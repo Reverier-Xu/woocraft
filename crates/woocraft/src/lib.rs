@@ -25,7 +25,7 @@ impl Default for Theme {
 }
 
 pub trait GpuiStylable {
-  fn class_name(&self, theme: Theme) -> String;
+  fn class_name(&self, theme: &Theme) -> String;
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -34,7 +34,7 @@ pub struct Button {
 }
 
 impl GpuiStylable for Button {
-  fn class_name(&self, theme: Theme) -> String {
+  fn class_name(&self, theme: &Theme) -> String {
     class_with_override(
       &format!(
         "{} inline-flex items-center px-3",
@@ -51,7 +51,7 @@ pub struct Input {
 }
 
 impl GpuiStylable for Input {
-  fn class_name(&self, theme: Theme) -> String {
+  fn class_name(&self, theme: &Theme) -> String {
     class_with_override(
       &format!("{} w-full px-3", theme.control_height_class),
       &self.style_overrides,
@@ -65,7 +65,7 @@ pub struct Select {
 }
 
 impl GpuiStylable for Select {
-  fn class_name(&self, theme: Theme) -> String {
+  fn class_name(&self, theme: &Theme) -> String {
     class_with_override(
       &format!("{} w-full px-3", theme.control_height_class),
       &self.style_overrides,
@@ -79,7 +79,7 @@ pub struct WindowChrome {
 }
 
 impl GpuiStylable for WindowChrome {
-  fn class_name(&self, theme: Theme) -> String {
+  fn class_name(&self, theme: &Theme) -> String {
     class_with_override(
       &format!("{} overflow-hidden", theme.window_radius_class),
       &self.style_overrides,
@@ -87,7 +87,7 @@ impl GpuiStylable for WindowChrome {
   }
 }
 
-fn class_with_override(base: &str, style_overrides: &str) -> String {
+pub fn class_with_override(base: &str, style_overrides: &str) -> String {
   if style_overrides.trim().is_empty() {
     return base.to_owned();
   }
@@ -111,9 +111,9 @@ mod tests {
   #[test]
   fn controls_share_single_height_class() {
     let theme = Theme::default();
-    assert!(Button::default().class_name(theme).contains("h-8"));
-    assert!(Input::default().class_name(theme).contains("h-8"));
-    assert!(Select::default().class_name(theme).contains("h-8"));
+    assert!(Button::default().class_name(&theme).contains("h-8"));
+    assert!(Input::default().class_name(&theme).contains("h-8"));
+    assert!(Select::default().class_name(&theme).contains("h-8"));
   }
 
   #[test]
@@ -124,7 +124,7 @@ mod tests {
     };
 
     assert_eq!(
-      button.class_name(theme),
+      button.class_name(&theme),
       "h-8 inline-flex items-center px-3 bg-brand text-white"
     );
   }
@@ -132,7 +132,7 @@ mod tests {
   #[test]
   fn window_uses_rounded_corners() {
     let theme = Theme::default();
-    let classes = WindowChrome::default().class_name(theme);
+    let classes = WindowChrome::default().class_name(&theme);
 
     assert!(classes.contains("rounded-xl"));
   }
