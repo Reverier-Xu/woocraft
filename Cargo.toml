@@ -1,0 +1,8 @@
+[workspace]
+members  = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+authors     = ["Reverier-Xu <reverier.xu@woooo.tech>"]
+description = "GPUI component libs of Reverier's design."
+edition     = "2024"
