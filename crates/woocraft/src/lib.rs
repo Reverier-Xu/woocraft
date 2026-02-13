@@ -7,6 +7,7 @@ pub const WINDOW_RADIUS_CLASS: &str = "rounded-xl";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Theme {
+  /// Base spacing scale in px (4px) for layout composition outside fixed single-line controls.
   pub spacing_step_px: u8,
   pub container_height_class: &'static str,
   pub control_height_class: &'static str,
@@ -88,7 +89,8 @@ impl GpuiStylable for WindowChrome {
 }
 
 pub fn class_with_override(base: &str, style_overrides: &str) -> String {
-  if style_overrides.trim().is_empty() {
+  let style_overrides = style_overrides.trim();
+  if style_overrides.is_empty() {
     return base.to_owned();
   }
 
@@ -127,6 +129,11 @@ mod tests {
       button.class_name(&theme),
       "h-8 inline-flex items-center px-3 bg-brand text-white"
     );
+  }
+
+  #[test]
+  fn style_overrides_are_trimmed_before_composition() {
+    assert_eq!(class_with_override("h-8", "  bg-brand text-white  "), "h-8 bg-brand text-white");
   }
 
   #[test]
