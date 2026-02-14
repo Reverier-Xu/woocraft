@@ -16,7 +16,8 @@ use crate::{
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ButtonVariant {
   Primary,
-  Secondary,
+  Success,
+  Warning,
   #[default]
   Default,
   Flat,
@@ -30,8 +31,12 @@ pub trait ButtonVariants: Sized {
     self.with_variant(ButtonVariant::Primary)
   }
 
-  fn secondary(self) -> Self {
-    self.with_variant(ButtonVariant::Secondary)
+  fn success(self) -> Self {
+    self.with_variant(ButtonVariant::Success)
+  }
+
+  fn warning(self) -> Self {
+    self.with_variant(ButtonVariant::Warning)
   }
 
   fn default(self) -> Self {
@@ -192,17 +197,30 @@ impl RenderOnce for Button {
           ..theme.primary
         },
       ),
-      ButtonVariant::Secondary => (
-        theme.secondary,
-        theme.secondary_foreground,
-        theme.border,
+      ButtonVariant::Success => (
+        theme.success,
+        theme.primary_foreground,
+        theme.success,
         Hsla {
           a: 0.9,
-          ..theme.secondary
+          ..theme.success
         },
         Hsla {
           a: 0.8,
-          ..theme.secondary
+          ..theme.success
+        },
+      ),
+      ButtonVariant::Warning => (
+        theme.warning,
+        theme.primary_foreground,
+        theme.warning,
+        Hsla {
+          a: 0.9,
+          ..theme.warning
+        },
+        Hsla {
+          a: 0.8,
+          ..theme.warning
         },
       ),
       ButtonVariant::Default => (
@@ -264,9 +282,27 @@ impl RenderOnce for Button {
     let hover_bg = if self.outline { background_hover } else { hover_bg };
     let active_bg = if self.outline { background_active } else { active_bg };
 
-    let selected_bg = if self.outline { transparent } else { active_bg };
-    let selected_fg = if self.outline { base_bg } else { fg };
-    let selected_border = if self.outline { base_bg } else { border };
+    let selected_bg = if is_flat {
+      bg
+    } else if self.outline {
+      transparent
+    } else {
+      active_bg
+    };
+    let selected_fg = if is_flat {
+      theme.primary
+    } else if self.outline {
+      base_bg
+    } else {
+      fg
+    };
+    let selected_border = if is_flat {
+      border
+    } else if self.outline {
+      base_bg
+    } else {
+      border
+    };
 
     let disabled_alpha = 0.6;
     let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) =

@@ -13,8 +13,6 @@ pub struct ThemeColors {
     pub popover_foreground: Hsla,
     pub primary: Hsla,
     pub primary_foreground: Hsla,
-    pub secondary: Hsla,
-    pub secondary_foreground: Hsla,
     pub muted: Hsla,
     pub muted_foreground: Hsla,
     pub border: Hsla,
@@ -32,7 +30,6 @@ pub struct ThemeTokens {
     pub warning: f32,
     pub success: f32,
     pub info: f32,
-    pub secondary: f32,
     pub accent: f32,
     pub lightness: f32,
     pub chroma: f32,
@@ -50,7 +47,6 @@ impl Default for ThemeTokens {
             warning: 48.0,
             success: 150.0,
             info: 248.0,
-            secondary: 324.0,
             accent: 130.0,
             lightness: 0.64,
             chroma: 0.17,
@@ -188,14 +184,11 @@ impl ThemeColors {
         let foreground = pick_readable_text(background, light_theme_text, dark_theme_text);
         let card = to_hsla_from_oklch(card_lightness, bg_chroma, tokens.primary, 1.0);
         let card_foreground = foreground;
-        let popover = card;
+        let popover = background.clone();
         let popover_foreground = foreground;
 
         let primary = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.primary, 1.0);
         let primary_foreground = pick_readable_text(primary, light_theme_text, dark_theme_text);
-        let secondary =
-            to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.secondary, 1.0);
-        let secondary_foreground = pick_readable_text(secondary, light_theme_text, dark_theme_text);
         let muted = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.01, tokens.accent, 1.0);
         let muted_foreground = with_alpha(foreground, 0.75);
 
@@ -215,8 +208,6 @@ impl ThemeColors {
             popover_foreground,
             primary,
             primary_foreground,
-            secondary,
-            secondary_foreground,
             muted,
             muted_foreground,
             border,
@@ -242,8 +233,6 @@ impl ThemeColors {
             popover_foreground: with_alpha(self.popover_foreground, alpha),
             primary: with_alpha(self.primary, alpha),
             primary_foreground: with_alpha(self.primary_foreground, alpha),
-            secondary: with_alpha(self.secondary, alpha),
-            secondary_foreground: with_alpha(self.secondary_foreground, alpha),
             muted: with_alpha(self.muted, alpha),
             muted_foreground: with_alpha(self.muted_foreground, alpha),
             border: with_alpha(self.border, alpha),
@@ -347,7 +336,6 @@ mod tests {
             "warning": 48,
             "success": 150,
             "info": 248,
-            "secondary": 324,
             "accent": 130,
             "lightness": 0.64,
             "chroma": 0.17,
@@ -362,7 +350,6 @@ mod tests {
             warning = 48
             success = 150
             info = 248
-            secondary = 324
             accent = 130
             lightness = 0.64
             chroma = 0.17
@@ -393,13 +380,13 @@ mod tests {
 
         write!(
             json_file,
-            "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"secondary\":324,\"accent\":130,\"lightness\":0.64,\"chroma\":0.17,\"light_bg_lightness\":0.96,\"dark_bg_lightness\":0.18,\"light_bg_chroma\":0.015,\"dark_bg_chroma\":0.015}}"
+            "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"lightness\":0.64,\"chroma\":0.17,\"light_bg_lightness\":0.96,\"dark_bg_lightness\":0.18,\"light_bg_chroma\":0.015,\"dark_bg_chroma\":0.015}}"
         )
         .expect("write json file");
 
         write!(
             toml_file,
-            "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\nsecondary = 324\naccent = 130\nlightness = 0.64\nchroma = 0.17\nlight_bg_lightness = 0.96\ndark_bg_lightness = 0.18\nlight_bg_chroma = 0.015\ndark_bg_chroma = 0.015\n"
+            "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nlightness = 0.64\nchroma = 0.17\nlight_bg_lightness = 0.96\ndark_bg_lightness = 0.18\nlight_bg_chroma = 0.015\ndark_bg_chroma = 0.015\n"
         )
         .expect("write toml file");
 

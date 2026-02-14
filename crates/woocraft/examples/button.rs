@@ -66,7 +66,8 @@ impl Render for ButtonWindow {
                                 cx.notify();
                             })),
                     )
-                    .child(Button::new("btn-secondary").label("Secondary").secondary())
+                    .child(Button::new("btn-success").label("Success").success())
+                    .child(Button::new("btn-warning").label("Warning").warning())
                     .child(Button::new("btn-default").label("Default").default())
                     .child(Button::new("btn-flat").label("Flat").flat())
                     .child(Button::new("btn-danger").label("Danger").danger())
@@ -85,8 +86,8 @@ impl Render for ButtonWindow {
             .child(
                 h_flex()
                     .gap_3()
-                    .child(Button::new("btn-outline").label("Outline").secondary().outline(true))
-                    .child(Button::new("btn-selected").label("Selected").secondary().selected(true))
+                    .child(Button::new("btn-outline").label("Outline").default().outline(true))
+                    .child(Button::new("btn-selected").label("Selected").default().selected(true))
                     .child(Button::new("btn-loading").label("Loading").primary().loading(true))
                     .child(
                         Button::new("btn-loading-custom")
