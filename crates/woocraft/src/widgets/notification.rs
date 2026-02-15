@@ -397,6 +397,7 @@ impl RenderOnce for NotificationCard {
       .rounded(cx.theme().radius_container)
       .p_1()
       .gap_1()
+      .shadow_sm()
       .items_start()
       .child(
         h_flex()
@@ -430,16 +431,15 @@ impl RenderOnce for NotificationCard {
               }),
           ),
       )
-      .child(v_flex().w_full().px_2().flex_1().when_some(
-        self.data.message.clone(),
-        |this, message| {
-          this.child(
-            div()
-              .text_color(cx.theme().muted_foreground)
-              .child(message),
-          )
-        },
-      ))
+      .child(
+        v_flex()
+          .w_full()
+          .px_2()
+          .flex_1()
+          .when_some(self.data.message.clone(), |this, message| {
+            this.child(div().text_color(cx.theme().muted_foreground).child(message))
+          }),
+      )
       .child(h_flex().w_full().justify_end().when_some(
         self.data.action_label.clone(),
         |this, action_label| {

@@ -1,8 +1,9 @@
-use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
-  App, Hsla, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled,
-  Window, div, relative,
+  App, Hsla, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+  div, relative,
 };
+
+use crate::{ActiveTheme, Sizable, Size, StyledExt};
 
 #[derive(IntoElement)]
 pub struct Progress {

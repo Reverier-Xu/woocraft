@@ -1,6 +1,6 @@
 use gpui::{
   AnyElement, App, Hsla, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
-  div, px, prelude::FluentBuilder as _,
+  div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme, Icon, Sizable, Size, StyledExt, h_flex};
@@ -128,7 +128,7 @@ impl RenderOnce for Badge {
           .line_height(px(12.0))
           .child(count)
           .into_any_element()
-      },
+      }
       BadgeVariant::Icon(icon) => h_flex()
         .absolute()
         .justify_center()
@@ -149,8 +149,6 @@ impl RenderOnce for Badge {
       .relative()
       .refine_style(&self.style)
       .children(self.children)
-      .when(visible, |this| {
-        this.child(overlay)
-      })
+      .when(visible, |this| this.child(overlay))
   }
 }

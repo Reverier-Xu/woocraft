@@ -1,11 +1,10 @@
 use gpui::{
   AnyElement, App, Bounds, CursorStyle, Decorations, Edges, HitboxBehavior, Hsla,
-  InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point,
-  RenderOnce, ResizeEdge, Size, Styled as _, Window, canvas, div, point,
-  prelude::FluentBuilder as _, px,
+  InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce,
+  ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
 
-use crate::ActiveTheme;
+use crate::{ActiveTheme, v_flex};
 
 #[cfg(not(target_os = "linux"))]
 const SHADOW_SIZE: Pixels = px(0.0);
@@ -105,10 +104,18 @@ impl RenderOnce for WindowBorder {
             .size_full()
             .absolute(),
           )
-          .when(!(tiling.top || tiling.right), |div| div.rounded_tr(border_radius))
-          .when(!(tiling.top || tiling.left), |div| div.rounded_tl(border_radius))
-          .when(!(tiling.bottom || tiling.left), |div| div.rounded_bl(border_radius))
-          .when(!(tiling.bottom || tiling.right), |div| div.rounded_br(border_radius))
+          .when(!(tiling.top || tiling.right), |div| {
+            div.rounded_tr(border_radius)
+          })
+          .when(!(tiling.top || tiling.left), |div| {
+            div.rounded_tl(border_radius)
+          })
+          .when(!(tiling.bottom || tiling.left), |div| {
+            div.rounded_bl(border_radius)
+          })
+          .when(!(tiling.bottom || tiling.right), |div| {
+            div.rounded_br(border_radius)
+          })
           .when(!tiling.top, |div| div.pt(SHADOW_SIZE))
           .when(!tiling.bottom, |div| div.pb(SHADOW_SIZE))
           .when(!tiling.left, |div| div.pl(SHADOW_SIZE))
@@ -124,7 +131,7 @@ impl RenderOnce for WindowBorder {
       })
       .size_full()
       .child(
-        div()
+        v_flex()
           .cursor(CursorStyle::default())
           .map(|this| match decorations {
             Decorations::Server => this
@@ -132,10 +139,18 @@ impl RenderOnce for WindowBorder {
               .border_color(cx.theme().border)
               .border_1(),
             Decorations::Client { tiling } => this
-              .when(!(tiling.top || tiling.right), |div| div.rounded_tr(border_radius))
-              .when(!(tiling.top || tiling.left), |div| div.rounded_tl(border_radius))
-              .when(!(tiling.bottom || tiling.left), |div| div.rounded_bl(border_radius))
-              .when(!(tiling.bottom || tiling.right), |div| div.rounded_br(border_radius))
+              .when(!(tiling.top || tiling.right), |div| {
+                div.rounded_tr(border_radius)
+              })
+              .when(!(tiling.top || tiling.left), |div| {
+                div.rounded_tl(border_radius)
+              })
+              .when(!(tiling.bottom || tiling.left), |div| {
+                div.rounded_bl(border_radius)
+              })
+              .when(!(tiling.bottom || tiling.right), |div| {
+                div.rounded_br(border_radius)
+              })
               .border_color(cx.theme().border)
               .when(!tiling.top, |div| div.border_t(BORDER_SIZE))
               .when(!tiling.bottom, |div| div.border_b(BORDER_SIZE))

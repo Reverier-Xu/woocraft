@@ -1,7 +1,6 @@
 use gpui::{
-  App, Axis, Div, Hsla, IntoElement, PathBuilder, RenderOnce, SharedString, StyleRefinement,
-  Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
-  ParentElement,
+  App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
+  StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -91,12 +90,12 @@ impl Divider {
               let x = bounds.origin.x;
               let y = bounds.origin.y + px(0.5);
               (point(x, y), point(x + bounds.size.width, y))
-            },
+            }
             Axis::Vertical => {
               let x = bounds.origin.x + px(0.5);
               let y = bounds.origin.y;
               (point(x, y), point(x, y + bounds.size.height))
-            },
+            }
           };
 
           builder.move_to(start);

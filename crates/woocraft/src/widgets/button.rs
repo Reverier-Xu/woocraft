@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
   Animation, AnimationExt as _, AnyElement, AnyView, App, ClickEvent, ElementId, Hsla,
@@ -290,8 +289,16 @@ impl RenderOnce for Button {
       ..theme.background
     };
 
-    let hover_bg = if self.outline { background_hover } else { hover_bg };
-    let active_bg = if self.outline { background_active } else { active_bg };
+    let hover_bg = if self.outline {
+      background_hover
+    } else {
+      hover_bg
+    };
+    let active_bg = if self.outline {
+      background_active
+    } else {
+      active_bg
+    };
 
     let selected_bg = if is_flat {
       bg

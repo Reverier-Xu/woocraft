@@ -118,11 +118,27 @@ impl Styled for Tag {
 impl RenderOnce for Tag {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let (default_bg, default_fg, default_border) = match self.variant {
-      TagVariant::Primary => (cx.theme().primary, cx.theme().primary_foreground, cx.theme().primary),
+      TagVariant::Primary => (
+        cx.theme().primary,
+        cx.theme().primary_foreground,
+        cx.theme().primary,
+      ),
       TagVariant::Secondary => (cx.theme().muted, cx.theme().foreground, cx.theme().border),
-      TagVariant::Danger => (cx.theme().danger, cx.theme().primary_foreground, cx.theme().danger),
-      TagVariant::Success => (cx.theme().success, cx.theme().primary_foreground, cx.theme().success),
-      TagVariant::Warning => (cx.theme().warning, cx.theme().primary_foreground, cx.theme().warning),
+      TagVariant::Danger => (
+        cx.theme().danger,
+        cx.theme().primary_foreground,
+        cx.theme().danger,
+      ),
+      TagVariant::Success => (
+        cx.theme().success,
+        cx.theme().primary_foreground,
+        cx.theme().success,
+      ),
+      TagVariant::Warning => (
+        cx.theme().warning,
+        cx.theme().primary_foreground,
+        cx.theme().warning,
+      ),
       TagVariant::Custom => (
         self.custom_bg.unwrap_or(cx.theme().muted),
         self.custom_fg.unwrap_or(cx.theme().foreground),

@@ -185,8 +185,9 @@ impl RenderOnce for Label {
       .text_color(cx.theme().foreground)
       .refine_style(&self.style)
       .child(
-        StyledText::new(&text)
-          .when_some(self.measure_highlights(cx), |this, hl| this.with_highlights(hl)),
+        StyledText::new(&text).when_some(self.measure_highlights(cx), |this, hl| {
+          this.with_highlights(hl)
+        }),
       )
   }
 }

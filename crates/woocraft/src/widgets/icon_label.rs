@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
   Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,

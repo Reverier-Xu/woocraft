@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
   Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement as _,
@@ -76,8 +75,7 @@ impl Switch {
 
   pub fn on_click<F>(mut self, handler: F) -> Self
   where
-    F: Fn(&bool, &mut Window, &mut App) + 'static,
-  {
+    F: Fn(&bool, &mut Window, &mut App) + 'static, {
     self.on_click = Some(Rc::new(handler));
     self
   }

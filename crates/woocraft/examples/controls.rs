@@ -3,10 +3,10 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider,
-  Kbd, Label, Link, Notification, NotificationCenter, NotificationPlacement, NotificationState,
-  NotificationType, Popover, Progress, Selectable, Slider, SliderState, Spinner, StyledExt,
-  Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, h_flex, init, v_flex, window_border,
+  ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider, Kbd,
+  Label, Link, Notification, NotificationCenter, NotificationPlacement, NotificationState,
+  NotificationType, Popover, Progress, ScrollableElement, Selectable, Slider, SliderState, Spinner,
+  StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, h_flex, init, v_flex, window_border,
 };
 
 struct ControlsWindow {
@@ -21,7 +21,6 @@ struct ControlsWindow {
 
 impl ControlsWindow {
   fn view(cx: &mut App) -> Entity<Self> {
-
     let slider_state = cx.new(|_| {
       SliderState::new()
         .min(0.0)
@@ -51,13 +50,15 @@ impl Render for ControlsWindow {
     window_border().child(
       v_flex()
         .size_full()
+        .min_h_0()
         .child(TitleBar::new().title("Woocraft Controls Example"))
         .child(
-          v_flex()
-            .relative()
-            .flex_1()
+            v_flex()
             .p_6()
             .gap_4()
+            .overflow_y_scrollbar()
+            .flex_1()
+            .min_h_0()
             .child(
               div()
                 .text_xl()
@@ -188,6 +189,33 @@ impl Render for ControlsWindow {
                     .child(
                       Kbd::new(gpui::Keystroke::parse("shift-enter").expect("valid keystroke"))
                         .outline(),
+                    ),
+                ),
+            )
+            .child(
+              v_flex()
+                .gap_2()
+                .child(div().text_sm().child("Scroll System"))
+                .child(
+                  div()
+                    .h(px(140.))
+                    .w(px(360.))
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(cx.theme().radius_container)
+                    .child(
+                      v_flex()
+                        .size_full()
+                        .overflow_y_scrollbar()
+                        .children((1..=24).map(|i| {
+                          div()
+                            .px_3()
+                            .py_2()
+                            .border_b_1()
+                            .border_color(cx.theme().border.opacity(0.5))
+                            .child(format!("Scrollable row #{i}"))
+                            .into_any_element()
+                        })),
                     ),
                 ),
             )

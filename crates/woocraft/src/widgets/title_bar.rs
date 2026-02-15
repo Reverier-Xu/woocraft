@@ -1,15 +1,14 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, ClickEvent, Context, Decorations, InteractiveElement as _,
-  IntoElement, MouseButton, ParentElement, Render, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
-  WindowControlArea, div, prelude::FluentBuilder as _, px,
+  AnyElement, App, ClickEvent, Context, Decorations, InteractiveElement as _, IntoElement,
+  MouseButton, ParentElement, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
+  StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, div,
+  prelude::FluentBuilder as _, px,
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, IconLabel, IconName, Size, StyleSized, StyledExt,
-  h_flex,
+  ActiveTheme, Button, ButtonVariants, IconLabel, IconName, Size, StyleSized, StyledExt, h_flex,
 };
 
 const TITLE_BAR_SIZE: Size = Size::Medium;
@@ -53,8 +52,7 @@ impl TitleBar {
   }
 
   pub fn on_close_window(
-    mut self,
-    f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
   ) -> Self {
     if cfg!(target_os = "linux") {
       self.on_close_window = Some(Rc::new(f));
@@ -90,7 +88,9 @@ impl RenderOnce for WindowControls {
       .justify_center()
       .content_center()
       .items_center()
-      .when(is_windows, |this| this.window_control_area(WindowControlArea::Min))
+      .when(is_windows, |this| {
+        this.window_control_area(WindowControlArea::Min)
+      })
       .when(is_linux, |this| {
         this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
           window.prevent_default();
@@ -114,7 +114,9 @@ impl RenderOnce for WindowControls {
       .justify_center()
       .content_center()
       .items_center()
-      .when(is_windows, |this| this.window_control_area(WindowControlArea::Max))
+      .when(is_windows, |this| {
+        this.window_control_area(WindowControlArea::Max)
+      })
       .when(is_linux, |this| {
         this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
           window.prevent_default();
@@ -143,7 +145,9 @@ impl RenderOnce for WindowControls {
       .justify_center()
       .content_center()
       .items_center()
-      .when(is_windows, |this| this.window_control_area(WindowControlArea::Close))
+      .when(is_windows, |this| {
+        this.window_control_area(WindowControlArea::Close)
+      })
       .when(is_linux, |this| {
         this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
           window.prevent_default();
@@ -204,16 +208,14 @@ impl RenderOnce for TitleBar {
     let is_linux = cfg!(target_os = "linux");
     let is_macos = cfg!(target_os = "macos");
     let window_radius = cx.theme().radius_container;
-    let title = self
-      .title
-      .unwrap_or_else(|| {
-        let window_title = window.window_title();
-        if window_title.is_empty() {
-          rust_i18n::t!("title_bar.untitled").into()
-        } else {
-          window_title.into()
-        }
-      });
+    let title = self.title.unwrap_or_else(|| {
+      let window_title = window.window_title();
+      if window_title.is_empty() {
+        rust_i18n::t!("title_bar.untitled").into()
+      } else {
+        window_title.into()
+      }
+    });
     let icon = self.icon.unwrap_or(IconName::Apps);
 
     let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
@@ -234,8 +236,12 @@ impl RenderOnce for TitleBar {
         .map(|this| match decorations {
           Decorations::Server => this.rounded_tl(window_radius).rounded_tr(window_radius),
           Decorations::Client { tiling, .. } => this
-            .when(!(tiling.top || tiling.left), |div| div.rounded_tl(window_radius))
-            .when(!(tiling.top || tiling.right), |div| div.rounded_tr(window_radius)),
+            .when(!(tiling.top || tiling.left), |div| {
+              div.rounded_tl(window_radius)
+            })
+            .when(!(tiling.top || tiling.right), |div| {
+              div.rounded_tr(window_radius)
+            }),
         })
         .when(is_linux, |this| {
           this.on_click(|event, window, _| {
@@ -282,11 +288,7 @@ impl RenderOnce for TitleBar {
             .gap_2()
             .flex_shrink_0()
             .flex_1()
-            .child(
-              IconLabel::new("title-bar-label")
-                .icon(icon)
-                .label(title),
-            )
+            .child(IconLabel::new("title-bar-label").icon(icon).label(title))
             .when(is_linux && is_client_decorated, |this| {
               this.child(
                 div()

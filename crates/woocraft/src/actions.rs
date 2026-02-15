@@ -27,9 +27,5 @@ actions!(
 );
 
 pub fn init(cx: &mut App) {
-  cx.bind_keys([KeyBinding::new(
-    "escape",
-    Cancel,
-    Some(POPOVER_CONTEXT),
-  )]);
+  cx.bind_keys([KeyBinding::new("escape", Cancel, Some(POPOVER_CONTEXT))]);
 }

@@ -1,7 +1,6 @@
 use gpui::{
   App, AppContext as _, Axis, Bounds, Context, DragMoveEvent, Empty, Entity, EntityId,
-  EventEmitter,
-  InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+  EventEmitter, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
   ParentElement, Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
@@ -134,7 +133,10 @@ impl SliderState {
   pub fn scale(mut self, scale: SliderScale) -> Self {
     if matches!(scale, SliderScale::Logarithmic) {
       assert!(self.min > 0.0, "min must be > 0 for logarithmic slider");
-      assert!(self.max > self.min, "max must be > min for logarithmic slider");
+      assert!(
+        self.max > self.min,
+        "max must be > min for logarithmic slider"
+      );
     }
     self.scale = scale;
     self.sync_percentage();
@@ -163,12 +165,12 @@ impl SliderState {
       SliderValue::Single(value) => {
         let p = self.value_to_percentage(value.clamp(self.min, self.max));
         self.percentage = 0.0..p;
-      },
+      }
       SliderValue::Range(start, end) => {
         let start = start.clamp(self.min, self.max);
         let end = end.clamp(self.min, self.max);
         self.percentage = self.value_to_percentage(start)..self.value_to_percentage(end);
-      },
+      }
     }
   }
 
@@ -192,7 +194,7 @@ impl SliderState {
         let start = snap(start);
         let end = snap(end).max(start);
         SliderValue::Range(start, end)
-      },
+      }
     }
   }
 
@@ -202,7 +204,7 @@ impl SliderState {
       SliderScale::Logarithmic => {
         let base = self.max / self.min;
         (base.powf(percentage) * self.min).clamp(self.min, self.max)
-      },
+      }
     }
   }
 
@@ -215,11 +217,11 @@ impl SliderState {
         } else {
           ((value - self.min) / range).clamp(0.0, 1.0)
         }
-      },
+      }
       SliderScale::Logarithmic => {
         let base = self.max / self.min;
         (value / self.min).log(base).clamp(0.0, 1.0)
-      },
+      }
     }
   }
 
@@ -246,14 +248,13 @@ impl SliderState {
       self.bounds.bottom() - position.y
     };
 
-    let center = ((self.percentage.end - self.percentage.start) * 0.5 + self.percentage.start)
-      * total;
+    let center =
+      ((self.percentage.end - self.percentage.start) * 0.5 + self.percentage.start) * total;
     self.active_thumb_start = inner_pos < center;
   }
 
   fn update_by_position(
-    &mut self, axis: Axis, position: gpui::Point<Pixels>, is_start: bool,
-    cx: &mut Context<Self>,
+    &mut self, axis: Axis, position: gpui::Point<Pixels>, is_start: bool, cx: &mut Context<Self>,
   ) {
     let total = if matches!(axis, Axis::Horizontal) {
       self.bounds.size.width
@@ -281,7 +282,7 @@ impl SliderState {
     let value = self.percentage_to_value(percentage);
     let value = match self.snap_and_clamp(SliderValue::Single(value)) {
       SliderValue::Single(v) => v,
-      SliderValue::Range(_, _) => value,
+      SliderValue::Range(..) => value,
     };
 
     if is_start {
@@ -380,8 +381,12 @@ impl RenderOnce for Slider {
         div()
           .id(("slider-track", self.state.entity_id().as_u64()))
           .relative()
-          .when(matches!(axis, Axis::Horizontal), |this| this.h(px(2.0)).w_full())
-          .when(matches!(axis, Axis::Vertical), |this| this.w(px(2.0)).h_full())
+          .when(matches!(axis, Axis::Horizontal), |this| {
+            this.h(px(2.0)).w_full()
+          })
+          .when(matches!(axis, Axis::Vertical), |this| {
+            this.w(px(2.0)).h_full()
+          })
           .rounded_full()
           .bg(cx.theme().muted)
           .on_prepaint({
@@ -430,10 +435,16 @@ impl RenderOnce for Slider {
                 .border_color(cx.theme().primary)
                 .bg(cx.theme().background)
                 .when(matches!(axis, Axis::Horizontal), |this| {
-                  this.top(px(-7.0)).left(relative(percentage.start)).ml(-px(8.0))
+                  this
+                    .top(px(-7.0))
+                    .left(relative(percentage.start))
+                    .ml(-px(8.0))
                 })
                 .when(matches!(axis, Axis::Vertical), |this| {
-                  this.left(px(-7.0)).bottom(relative(percentage.start)).mb(-px(8.0))
+                  this
+                    .left(px(-7.0))
+                    .bottom(relative(percentage.start))
+                    .mb(-px(8.0))
                 })
                 .when(!self.disabled, |this| {
                   this
@@ -472,10 +483,16 @@ impl RenderOnce for Slider {
               .border_color(cx.theme().primary)
               .bg(cx.theme().background)
               .when(matches!(axis, Axis::Horizontal), |this| {
-                this.top(px(-7.0)).left(relative(percentage.end)).ml(-px(8.0))
+                this
+                  .top(px(-7.0))
+                  .left(relative(percentage.end))
+                  .ml(-px(8.0))
               })
               .when(matches!(axis, Axis::Vertical), |this| {
-                this.left(px(-7.0)).bottom(relative(percentage.end)).mb(-px(8.0))
+                this
+                  .left(px(-7.0))
+                  .bottom(relative(percentage.end))
+                  .mb(-px(8.0))
               })
               .when(!self.disabled, |this| {
                 this

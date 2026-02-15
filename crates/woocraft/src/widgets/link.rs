@@ -3,8 +3,7 @@ use std::rc::Rc;
 use gpui::{
   AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, MouseButton,
   ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-  Styled, Window, div,
-  prelude::FluentBuilder as _,
+  Styled, Window, div, prelude::FluentBuilder as _,
 };
 
 use crate::{ActiveTheme, Disableable, StyledExt};
@@ -37,8 +36,7 @@ impl Link {
   }
 
   pub fn on_click(
-    mut self,
-    handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
   ) -> Self {
     self.on_click = Some(Rc::new(handler));
     self

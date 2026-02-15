@@ -1,7 +1,6 @@
 use gpui::{
-  Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, RenderOnce,
-  ParentElement as _, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
-  relative,
+  Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, ParentElement as _,
+  RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -46,15 +45,11 @@ impl Kbd {
   }
 
   pub fn binding_for_action(
-    action: &dyn Action,
-    context: Option<&str>,
-    window: &Window,
+    action: &dyn Action, context: Option<&str>, window: &Window,
   ) -> Option<Self> {
     let key_context = context.and_then(|context| KeyContext::parse(context).ok());
     let binding = match key_context {
-      Some(context) => {
-        window.highest_precedence_binding_for_action_in_context(action, context)
-      },
+      Some(context) => window.highest_precedence_binding_for_action_in_context(action, context),
       None => window.highest_precedence_binding_for_action(action),
     }?;
 
@@ -65,9 +60,7 @@ impl Kbd {
   }
 
   pub fn binding_for_action_in(
-    action: &dyn Action,
-    focus_handle: &FocusHandle,
-    window: &Window,
+    action: &dyn Action, focus_handle: &FocusHandle, window: &Window,
   ) -> Option<Self> {
     let binding = window.highest_precedence_binding_for_action_in(action, focus_handle)?;
     binding
@@ -186,7 +179,7 @@ impl Kbd {
             keys.push_str(key_str);
           }
         }
-      },
+      }
     }
 
     parts.push(&keys);

@@ -120,16 +120,12 @@ impl RenderOnce for Checkbox {
           .border_color(border_color)
           .bg(indicator_color)
           .child(
-            div()
-              .size_full()
-              .items_center()
-              .justify_center()
-              .child(
-                Icon::new(IconName::Checkmark)
-                  .with_size(self.size.smaller())
-                  .text_color(cx.theme().primary_foreground)
-                  .when(!checked, |this| this.opacity(0.0)),
-              ),
+            div().size_full().items_center().justify_center().child(
+              Icon::new(IconName::Checkmark)
+                .with_size(self.size.smaller())
+                .text_color(cx.theme().primary_foreground)
+                .when(!checked, |this| this.opacity(0.0)),
+            ),
           ),
       )
       .when_some(self.label, |this, label| this.child(label))

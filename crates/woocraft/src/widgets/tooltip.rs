@@ -30,8 +30,7 @@ impl Tooltip {
   pub fn element<E, F>(builder: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static,
-  {
+    F: Fn(&mut Window, &mut App) -> E + 'static, {
     Self {
       style: StyleRefinement::default(),
       key_binding: None,
