@@ -22,7 +22,7 @@ impl Progress {
       color: None,
       track_color: None,
       text_color: None,
-      label: "Loading".into(),
+      label: rust_i18n::t!("common.loading").into(),
       style: StyleRefinement::default(),
       size: Size::default(),
     }

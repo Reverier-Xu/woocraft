@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui::{
-  Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,
+  Animation, AnimationExt as _, AnyElement, AnyView, App, ClickEvent, ElementId, Hsla,
   InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
   percentage, prelude::FluentBuilder,
@@ -71,6 +71,7 @@ pub struct Button {
   loading: bool,
   loading_icon: Option<IconName>,
   on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+  tooltip_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyView>>,
 }
 
 impl Button {
@@ -89,6 +90,7 @@ impl Button {
       loading: false,
       loading_icon: None,
       on_click: None,
+      tooltip_builder: None,
     }
   }
 
@@ -121,6 +123,11 @@ impl Button {
 
   pub fn loading_icon(mut self, icon: IconName) -> Self {
     self.loading_icon = Some(icon);
+    self
+  }
+
+  pub fn tooltip(mut self, builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
+    self.tooltip_builder = Some(Rc::new(builder));
     self
   }
 
@@ -421,6 +428,9 @@ impl RenderOnce for Button {
       .when(self.disabled, |this| this.cursor_not_allowed())
       .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
         this.on_click(move |event, window, cx| on_click(event, window, cx))
+      })
+      .when_some(self.tooltip_builder, |this, tooltip_builder| {
+        this.tooltip(move |window, cx| tooltip_builder(window, cx))
       })
       .refine_style(&self.style)
   }

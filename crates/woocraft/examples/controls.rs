@@ -3,10 +3,10 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Badge, Button, ButtonVariants, Checkbox, Divider, Label, Link, Notification,
-  NotificationCenter, NotificationPlacement, NotificationState, NotificationType, Progress,
-  Selectable, Slider, SliderState, Spinner, StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar,
-  h_flex, init, v_flex, window_border,
+  ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider,
+  Kbd, Label, Link, Notification, NotificationCenter, NotificationPlacement, NotificationState,
+  NotificationType, Popover, Progress, Selectable, Slider, SliderState, Spinner, StyledExt,
+  Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, h_flex, init, v_flex, window_border,
 };
 
 struct ControlsWindow {
@@ -15,6 +15,8 @@ struct ControlsWindow {
   slider_state: Entity<SliderState>,
   notification_state: Entity<NotificationState>,
   link_clicks: usize,
+  breadcrumb_last: &'static str,
+  popover_open: bool,
 }
 
 impl ControlsWindow {
@@ -35,6 +37,8 @@ impl ControlsWindow {
       slider_state,
       notification_state,
       link_clicks: 0,
+      breadcrumb_last: "Home",
+      popover_open: false,
     })
   }
 }
@@ -75,6 +79,116 @@ impl Render for ControlsWindow {
                     .label("Dark")
                     .selected(is_dark)
                     .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
+                ),
+            )
+            .child(
+              v_flex()
+                .gap_2()
+                .child(div().text_sm().child("Breadcrumb"))
+                .child(
+                  Breadcrumb::new()
+                    .child(BreadcrumbItem::new("Home").on_click(cx.listener(
+                      |this, _, _, cx| {
+                        this.breadcrumb_last = "Home";
+                        cx.notify();
+                      },
+                    )))
+                    .child(BreadcrumbItem::new("Library").on_click(cx.listener(
+                      |this, _, _, cx| {
+                        this.breadcrumb_last = "Library";
+                        cx.notify();
+                      },
+                    )))
+                    .child(BreadcrumbItem::new("Components").on_click(cx.listener(
+                      |this, _, _, cx| {
+                        this.breadcrumb_last = "Components";
+                        cx.notify();
+                      },
+                    )))
+                    .child(BreadcrumbItem::new("Breadcrumb").disabled(true)),
+                )
+                .child(Label::new(format!("breadcrumb_last = {}", self.breadcrumb_last))),
+            )
+            .child(
+              v_flex()
+                .gap_2()
+                .child(div().text_sm().child("Popover"))
+                .child(
+                  h_flex().items_center().gap_3().child(
+                    Popover::new("demo-popover")
+                      .on_open_change(cx.listener(|this, open, _, cx| {
+                        this.popover_open = *open;
+                        cx.notify();
+                      }))
+                      .trigger(
+                        Button::new("popover-trigger")
+                          .label("Open Popover")
+                          .default(),
+                      )
+                      .content(|_, _, _| {
+                        v_flex()
+                          .gap_2()
+                          .child(div().font_semibold().child("Popover Content"))
+                          .child(
+                            div()
+                              .text_sm()
+                              .child("Migrated from deprecated/ui and styled by new theme tokens."),
+                          )
+                      }),
+                  )
+                  .child(Label::new(format!("popover_open = {}", self.popover_open))),
+                ),
+            )
+            .child(
+              v_flex()
+                .gap_2()
+                .child(div().text_sm().child("Tooltip"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      Button::new("tooltip-trigger")
+                        .label("Hover me")
+                        .tooltip(|window, cx| {
+                          Tooltip::new("Tooltip from woocraft::Tooltip")
+                            .key_binding(Some(
+                              Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")),
+                            ))
+                            .build(window, cx)
+                        }),
+                    )
+                    .child(
+                      Button::new("tooltip-action-trigger")
+                        .label("Hover for action")
+                        .tooltip(|window, cx| {
+                          Tooltip::new("Shortcut resolved from action binding")
+                            .action(
+                              &woocraft::actions::Cancel,
+                              Some(woocraft::actions::POPOVER_CONTEXT),
+                            )
+                            .build(window, cx)
+                        }),
+                    )
+                    .child(div().text_sm().text_color(cx.theme().muted_foreground).child(
+                      "Move cursor over the button to preview tooltip",
+                    )),
+                ),
+            )
+            .child(
+              v_flex()
+                .gap_2()
+                .child(div().text_sm().child("Kbd"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().text_sm().child("Shortcut:"))
+                    .child(Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")))
+                    .child(
+                      Kbd::new(gpui::Keystroke::parse("shift-enter").expect("valid keystroke"))
+                        .outline(),
+                    ),
                 ),
             )
             .child(
@@ -239,8 +353,13 @@ impl Render for ControlsWindow {
                 .border_color(cx.theme().border)
                 .pt_3()
                 .child(Label::new("Summary").secondary(format!(
-                  "checked={}, switched={}, slider={:.1}, link_clicks={}",
-                  self.checked, self.switched, slider_value, self.link_clicks
+                  "checked={}, switched={}, slider={:.1}, link_clicks={}, breadcrumb_last={}, popover_open={}",
+                  self.checked,
+                  self.switched,
+                  slider_value,
+                  self.link_clicks,
+                  self.breadcrumb_last,
+                  self.popover_open
                 ))),
             )
             .child(

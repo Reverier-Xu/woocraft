@@ -23,6 +23,7 @@ toml        = { workspace = true }
 
 # For assets embedding, optional and workspace to avoid unnecessary dependency for users who don't need it.
 rust-embed = { workspace = true, optional = true }
+rust-i18n = { workspace = true }
 
 [features]
 default   = ["resources"]

@@ -1,0 +1,5 @@
+[common]
+loading = "加载中"
+
+[title_bar]
+untitled = "未命名"

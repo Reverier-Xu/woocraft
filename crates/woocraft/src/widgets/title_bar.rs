@@ -209,7 +209,7 @@ impl RenderOnce for TitleBar {
       .unwrap_or_else(|| {
         let window_title = window.window_title();
         if window_title.is_empty() {
-          "Untitled".into()
+          rust_i18n::t!("title_bar.untitled").into()
         } else {
           window_title.into()
         }

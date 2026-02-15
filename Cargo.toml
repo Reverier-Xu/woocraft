@@ -30,3 +30,4 @@ thiserror   = "2.0"
 toml        = "0.9"
 
 rust-embed = { version = "8.7", features = ["interpolate-folder-path"] }
+rust-i18n  = "3.1"

@@ -1,0 +1,5 @@
+[common]
+loading = "Loading"
+
+[title_bar]
+untitled = "Untitled"
