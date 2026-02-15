@@ -105,21 +105,15 @@ impl<E> RenderOnce for Scrollable<E>
 where
   E: InteractiveElement + Styled + ParentElement + Element + 'static,
 {
-  fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let scroll_handle = window
       .use_keyed_state(self.id.clone(), cx, |_, _| ScrollHandle::default())
       .read(cx)
       .clone();
 
-    let style = StyleRefinement {
-      size: self.element.style().size.clone(),
-      ..Default::default()
-    };
-
     div()
       .id(self.id)
       .refine_style(&self.style)
-      .refine_style(&style)
       .relative()
       .child(
         div()
