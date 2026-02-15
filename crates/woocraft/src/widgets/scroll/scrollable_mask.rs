@@ -4,21 +4,45 @@ use gpui::{
   ScrollHandle, ScrollWheelEvent, Style, Window, px, relative,
 };
 
-fn is_horizontal(axis: Axis) -> bool {
-  matches!(axis, Axis::Horizontal)
+use super::ScrollbarAxis;
+
+#[derive(Clone, Copy)]
+pub enum ScrollableMaskAxis {
+  Vertical,
+  Horizontal,
+  Both,
+}
+
+impl From<Axis> for ScrollableMaskAxis {
+  fn from(axis: Axis) -> Self {
+    match axis {
+      Axis::Vertical => Self::Vertical,
+      Axis::Horizontal => Self::Horizontal,
+    }
+  }
+}
+
+impl From<ScrollbarAxis> for ScrollableMaskAxis {
+  fn from(axis: ScrollbarAxis) -> Self {
+    match axis {
+      ScrollbarAxis::Vertical => Self::Vertical,
+      ScrollbarAxis::Horizontal => Self::Horizontal,
+      ScrollbarAxis::Both => Self::Both,
+    }
+  }
 }
 
 pub struct ScrollableMask {
-  axis: Axis,
+  axis: ScrollableMaskAxis,
   scroll_handle: ScrollHandle,
   debug: Option<Hsla>,
 }
 
 impl ScrollableMask {
-  pub fn new(axis: Axis, scroll_handle: &ScrollHandle) -> Self {
+  pub fn new(axis: impl Into<ScrollableMaskAxis>, scroll_handle: &ScrollHandle) -> Self {
     Self {
       scroll_handle: scroll_handle.clone(),
-      axis,
+      axis: axis.into(),
       debug: None,
     }
   }
@@ -84,7 +108,7 @@ impl Element for ScrollableMask {
     _: Bounds<Pixels>, _: &mut Self::RequestLayoutState, hitbox: &mut Self::PrepaintState,
     window: &mut Window, _: &mut App,
   ) {
-    let horizontal = is_horizontal(self.axis);
+    let axis = self.axis;
     let line_height = window.line_height();
     let bounds = hitbox.bounds;
 
@@ -105,7 +129,7 @@ impl Element for ScrollableMask {
         let scroll_handle = self.scroll_handle.clone();
 
         move |event: &ScrollWheelEvent, phase, _, cx| {
-          if !(bounds.contains(&event.position) && phase.bubble()) {
+          if !(bounds.contains(&event.position) && phase.capture()) {
             return;
           }
 
@@ -120,10 +144,17 @@ impl Element for ScrollableMask {
             }
           }
 
-          if horizontal {
-            offset.x += delta.x;
-          } else {
-            offset.y += delta.y;
+          match axis {
+            ScrollableMaskAxis::Horizontal => {
+              offset.x += delta.x;
+            }
+            ScrollableMaskAxis::Vertical => {
+              offset.y += delta.y;
+            }
+            ScrollableMaskAxis::Both => {
+              offset.x += delta.x;
+              offset.y += delta.y;
+            }
           }
 
           if offset != scroll_handle.offset() {

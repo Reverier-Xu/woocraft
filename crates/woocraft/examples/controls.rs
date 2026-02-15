@@ -198,25 +198,22 @@ impl Render for ControlsWindow {
                 .child(div().text_sm().child("Scroll System"))
                 .child(
                   div()
+                    .overflow_y_scrollbar()
                     .h(px(140.))
                     .w(px(360.))
                     .border_1()
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius_container)
-                    .child(
-                      v_flex()
-                        .size_full()
-                        .overflow_y_scrollbar()
-                        .children((1..=24).map(|i| {
-                          div()
-                            .px_3()
-                            .py_2()
-                            .border_b_1()
-                            .border_color(cx.theme().border.opacity(0.5))
-                            .child(format!("Scrollable row #{i}"))
-                            .into_any_element()
-                        })),
-                    ),
+                    .children((1..=24).map(|i| {
+                      div()
+                        .px_3()
+                        .py_2()
+                        .border_b_1()
+                        .border_color(cx.theme().border.opacity(0.5))
+                        .child(format!("Scrollable row #{i}"))
+                        .into_any_element()
+                    })),
+                    
                 ),
             )
             .child(

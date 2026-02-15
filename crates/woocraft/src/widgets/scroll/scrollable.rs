@@ -6,7 +6,7 @@ use gpui::{
   prelude::FluentBuilder,
 };
 
-use super::{Scrollbar, ScrollbarAxis, ScrollbarHandle};
+use super::{ScrollableMask, Scrollbar, ScrollbarAxis, ScrollbarHandle};
 use crate::StyledExt;
 
 pub trait ScrollableElement: InteractiveElement + Styled + ParentElement + Element {
@@ -128,6 +128,7 @@ where
           })
           .child(self.element.size_auto()),
       )
+      .child(ScrollableMask::new(self.axis, &scroll_handle))
       .child(render_scrollbar(
         "scrollbar",
         &scroll_handle,
