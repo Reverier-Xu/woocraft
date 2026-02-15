@@ -1,5 +1,5 @@
 [common]
-loading = "Loading"
+loading = "Loading..."
 
 [title_bar]
 untitled = "Untitled"

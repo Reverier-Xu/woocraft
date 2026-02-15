@@ -1,9 +1,13 @@
-use std::{collections::VecDeque, rc::Rc, time::Duration};
+use std::{
+  collections::VecDeque,
+  rc::Rc,
+  time::{Duration, Instant},
+};
 
 use gpui::{
   App, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render, RenderOnce,
   SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, px,
+  prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{ActiveTheme, Button, ButtonVariants, Icon, IconName, StyledExt, h_flex, v_flex};
@@ -184,6 +188,11 @@ struct NotificationItem {
   id: usize,
   key: Option<SharedString>,
   data: Notification,
+  autohide: bool,
+  duration: Duration,
+  timer_epoch: u64,
+  started_at: Option<Instant>,
+  hovered: bool,
 }
 
 pub struct NotificationState {
@@ -225,6 +234,11 @@ impl NotificationState {
       id,
       key: notification.key.clone(),
       data: notification,
+      autohide,
+      duration,
+      timer_epoch: 0,
+      started_at: None,
+      hovered: false,
     });
 
     while self.items.len() > self.max_items {
@@ -232,20 +246,111 @@ impl NotificationState {
     }
 
     if autohide {
-      let state = cx.entity().downgrade();
-      cx.spawn_in(window, async move |_, cx| {
-        cx.background_executor().timer(duration).await;
-        if let Some(state) = state.upgrade() {
-          _ = state.update(cx, |state, cx| {
-            state.close(id);
-            cx.notify();
-          });
-        }
-      })
-      .detach();
+      self.restart_timer(id, window, cx);
     }
 
     cx.notify();
+  }
+
+  fn spawn_timer(
+    state: gpui::WeakEntity<Self>, id: usize, duration: Duration, epoch: u64, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    cx.spawn_in(window, async move |_, cx| {
+      loop {
+        cx.background_executor()
+          .timer(Duration::from_millis(33))
+          .await;
+
+        let keep_running = if let Some(state) = state.upgrade() {
+          state
+            .update(cx, |state, cx| {
+              let Some(item) = state.items.iter_mut().find(|item| item.id == id) else {
+                return false;
+              };
+
+              if !item.autohide || item.timer_epoch != epoch {
+                return false;
+              }
+
+              let Some(started_at) = item.started_at else {
+                return false;
+              };
+
+              if started_at.elapsed() >= duration {
+                state.close(id);
+                cx.notify();
+                return false;
+              }
+
+              cx.notify();
+              true
+            })
+            .unwrap_or(false)
+        } else {
+          false
+        };
+
+        if !keep_running {
+          break;
+        }
+      }
+    })
+    .detach();
+  }
+
+  fn restart_timer(&mut self, id: usize, window: &mut Window, cx: &mut Context<Self>) {
+    let Some((duration, epoch)) =
+      self
+        .items
+        .iter_mut()
+        .find(|item| item.id == id)
+        .and_then(|item| {
+          if !item.autohide {
+            return None;
+          }
+
+          item.hovered = false;
+          item.started_at = Some(Instant::now());
+          item.timer_epoch = item.timer_epoch.wrapping_add(1);
+
+          Some((item.duration, item.timer_epoch))
+        })
+    else {
+      return;
+    };
+
+    let state = cx.entity().downgrade();
+    Self::spawn_timer(state, id, duration, epoch, window, cx);
+  }
+
+  fn pause_and_reset_timer(&mut self, id: usize) {
+    if let Some(item) = self.items.iter_mut().find(|item| item.id == id) {
+      if item.autohide {
+        item.hovered = true;
+        item.started_at = None;
+        item.timer_epoch = item.timer_epoch.wrapping_add(1);
+      }
+    }
+  }
+
+  fn progress_ratio(&self, id: usize) -> Option<f32> {
+    let item = self.items.iter().find(|item| item.id == id)?;
+    if !item.autohide {
+      return None;
+    }
+
+    if item.hovered || item.started_at.is_none() {
+      return Some(1.0);
+    }
+
+    let duration = item.duration.as_secs_f32();
+    if duration <= f32::EPSILON {
+      return Some(0.0);
+    }
+
+    let elapsed = item.started_at?.elapsed().as_secs_f32();
+    Some((1.0 - elapsed / duration).clamp(0.0, 1.0))
   }
 
   pub fn close(&mut self, id: usize) {
@@ -387,6 +492,7 @@ impl RenderOnce for NotificationCard {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let icon_color = self.data.type_.color(cx);
     let icon_name = self.data.icon.unwrap_or_else(|| self.data.type_.icon());
+    let progress_ratio = self.state.read(cx).progress_ratio(self.id);
 
     v_flex()
       .id(("notification-card", self.id as u64))
@@ -396,9 +502,22 @@ impl RenderOnce for NotificationCard {
       .bg(cx.theme().popover)
       .rounded(cx.theme().radius_container)
       .p_1()
-      .gap_1()
       .shadow_sm()
       .items_start()
+      .on_hover({
+        let state = self.state.clone();
+        let id = self.id;
+        move |is_hovered, window, cx| {
+          state.update(cx, |state, cx| {
+            if *is_hovered {
+              state.pause_and_reset_timer(id);
+            } else {
+              state.restart_timer(id, window, cx);
+            }
+            cx.notify();
+          });
+        }
+      })
       .child(
         h_flex()
           .w_full()
@@ -435,6 +554,7 @@ impl RenderOnce for NotificationCard {
         v_flex()
           .w_full()
           .px_2()
+          .py_1()
           .flex_1()
           .when_some(self.data.message.clone(), |this, message| {
             this.child(div().text_color(cx.theme().muted_foreground).child(message))
@@ -445,7 +565,7 @@ impl RenderOnce for NotificationCard {
         |this, action_label| {
           this.child(
             Button::new(("notification-action", self.id as u64))
-              .flat()
+              .primary()
               .label(action_label)
               .on_click({
                 let action = self.data.action_on_click.clone();
@@ -458,6 +578,22 @@ impl RenderOnce for NotificationCard {
           )
         },
       ))
+      .when_some(progress_ratio, |this, progress_ratio| {
+        this.child(
+          div()
+            .w_full()
+            .h(px(2.0))
+            .rounded(px(1.0))
+            .bg(cx.theme().border.opacity(0.35))
+            .child(
+              div()
+                .h_full()
+                .rounded(px(1.0))
+                .bg(icon_color)
+                .w(relative(progress_ratio)),
+            ),
+        )
+      })
       .when_some(self.data.on_click.clone(), |this, on_click| {
         this.cursor_pointer().on_click(move |_, window, cx| {
           on_click(window, cx);
