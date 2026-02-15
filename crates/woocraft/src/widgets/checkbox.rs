@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement,
-  RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+  AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, MouseButton,
+  ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder as _,
 };
 
@@ -19,6 +19,8 @@ pub struct Checkbox {
   checked: bool,
   disabled: bool,
   size: Size,
+  tab_stop: bool,
+  tab_index: isize,
   on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
 }
 
@@ -32,6 +34,8 @@ impl Checkbox {
       checked: false,
       disabled: false,
       size: Size::default(),
+      tab_stop: true,
+      tab_index: 0,
       on_click: None,
     }
   }
@@ -48,6 +52,16 @@ impl Checkbox {
 
   pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
     self.on_click = Some(Rc::new(handler));
+    self
+  }
+
+  pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+    self.tab_stop = tab_stop;
+    self
+  }
+
+  pub fn tab_index(mut self, tab_index: isize) -> Self {
+    self.tab_index = tab_index;
     self
   }
 }
@@ -89,8 +103,12 @@ impl ParentElement for Checkbox {
 }
 
 impl RenderOnce for Checkbox {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
+    let focus_handle = window
+      .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+      .read(cx)
+      .clone();
     let indicator_color = if checked {
       cx.theme().primary
     } else {
@@ -131,10 +149,20 @@ impl RenderOnce for Checkbox {
       .when_some(self.label, |this, label| this.child(label))
       .children(self.children)
       .when(!self.disabled, |this| {
+        this.track_focus(
+          &focus_handle
+            .tab_stop(self.tab_stop)
+            .tab_index(self.tab_index),
+        )
+      })
+      .when(!self.disabled, |this| {
         this
           .cursor_pointer()
           .hover(|this| this.opacity(0.9))
           .active(|this| this.opacity(0.8))
+      })
+      .on_mouse_down(MouseButton::Left, |_, window, _| {
+        window.prevent_default();
       })
       .when_some(
         self.on_click.filter(|_| !self.disabled),

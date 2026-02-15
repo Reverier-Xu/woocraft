@@ -61,6 +61,15 @@ impl Render for ButtonWindow {
       .child(
         h_flex()
           .gap_3()
+          .child(Button::new("btn-default").label("Default").default())
+          .child(
+            Button::new("btn-down")
+              .label("Down")
+              .default()
+              .dropdown_caret(true),
+          )
+          .child(Button::new("btn-link").label("Link").link())
+          .child(Button::new("btn-flat").label("Flat").flat())
           .child(
             Button::new("btn-primary")
               .label("Primary")
@@ -72,8 +81,6 @@ impl Render for ButtonWindow {
           )
           .child(Button::new("btn-success").label("Success").success())
           .child(Button::new("btn-warning").label("Warning").warning())
-          .child(Button::new("btn-default").label("Default").default())
-          .child(Button::new("btn-flat").label("Flat").flat())
           .child(Button::new("btn-danger").label("Danger").danger())
           .child(
             Button::new("btn-disabled")

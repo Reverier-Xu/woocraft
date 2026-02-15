@@ -1,6 +1,6 @@
 use gpui::{
-  AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+  AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
@@ -13,6 +13,7 @@ pub enum TagVariant {
   Danger,
   Success,
   Warning,
+  Info,
   Custom,
 }
 
@@ -22,6 +23,7 @@ pub struct Tag {
   variant: TagVariant,
   outline: bool,
   size: Size,
+  rounded: Option<Pixels>,
   custom_bg: Option<Hsla>,
   custom_fg: Option<Hsla>,
   custom_border: Option<Hsla>,
@@ -35,6 +37,7 @@ impl Tag {
       variant: TagVariant::default(),
       outline: false,
       size: Size::default(),
+      rounded: None,
       custom_bg: None,
       custom_fg: None,
       custom_border: None,
@@ -62,6 +65,10 @@ impl Tag {
     Self::new().with_variant(TagVariant::Warning)
   }
 
+  pub fn info() -> Self {
+    Self::new().with_variant(TagVariant::Info)
+  }
+
   pub fn custom(bg: Hsla, fg: Hsla, border: Hsla) -> Self {
     Self::new()
       .with_variant(TagVariant::Custom)
@@ -77,6 +84,16 @@ impl Tag {
 
   pub fn outline(mut self) -> Self {
     self.outline = true;
+    self
+  }
+
+  pub fn rounded(mut self, radius: impl Into<Pixels>) -> Self {
+    self.rounded = Some(radius.into());
+    self
+  }
+
+  pub fn rounded_full(mut self) -> Self {
+    self.rounded = Some(px(999.0));
     self
   }
 
@@ -139,6 +156,11 @@ impl RenderOnce for Tag {
         cx.theme().primary_foreground,
         cx.theme().warning,
       ),
+      TagVariant::Info => (
+        cx.theme().ring,
+        cx.theme().primary_foreground,
+        cx.theme().ring,
+      ),
       TagVariant::Custom => (
         self.custom_bg.unwrap_or(cx.theme().muted),
         self.custom_fg.unwrap_or(cx.theme().foreground),
@@ -156,6 +178,7 @@ impl RenderOnce for Tag {
     } else {
       default_fg
     };
+    let rounded = self.rounded.unwrap_or(cx.theme().radius);
 
     div()
       .flex()
@@ -171,7 +194,7 @@ impl RenderOnce for Tag {
       .bg(bg)
       .text_color(fg)
       .border_color(default_border)
-      .rounded(cx.theme().radius)
+      .rounded(rounded)
       .hover(|this| this.opacity(0.9))
       .refine_style(&self.style)
       .children(self.children)

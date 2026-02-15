@@ -6923,6 +6923,7 @@ dependencies = [
  "gpui",
  "gpui-macros",
  "palette",
+ "regex",
  "rust-embed",
  "rust-i18n",
  "serde",

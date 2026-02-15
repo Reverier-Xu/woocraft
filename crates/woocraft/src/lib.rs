@@ -25,4 +25,5 @@ pub fn init(cx: &mut gpui::App) {
   i18n::init();
   actions::init(cx);
   base::init(cx);
+  widgets::init(cx);
 }

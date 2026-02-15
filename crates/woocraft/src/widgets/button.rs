@@ -1,10 +1,10 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  Animation, AnimationExt as _, AnyElement, AnyView, App, ClickEvent, ElementId, Hsla,
-  InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
+  Animation, AnimationExt as _, AnyElement, AnyView, App, ClickEvent, Corners, ElementId, Hsla,
+  InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
-  percentage, prelude::FluentBuilder,
+  percentage, prelude::FluentBuilder, px,
 };
 
 use crate::{
@@ -17,10 +17,28 @@ pub enum ButtonVariant {
   Primary,
   Success,
   Warning,
+  Info,
   #[default]
   Default,
+  Link,
   Flat,
   Danger,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub enum ButtonRounded {
+  None,
+  Small,
+  #[default]
+  Medium,
+  Large,
+  Size(Pixels),
+}
+
+impl From<Pixels> for ButtonRounded {
+  fn from(value: Pixels) -> Self {
+    Self::Size(value)
+  }
 }
 
 pub trait ButtonVariants: Sized {
@@ -38,6 +56,10 @@ pub trait ButtonVariants: Sized {
     self.with_variant(ButtonVariant::Warning)
   }
 
+  fn info(self) -> Self {
+    self.with_variant(ButtonVariant::Info)
+  }
+
   fn default(self) -> Self {
     self.with_variant(ButtonVariant::Default)
   }
@@ -46,8 +68,8 @@ pub trait ButtonVariants: Sized {
     self.with_variant(ButtonVariant::Flat)
   }
 
-  fn ghost(self) -> Self {
-    self.default()
+  fn link(self) -> Self {
+    self.with_variant(ButtonVariant::Link)
   }
 
   fn danger(self) -> Self {
@@ -66,6 +88,11 @@ pub struct Button {
   size: Size,
   disabled: bool,
   selected: bool,
+  rounded: ButtonRounded,
+  border_corners: Corners<bool>,
+  dropdown_caret: bool,
+  tab_stop: bool,
+  tab_index: isize,
   outline: bool,
   loading: bool,
   loading_icon: Option<IconName>,
@@ -85,6 +112,11 @@ impl Button {
       size: Size::Medium,
       disabled: false,
       selected: false,
+      rounded: ButtonRounded::default(),
+      border_corners: Corners::all(true),
+      dropdown_caret: false,
+      tab_stop: true,
+      tab_index: 0,
       outline: false,
       loading: false,
       loading_icon: None,
@@ -112,6 +144,31 @@ impl Button {
 
   pub fn outline(mut self, outline: bool) -> Self {
     self.outline = outline;
+    self
+  }
+
+  pub fn rounded(mut self, rounded: impl Into<ButtonRounded>) -> Self {
+    self.rounded = rounded.into();
+    self
+  }
+
+  pub fn border_corners(mut self, corners: impl Into<Corners<bool>>) -> Self {
+    self.border_corners = corners.into();
+    self
+  }
+
+  pub fn dropdown_caret(mut self, dropdown_caret: bool) -> Self {
+    self.dropdown_caret = dropdown_caret;
+    self
+  }
+
+  pub fn tab_stop(mut self, tab_stop: bool) -> Self {
+    self.tab_stop = tab_stop;
+    self
+  }
+
+  pub fn tab_index(mut self, tab_index: isize) -> Self {
+    self.tab_index = tab_index;
     self
   }
 
@@ -184,9 +241,9 @@ impl ParentElement for Button {
 }
 
 impl RenderOnce for Button {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let theme = cx.theme();
-    let is_flat = matches!(self.variant, ButtonVariant::Flat);
+    let is_flat = matches!(self.variant, ButtonVariant::Flat | ButtonVariant::Link);
 
     let transparent = Hsla::transparent_black();
     let (base_bg, base_fg, base_border, hover_bg, active_bg) = match self.variant {
@@ -229,6 +286,19 @@ impl RenderOnce for Button {
           ..theme.warning
         },
       ),
+      ButtonVariant::Info => (
+        theme.ring,
+        theme.primary_foreground,
+        theme.ring,
+        Hsla {
+          a: 0.9,
+          ..theme.ring
+        },
+        Hsla {
+          a: 0.8,
+          ..theme.ring
+        },
+      ),
       ButtonVariant::Default => (
         transparent,
         theme.foreground,
@@ -240,6 +310,19 @@ impl RenderOnce for Button {
         Hsla {
           a: 0.1,
           ..theme.foreground
+        },
+      ),
+      ButtonVariant::Link => (
+        transparent,
+        theme.primary,
+        transparent,
+        Hsla {
+          a: 0.1,
+          ..theme.primary
+        },
+        Hsla {
+          a: 0.15,
+          ..theme.primary
         },
       ),
       ButtonVariant::Flat => (
@@ -303,21 +386,29 @@ impl RenderOnce for Button {
     let selected_bg = if is_flat {
       bg
     } else if self.outline {
-      transparent
+      background_hover
     } else {
       active_bg
     };
     let selected_fg = if is_flat {
       theme.primary
     } else if self.outline {
-      base_bg
+      if self.variant == ButtonVariant::Default {
+        theme.foreground
+      } else {
+        base_bg
+      }
     } else {
       fg
     };
     let selected_border = if is_flat {
       border
     } else if self.outline {
-      base_bg
+      if self.variant == ButtonVariant::Default {
+        theme.foreground
+      } else {
+        base_bg
+      }
     } else {
       border
     };
@@ -371,7 +462,6 @@ impl RenderOnce for Button {
           selected_border,
         )
       };
-
     let has_only_icon = self.label.is_none() && self.children.is_empty() && self.icon.is_some();
     let clickable = self.clickable();
     let hoverable = self.hoverable();
@@ -403,7 +493,23 @@ impl RenderOnce for Button {
       })
       .when_some(self.label, |this, label| this.child(label))
       .children(self.children)
+      .when(self.dropdown_caret, |this| {
+        this.child(Icon::new(IconName::ChevronDown).with_size(self.size.smaller()))
+      })
       .button_text_size(self.size);
+
+    let radius = match self.rounded {
+      ButtonRounded::None => px(0.0),
+      ButtonRounded::Small => theme.radius / 2.0,
+      ButtonRounded::Medium => theme.radius,
+      ButtonRounded::Large => theme.radius_container,
+      ButtonRounded::Size(radius) => radius,
+    };
+
+    let focus_handle = window
+      .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+      .read(cx)
+      .clone();
 
     div()
       .id(self.id)
@@ -415,6 +521,26 @@ impl RenderOnce for Button {
       .border_color(border)
       .text_color(fg)
       .input_size(self.size)
+      .rounded_tl(if self.border_corners.top_left {
+        radius
+      } else {
+        px(0.0)
+      })
+      .rounded_tr(if self.border_corners.top_right {
+        radius
+      } else {
+        px(0.0)
+      })
+      .rounded_bl(if self.border_corners.bottom_left {
+        radius
+      } else {
+        px(0.0)
+      })
+      .rounded_br(if self.border_corners.bottom_right {
+        radius
+      } else {
+        px(0.0)
+      })
       .when(self.selected, |this| {
         this
           .bg(selected_bg)
@@ -423,7 +549,17 @@ impl RenderOnce for Button {
       })
       .when(!has_only_icon, |this| this.px(self.size.input_px()))
       .when(has_only_icon, |this| {
-        this.size(self.size.component_height()).p_0()
+        this
+          .size(self.size.component_height())
+          .p_0()
+          .flex_shrink_0()
+      })
+      .when(!self.disabled, |this| {
+        this.track_focus(
+          &focus_handle
+            .tab_stop(self.tab_stop)
+            .tab_index(self.tab_index),
+        )
       })
       .child(content)
       .when(hoverable, |this| {

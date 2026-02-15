@@ -3,10 +3,12 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider, Kbd,
-  Label, Link, Notification, NotificationCenter, NotificationPlacement, NotificationState,
-  NotificationType, Popover, Progress, ScrollableElement, Selectable, Slider, SliderState, Spinner,
-  StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, h_flex, init, v_flex, window_border,
+  ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider, Icon,
+  IconLabel, Input, InputState, Kbd, Label, Link, Notification, NotificationCenter,
+  NotificationPlacement, NotificationState, NotificationType, NumberInput, OtpInput, OtpState,
+  Popover, Progress, ProgressCircle, ScrollableElement, Selectable, Slider, SliderState, Spinner,
+  StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex,
+  window_border,
 };
 
 struct ControlsWindow {
@@ -17,6 +19,13 @@ struct ControlsWindow {
   link_clicks: usize,
   breadcrumb_last: &'static str,
   popover_open: bool,
+  button_group_selected: Vec<usize>,
+  toggle_checked: bool,
+  toggle_group_checks: Vec<bool>,
+  input_state1: Entity<InputState>,
+  input_state2: Entity<InputState>,
+  number_input_state: Entity<InputState>,
+  otp_state: Entity<OtpState>,
 }
 
 impl ControlsWindow {
@@ -29,6 +38,10 @@ impl ControlsWindow {
         .default_value(20.0)
     });
     let notification_state = cx.new(|_| NotificationState::new().max_items(6));
+    let input_state1 = cx.new(|cx| InputState::new(cx).placeholder("Search package..."));
+    let input_state2 = cx.new(|cx| InputState::new(cx).placeholder("Search package..."));
+    let number_input_state = cx.new(|cx| InputState::new(cx).default_value("10"));
+    let otp_state = cx.new(|cx| OtpState::new(6, cx));
 
     cx.new(|_| Self {
       checked: false,
@@ -38,6 +51,13 @@ impl ControlsWindow {
       link_clicks: 0,
       breadcrumb_last: "Home",
       popover_open: false,
+      button_group_selected: vec![0],
+      toggle_checked: false,
+      toggle_group_checks: vec![false, true, false],
+      input_state1,
+      input_state2,
+      number_input_state,
+      otp_state,
     })
   }
 }
@@ -213,7 +233,6 @@ impl Render for ControlsWindow {
                         .child(format!("Scrollable row #{i}"))
                         .into_any_element()
                     })),
-                    
                 ),
             )
             .child(
@@ -225,6 +244,37 @@ impl Render for ControlsWindow {
             .child(
               v_flex()
                 .gap_3()
+                .child(div().text_sm().child("Inputs (single / number / otp)"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      div().w(px(280.)).child(
+                        Input::new(&self.input_state1)
+                          .cleanable(true),
+                      ),
+                    ),
+                )
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      div().w(px(220.)).child(
+                        NumberInput::new(&self.number_input_state)
+                          .step(0.5)
+                          .min(0.0)
+                          .max(99.0),
+                      ),
+                    ),
+                )
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(OtpInput::new(&self.otp_state).groups(3)),
+                )
                 .child(
                   h_flex()
                     .items_center()
@@ -232,6 +282,8 @@ impl Render for ControlsWindow {
                     .child(
                       Checkbox::new("demo-checkbox")
                         .checked(self.checked)
+                        .tab_stop(true)
+                        .tab_index(1)
                         .label("Enable")
                         .on_click(cx.listener(|this, checked, _, cx| {
                           this.checked = *checked;
@@ -360,6 +412,8 @@ impl Render for ControlsWindow {
                     )
                     .child(Tag::primary().child("Primary"))
                     .child(Tag::success().outline().child("Success"))
+                    .child(Tag::info().child("Info"))
+                    .child(Tag::warning().rounded_full().child("Rounded Full"))
                     .child(
                       div().w(px(180.)).child(
                         Progress::new()
@@ -369,8 +423,78 @@ impl Render for ControlsWindow {
                           .text_color(cx.theme().muted_foreground)
                           .value(slider_value),
                       ),
+                    )
+                    .child(
+                      ProgressCircle::new()
+                        .value(slider_value)
+                        .color(cx.theme().primary)
+                        .track_color(cx.theme().muted)
+                        .text_color(cx.theme().muted_foreground),
                     ),
                 ),
+            )
+            .child(Divider::horizontal_dashed().label("newly added capabilities"))
+            .child(
+              v_flex()
+                .gap_3()
+                .child(div().text_sm().child("Button Variants + Features"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      Button::new("btn-info")
+                        .info()
+                        .label("Info")
+                        .dropdown_caret(true),
+                    )
+                    .child(Button::new("btn-link").link().label("Link"))
+                )
+                .child(div().text_sm().child("WidgetGroup (buttons)"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      WidgetGroup::new("demo-widget-group")
+                        .multiple(true)
+                        .default()
+                        .child(Button::new("bg-0").label("One").selected(self.button_group_selected.contains(&0)))
+                        .child(Button::new("bg-1").label("Two").selected(self.button_group_selected.contains(&1)))
+                        .child(Button::new("bg-2").label("Three").selected(self.button_group_selected.contains(&2)))
+                        .on_click(cx.listener(|this, selected: &Vec<usize>, _, cx| {
+                          this.button_group_selected = selected.clone();
+                          cx.notify();
+                        })),
+                    )
+                    .child(Label::new(format!(
+                      "selected = {:?}",
+                      self.button_group_selected
+                    ))),
+                )
+                .child(div().text_sm().child("WidgetGroup (mixed components)"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      div().w(px(560.)).child(
+                        WidgetGroup::new("demo-widget-group-mixed")
+                          .child(
+                            Button::new("wg-run")
+                              .primary()
+                              .label("Run"),
+                          )
+                          .child(Input::new(&self.input_state2).cleanable(true))
+                          .child(Icon::new(woocraft::IconName::Search))
+                          .child(
+                            IconLabel::new("wg-status")
+                              .icon(woocraft::IconName::Checkmark)
+                              .label("Ready"),
+                          ),
+                      ),
+                    ),
+                )
             )
             .child(
               div()
@@ -378,21 +502,24 @@ impl Render for ControlsWindow {
                 .border_color(cx.theme().border)
                 .pt_3()
                 .child(Label::new("Summary").secondary(format!(
-                  "checked={}, switched={}, slider={:.1}, link_clicks={}, breadcrumb_last={}, popover_open={}",
+                  "checked={}, switched={}, slider={:.1}, link_clicks={}, breadcrumb_last={}, popover_open={}, button_group={:?}, toggle={}, toggle_group={:?}",
                   self.checked,
                   self.switched,
                   slider_value,
                   self.link_clicks,
                   self.breadcrumb_last,
-                  self.popover_open
+                  self.popover_open,
+                  self.button_group_selected,
+                  self.toggle_checked,
+                  self.toggle_group_checks
                 ))),
             )
-            .child(
+            ,
+        ),
+    ).child(
               NotificationCenter::new(&self.notification_state)
                 .placement(NotificationPlacement::BottomRight),
-            ),
-        ),
-    )
+            )
   }
 }
 
