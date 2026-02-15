@@ -1,10 +1,10 @@
 use gpui::{
-  AnyElement, App, Bounds, Deferred, ElementId, IntoElement, Length, ParentElement,
-  Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, deferred, div, px,
-  InteractiveElement as _, prelude::FluentBuilder as _,
+  AnyElement, App, Bounds, Corner, Deferred, ElementId, InteractiveElement as _, IntoElement,
+  Length, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, deferred,
+  div, point, prelude::FluentBuilder as _, px,
 };
 
-use crate::{ActiveTheme, Size, Sizable, StyleSized, StyledExt, v_flex};
+use crate::{ActiveTheme, Sizable, Size, StyleSized, StyledExt, v_flex};
 
 #[derive(IntoElement)]
 pub struct Popover {
@@ -42,8 +42,16 @@ impl Popover {
   where
     E: IntoElement + 'static,
   {
+    let popover_position = point(
+      trigger_bounds.origin.x,
+      trigger_bounds.origin.y + trigger_bounds.size.height + px(4.),
+    );
+    println!("Popover position: {:?}", popover_position);
+
     deferred(
       anchored()
+        .anchor(Corner::TopLeft)
+        .position(popover_position)
         .snap_to_window_with_margin(px(8.))
         .child(
           div()
@@ -80,8 +88,6 @@ impl ParentElement for Popover {
 
 impl RenderOnce for Popover {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-
-
     Self::render_overlay(
       self.trigger_bounds,
       self.menu_width,

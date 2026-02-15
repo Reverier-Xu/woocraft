@@ -411,7 +411,7 @@ impl RenderOnce for NotificationCard {
             v_flex()
               .flex_1()
               .when_some(self.data.title.clone(), |this, title| {
-                this.child(div().text_sm().font_semibold().child(title))
+                this.child(div().font_semibold().child(title))
               }),
           )
           .child(
@@ -435,7 +435,6 @@ impl RenderOnce for NotificationCard {
         |this, message| {
           this.child(
             div()
-              .text_sm()
               .text_color(cx.theme().muted_foreground)
               .child(message),
           )

@@ -5,7 +5,7 @@ use gpui::{
   Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,
   InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
-  percentage, prelude::FluentBuilder as _,
+  percentage, prelude::FluentBuilder,
 };
 
 use crate::{
@@ -265,7 +265,11 @@ impl RenderOnce for Button {
     };
 
     let (bg, fg, border) = if self.outline {
-      (transparent, base_bg, base_bg)
+      if self.variant == ButtonVariant::Default {
+        (transparent, theme.foreground, theme.foreground)
+      } else {
+        (transparent, base_bg, base_bg)
+      }
     } else {
       (base_bg, base_fg, base_border)
     };
@@ -414,6 +418,7 @@ impl RenderOnce for Button {
           .hover(move |this| this.bg(hover_bg).border_color(border))
           .active(move |this| this.bg(active_bg).border_color(border))
       })
+      .when(self.disabled, |this| this.cursor_not_allowed())
       .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
         this.on_click(move |event, window, cx| on_click(event, window, cx))
       })

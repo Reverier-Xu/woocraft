@@ -30,7 +30,7 @@ impl Render for ButtonWindow {
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
             .child(div().text_xl().font_semibold().child("Woocraft Button Preview"))
-            .child(div().text_sm().child("Theme"))
+            .child(div().child("Theme"))
             .child(
                 h_flex()
                     .gap_3()
