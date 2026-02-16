@@ -3,8 +3,8 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, Label, Pagination, Selectable, Sizable as _,
-  StyledExt, Theme, ThemeMode, v_flex, window_border,
+  ActiveTheme, Button, ButtonVariants as _, Label, Pagination, Selectable, Sizable as _, StyledExt,
+  Theme, ThemeMode, TitleBar, v_flex, window_border,
 };
 
 #[derive(Default)]
@@ -14,7 +14,7 @@ struct PaginationWindow {
 }
 
 impl PaginationWindow {
-  fn view(cx: &mut App) -> Entity<Self> {
+  fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
     cx.new(|_| Self {
       page: 1,
       total_pages: 18,
@@ -29,83 +29,87 @@ impl Render for PaginationWindow {
     window_border().child(
       v_flex()
         .size_full()
-        .p_6()
-        .gap_4()
-        .bg(cx.theme().background)
-        .text_color(cx.theme().foreground)
+        .min_h_0()
+        .child(TitleBar::new().title("Woocraft Pagination Example"))
         .child(
           div()
-            .text_xl()
-            .font_semibold()
-            .child("Woocraft Pagination Example"),
-        )
-        .child(
-          Label::new("Current Page").secondary(format!(
-            "{}/{}",
-            self.page, self.total_pages
-          )),
-        )
-        .child(
-          div().child(
-            Pagination::new("pagination-default")
-              .current_page(self.page)
-              .total_pages(self.total_pages)
-              .visible_pages(7)
-              .on_click(cx.listener(|this, page, _, cx| {
-                this.page = *page;
-                cx.notify();
-              })),
-          ),
-        )
-        .child(div().text_sm().child("Compact"))
-        .child(
-          div().child(
-            Pagination::new("pagination-compact")
-              .compact()
-              .current_page(self.page)
-              .total_pages(self.total_pages)
-              .on_click(cx.listener(|this, page, _, cx| {
-                this.page = *page;
-                cx.notify();
-              })),
-          ),
-        )
-        .child(div().text_sm().child("State"))
-        .child(
-          div().h_flex().gap_3().child(
-            Button::new("page-prev")
-              .label("Prev")
-              .flat()
-              .small()
-              .on_click(cx.listener(|this, _, _, cx| {
-                this.page = this.page.saturating_sub(1).max(1);
-                cx.notify();
-              })),
-          )
-          .child(
-            Button::new("page-next")
-              .label("Next")
-              .flat()
-              .small()
-              .on_click(cx.listener(|this, _, _, cx| {
-                this.page = (this.page + 1).min(this.total_pages);
-                cx.notify();
-              })),
-          )
-          .child(
-            Button::new("theme-light")
-              .label("Light")
-              .selected(!is_dark)
-              .small()
-              .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
-          )
-          .child(
-            Button::new("theme-dark")
-              .label("Dark")
-              .selected(is_dark)
-              .small()
-              .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
-          ),
+            .v_flex()
+            .p_6()
+            .gap_4()
+            .child(
+              div()
+                .text_xl()
+                .font_semibold()
+                .child("Woocraft Pagination Example"),
+            )
+            .child(
+              Label::new("Current Page").secondary(format!("{}/{}", self.page, self.total_pages)),
+            )
+            .child(
+              div().child(
+                Pagination::new("pagination-default")
+                  .current_page(self.page)
+                  .total_pages(self.total_pages)
+                  .visible_pages(7)
+                  .on_click(cx.listener(|this, page, _, cx| {
+                    this.page = *page;
+                    cx.notify();
+                  })),
+              ),
+            )
+            .child(div().text_sm().child("Compact"))
+            .child(
+              div().child(
+                Pagination::new("pagination-compact")
+                  .compact()
+                  .current_page(self.page)
+                  .total_pages(self.total_pages)
+                  .on_click(cx.listener(|this, page, _, cx| {
+                    this.page = *page;
+                    cx.notify();
+                  })),
+              ),
+            )
+            .child(div().text_sm().child("State"))
+            .child(
+              div()
+                .h_flex()
+                .gap_3()
+                .child(
+                  Button::new("page-prev")
+                    .label("Prev")
+                    .flat()
+                    .small()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                      this.page = this.page.saturating_sub(1).max(1);
+                      cx.notify();
+                    })),
+                )
+                .child(
+                  Button::new("page-next")
+                    .label("Next")
+                    .flat()
+                    .small()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                      this.page = (this.page + 1).min(this.total_pages);
+                      cx.notify();
+                    })),
+                )
+                .child(
+                  Button::new("theme-light")
+                    .label("Light")
+                    .selected(!is_dark)
+                    .small()
+                    .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
+                )
+                .child(
+                  Button::new("theme-dark")
+                    .label("Dark")
+                    .selected(is_dark)
+                    .small()
+                    .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
+                ),
+            ),
         ),
     )
   }
@@ -118,14 +122,19 @@ fn main() {
     woocraft::init(cx);
     cx.activate(true);
 
-    let bounds = Bounds::centered(None, GpuiSize::new(px(920.), px(560.)), cx);
+    let bounds = Bounds::centered(None, GpuiSize::new(px(980.), px(680.)), cx);
     let window = cx
       .open_window(
         WindowOptions {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
+          titlebar: Some(TitleBar::title_bar_options()),
+          #[cfg(target_os = "linux")]
+          window_background: gpui::WindowBackgroundAppearance::Transparent,
+          #[cfg(target_os = "linux")]
+          window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
-        |_window, cx| PaginationWindow::view(cx),
+        PaginationWindow::view,
       )
       .expect("open pagination demo window failed");
 

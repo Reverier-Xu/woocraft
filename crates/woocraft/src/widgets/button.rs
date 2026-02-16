@@ -469,11 +469,15 @@ impl RenderOnce for Button {
           selected_border,
         )
       };
-      let (bg, border) = if self.disabled && matches!(self.variant, ButtonVariant::Flat | ButtonVariant::Link | ButtonVariant::Default) {
-        (theme.foreground.alpha(0.2), transparent)
-      } else {
-        (bg, border)
-      };
+    let (bg, border) = if self.disabled
+      && matches!(
+        self.variant,
+        ButtonVariant::Flat | ButtonVariant::Link | ButtonVariant::Default
+      ) {
+      (theme.foreground.alpha(0.1), transparent)
+    } else {
+      (bg, border)
+    };
     let has_only_icon = self.label.is_none() && self.children.is_empty() && self.icon.is_some();
     let clickable = self.clickable();
     let hoverable = self.hoverable();
@@ -559,7 +563,11 @@ impl RenderOnce for Button {
           .text_color(selected_fg)
           .border_color(selected_border)
       })
-      .when(!has_only_icon, |this| this.px(self.size.input_px()))
+      .when(!has_only_icon, |this| {
+        this
+          .px(self.size.input_px())
+          .min_w(self.size.component_height())
+      })
       .when(has_only_icon, |this| {
         this
           .size(self.size.component_height())

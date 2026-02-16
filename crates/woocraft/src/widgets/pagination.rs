@@ -106,10 +106,11 @@ impl Pagination {
       })
       .when(self.compact, |this| this.icon(icon))
       .when(!self.compact, |this| {
-        this
-          .when(is_prev, |this| this.flex_row_reverse())
-          .child(label.clone())
-          .child(Icon::new(icon))
+        if is_prev {
+          this.child(Icon::new(icon)).child(label.clone())
+        } else {
+          this.child(label.clone()).child(Icon::new(icon))
+        }
       })
       .when_some(self.on_click.clone(), |this, handler| {
         this.on_click(move |_, window, cx| {
