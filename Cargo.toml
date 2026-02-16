@@ -11,6 +11,7 @@ publish      = true
 repository   = "https://github.com/Reverier-Xu/woocraft"
 rust-version = "1.93.0"
 version      = "0.1.0"
+readme       = "README.md"
 
 [profile.release]
 codegen-units = 1
