@@ -1,13 +1,13 @@
 use gpui::{
-  BoxShadow, Corners, DefiniteLength, Div, Edges, Hsla, Pixels, Refineable, StyleRefinement,
-  Styled, div, point, px,
+  BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks, FontFeatures, Hsla, Pixels,
+  Refineable, StyleRefinement, Styled, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
 /// A trait for converting [`Pixels`] to primitive float values.
 pub trait PixelsExt {
   fn as_f32(&self) -> f32;
-  fn as_f64(self) -> f64;
+  fn as_f64(&self) -> f64;
 }
 
 impl PixelsExt for Pixels {
@@ -15,21 +15,70 @@ impl PixelsExt for Pixels {
     f32::from(*self)
   }
 
-  fn as_f64(self) -> f64 {
-    f64::from(self)
+  fn as_f64(&self) -> f64 {
+    f64::from(*self)
+  }
+}
+
+pub fn default_font() -> Font {
+  let locale = crate::locale();
+  let cjk_fallbacks = if locale.starts_with("zh-hans") {
+    vec![
+      "PingFang SC".into(),
+      "Hiragino Sans GB".into(),
+      "Noto Sans CJK SC".into(),
+      "Source Han Sans SC".into(),
+      "Source Han Sans CN".into(),
+      "Microsoft YaHei".into(),
+      "WenQuanYi Micro Hei".into(),
+    ]
+  } else if locale.starts_with("zh-hant") {
+    vec![
+      "PingFang TC".into(),
+      "Heiti TC".into(),
+      "Source Han Sans TC".into(),
+      "Noto Sans CJK TC".into(),
+      "Microsoft JhengHei".into(),
+    ]
+  } else if locale.starts_with("ja") {
+    vec![
+      "Hiragino Kaku Gothic ProN".into(),
+      "Yu Gothic".into(),
+      "Meiryo".into(),
+      "Noto Sans CJK JP".into(),
+      "Source Han Sans JP".into(),
+    ]
+  } else {
+    vec![
+      "Source Han Sans CN".into(),
+      "Source Han Sans SC".into(),
+      "Noto Sans CJK SC".into(),
+      "PingFang SC".into(),
+      "Microsoft YaHei".into(),
+      "Hiragino Sans GB".into(),
+      "WenQuanYi Micro Hei".into(),
+    ]
+  };
+
+  Font {
+    family: crate::DEFAULT_FONT_FAMILY.into(),
+    weight: gpui::FontWeight::NORMAL,
+    style: gpui::FontStyle::Normal,
+    features: FontFeatures::default(),
+    fallbacks: Some(FontFallbacks::from_fonts(cjk_fallbacks)),
   }
 }
 
 /// Returns a `Div` as horizontal flex layout.
 #[inline(always)]
 pub fn h_flex() -> Div {
-  div().h_flex().font_family(crate::DEFAULT_FONT_FAMILY)
+  div().h_flex().font(default_font())
 }
 
 /// Returns a `Div` as vertical flex layout.
 #[inline(always)]
 pub fn v_flex() -> Div {
-  div().v_flex().font_family(crate::DEFAULT_FONT_FAMILY)
+  div().v_flex().font(default_font())
 }
 
 /// Create a [`BoxShadow`] like CSS.
@@ -74,7 +123,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let paddings = paddings.into();
     self
       .pt(paddings.top.into())
@@ -85,7 +135,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let margins = margins.into();
     self
       .mt(margins.top.into())
@@ -104,7 +155,7 @@ pub trait StyledExt: Styled + Sized {
   font_weight!(font_extrabold, EXTRA_BOLD);
   font_weight!(font_black, BLACK);
 
-  fn corner_radii(self, radius: Corners<Pixels>) -> Self {
+  fn corner_radius(self, radius: Corners<Pixels>) -> Self {
     self
       .rounded_tl(radius.top_left)
       .rounded_tr(radius.top_right)
@@ -140,7 +191,7 @@ impl Size {
     }
   }
 
-  pub fn from_str(size: &str) -> Self {
+  pub fn parse(size: &str) -> Self {
     match size.to_lowercase().as_str() {
       "sm" | "small" => Size::Small,
       "md" | "medium" => Size::Medium,
@@ -330,10 +381,12 @@ pub trait StyleSized<T: Styled> {
   fn input_h(self, size: Size) -> Self;
   fn input_rounded(self, size: Size) -> Self;
   fn container_h(self, size: Size) -> Self;
+  fn container_min_h(self, size: Size) -> Self;
   fn container_multiline_h(self, size: Size, lines: u32) -> Self;
   fn container_rounded(self, size: Size) -> Self;
   fn container_px(self, size: Size) -> Self;
   fn container_py(self, size: Size) -> Self;
+  fn container_size(self, size: Size) -> Self;
   fn list_size(self, size: Size) -> Self;
   fn list_px(self, size: Size) -> Self;
   fn list_py(self, size: Size) -> Self;
@@ -393,6 +446,11 @@ impl<T: Styled> StyleSized<T> for T {
   }
 
   #[inline]
+  fn container_min_h(self, size: Size) -> Self {
+    self.min_h(size.container_height())
+  }
+
+  #[inline]
   fn container_multiline_h(self, size: Size, lines: u32) -> Self {
     self.h(size.multiline_container_height(lines))
   }
@@ -410,6 +468,15 @@ impl<T: Styled> StyleSized<T> for T {
   #[inline]
   fn container_py(self, size: Size) -> Self {
     self.py(size.container_py())
+  }
+
+  #[inline]
+  fn container_size(self, size: Size) -> Self {
+    self
+      .container_px(size)
+      .container_py(size)
+      .container_min_h(size)
+      .container_rounded(size)
   }
 
   #[inline]
@@ -479,19 +546,19 @@ mod tests {
 
   #[test]
   fn test_size_from_str() {
-    assert_eq!(Size::from_str("sm"), Size::Small);
-    assert_eq!(Size::from_str("small"), Size::Small);
-    assert_eq!(Size::from_str("md"), Size::Medium);
-    assert_eq!(Size::from_str("medium"), Size::Medium);
-    assert_eq!(Size::from_str("lg"), Size::Large);
-    assert_eq!(Size::from_str("large"), Size::Large);
-    assert_eq!(Size::from_str("unknown"), Size::Medium);
+    assert_eq!(Size::parse("sm"), Size::Small);
+    assert_eq!(Size::parse("small"), Size::Small);
+    assert_eq!(Size::parse("md"), Size::Medium);
+    assert_eq!(Size::parse("medium"), Size::Medium);
+    assert_eq!(Size::parse("lg"), Size::Large);
+    assert_eq!(Size::parse("large"), Size::Large);
+    assert_eq!(Size::parse("unknown"), Size::Medium);
 
-    assert_eq!(Size::from_str("xs"), Size::Medium);
-    assert_eq!(Size::from_str("xsmall"), Size::Medium);
+    assert_eq!(Size::parse("xs"), Size::Medium);
+    assert_eq!(Size::parse("xsmall"), Size::Medium);
 
-    assert_eq!(Size::from_str("SMALL"), Size::Small);
-    assert_eq!(Size::from_str("Md"), Size::Medium);
+    assert_eq!(Size::parse("SMALL"), Size::Small);
+    assert_eq!(Size::parse("Md"), Size::Medium);
   }
 
   #[test]

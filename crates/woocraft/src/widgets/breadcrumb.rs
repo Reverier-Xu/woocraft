@@ -8,6 +8,8 @@ use gpui::{
 
 use crate::{ActiveTheme, Icon, IconName, Sizable, StyledExt, h_flex};
 
+type BreadcrumbClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
 #[derive(IntoElement)]
 pub struct Breadcrumb {
   style: StyleRefinement,
@@ -19,9 +21,15 @@ pub struct BreadcrumbItem {
   id: ElementId,
   style: StyleRefinement,
   label: SharedString,
-  on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+  on_click: Option<BreadcrumbClickHandler>,
   disabled: bool,
   is_last: bool,
+}
+
+impl Default for Breadcrumb {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Breadcrumb {
@@ -57,7 +65,7 @@ impl RenderOnce for Breadcrumb {
     for (index, item) in self.items.into_iter().enumerate() {
       let is_last = index == items_count.saturating_sub(1);
 
-      children.push(item.id(index).is_last(is_last).into_any_element());
+      children.push(item.id(index).with_last(is_last).into_any_element());
       if !is_last {
         children.push(BreadcrumbSeparator.into_any_element());
       }
@@ -101,7 +109,7 @@ impl BreadcrumbItem {
     self
   }
 
-  fn is_last(mut self, is_last: bool) -> Self {
+  fn with_last(mut self, is_last: bool) -> Self {
     self.is_last = is_last;
     self
   }

@@ -8,7 +8,10 @@ mod input;
 mod kbd;
 mod label;
 mod link;
+mod list;
+mod menu;
 mod notification;
+mod pagination;
 mod popover;
 mod progress;
 mod scroll;
@@ -18,6 +21,7 @@ mod switch;
 mod tag;
 mod title_bar;
 mod tooltip;
+mod virtual_list;
 mod widget_group;
 mod window_border;
 
@@ -31,7 +35,10 @@ pub use input::*;
 pub use kbd::*;
 pub use label::*;
 pub use link::*;
+pub use list::*;
+pub use menu::*;
 pub use notification::*;
+pub use pagination::*;
 pub use popover::*;
 pub use progress::*;
 pub use scroll::*;
@@ -41,9 +48,12 @@ pub use switch::*;
 pub use tag::*;
 pub use title_bar::*;
 pub use tooltip::*;
+pub use virtual_list::*;
 pub use widget_group::*;
 pub use window_border::*;
 
 pub fn init(cx: &mut gpui::App) {
   input::init(cx);
+  list::init(cx);
+  menu::init(cx);
 }

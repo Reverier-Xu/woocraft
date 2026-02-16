@@ -15,6 +15,12 @@ pub struct Spinner {
   color: Option<Hsla>,
 }
 
+impl Default for Spinner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Spinner {
   pub fn new() -> Self {
     Self {

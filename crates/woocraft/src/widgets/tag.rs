@@ -30,6 +30,12 @@ pub struct Tag {
   children: Vec<AnyElement>,
 }
 
+impl Default for Tag {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Tag {
   pub fn new() -> Self {
     Self {

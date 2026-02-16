@@ -6928,6 +6928,7 @@ dependencies = [
  "rust-i18n",
  "serde",
  "serde_json",
+ "smallvec",
  "thiserror 2.0.18",
  "toml 0.9.12+spec-1.1.0",
 ]

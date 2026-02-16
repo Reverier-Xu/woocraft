@@ -11,6 +11,8 @@ use crate::{
   ActiveTheme, Button, ButtonVariants, IconLabel, IconName, Size, StyleSized, StyledExt, h_flex,
 };
 
+type CloseWindowHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
 const TITLE_BAR_SIZE: Size = Size::Medium;
 
 #[derive(IntoElement)]
@@ -19,7 +21,7 @@ pub struct TitleBar {
   children: Vec<AnyElement>,
   title: Option<SharedString>,
   icon: Option<IconName>,
-  on_close_window: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+  on_close_window: Option<CloseWindowHandler>,
 }
 
 impl TitleBar {
@@ -69,7 +71,7 @@ impl Default for TitleBar {
 
 #[derive(IntoElement)]
 struct WindowControls {
-  on_close_window: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+  on_close_window: Option<CloseWindowHandler>,
 }
 
 impl RenderOnce for WindowControls {

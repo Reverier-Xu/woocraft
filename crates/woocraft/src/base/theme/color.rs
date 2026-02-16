@@ -178,7 +178,7 @@ impl ThemeColors {
     let foreground = pick_readable_text(background, light_theme_text, dark_theme_text);
     let card = to_hsla_from_oklch(card_lightness, bg_chroma, tokens.primary, 1.0);
     let card_foreground = foreground;
-    let popover = background.clone();
+    let popover = background;
     let popover_foreground = foreground;
 
     let primary = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.primary, 1.0);

@@ -414,10 +414,12 @@ impl Element for Scrollbar {
     &mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, window: &mut Window,
     cx: &mut App,
   ) -> (LayoutId, Self::RequestLayoutState) {
-    let mut style = Style::default();
-    style.position = Position::Absolute;
-    style.flex_grow = 1.0;
-    style.flex_shrink = 1.0;
+    let mut style = Style {
+      position: Position::Absolute,
+      flex_grow: 1.0,
+      flex_shrink: 1.0,
+      ..Default::default()
+    };
     style.size.width = relative(1.).into();
     style.size.height = relative(1.).into();
 
@@ -670,17 +672,38 @@ impl Element for Scrollbar {
           window.on_mouse_event({
             let state = scrollbar_state.clone();
             let scroll_handle = self.scroll_handle.clone();
+            let line_height = window.line_height();
 
             move |event: &ScrollWheelEvent, phase, _, cx| {
-              if phase.bubble() && hitbox_bounds.contains(&event.position) {
-                if scroll_handle.offset() != state.get().last_scroll_offset {
-                  state.set(
-                    state
-                      .get()
-                      .with_last_scroll(scroll_handle.offset(), Some(Instant::now())),
-                  );
-                  cx.notify(view_id);
+              if !(phase.capture() && hitbox_bounds.contains(&event.position)) {
+                return;
+              }
+
+              let mut delta = event.delta.pixel_delta(line_height);
+              if !delta.x.is_zero() && !delta.y.is_zero() {
+                if delta.x.abs() > delta.y.abs() {
+                  delta.y = px(0.);
+                } else {
+                  delta.x = px(0.);
                 }
+              }
+
+              let mut offset = scroll_handle.offset();
+              if vertical {
+                offset.y += delta.y;
+              } else {
+                offset.x += delta.x;
+              }
+
+              if offset != scroll_handle.offset() {
+                scroll_handle.set_offset(offset);
+                state.set(
+                  state
+                    .get()
+                    .with_last_scroll(scroll_handle.offset(), Some(Instant::now())),
+                );
+                cx.notify(view_id);
+                cx.stop_propagation();
               }
             }
           });
@@ -743,12 +766,11 @@ impl Element for Scrollbar {
                 if state.get().hovered_axis != Some(axis) {
                   notify = true;
                 }
-              } else if state.get().hovered_axis == Some(axis) {
-                if state.get().hovered_axis.is_some() {
+              } else if state.get().hovered_axis == Some(axis)
+                && state.get().hovered_axis.is_some() {
                   state.set(state.get().with_hovered(None));
                   notify = true;
                 }
-              }
 
               if thumb_bounds.contains(&event.position) {
                 if state.get().hovered_on_thumb != Some(axis) {
@@ -788,15 +810,13 @@ impl Element for Scrollbar {
                   )
                 };
 
-                if (scroll_handle.offset().y - offset.y).abs() > px(1.)
-                  || (scroll_handle.offset().x - offset.x).abs() > px(1.)
-                {
-                  if state.get().last_update.elapsed() > max_fps_duration {
+                if ((scroll_handle.offset().y - offset.y).abs() > px(1.)
+                  || (scroll_handle.offset().x - offset.x).abs() > px(1.))
+                  && state.get().last_update.elapsed() > max_fps_duration {
                     scroll_handle.set_offset(offset);
                     state.set(state.get().with_last_update(Instant::now()));
                     notify = true;
                   }
-                }
               }
 
               if notify {

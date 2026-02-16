@@ -12,6 +12,8 @@ use crate::{
   h_flex,
 };
 
+type IconLabelClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
 #[derive(IntoElement)]
 pub struct IconLabel {
   id: ElementId,
@@ -24,7 +26,7 @@ pub struct IconLabel {
   selected: bool,
   loading: bool,
   loading_icon: Option<IconName>,
-  on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+  on_click: Option<IconLabelClickHandler>,
 }
 
 impl IconLabel {

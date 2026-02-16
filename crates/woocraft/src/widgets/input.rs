@@ -1,12 +1,15 @@
-use std::{ops::Range, time::Duration};
+use std::{
+  ops::Range,
+  time::{Duration, Instant},
+};
 
 use gpui::{
-  Action, AnyElement, App, Bounds, ClipboardItem, Context, Corners, Entity, EntityInputHandler,
-  ElementInputHandler, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
-  IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-  MouseUpEvent, ParentElement as _, Pixels, Render, RenderOnce, SharedString, StyleRefinement,
-  Styled, UTF16Selection, Window,
-  actions, div, point, prelude::FluentBuilder as _, px, relative,
+  Action, Animation, AnimationExt as _, AnyElement, App, Bounds, ClipboardItem, Context, Corners,
+  ElementInputHandler, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla,
+  InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
+  MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render, RenderOnce, SharedString,
+  StyleRefinement, Styled, UTF16Selection, Window, actions, div, linear, point,
+  prelude::FluentBuilder as _, px, relative,
 };
 use regex::Regex;
 use serde::Deserialize;
@@ -17,6 +20,34 @@ use crate::{
 };
 
 const CONTEXT: &str = "Input";
+const CARET_THICKNESS: Pixels = px(2.);
+const CARET_BLINK_DURATION: Duration = Duration::from_millis(1200);
+const CARET_STEADY_DURATION: Duration = Duration::from_millis(700);
+
+fn caret_opacity(delta: f32) -> f32 {
+  let wave = (1.0 + (delta * std::f32::consts::TAU).cos()) * 0.5;
+  0.1 + wave * 0.9
+}
+
+fn shared_caret(color: Hsla, animate: bool, animation_id: &'static str) -> AnyElement {
+  let caret = div().h_full().w(CARET_THICKNESS).bg(color);
+
+  if animate {
+    caret
+      .with_animation(
+        animation_id,
+        Animation::new(CARET_BLINK_DURATION)
+          .repeat()
+          .with_easing(linear),
+        |this, delta| this.opacity(caret_opacity(delta)),
+      )
+      .into_any_element()
+  } else {
+    caret.into_any_element()
+  }
+}
+
+type InputValidate = Box<dyn Fn(&str, &mut Context<InputState>) -> bool + 'static>;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -160,14 +191,14 @@ pub struct InputState {
   selecting: bool,
   input_bounds: Bounds<Pixels>,
   horizontal_scroll: Pixels,
-  blink_visible: bool,
+  caret_steady_until: Option<Instant>,
   disabled: bool,
   loading: bool,
   masked: bool,
   clean_on_escape: bool,
   size: Size,
   pattern: Option<Regex>,
-  validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
+  validate: Option<InputValidate>,
   undo_stack: Vec<Snapshot>,
   redo_stack: Vec<Snapshot>,
 }
@@ -176,7 +207,9 @@ impl EventEmitter<InputEvent> for InputState {}
 
 impl InputState {
   pub fn new(cx: &mut Context<Self>) -> Self {
-    let state = Self {
+    
+
+    Self {
       focus_handle: cx.focus_handle().tab_stop(true),
       text: String::new(),
       placeholder: SharedString::default(),
@@ -185,7 +218,7 @@ impl InputState {
       selecting: false,
       input_bounds: Bounds::default(),
       horizontal_scroll: px(0.),
-      blink_visible: true,
+      caret_steady_until: None,
       disabled: false,
       loading: false,
       masked: false,
@@ -195,28 +228,22 @@ impl InputState {
       validate: None,
       undo_stack: Vec::new(),
       redo_stack: Vec::new(),
-    };
+    }
+  }
 
-    cx.spawn({
-      let entity = cx.entity().clone();
-      async move |_, cx| {
-        loop {
-          cx.background_executor()
-            .timer(Duration::from_millis(530))
-            .await;
-          let result: Result<(), _> = entity.update(cx, |state: &mut InputState, cx| {
-            state.blink_visible = !state.blink_visible;
-            cx.notify();
-          });
-          if result.is_err() {
-            break;
-          }
-        }
+  fn hold_caret_visible(&mut self) {
+    self.caret_steady_until = Some(Instant::now() + CARET_STEADY_DURATION);
+  }
+
+  fn should_animate_caret(&mut self) -> bool {
+    match self.caret_steady_until {
+      Some(until) if Instant::now() < until => false,
+      Some(_) => {
+        self.caret_steady_until = None;
+        true
       }
-    })
-    .detach();
-
-    state
+      None => true,
+    }
   }
 
   pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
@@ -449,7 +476,7 @@ impl InputState {
     }
 
     self.focus(window, cx);
-    self.blink_visible = true;
+    self.hold_caret_visible();
     self.selecting = true;
 
     let offset = self.byte_offset_for_mouse_position(event.position, window);
@@ -470,6 +497,7 @@ impl InputState {
 
     let offset = self.byte_offset_for_mouse_position(event.position, window);
     self.selected_range.end = offset;
+    self.hold_caret_visible();
     self.ensure_cursor_visible(window);
     cx.notify();
   }
@@ -552,9 +580,7 @@ impl InputState {
       .iter()
       .position(|(byte, _)| *byte >= offset)
       .unwrap_or(chars.len());
-    if idx > 0 {
-      idx -= 1;
-    }
+    idx = idx.saturating_sub(1);
     while idx > 0 && chars[idx].1.is_whitespace() {
       idx -= 1;
     }
@@ -587,11 +613,10 @@ impl InputState {
   }
 
   fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
-    if let Some(pattern) = &self.pattern {
-      if !pattern.is_match(new_text) {
+    if let Some(pattern) = &self.pattern
+      && !pattern.is_match(new_text) {
         return false;
       }
-    }
 
     if let Some(validate) = &self.validate {
       return validate(new_text, cx);
@@ -628,7 +653,7 @@ impl InputState {
     let cursor = range.start + new_text.len();
     self.selected_range = Selection::new(cursor, cursor);
     self.ime_marked_range = None;
-    self.blink_visible = true;
+    self.hold_caret_visible();
     cx.emit(InputEvent::Change);
     cx.notify();
   }
@@ -641,6 +666,7 @@ impl InputState {
       self.selected_range_normalized().start
     };
     self.selected_range = Selection::new(cursor, cursor);
+    self.hold_caret_visible();
     cx.notify();
   }
 
@@ -652,12 +678,14 @@ impl InputState {
       self.selected_range_normalized().end
     };
     self.selected_range = Selection::new(cursor, cursor);
+    self.hold_caret_visible();
     cx.notify();
   }
 
   fn move_home(&mut self, _: &MoveHome, _: &mut Window, cx: &mut Context<Self>) {
     self.ime_marked_range = None;
     self.selected_range = Selection::new(0, 0);
+    self.hold_caret_visible();
     cx.notify();
   }
 
@@ -665,6 +693,7 @@ impl InputState {
     self.ime_marked_range = None;
     let end = self.text.len();
     self.selected_range = Selection::new(end, end);
+    self.hold_caret_visible();
     cx.notify();
   }
 
@@ -734,12 +763,14 @@ impl InputState {
   ) {
     let offset = self.previous_word_start(self.cursor());
     self.selected_range = Selection::new(offset, offset);
+    self.hold_caret_visible();
     cx.notify();
   }
 
   fn move_to_next_word(&mut self, _: &MoveToNextWord, _: &mut Window, cx: &mut Context<Self>) {
     let offset = self.next_word_end(self.cursor());
     self.selected_range = Selection::new(offset, offset);
+    self.hold_caret_visible();
     cx.notify();
   }
 
@@ -814,7 +845,7 @@ impl InputState {
       return;
     }
 
-    self.blink_visible = true;
+    self.hold_caret_visible();
     cx.notify();
   }
 }
@@ -822,6 +853,7 @@ impl InputState {
 pub struct OtpState {
   focus_handle: FocusHandle,
   value: SharedString,
+  caret_steady_until: Option<Instant>,
   masked: bool,
   length: usize,
   disabled: bool,
@@ -834,6 +866,7 @@ impl OtpState {
     Self {
       focus_handle,
       value: SharedString::default(),
+      caret_steady_until: None,
       masked: false,
       length: length.max(1),
       disabled: false,
@@ -871,9 +904,20 @@ impl OtpState {
     self.focus_handle.focus(window);
   }
 
+  fn hold_caret_visible(&mut self) {
+    self.caret_steady_until = Some(Instant::now() + CARET_STEADY_DURATION);
+  }
+
+  fn should_animate_caret(&self) -> bool {
+    self
+      .caret_steady_until
+      .is_none_or(|until| Instant::now() >= until)
+  }
+
   fn on_input_mouse_down(
     &mut self, _: &gpui::MouseDownEvent, window: &mut Window, cx: &mut Context<Self>,
   ) {
+    self.hold_caret_visible();
     self.focus(window, cx);
   }
 
@@ -890,6 +934,7 @@ impl OtpState {
         if !chars.is_empty() {
           chars.pop();
           self.value = chars.iter().collect::<String>().into();
+          self.hold_caret_visible();
           cx.emit(InputEvent::Change);
           cx.notify();
           window.prevent_default();
@@ -897,16 +942,16 @@ impl OtpState {
         }
       }
       _ => {
-        if let Some(ch) = key.chars().next() {
-          if ch.is_ascii_digit() && chars.len() < self.length {
+        if let Some(ch) = key.chars().next()
+          && ch.is_ascii_digit() && chars.len() < self.length {
             chars.push(ch);
             self.value = chars.iter().collect::<String>().into();
+            self.hold_caret_visible();
             cx.emit(InputEvent::Change);
             cx.notify();
             window.prevent_default();
             cx.stop_propagation();
           }
-        }
       }
     }
   }
@@ -968,6 +1013,8 @@ impl RenderOnce for OtpInput {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let state = self.state.read(cx);
     let is_focused = state.focus_handle.is_focused(window);
+    let animate_caret = state.should_animate_caret();
+    let caret_color = cx.theme().primary;
     let value_chars = state.value.chars().collect::<Vec<_>>();
     let cursor_ix = value_chars.len().min(state.length.saturating_sub(1));
     let group_count = self.number_of_groups.max(1).min(state.length);
@@ -1028,8 +1075,7 @@ impl RenderOnce for OtpInput {
               if focused_cell {
                 div()
                   .h_4()
-                  .border_l_2()
-                  .border_color(cx.theme().ring)
+                  .child(shared_caret(caret_color, animate_caret, "otp-caret-blink"))
                   .into_any_element()
               } else {
                 div().into_any_element()
@@ -1322,14 +1368,14 @@ impl EntityInputHandler for InputState {
         .unwrap_or_else(|| Selection::new(marked_range.end, marked_range.end));
     }
 
-    self.blink_visible = true;
+    self.hold_caret_visible();
     cx.emit(InputEvent::Change);
     cx.notify();
   }
 
   fn bounds_for_range(
-    &mut self, range_utf16: Range<usize>, bounds: gpui::Bounds<gpui::Pixels>,
-    window: &mut Window, _cx: &mut Context<Self>,
+    &mut self, range_utf16: Range<usize>, bounds: gpui::Bounds<gpui::Pixels>, window: &mut Window,
+    _cx: &mut Context<Self>,
   ) -> Option<gpui::Bounds<gpui::Pixels>> {
     if bounds.size.width <= px(0.) {
       return Some(bounds);
@@ -1372,7 +1418,7 @@ impl Focusable for InputState {
 }
 
 impl Render for InputState {
-  fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     self.ensure_cursor_visible(window);
 
     let cursor = self.cursor();
@@ -1386,6 +1432,8 @@ impl Render for InputState {
     };
 
     let text_color = window.text_style().color;
+    let caret_color = cx.theme().primary;
+    let selection_color = cx.theme().primary.opacity(0.25);
 
     let cursor_char = Self::byte_to_char_offset(&self.text, cursor);
     let selection_start_char = Self::byte_to_char_offset(&self.text, selection.start);
@@ -1400,7 +1448,8 @@ impl Render for InputState {
     let right_text = &display[selected_byte.min(display.len())..];
 
     let caret_left = (self.cursor_x(window) - self.horizontal_scroll).max(px(0.));
-    let show_caret = is_focused && !has_selection && self.blink_visible;
+    let show_caret = is_focused && !has_selection;
+    let animate_caret = show_caret && self.should_animate_caret();
 
     h_flex()
       .id("input-state")
@@ -1422,11 +1471,7 @@ impl Render for InputState {
           })
           .when(has_selection, |this| {
             this
-              .child(
-                div()
-                  .bg(text_color.opacity(0.25))
-                  .child(selected_text.to_string()),
-              )
+              .child(div().bg(selection_color).child(selected_text.to_string()))
               .child(right_text.to_string())
           })
           .when(!has_selection, |this| {
@@ -1438,11 +1483,13 @@ impl Render for InputState {
           div()
             .absolute()
             .left(caret_left)
-            .top_0()
-            .bottom_0()
-            .w(px(0.))
-            .border_l_2()
-            .border_color(text_color),
+            .top_0p5()
+            .bottom_0p5()
+            .child(shared_caret(
+              caret_color,
+              animate_caret,
+              "input-caret-blink",
+            )),
         )
       })
   }
@@ -1520,6 +1567,11 @@ impl Input {
   pub fn tab_index(mut self, index: isize) -> Self {
     self.tab_index = index;
     self
+  }
+
+  pub(crate) fn is_active(&self, window: &Window, cx: &App) -> bool {
+    let state = self.state.read(cx);
+    self.selected || (state.focus_handle.is_focused(window) && !state.disabled)
   }
 
   fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
@@ -1649,7 +1701,7 @@ impl RenderOnce for Input {
       .when(self.appearance, |this| {
         this
           .bg(bg)
-          .corner_radii(Corners {
+          .corner_radius(Corners {
             top_left: if self.border_corners.top_left {
               cx.theme().radius
             } else {
@@ -1699,6 +1751,40 @@ impl RenderOnce for Input {
                 ElementInputHandler::new(bounds, state.clone()),
                 cx,
               );
+
+              window.on_mouse_event({
+                let state = state.clone();
+                move |event: &MouseMoveEvent, _, window, cx| {
+                  if event.pressed_button != Some(MouseButton::Left) {
+                    return;
+                  }
+
+                  let (should_track_drag, outside_input_bounds) = {
+                    let input_state = state.read(cx);
+                    (
+                      input_state.selecting && input_state.focus_handle.is_focused(window),
+                      !input_state.input_bounds.contains(&event.position),
+                    )
+                  };
+
+                  if should_track_drag && outside_input_bounds {
+                    state.update(cx, |state, cx| {
+                      state.on_mouse_move(event, window, cx);
+                    });
+                  }
+                }
+              });
+
+              window.on_mouse_event({
+                let state = state.clone();
+                move |event: &MouseUpEvent, _, window, cx| {
+                  if state.read(cx).selecting {
+                    state.update(cx, |state, cx| {
+                      state.on_mouse_up(event, window, cx);
+                    });
+                  }
+                }
+              });
 
               state.update(cx, |state, cx| {
                 if state.input_bounds != bounds {

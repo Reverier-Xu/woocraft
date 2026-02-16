@@ -8,13 +8,15 @@ use gpui::{
 
 use crate::{ActiveTheme, Disableable, StyledExt};
 
+type LinkClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
+
 #[derive(IntoElement)]
 pub struct Link {
   id: ElementId,
   style: StyleRefinement,
   href: Option<SharedString>,
   disabled: bool,
-  on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+  on_click: Option<LinkClickHandler>,
   children: Vec<AnyElement>,
 }
 

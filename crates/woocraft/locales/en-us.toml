@@ -3,3 +3,10 @@ loading = "Loading..."
 
 [title_bar]
 untitled = "Untitled"
+
+[list]
+search_placeholder = "Search..."
+
+[pagination]
+previous = "Previous"
+next = "Next"

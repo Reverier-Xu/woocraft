@@ -1,7 +1,7 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-  AnyElement, App, Axis, Corners, ElementId, InteractiveElement as _, IntoElement,
+  AnyElement, App, Axis, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement,
   ParentElement as _, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
   div, prelude::FluentBuilder as _, px,
 };
@@ -10,6 +10,8 @@ use crate::{
   ActiveTheme, Button, ButtonVariant, ButtonVariants as _, Disableable, Icon, IconLabel, Input,
   Label, Selectable, Sizable, Size, StyleSized as _, StyledExt, h_flex,
 };
+
+type WidgetGroupClickHandler = Box<dyn Fn(&Vec<usize>, &mut Window, &mut App) + 'static>;
 
 pub enum WidgetGroupChild {
   Button(Button),
@@ -75,7 +77,7 @@ pub struct WidgetGroup {
   outline: bool,
   variant: Option<ButtonVariant>,
   size: Option<Size>,
-  on_click: Option<Box<dyn Fn(&Vec<usize>, &mut Window, &mut App) + 'static>>,
+  on_click: Option<WidgetGroupClickHandler>,
 }
 
 impl WidgetGroup {
@@ -164,6 +166,99 @@ impl WidgetGroup {
       bottom_right: if corners.bottom_right { radius } else { px(0.) },
     }
   }
+
+  fn divider_color(
+    left_active: Option<Hsla>, right_active: Option<Hsla>, disabled: bool, cx: &App,
+  ) -> Hsla {
+    if let Some(color) = right_active {
+      return color;
+    }
+
+    if let Some(color) = left_active {
+      return color;
+    }
+
+    let mut base = cx.theme().input;
+    if disabled {
+      base.a *= 0.6;
+    }
+    base
+  }
+
+  fn button_active_border_color(
+    variant: ButtonVariant, outline: bool, disabled: bool, cx: &App,
+  ) -> Hsla {
+    let theme = cx.theme();
+    let transparent = Hsla::transparent_black();
+
+    let base_border = match variant {
+      ButtonVariant::Primary => theme.primary,
+      ButtonVariant::Success => theme.success,
+      ButtonVariant::Warning => theme.warning,
+      ButtonVariant::Info => theme.ring,
+      ButtonVariant::Default => theme.border,
+      ButtonVariant::Link | ButtonVariant::Flat => transparent,
+      ButtonVariant::Danger => theme.danger,
+    };
+
+    let mut color = if matches!(variant, ButtonVariant::Flat | ButtonVariant::Link) {
+      base_border
+    } else if outline {
+      if variant == ButtonVariant::Default {
+        theme.foreground
+      } else {
+        base_border
+      }
+    } else {
+      base_border
+    };
+
+    if disabled {
+      color.a *= 0.6;
+    }
+
+    color
+  }
+
+  fn input_active_border_color(disabled: bool, cx: &App) -> Hsla {
+    let mut color = cx.theme().ring;
+    if disabled {
+      color.a *= 0.6;
+    }
+    color
+  }
+
+  fn active_border_color(
+    child: &WidgetGroupChild, variant: ButtonVariant, outline: bool, disabled: bool,
+    window: &Window, cx: &App,
+  ) -> Option<Hsla> {
+    match child {
+      WidgetGroupChild::Button(button) if button.is_selected() => Some(
+        Self::button_active_border_color(variant, outline, disabled, cx),
+      ),
+      WidgetGroupChild::Input(input) if input.is_active(window, cx) => {
+        Some(Self::input_active_border_color(disabled, cx))
+      }
+      _ => None,
+    }
+  }
+
+  fn divider(layout: Axis, color: Hsla, size: Size) -> AnyElement {
+    match layout {
+      Axis::Horizontal => div()
+        .w(px(1.))
+        .h(size.component_height())
+        .bg(color)
+        .ml(px(-1.))
+        .into_any_element(),
+      Axis::Vertical => div()
+        .h(px(1.))
+        .w_full()
+        .bg(color)
+        .mt(px(-1.))
+        .into_any_element(),
+    }
+  }
 }
 
 impl Disableable for WidgetGroup {
@@ -194,7 +289,22 @@ impl crate::ButtonVariants for WidgetGroup {
 }
 
 impl RenderOnce for WidgetGroup {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let effective_variant = self.variant.unwrap_or_default();
+    let active_border_colors = self
+      .children
+      .iter()
+      .map(|child| {
+        Self::active_border_color(
+          child,
+          effective_variant,
+          self.outline,
+          self.disabled,
+          window,
+          cx,
+        )
+      })
+      .collect::<Vec<_>>();
     let selected_ixs = self
       .children
       .iter()
@@ -222,66 +332,116 @@ impl RenderOnce for WidgetGroup {
           .when(!self.compact, |this| this.gap_0())
       })
       .refine_style(&self.style)
-      .children(self.children.into_iter().enumerate().map(|(ix, child)| {
-        let clicked_ix = clicked_ix.clone();
-        let is_first = ix == 0;
-        let corners = Self::corners_for(ix, children_len, self.layout);
+      .children(
+        self
+          .children
+          .into_iter()
+          .enumerate()
+          .flat_map(|(ix, child)| {
+            let clicked_ix = clicked_ix.clone();
+            let is_first = ix == 0;
+            let is_last = ix + 1 == children_len;
+            let hide_leading_border = !is_first;
+            let hide_trailing_border = !is_last;
+            let corners = Self::corners_for(ix, children_len, self.layout);
+            let mut elements = Vec::with_capacity(2);
 
-        match child {
-          WidgetGroupChild::Button(button) => button
-            .disabled(self.disabled)
-            .border_corners(corners)
-            .when_some(self.variant, |this, variant| this.with_variant(variant))
-            .when_some(self.size, |this, size| this.with_size(size))
-            .when(self.outline, |this| this.outline(true))
-            .when(
-              matches!(self.layout, Axis::Horizontal) && !is_first,
-              |this| this.ml(px(0.)).border_l_0(),
-            )
-            .when(matches!(self.layout, Axis::Vertical) && !is_first, |this| {
-              this.mt(px(0.)).border_t_0()
-            })
-            .when(self.on_click.is_some() && !self.disabled, |this| {
-              this.on_click(move |_, _, _| {
-                clicked_ix.set(Some(ix));
-              })
-            })
-            .into_any_element(),
-          WidgetGroupChild::Input(input) => input
-            .disabled(self.disabled)
-            .border_corners(corners)
-            .with_size(effective_size)
-            .when(
-              matches!(self.layout, Axis::Horizontal) && !is_first,
-              |this| this.ml(px(0.)).border_l_0(),
-            )
-            .when(matches!(self.layout, Axis::Vertical) && !is_first, |this| {
-              this.mt(px(0.)).border_t_0()
-            })
-            .into_any_element(),
-          WidgetGroupChild::Element(element) => h_flex()
-            .items_center()
-            .input_h(effective_size)
-            .px(effective_size.input_px())
-            .bg(if self.disabled {
-              cx.theme().muted
-            } else {
-              cx.theme().background
-            })
-            .border_1()
-            .border_color(cx.theme().input)
-            .corner_radii(Self::corner_pixels(corners, cx.theme().radius))
-            .when(
-              matches!(self.layout, Axis::Horizontal) && !is_first,
-              |this| this.ml(px(0.)).border_l_0(),
-            )
-            .when(matches!(self.layout, Axis::Vertical) && !is_first, |this| {
-              this.mt(px(0.)).border_t_0()
-            })
-            .child(element)
-            .into_any_element(),
-        }
-      }))
+            if ix > 0 {
+              let color = Self::divider_color(
+                active_border_colors[ix - 1],
+                active_border_colors[ix],
+                self.disabled,
+                cx,
+              );
+              elements.push(Self::divider(self.layout, color, effective_size));
+            }
+
+            let child = match child {
+              WidgetGroupChild::Button(button) => button
+                .disabled(self.disabled)
+                .border_corners(corners)
+                .when_some(self.variant, |this, variant| this.with_variant(variant))
+                .when_some(self.size, |this, size| this.with_size(size))
+                .when(self.outline, |this| this.outline(true))
+                .when(
+                  hide_leading_border && matches!(self.layout, Axis::Horizontal),
+                  |this| this.ml(px(0.)).border_l_0(),
+                )
+                .when(
+                  hide_leading_border && matches!(self.layout, Axis::Vertical),
+                  |this| this.mt(px(0.)).border_t_0(),
+                )
+                .when(
+                  hide_trailing_border && matches!(self.layout, Axis::Horizontal),
+                  |this| this.border_r(px(0.)),
+                )
+                .when(
+                  hide_trailing_border && matches!(self.layout, Axis::Vertical),
+                  |this| this.border_b(px(0.)),
+                )
+                .when(self.on_click.is_some() && !self.disabled, |this| {
+                  this.on_click(move |_, _, _| {
+                    clicked_ix.set(Some(ix));
+                  })
+                })
+                .into_any_element(),
+              WidgetGroupChild::Input(input) => input
+                .disabled(self.disabled)
+                .border_corners(corners)
+                .with_size(effective_size)
+                .when(
+                  hide_leading_border && matches!(self.layout, Axis::Horizontal),
+                  |this| this.ml(px(0.)).border_l_0(),
+                )
+                .when(
+                  hide_leading_border && matches!(self.layout, Axis::Vertical),
+                  |this| this.mt(px(0.)).border_t_0(),
+                )
+                .when(
+                  hide_trailing_border && matches!(self.layout, Axis::Horizontal),
+                  |this| this.border_r(px(0.)),
+                )
+                .when(
+                  hide_trailing_border && matches!(self.layout, Axis::Vertical),
+                  |this| this.border_b(px(0.)),
+                )
+                .into_any_element(),
+              WidgetGroupChild::Element(element) => h_flex()
+                .items_center()
+                .input_h(effective_size)
+                .px(effective_size.input_px())
+                .bg(if self.disabled {
+                  cx.theme().muted
+                } else {
+                  cx.theme().background
+                })
+                .border_1()
+                .border_color(cx.theme().input)
+                .corner_radius(Self::corner_pixels(corners, cx.theme().radius))
+                .when(
+                  hide_leading_border && matches!(self.layout, Axis::Horizontal),
+                  |this| this.ml(px(0.)).border_l_0(),
+                )
+                .when(
+                  hide_leading_border && matches!(self.layout, Axis::Vertical),
+                  |this| this.mt(px(0.)).border_t_0(),
+                )
+                .when(
+                  hide_trailing_border && matches!(self.layout, Axis::Horizontal),
+                  |this| this.border_r(px(0.)),
+                )
+                .when(
+                  hide_trailing_border && matches!(self.layout, Axis::Vertical),
+                  |this| this.border_b(px(0.)),
+                )
+                .child(element)
+                .into_any_element(),
+            };
+
+            elements.push(child);
+            elements
+          }),
+      )
       .when_some(
         self.on_click.filter(|_| !self.disabled),
         move |this, on_click| {

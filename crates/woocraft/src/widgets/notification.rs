@@ -12,6 +12,8 @@ use gpui::{
 
 use crate::{ActiveTheme, Button, ButtonVariants, Icon, IconName, StyledExt, h_flex, v_flex};
 
+type NotificationClickHandler = Rc<dyn Fn(&mut Window, &mut App)>;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum NotificationPlacement {
   TopLeft,
@@ -70,9 +72,15 @@ pub struct Notification {
   icon: Option<IconName>,
   autohide: bool,
   duration: Duration,
-  on_click: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
+  on_click: Option<NotificationClickHandler>,
   action_label: Option<SharedString>,
-  action_on_click: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
+  action_on_click: Option<NotificationClickHandler>,
+}
+
+impl Default for Notification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Notification {
@@ -201,6 +209,12 @@ pub struct NotificationState {
   next_id: usize,
 }
 
+impl Default for NotificationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NotificationState {
   pub fn new() -> Self {
     Self {
@@ -325,13 +339,12 @@ impl NotificationState {
   }
 
   fn pause_and_reset_timer(&mut self, id: usize) {
-    if let Some(item) = self.items.iter_mut().find(|item| item.id == id) {
-      if item.autohide {
+    if let Some(item) = self.items.iter_mut().find(|item| item.id == id)
+      && item.autohide {
         item.hovered = true;
         item.started_at = None;
         item.timer_epoch = item.timer_epoch.wrapping_add(1);
       }
-    }
   }
 
   fn progress_ratio(&self, id: usize) -> Option<f32> {

@@ -12,6 +12,9 @@ use crate::{
   h_flex,
 };
 
+type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+type TooltipBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ButtonVariant {
   Primary,
@@ -96,8 +99,8 @@ pub struct Button {
   outline: bool,
   loading: bool,
   loading_icon: Option<IconName>,
-  on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
-  tooltip_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyView>>,
+  on_click: Option<ButtonClickHandler>,
+  tooltip_builder: Option<TooltipBuilder>,
 }
 
 impl Button {
@@ -185,6 +188,10 @@ impl Button {
   pub fn tooltip(mut self, builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
     self.tooltip_builder = Some(Rc::new(builder));
     self
+  }
+
+  pub fn element_id(&self) -> ElementId {
+    self.id.clone()
   }
 
   fn clickable(&self) -> bool {
@@ -461,6 +468,11 @@ impl RenderOnce for Button {
           selected_fg,
           selected_border,
         )
+      };
+      let (bg, border) = if self.disabled && matches!(self.variant, ButtonVariant::Flat | ButtonVariant::Link | ButtonVariant::Default) {
+        (theme.foreground.alpha(0.2), transparent)
+      } else {
+        (bg, border)
       };
     let has_only_icon = self.label.is_none() && self.children.is_empty() && self.icon.is_some();
     let clickable = self.clickable();

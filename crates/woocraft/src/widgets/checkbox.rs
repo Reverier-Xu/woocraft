@@ -10,6 +10,8 @@ use crate::{
   ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex,
 };
 
+type CheckboxClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
+
 #[derive(IntoElement)]
 pub struct Checkbox {
   id: ElementId,
@@ -21,7 +23,7 @@ pub struct Checkbox {
   size: Size,
   tab_stop: bool,
   tab_index: isize,
-  on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+  on_click: Option<CheckboxClickHandler>,
 }
 
 impl Checkbox {

@@ -65,7 +65,9 @@ pub fn register_fonts(text_system: &gpui::TextSystem) -> Result<()> {
     .filter_map(|path| Assets::get(path.as_ref()).map(|file| file.data))
     .collect::<Vec<Cow<'static, [u8]>>>();
 
-  text_system.add_fonts(fonts)
+  text_system.add_fonts(fonts)?;
+
+  Ok(())
 }
 
 #[cfg(test)]

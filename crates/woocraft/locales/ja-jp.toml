@@ -3,3 +3,10 @@ loading = "読み込み中..."
 
 [title_bar]
 untitled = "無題"
+
+[list]
+search_placeholder = "検索..."
+
+[pagination]
+previous = "前へ"
+next = "次へ"

@@ -78,10 +78,12 @@ impl Element for ScrollableMask {
     &mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
     window: &mut Window, cx: &mut App,
   ) -> (LayoutId, Self::RequestLayoutState) {
-    let mut style = Style::default();
-    style.position = Position::Absolute;
-    style.flex_grow = 1.0;
-    style.flex_shrink = 1.0;
+    let mut style = Style {
+      position: Position::Absolute,
+      flex_grow: 1.0,
+      flex_shrink: 1.0,
+      ..Default::default()
+    };
     style.size.width = relative(1.).into();
     style.size.height = relative(1.).into();
 

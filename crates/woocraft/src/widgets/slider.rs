@@ -97,6 +97,12 @@ pub struct SliderState {
   active_thumb_start: bool,
 }
 
+impl Default for SliderState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SliderState {
   pub fn new() -> Self {
     let mut this = Self {

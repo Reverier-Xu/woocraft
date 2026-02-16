@@ -13,6 +13,11 @@ use crate::{
   h_flex,
 };
 
+type PopoverTriggerBuilder = Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>;
+type PopoverContentBuilder =
+  Rc<dyn Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> AnyElement + 'static>;
+type OpenChangeHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
+
 #[derive(IntoElement)]
 pub struct Popover {
   id: ElementId,
@@ -21,19 +26,14 @@ pub struct Popover {
   default_open: bool,
   open: Option<bool>,
   tracked_focus_handle: Option<FocusHandle>,
-  trigger: Option<Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>>,
-  content: Option<
-    Rc<
-      dyn Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> AnyElement
-        + 'static,
-    >,
-  >,
+  trigger: Option<PopoverTriggerBuilder>,
+  content: Option<PopoverContentBuilder>,
   children: Vec<AnyElement>,
   trigger_style: Option<StyleRefinement>,
   mouse_button: MouseButton,
   appearance: bool,
   overlay_closable: bool,
-  on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
+  on_open_change: Option<OpenChangeHandler>,
 }
 
 impl Popover {
@@ -68,7 +68,8 @@ impl Popover {
 
   pub fn trigger<T>(mut self, trigger: T) -> Self
   where
-    T: Selectable + IntoElement + 'static, {
+    T: Selectable + IntoElement + 'static,
+  {
     self.trigger = Some(Box::new(|is_open, _, _| {
       let selected = trigger.is_selected();
       trigger.selected(selected || is_open).into_any_element()
@@ -88,7 +89,8 @@ impl Popover {
 
   pub fn on_open_change<F>(mut self, callback: F) -> Self
   where
-    F: Fn(&bool, &mut Window, &mut App) + 'static, {
+    F: Fn(&bool, &mut Window, &mut App) + 'static,
+  {
     self.on_open_change = Some(Rc::new(callback));
     self
   }
@@ -106,7 +108,8 @@ impl Popover {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> E + 'static, {
+    F: Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> E + 'static,
+  {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));
@@ -142,7 +145,8 @@ impl Popover {
     anchor: Anchor, trigger_bounds: Bounds<Pixels>, content: E, _: &mut Window, _: &mut App,
   ) -> Deferred
   where
-    E: IntoElement + 'static, {
+    E: IntoElement + 'static,
+  {
     deferred(
       anchored()
         .snap_to_window_with_margin(px(8.))
@@ -194,7 +198,7 @@ pub struct PopoverState {
   tracked_focus_handle: Option<FocusHandle>,
   trigger_bounds: Bounds<Pixels>,
   open: bool,
-  on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
+  on_open_change: Option<OpenChangeHandler>,
   dismiss_subscription: Option<Subscription>,
 }
 

@@ -8,6 +8,8 @@ use gpui::{
 
 use crate::{ActiveTheme, Disableable, Sizable, Size, StyleSized, StyledExt, h_flex};
 
+type SwitchClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum SwitchVariant {
   #[default]
@@ -44,7 +46,7 @@ pub struct Switch {
   checked: bool,
   disabled: bool,
   label: Option<SharedString>,
-  on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
+  on_click: Option<SwitchClickHandler>,
   size: Size,
   variant: SwitchVariant,
 }
@@ -75,7 +77,8 @@ impl Switch {
 
   pub fn on_click<F>(mut self, handler: F) -> Self
   where
-    F: Fn(&bool, &mut Window, &mut App) + 'static, {
+    F: Fn(&bool, &mut Window, &mut App) + 'static,
+  {
     self.on_click = Some(Rc::new(handler));
     self
   }

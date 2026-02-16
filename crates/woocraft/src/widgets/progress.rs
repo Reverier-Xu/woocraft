@@ -5,7 +5,7 @@ use gpui::{
   StyleRefinement, Styled, Window, canvas, div, point, px, relative,
 };
 
-use crate::{ActiveTheme, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, Sizable, Size, StyledExt, h_flex};
 
 #[derive(IntoElement)]
 pub struct Progress {
@@ -16,6 +16,12 @@ pub struct Progress {
   label: SharedString,
   value: f32,
   size: Size,
+}
+
+impl Default for Progress {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Progress {
@@ -132,6 +138,12 @@ pub struct ProgressCircle {
   value: f32,
   size: Size,
   children: Vec<AnyElement>,
+}
+
+impl Default for ProgressCircle {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProgressCircle {
@@ -270,7 +282,7 @@ impl RenderOnce for ProgressCircle {
         .size_full(),
       )
       .child(
-        div()
+        h_flex()
           .absolute()
           .size_full()
           .items_center()

@@ -24,6 +24,12 @@ pub struct Badge {
   size: Size,
 }
 
+impl Default for Badge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Badge {
   pub fn new() -> Self {
     Self {

@@ -4,7 +4,7 @@ use gpui::{
   ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
 
-use crate::{ActiveTheme, v_flex};
+use crate::{ActiveTheme, default_font, v_flex};
 
 #[cfg(not(target_os = "linux"))]
 const SHADOW_SIZE: Pixels = px(0.0);
@@ -64,6 +64,7 @@ impl RenderOnce for WindowBorder {
 
     div()
       .id("window-backdrop")
+      .font(default_font())
       .bg(gpui::transparent_black())
       .map(|this| match decorations {
         Decorations::Server => this,

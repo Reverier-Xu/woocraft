@@ -5,9 +5,11 @@ use gpui::{
 
 use crate::{ActiveTheme, Kbd, StyledExt, h_flex};
 
+type TooltipElementBuilder = Box<dyn Fn(&mut Window, &mut App) -> AnyElement>;
+
 enum TooltipContent {
   Text(SharedString),
-  Element(Box<dyn Fn(&mut Window, &mut App) -> AnyElement>),
+  Element(TooltipElementBuilder),
 }
 
 pub struct Tooltip {
@@ -30,7 +32,8 @@ impl Tooltip {
   pub fn element<E, F>(builder: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static, {
+    F: Fn(&mut Window, &mut App) -> E + 'static,
+  {
     Self {
       style: StyleRefinement::default(),
       key_binding: None,

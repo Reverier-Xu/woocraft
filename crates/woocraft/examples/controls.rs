@@ -1,15 +1,334 @@
 use gpui::{
   App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
-  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
+  ScrollStrategy, Size as GpuiSize, Styled, Task, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
   ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider, Icon,
-  IconLabel, Input, InputState, Kbd, Label, Link, Notification, NotificationCenter,
-  NotificationPlacement, NotificationState, NotificationType, NumberInput, OtpInput, OtpState,
-  Popover, Progress, ProgressCircle, ScrollableElement, Selectable, Slider, SliderState, Spinner,
-  StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex,
-  window_border,
+  IconLabel, IndexPath, Input, InputState, Kbd, Label, Link, List, ListDelegate, ListItem,
+  ListState, Notification, NotificationCenter, NotificationPlacement,
+  NotificationState, NotificationType, NumberInput, OtpInput, OtpState, Popover, Progress,
+  Pagination, ProgressCircle, ScrollableElement, Selectable, Slider, SliderState, Spinner,
+  StyledExt, Switch, Sizable, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex,
+  init, v_flex, window_border,
 };
+
+#[derive(Clone)]
+struct DemoListEntry {
+  title: &'static str,
+  subtitle: &'static str,
+  tag: &'static str,
+}
+
+struct DemoListDelegate {
+  section_titles: Vec<&'static str>,
+  entries: Vec<Vec<DemoListEntry>>,
+  filtered_indices: Vec<Vec<usize>>,
+  current_page: usize,
+  page_size: usize,
+  selected: Option<IndexPath>,
+  right_clicked: Option<IndexPath>,
+  confirmed: Option<IndexPath>,
+  loading: bool,
+}
+
+impl DemoListDelegate {
+  fn new() -> Self {
+    let section_titles = vec!["Framework", "Utility", "Design"];
+    let entries = vec![
+      vec![
+        DemoListEntry {
+          title: "Renderer",
+          subtitle: "High-performance viewport renderer",
+          tag: "Core",
+        },
+        DemoListEntry {
+          title: "Scheduler",
+          subtitle: "Task orchestration and frame budget",
+          tag: "Core",
+        },
+        DemoListEntry {
+          title: "Input Hub",
+          subtitle: "Unified keyboard and pointer pipeline",
+          tag: "Input",
+        },
+        DemoListEntry {
+          title: "Theme Engine",
+          subtitle: "Runtime token and palette switching",
+          tag: "Style",
+        },
+        DemoListEntry {
+          title: "Widget Registry",
+          subtitle: "Composable widget lifecycle management",
+          tag: "UI",
+        },
+      ],
+      vec![
+        DemoListEntry {
+          title: "Logger",
+          subtitle: "Structured event and diagnostics",
+          tag: "Observability",
+        },
+        DemoListEntry {
+          title: "Inspector",
+          subtitle: "Runtime tree and style inspection",
+          tag: "Debug",
+        },
+        DemoListEntry {
+          title: "Clipboard",
+          subtitle: "Cross-platform clipboard bridge",
+          tag: "Platform",
+        },
+        DemoListEntry {
+          title: "Virtual Scroller",
+          subtitle: "Variable-size list virtualization",
+          tag: "List",
+        },
+        DemoListEntry {
+          title: "Command Palette",
+          subtitle: "Search and action execution",
+          tag: "UX",
+        },
+      ],
+      vec![
+        DemoListEntry {
+          title: "Typography",
+          subtitle: "CJK-aware font fallback configuration",
+          tag: "Text",
+        },
+        DemoListEntry {
+          title: "Icon Pack",
+          subtitle: "Semantic icon naming and rendering",
+          tag: "Assets",
+        },
+        DemoListEntry {
+          title: "Spacing",
+          subtitle: "Consistent layout rhythm tokens",
+          tag: "Layout",
+        },
+        DemoListEntry {
+          title: "Motion",
+          subtitle: "Animation timing and transitions",
+          tag: "Interaction",
+        },
+        DemoListEntry {
+          title: "Accessibility",
+          subtitle: "Focus, contrast and keyboard support",
+          tag: "A11y",
+        },
+      ],
+    ];
+
+    let filtered_indices = entries
+      .iter()
+      .map(|section| (0..section.len()).collect::<Vec<_>>())
+      .collect::<Vec<_>>();
+    Self {
+      section_titles,
+      entries,
+      filtered_indices,
+      current_page: 1,
+      page_size: 3,
+      selected: None,
+      right_clicked: None,
+      confirmed: None,
+      loading: false,
+    }
+  }
+
+  fn is_loading(&self) -> bool {
+    self.loading
+  }
+
+  fn set_loading(&mut self, loading: bool) {
+    self.loading = loading;
+  }
+
+  fn total_pages(&self) -> usize {
+    let max_len = self.filtered_indices.iter().map(Vec::len).max().unwrap_or(0);
+    let page_size = self.page_size.max(1);
+    ((max_len + page_size - 1) / page_size).max(1)
+  }
+
+  fn current_page(&self) -> usize {
+    self.current_page
+  }
+
+  fn set_current_page(&mut self, page: usize) {
+    self.current_page = page.clamp(1, self.total_pages());
+  }
+
+  fn visible_bounds(&self, section: usize) -> (usize, usize, usize) {
+    let total = self.filtered_indices.get(section).map_or(0, Vec::len);
+    let start = (self.current_page.saturating_sub(1)) * self.page_size;
+    let start = start.min(total);
+    let end = (start + self.page_size).min(total);
+    (start, end, total)
+  }
+
+  fn selected_summary(&self) -> String {
+    self
+      .selected
+      .map(|ix| format!("{}:{}", ix.section, ix.row))
+      .unwrap_or_else(|| "None".to_string())
+  }
+
+  fn right_clicked_summary(&self) -> String {
+    self
+      .right_clicked
+      .map(|ix| format!("{}:{}", ix.section, ix.row))
+      .unwrap_or_else(|| "None".to_string())
+  }
+
+  fn confirmed_summary(&self) -> String {
+    self
+      .confirmed
+      .map(|ix| format!("{}:{}", ix.section, ix.row))
+      .unwrap_or_else(|| "None".to_string())
+  }
+}
+
+impl ListDelegate for DemoListDelegate {
+  type Item = ListItem;
+
+  fn perform_search(
+    &mut self, query: &str, _window: &mut Window, _cx: &mut Context<ListState<Self>>,
+  ) -> Task<()> {
+    let query = query.trim().to_lowercase();
+    self.filtered_indices = self
+      .entries
+      .iter()
+      .map(|section| {
+        section
+          .iter()
+          .enumerate()
+          .filter_map(|(ix, item)| {
+            if query.is_empty()
+              || item.title.to_lowercase().contains(&query)
+              || item.subtitle.to_lowercase().contains(&query)
+              || item.tag.to_lowercase().contains(&query)
+            {
+              Some(ix)
+            } else {
+              None
+            }
+          })
+          .collect::<Vec<_>>()
+      })
+      .collect::<Vec<_>>();
+    self.current_page = 1;
+
+    Task::ready(())
+  }
+
+  fn sections_count(&self, _cx: &App) -> usize {
+    self.entries.len()
+  }
+
+  fn items_count(&self, section: usize, _cx: &App) -> usize {
+    let (start, end, _) = self.visible_bounds(section);
+    end.saturating_sub(start)
+  }
+
+  fn render_item(
+    &mut self, ix: IndexPath, _window: &mut Window, cx: &mut Context<ListState<Self>>,
+  ) -> Option<Self::Item> {
+    let (start, _, _) = self.visible_bounds(ix.section);
+    let filtered_ix = *self.filtered_indices.get(ix.section)?.get(start + ix.row)?;
+    let item = self.entries.get(ix.section)?.get(filtered_ix)?;
+    let title = item.title;
+    let subtitle = item.subtitle;
+    let tag = item.tag;
+    let confirmed = self.confirmed.map(|v| v.eq_row(ix)).unwrap_or(false);
+
+    Some(
+      ListItem::new(("controls-list-item", ix.section * 1000 + ix.row))
+        .check_icon(Icon::new(woocraft::IconName::CheckmarkCircle))
+        .confirmed(confirmed)
+        .child(
+          v_flex()
+            .gap_0p5()
+            .child(div().font_medium().child(title))
+            .child(
+              div()
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child(subtitle),
+            ),
+        )
+        .suffix(move |_, _| Tag::new().outline().small().child(tag)),
+    )
+  }
+
+  fn render_section_header(
+    &mut self, section: usize, _window: &mut Window, cx: &mut Context<ListState<Self>>,
+  ) -> Option<impl IntoElement> {
+    let total = self.filtered_indices.get(section).map_or(0, Vec::len);
+    Some(
+      h_flex()
+        .px_2()
+        .py_1()
+        .justify_between()
+        .bg(cx.theme().muted.opacity(0.3))
+        .child(div().font_semibold().child(self.section_titles[section]))
+        .child(div().text_color(cx.theme().muted_foreground).child(format!("{total} items"))),
+    )
+  }
+
+  fn render_section_footer(
+    &mut self, section: usize, _window: &mut Window, cx: &mut Context<ListState<Self>>,
+  ) -> Option<impl IntoElement> {
+    let (start, end, total) = self.visible_bounds(section);
+    Some(
+      h_flex()
+        .w_full()
+        .px_2()
+        .py_1()
+        .justify_between()
+        .text_color(cx.theme().muted_foreground)
+        .child(format!(
+          "Page {} · Showing {}-{} / {}",
+          self.current_page,
+          start + usize::from(total > 0),
+          end,
+          total
+        )),
+    )
+  }
+
+  fn loading(&self, _cx: &App) -> bool {
+    self.loading
+  }
+
+  fn set_selected_index(
+    &mut self, ix: Option<IndexPath>, _window: &mut Window, _cx: &mut Context<ListState<Self>>,
+  ) {
+    self.selected = ix;
+  }
+
+  fn set_right_clicked_index(
+    &mut self, ix: Option<IndexPath>, _window: &mut Window, _cx: &mut Context<ListState<Self>>,
+  ) {
+    self.right_clicked = ix;
+  }
+
+  fn confirm(
+    &mut self, _secondary: bool, _window: &mut Window, _cx: &mut Context<ListState<Self>>,
+  ) {
+    self.confirmed = self.selected;
+  }
+
+  fn has_more(&self, _cx: &App) -> bool {
+    false
+  }
+
+  fn load_more_threshold(&self) -> usize {
+    0
+  }
+
+  fn load_more(&mut self, _window: &mut Window, _cx: &mut Context<ListState<Self>>) {
+    // no-op, this demo uses explicit pagination
+  }
+}
 
 struct ControlsWindow {
   checked: bool,
@@ -26,10 +345,13 @@ struct ControlsWindow {
   input_state2: Entity<InputState>,
   number_input_state: Entity<InputState>,
   otp_state: Entity<OtpState>,
+  list_state: Entity<ListState<DemoListDelegate>>,
+  list_searchable: bool,
+  list_selectable: bool,
 }
 
 impl ControlsWindow {
-  fn view(cx: &mut App) -> Entity<Self> {
+  fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
     let slider_state = cx.new(|_| {
       SliderState::new()
         .min(0.0)
@@ -42,6 +364,11 @@ impl ControlsWindow {
     let input_state2 = cx.new(|cx| InputState::new(cx).placeholder("Search package..."));
     let number_input_state = cx.new(|cx| InputState::new(cx).default_value("10"));
     let otp_state = cx.new(|cx| OtpState::new(6, cx));
+    let list_state = cx.new(|cx| {
+      ListState::new(DemoListDelegate::new(), window, cx)
+        .searchable(true)
+        .selectable(true)
+    });
 
     cx.new(|_| Self {
       checked: false,
@@ -58,6 +385,9 @@ impl ControlsWindow {
       input_state2,
       number_input_state,
       otp_state,
+      list_state,
+      list_searchable: true,
+      list_selectable: true,
     })
   }
 }
@@ -66,6 +396,18 @@ impl Render for ControlsWindow {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let slider_value = self.slider_state.read(cx).value().end();
     let is_dark = cx.theme().mode.is_dark();
+    let (list_selected, list_right_clicked, list_confirmed, list_loading, list_page, list_total_pages) = {
+      let list_state = self.list_state.read(cx);
+      let delegate = list_state.delegate();
+      (
+        delegate.selected_summary(),
+        delegate.right_clicked_summary(),
+        delegate.confirmed_summary(),
+        delegate.is_loading(),
+        delegate.current_page(),
+        delegate.total_pages(),
+      )
+    };
 
     window_border().child(
       v_flex()
@@ -481,12 +823,12 @@ impl Render for ControlsWindow {
                       div().w(px(560.)).child(
                         WidgetGroup::new("demo-widget-group-mixed")
                           .child(
-                            Button::new("wg-run")
-                              .primary()
-                              .label("Run"),
+                              Icon::new(woocraft::IconName::Search)
                           )
                           .child(Input::new(&self.input_state2).cleanable(true))
-                          .child(Icon::new(woocraft::IconName::Search))
+                          .child(
+                            Button::new("wg-run")
+                              .icon(woocraft::IconName::Play))
                           .child(
                             IconLabel::new("wg-status")
                               .icon(woocraft::IconName::Checkmark)
@@ -494,6 +836,135 @@ impl Render for ControlsWindow {
                           ),
                       ),
                     ),
+                )
+                .child(div().text_sm().child("List (comprehensive)"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                      Button::new("list-toggle-search")
+                        .label(if self.list_searchable {
+                          "Search: On"
+                        } else {
+                          "Search: Off"
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                          let next = !this.list_searchable;
+                          this.list_searchable = next;
+                          this.list_state.update(cx, |state, cx| {
+                            state.set_searchable(next, cx);
+                          });
+                        })),
+                    )
+                    .child(
+                      Button::new("list-toggle-select")
+                        .label(if self.list_selectable {
+                          "Selectable: On"
+                        } else {
+                          "Selectable: Off"
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                          let next = !this.list_selectable;
+                          this.list_selectable = next;
+                          this.list_state.update(cx, |state, cx| {
+                            state.set_selectable(next, cx);
+                          });
+                        })),
+                    )
+                    .child(
+                      Button::new("list-scroll-first")
+                        .label("Scroll To First")
+                        .on_click(cx.listener(|this, _, window, cx| {
+                          let list_state = this.list_state.clone();
+                          cx
+                            .spawn_in(window, async move |_, cx| {
+                              _ = list_state.update_in(cx, |state, window, cx| {
+                                state.scroll_to_item(
+                                  IndexPath::default(),
+                                  ScrollStrategy::Top,
+                                  window,
+                                  cx,
+                                );
+                              });
+                            })
+                            .detach();
+                        })),
+                    )
+                    .child(
+                      Button::new("list-toggle-loading")
+                        .label(if list_loading {
+                          "Loading: On"
+                        } else {
+                          "Loading: Off"
+                        })
+                        .on_click(cx.listener(|this, _, window, cx| {
+                          let list_state = this.list_state.clone();
+                          cx
+                            .spawn_in(window, async move |_, cx| {
+                              _ = list_state.update_in(cx, |state, _, cx| {
+                                let next = !state.delegate().is_loading();
+                                state.delegate_mut().set_loading(next);
+                                cx.notify();
+                              });
+                            })
+                            .detach();
+                        })),
+                    )
+                    .child(
+                      Button::new("list-reset-page")
+                        .label("Back To Page 1")
+                        .on_click(cx.listener(|this, _, window, cx| {
+                          let list_state = this.list_state.clone();
+                          cx
+                            .spawn_in(window, async move |_, cx| {
+                              _ = list_state.update_in(cx, |state, window, cx| {
+                                state.delegate_mut().set_current_page(1);
+                                state.scroll_to_item(IndexPath::default(), ScrollStrategy::Top, window, cx);
+                                cx.notify();
+                              });
+                            })
+                            .detach();
+                        })),
+                    ),
+                )
+                .child(
+                  div()
+                    .h(px(320.))
+                    .w(px(640.))
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(cx.theme().radius_container)
+                    .child(
+                      List::new(&self.list_state)
+                        .search_placeholder("Search title, subtitle, or tag")
+                        .scrollbar_visible(true),
+                    ),
+                )
+                .child(
+                  Pagination::new("controls-list-pagination")
+                    .current_page(list_page)
+                    .total_pages(list_total_pages)
+                    .visible_pages(7)
+                    .on_click(cx.listener(|this, page, _, cx| {
+                      this.list_state.update(cx, |state, cx| {
+                        state.delegate_mut().set_current_page(*page);
+                        cx.notify();
+                      });
+                    })),
+                )
+                .child(
+                  Label::new("List state").secondary(format!(
+                    "selected={}, right_clicked={}, confirmed={}, loading={}, searchable={}, selectable={}, page={}/{}",
+                    list_selected,
+                    list_right_clicked,
+                    list_confirmed,
+                    list_loading,
+                    self.list_searchable,
+                    self.list_selectable,
+                    list_page,
+                    list_total_pages
+                  )),
                 )
             )
             .child(
@@ -542,7 +1013,7 @@ fn main() {
           window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
-        |_window, cx| ControlsWindow::view(cx),
+        ControlsWindow::view,
       )
       .expect("open controls demo window failed");
 
