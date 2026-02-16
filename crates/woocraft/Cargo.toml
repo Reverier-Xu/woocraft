@@ -1,11 +1,12 @@
 [package]
+build       = "build.rs"
 description = "GPUI components lib for Woocraft design system."
 name        = "woocraft"
-build       = "build.rs"
 
 authors      = { workspace = true }
 edition      = { workspace = true }
 homepage     = { workspace = true }
+license      = { workspace = true }
 publish      = { workspace = true }
 repository   = { workspace = true }
 rust-version = { workspace = true }
@@ -16,16 +17,16 @@ anyhow      = { workspace = true }
 gpui        = { workspace = true }
 gpui-macros = { workspace = true }
 palette     = { workspace = true }
+regex       = { workspace = true }
 serde       = { workspace = true }
 serde_json  = { workspace = true }
 smallvec    = { workspace = true }
 thiserror   = { workspace = true }
 toml        = { workspace = true }
-regex       = { workspace = true }
 
 # For assets embedding, optional and workspace to avoid unnecessary dependency for users who don't need it.
 rust-embed = { workspace = true, optional = true }
-rust-i18n = { workspace = true }
+rust-i18n  = { workspace = true }
 
 [features]
 default   = ["resources"]
