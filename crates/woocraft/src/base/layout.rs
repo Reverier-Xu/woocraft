@@ -1,6 +1,51 @@
 use gpui::Axis;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TabBarDirection {
+  #[default]
+  #[serde(rename = "top")]
+  Top,
+  #[serde(rename = "bottom")]
+  Bottom,
+  #[serde(rename = "left")]
+  Left,
+  #[serde(rename = "right")]
+  Right,
+}
+
+impl TabBarDirection {
+  #[inline]
+  pub fn is_horizontal(self) -> bool {
+    matches!(self, Self::Top | Self::Bottom)
+  }
+
+  #[inline]
+  pub fn is_vertical(self) -> bool {
+    matches!(self, Self::Left | Self::Right)
+  }
+
+  #[inline]
+  pub fn is_top(self) -> bool {
+    matches!(self, Self::Top)
+  }
+
+  #[inline]
+  pub fn is_bottom(self) -> bool {
+    matches!(self, Self::Bottom)
+  }
+
+  #[inline]
+  pub fn is_left(self) -> bool {
+    matches!(self, Self::Left)
+  }
+
+  #[inline]
+  pub fn is_right(self) -> bool {
+    matches!(self, Self::Right)
+  }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DockPlacement {
   #[serde(rename = "center")]

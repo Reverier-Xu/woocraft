@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::{
-  App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity, EventEmitter,
+  AnyElement, App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity, EventEmitter,
   FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement, Pixels, Render,
   ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity,
   Window, div, prelude::FluentBuilder, relative,
@@ -588,7 +588,7 @@ impl TabPanel {
 
   fn render_title_bar(
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
-  ) -> impl IntoElement {
+  ) -> AnyElement {
     let view = cx.entity().clone();
 
     let Some(dock_area) = self.dock_area.upgrade() else {
@@ -603,10 +603,16 @@ impl TabPanel {
     let is_bottom_dock = bottom_dock_button.is_some();
 
     let panel_style = dock_area.read(cx).panel_style;
+    let tab_bar_direction = dock_area.read(cx).tab_bar_direction;
     let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
 
-    if visible_panels.len() == 1 && panel_style == PanelStyle::default() {
-      let panel = visible_panels.first().unwrap();
+    let show_single_title = tab_bar_direction.is_vertical()
+      || (visible_panels.len() == 1 && panel_style == PanelStyle::default());
+
+    if show_single_title {
+      let Some(panel) = self.active_panel(cx) else {
+        return div().into_any_element();
+      };
 
       if !panel.visible(cx) {
         return div().into_any_element();
@@ -619,6 +625,8 @@ impl TabPanel {
         .items_center()
         .justify_between()
         .gap_1()
+        .border_b_1()
+        .border_color(cx.theme().border)
         .container_size(Size::Medium)
         .container_h(Size::Medium)
         .when(has_extend_dock_button, |this| {
@@ -656,6 +664,8 @@ impl TabPanel {
 
     TabBar::new("tab-bar")
       .track_scroll(&self.tab_bar_scroll_handle)
+      .border_b_1()
+      .border_color(cx.theme().border)
       .when(has_extend_dock_button, |this| {
         this.prefix(
           h_flex()
@@ -783,9 +793,63 @@ impl TabPanel {
       .into_any_element()
   }
 
+  fn render_vertical_tab_bar(
+    &mut self, state: &TabState, _window: &mut Window, cx: &mut Context<Self>,
+  ) -> AnyElement {
+    let view = cx.entity().clone();
+    let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
+
+    if visible_panels.len() <= 1 {
+      return div().into_any_element();
+    }
+
+    v_flex()
+      .id("vertical-tab-bar")
+      .items_center()
+      .justify_start()
+      .gap_1()
+      .p_1()
+      .border_color(cx.theme().border)
+      .bg(cx.theme().tab_bar)
+      .children(visible_panels.iter().enumerate().filter_map(|(ix, panel)| {
+        let active = state.active_panel.as_ref() == Some(panel);
+
+        Some(
+          div()
+            .id(("vertical-tab", ix))
+            .p_1()
+            .rounded(cx.theme().radius)
+            .cursor_pointer()
+            .map(|this| {
+              if active {
+                this.bg(cx.theme().tab_active)
+              } else {
+                this
+              }
+            })
+            .child(crate::Icon::new(panel.icon(cx)).size(cx.theme().icon_size))
+            .on_click(cx.listener({
+              move |view, _, window, cx| {
+                view.set_active_ix(ix, window, cx);
+              }
+            }))
+            .when(state.draggable, |this| {
+              this.on_drag(
+                DragPanel::new(panel.clone(), view.clone()),
+                |drag, _, _, cx| {
+                  cx.stop_propagation();
+                  cx.new(|_| drag.clone())
+                },
+              )
+            }),
+        )
+      }))
+      .into_any_element()
+  }
+
   fn render_active_panel(
     &self, state: &TabState, _: &mut Window, cx: &mut Context<Self>,
-  ) -> impl IntoElement {
+  ) -> AnyElement {
     if self.collapsed {
       return Empty {}.into_any_element();
     }
@@ -1112,6 +1176,56 @@ impl Render for TabPanel {
       active_panel,
     };
 
+    let direction = self
+      .dock_area
+      .upgrade()
+      .map(|dock_area| dock_area.read(cx).tab_bar_direction)
+      .unwrap_or_default();
+
+    if direction.is_vertical() {
+      let title_bar = self.render_title_bar(&state, window, cx);
+      let vertical_tab_bar = self.render_vertical_tab_bar(&state, window, cx);
+      let active_panel_content = self.render_active_panel(&state, window, cx);
+
+      let content = v_flex()
+        .flex_1()
+        .size_full()
+        .child(title_bar)
+        .child(active_panel_content);
+
+      let main_content = if direction.is_left() {
+        h_flex().size_full().child(vertical_tab_bar).child(content)
+      } else {
+        h_flex().size_full().child(content).child(vertical_tab_bar)
+      };
+
+      return self
+        .bind_actions(cx)
+        .id("tab-panel")
+        .track_focus(&focus_handle)
+        .tab_group()
+        .size_full()
+        .overflow_hidden()
+        .bg(cx.theme().background)
+        .child(main_content)
+        .into_any_element();
+    }
+
+    let title_bar = self.render_title_bar(&state, window, cx);
+    let active_panel_content = self.render_active_panel(&state, window, cx);
+
+    let main_content = if direction.is_bottom() {
+      v_flex()
+        .size_full()
+        .child(active_panel_content)
+        .child(title_bar)
+    } else {
+      v_flex()
+        .size_full()
+        .child(title_bar)
+        .child(active_panel_content)
+    };
+
     self
       .bind_actions(cx)
       .id("tab-panel")
@@ -1120,7 +1234,7 @@ impl Render for TabPanel {
       .size_full()
       .overflow_hidden()
       .bg(cx.theme().background)
-      .child(self.render_title_bar(&state, window, cx))
-      .child(self.render_active_panel(&state, window, cx))
+      .child(main_content)
+      .into_any_element()
   }
 }

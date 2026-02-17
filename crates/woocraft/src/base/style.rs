@@ -124,7 +124,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let paddings = paddings.into();
     self
       .pt(paddings.top.into())
@@ -135,7 +136,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let margins = margins.into();
     self
       .mt(margins.top.into())
@@ -475,7 +477,6 @@ impl<T: Styled> StyleSized<T> for T {
       .container_px(size)
       .container_py(size)
       .container_min_h(size)
-      .container_rounded(size)
   }
 
   #[inline]
@@ -484,7 +485,6 @@ impl<T: Styled> StyleSized<T> for T {
       .list_px(size)
       .list_py(size)
       .container_h(size)
-      .container_rounded(size)
       .input_text_size(size)
   }
 

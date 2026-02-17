@@ -22,7 +22,7 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::{AnyDrag, DragDrop, DragMoving, DragResizing, TileItem, Tiles};
 
-use crate::{DockPlacement, ElementExt};
+use crate::{DockPlacement, ElementExt, TabBarDirection};
 
 pub(crate) fn init(cx: &mut App) {
   PanelRegistry::init(cx);
@@ -72,6 +72,9 @@ pub struct DockArea {
 
   /// The panel style, default is [`PanelStyle::Default`](PanelStyle::Default).
   pub(crate) panel_style: PanelStyle,
+
+  /// The tab bar direction, default is [`TabBarDirection::Top`](TabBarDirection::Top).
+  pub(crate) tab_bar_direction: TabBarDirection,
 
   _subscriptions: Vec<Subscription>,
 }
@@ -516,6 +519,7 @@ impl DockArea {
       toggle_button_visible: true,
       locked: false,
       panel_style: PanelStyle::default(),
+      tab_bar_direction: TabBarDirection::default(),
       _subscriptions: vec![],
     };
 
@@ -545,6 +549,20 @@ impl DockArea {
   pub fn panel_style(mut self, style: PanelStyle) -> Self {
     self.panel_style = style;
     self
+  }
+
+  /// Set the tab bar direction of the dock area.
+  pub fn tab_bar_direction(mut self, direction: TabBarDirection) -> Self {
+    self.tab_bar_direction = direction;
+    self
+  }
+
+  /// Set the tab bar direction of the dock area.
+  pub fn set_tab_bar_direction(
+    &mut self, direction: TabBarDirection, _: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.tab_bar_direction = direction;
+    cx.notify();
   }
 
   /// Set version of the dock area.

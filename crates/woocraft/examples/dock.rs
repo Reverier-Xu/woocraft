@@ -7,7 +7,7 @@ use gpui::{
 };
 use woocraft::{
   ActiveTheme, Button, ButtonVariants as _, DockArea, DockItem, DockPlacement, IconName, Panel,
-  PanelEvent, StyledExt as _, Theme, ThemeMode, h_flex, v_flex, window_border,
+  PanelEvent, StyledExt as _, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
 struct ExamplePanel {
@@ -164,8 +164,8 @@ impl Render for DockExample {
     window_border().child(
       v_flex()
         .size_full()
-        .bg(cx.theme().background)
-        .text_color(cx.theme().foreground)
+        .min_h_0()
+        .child(TitleBar::new().title("Woocraft Controls Example"))
         .child(
           h_flex()
             .h(px(48.))
@@ -238,6 +238,11 @@ fn main() {
       .open_window(
         WindowOptions {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
+          titlebar: Some(TitleBar::title_bar_options()),
+          #[cfg(target_os = "linux")]
+          window_background: gpui::WindowBackgroundAppearance::Transparent,
+          #[cfg(target_os = "linux")]
+          window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
         |window, cx| DockExample::view(window, cx),
