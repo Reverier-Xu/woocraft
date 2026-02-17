@@ -6,7 +6,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
-use super::{invalid_panel::InvalidPanel, DockArea, PanelInfo, PanelState, TabPanel};
+use super::{DockArea, PanelInfo, PanelState, TabPanel, invalid_panel::InvalidPanel};
 use crate::{Button, IconName, PopupMenu};
 
 type PanelBuilderFn = dyn Fn(
@@ -363,8 +363,7 @@ impl Global for PanelRegistry {}
 pub fn register_panel<F>(cx: &mut App, panel_name: &str, deserialize: F)
 where
   F: Fn(WeakEntity<DockArea>, &PanelState, &PanelInfo, &mut Window, &mut App) -> Box<dyn PanelView>
-    + 'static,
-{
+    + 'static, {
   PanelRegistry::init(cx);
   PanelRegistry::global_mut(cx)
     .items

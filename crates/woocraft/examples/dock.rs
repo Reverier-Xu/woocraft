@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use gpui::{
-  div, px, App, AppContext, Application, Bounds, Context, Edges, Entity, FocusHandle, Focusable,
+  App, AppContext, Application, Bounds, Context, Edges, Entity, FocusHandle, Focusable,
   IntoElement, ParentElement, Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds,
-  WindowOptions,
+  WindowOptions, div, px,
 };
 use woocraft::{
-  h_flex, v_flex, window_border, ActiveTheme, Button, ButtonVariants as _, DockArea, DockItem,
-  DockPlacement, IconName, Panel, PanelEvent, StyledExt as _, Theme, ThemeMode,
+  ActiveTheme, Button, ButtonVariants as _, DockArea, DockItem, DockPlacement, IconName, Panel,
+  PanelEvent, StyledExt as _, Theme, ThemeMode, h_flex, v_flex, window_border,
 };
 
 struct ExamplePanel {

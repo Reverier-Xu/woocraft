@@ -24,12 +24,13 @@ pub fn default_font() -> Font {
   let locale = crate::locale();
   let cjk_fallbacks = if locale.starts_with("zh-hans") {
     vec![
-      "PingFang SC".into(),
-      "Hiragino Sans GB".into(),
-      "Noto Sans CJK SC".into(),
-      "Source Han Sans SC".into(),
+      "Sarasa Mono SC".into(),
       "Source Han Sans CN".into(),
+      "Source Han Sans SC".into(),
+      "Noto Sans CJK SC".into(),
+      "PingFang SC".into(),
       "Microsoft YaHei".into(),
+      "Hiragino Sans GB".into(),
       "WenQuanYi Micro Hei".into(),
     ]
   } else if locale.starts_with("zh-hant") {
@@ -123,7 +124,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let paddings = paddings.into();
     self
       .pt(paddings.top.into())
@@ -134,7 +136,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let margins = margins.into();
     self
       .mt(margins.top.into())

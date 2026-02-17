@@ -3,13 +3,13 @@
 use std::{ops::Deref, sync::Arc};
 
 use gpui::{
-  div, prelude::FluentBuilder as _, px, App, AppContext, Context, Element, Empty, Entity,
-  IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Style,
-  StyleRefinement, Styled as _, WeakEntity, Window,
+  App, AppContext, Context, Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent,
+  ParentElement as _, Pixels, Point, Render, Style, StyleRefinement, Styled as _, WeakEntity,
+  Window, div, prelude::FluentBuilder as _, px,
 };
 
 use super::{
-  super::resizable::{resize_handle, PANEL_MIN_SIZE},
+  super::resizable::{PANEL_MIN_SIZE, resize_handle},
   DockArea, DockItem, PanelView, TabPanel,
 };
 use crate::{DockPlacement, Size, StyledExt};

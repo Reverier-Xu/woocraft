@@ -5,11 +5,11 @@ use std::{
 };
 
 use gpui::{
-  actions, div, prelude::FluentBuilder, px, size, AnyElement, App, AppContext, Bounds, Context,
-  DismissEvent, Div, DragMoveEvent, Empty, EntityId, EventEmitter, FocusHandle, Focusable,
-  InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
-  Pixels, Point, Render, ScrollHandle, SharedString, Size, StatefulInteractiveElement, Styled,
-  WeakEntity, Window,
+  AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty, EntityId,
+  EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton,
+  MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, SharedString,
+  Size, StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div,
+  prelude::FluentBuilder, px, size,
 };
 
 use super::{
@@ -19,7 +19,7 @@ use super::{
   },
   DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, StackPanel, TabPanel, TileMeta,
 };
-use crate::{h_flex, v_flex, ActiveTheme, ElementExt, Icon, IconName, ScrollbarShow};
+use crate::{ActiveTheme, ElementExt, Icon, IconName, ScrollbarShow, h_flex, v_flex};
 
 actions!(tiles, [Undo, Redo]);
 

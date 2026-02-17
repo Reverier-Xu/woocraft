@@ -232,7 +232,7 @@ impl RenderOnce for Tab {
     } else {
       None
     };
-    button = button.when_some(close_button, |this, btn| this.child(btn));
+    button = button.when_some(close_button, |this, btn| this.pr_1().child(btn));
 
     self
       .base

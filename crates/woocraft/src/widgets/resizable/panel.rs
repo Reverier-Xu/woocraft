@@ -4,13 +4,13 @@ use std::{
 };
 
 use gpui::{
-  div, prelude::FluentBuilder, Along, AnyElement, App, AppContext, Axis, Bounds, Context, Element,
-  ElementId, Empty, Entity, EventEmitter, InteractiveElement as _, IntoElement, IsZero as _,
-  MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window,
+  Along, AnyElement, App, AppContext, Axis, Bounds, Context, Element, ElementId, Empty, Entity,
+  EventEmitter, InteractiveElement as _, IntoElement, IsZero as _, MouseMoveEvent, MouseUpEvent,
+  ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window, div, prelude::FluentBuilder,
 };
 
-use super::{resizable_panel, resize_handle, ResizableState, PANEL_MIN_SIZE};
-use crate::{h_flex, v_flex, ElementExt};
+use super::{PANEL_MIN_SIZE, ResizableState, resizable_panel, resize_handle};
+use crate::{ElementExt, h_flex, v_flex};
 
 type ResizeHandler = dyn Fn(&Entity<ResizableState>, &mut Window, &mut App);
 
@@ -66,8 +66,7 @@ impl ResizablePanelGroup {
 
   pub fn children<I>(mut self, panels: impl IntoIterator<Item = I>) -> Self
   where
-    I: Into<ResizablePanel>,
-  {
+    I: Into<ResizablePanel>, {
     self.children = panels.into_iter().map(Into::into).collect();
     self
   }

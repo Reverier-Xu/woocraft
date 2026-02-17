@@ -67,8 +67,7 @@ impl Popover {
 
   pub fn trigger<T>(mut self, trigger: T) -> Self
   where
-    T: Selectable + IntoElement + 'static,
-  {
+    T: Selectable + IntoElement + 'static, {
     self.trigger = Some(Box::new(|is_open, _, _| {
       let selected = trigger.is_selected();
       trigger.selected(selected || is_open).into_any_element()
@@ -88,8 +87,7 @@ impl Popover {
 
   pub fn on_open_change<F>(mut self, callback: F) -> Self
   where
-    F: Fn(&bool, &mut Window, &mut App) + 'static,
-  {
+    F: Fn(&bool, &mut Window, &mut App) + 'static, {
     self.on_open_change = Some(Rc::new(callback));
     self
   }
@@ -107,8 +105,7 @@ impl Popover {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> E + 'static,
-  {
+    F: Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> E + 'static, {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));
@@ -139,8 +136,7 @@ impl Popover {
     anchor: Anchor, trigger_bounds: Bounds<Pixels>, content: E, _: &mut Window, _: &mut App,
   ) -> Deferred
   where
-    E: IntoElement + 'static,
-  {
+    E: IntoElement + 'static, {
     deferred(
       anchored()
         .snap_to_window_with_margin(px(8.))

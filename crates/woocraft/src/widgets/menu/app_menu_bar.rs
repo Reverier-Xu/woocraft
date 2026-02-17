@@ -1,12 +1,14 @@
 use gpui::{
-  anchored, deferred, div, prelude::FluentBuilder, px, App, AppContext as _, ClickEvent, Context,
-  DismissEvent, Entity, Focusable, InteractiveElement as _, IntoElement, KeyBinding, OwnedMenu,
-  ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window,
+  App, AppContext as _, ClickEvent, Context, DismissEvent, Entity, Focusable,
+  InteractiveElement as _, IntoElement, KeyBinding, OwnedMenu, ParentElement, Render, SharedString,
+  StatefulInteractiveElement, Styled, Subscription, Window, anchored, deferred, div,
+  prelude::FluentBuilder, px,
 };
 
 use crate::{
+  Button, ButtonVariants, PopupMenu, Selectable, Sizable,
   actions::{Cancel, SelectLeft, SelectRight},
-  h_flex, Button, ButtonVariants, PopupMenu, Selectable, Sizable,
+  h_flex,
 };
 
 const CONTEXT: &str = "AppMenuBar";

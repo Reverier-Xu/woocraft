@@ -127,9 +127,10 @@ impl ResizableState {
     self.panels.remove(panel_ix);
     self.sizes.remove(panel_ix);
     if let Some(resizing_panel_ix) = self.resizing_panel_ix
-      && resizing_panel_ix > panel_ix {
-        self.resizing_panel_ix = Some(resizing_panel_ix - 1);
-      }
+      && resizing_panel_ix > panel_ix
+    {
+      self.resizing_panel_ix = Some(resizing_panel_ix - 1);
+    }
     self.adjust_to_container_size(cx);
   }
 

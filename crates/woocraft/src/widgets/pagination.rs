@@ -207,12 +207,11 @@ impl RenderOnce for Pagination {
                     .checked(is_selected)
                     .disabled(is_disabled || is_selected);
 
-                  if !is_selected
-                    && let Some(handler) = on_click_for_page.clone() {
-                      item = item.on_click(move |_, window, cx| {
-                        handler(&page, window, cx);
-                      });
-                    }
+                  if !is_selected && let Some(handler) = on_click_for_page.clone() {
+                    item = item.on_click(move |_, window, cx| {
+                      handler(&page, window, cx);
+                    });
+                  }
                   menu = menu.item(item);
                 }
                 menu

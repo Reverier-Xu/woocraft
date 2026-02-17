@@ -1,10 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-  anchored, deferred, div, prelude::FluentBuilder, px, AnyElement, App, Context, Corner,
-  DismissEvent, Element, ElementId, Entity, Focusable, GlobalElementId, Hitbox, HitboxBehavior,
-  InspectorElementId, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement,
-  Pixels, Point, SharedString, StyleRefinement, Styled, Subscription, Window,
+  AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
+  GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
+  MouseButton, MouseDownEvent, ParentElement, Pixels, Point, SharedString, StyleRefinement, Styled,
+  Subscription, Window, anchored, deferred, div, prelude::FluentBuilder, px,
 };
 
 use crate::PopupMenu;
@@ -22,8 +22,7 @@ pub trait ContextMenuExt: ParentElement + Styled {
     self, f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
   ) -> ContextMenu<Self>
   where
-    Self: Sized,
-  {
+    Self: Sized, {
     // Generate a unique ID based on the element's memory address to ensure
     // each context menu has its own state and doesn't share with others
     let id = format!("context-menu-{:p}", &self as *const _);
@@ -59,8 +58,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
   #[must_use]
   fn menu<F>(mut self, builder: F) -> Self
   where
-    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-  {
+    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static, {
     self.menu = Some(Rc::new(builder));
     self
   }
