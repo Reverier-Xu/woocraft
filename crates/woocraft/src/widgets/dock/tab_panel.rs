@@ -4,7 +4,7 @@ use gpui::{
   AnyElement, App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
   EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
   Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-  WeakEntity, Window, div, prelude::FluentBuilder, px, relative,
+  WeakEntity, Window, div, prelude::FluentBuilder, relative,
 };
 use rust_i18n::t;
 
@@ -706,8 +706,11 @@ impl TabPanel {
     };
 
     let bottom_dock_button = self.render_dock_toggle_button(DockPlacement::Bottom, window, cx);
-    let is_bottom_dock_collapsed =
-      bottom_dock_button.is_some() && dock_area.read(cx).is_dock_collapsed(DockPlacement::Bottom, cx);
+    let is_bottom_dock_collapsed = bottom_dock_button.is_some()
+      && dock_area
+        .read(cx)
+        .is_dock_collapsed(DockPlacement::Bottom, cx);
+    let is_bottom_dock = bottom_dock_button.is_some();
 
     let panel_style = dock_area.read(cx).panel_style;
     let tab_bar_direction = self.get_tab_bar_direction(cx);
@@ -715,6 +718,9 @@ impl TabPanel {
 
     let show_single_title = tab_bar_direction.is_vertical()
       || (visible_panels.len() == 1 && panel_style == PanelStyle::default());
+
+    let show_bottom_divider =
+      !is_bottom_dock_collapsed || !is_bottom_dock || tab_bar_direction.is_bottom();
 
     if show_single_title {
       let Some(panel) = self.active_panel(cx) else {
@@ -727,7 +733,6 @@ impl TabPanel {
 
       let icon = panel.icon(cx);
       let title = panel.title(cx);
-      let border_color = cx.theme().border;
 
       let title_content = h_flex()
         .items_center()
@@ -762,20 +767,14 @@ impl TabPanel {
         .child(self.render_toolbar(state, window, cx));
 
       return v_flex()
-        .when(is_bottom_dock_collapsed && !tab_bar_direction.is_bottom(), |this| {
-          this.child(div().w_full().h(px(1.0)).bg(border_color))
-        })
         .child(title_content)
-        .when(!is_bottom_dock_collapsed || tab_bar_direction.is_bottom(), |this| {
-          this.child(div().w_full().h(px(1.0)).bg(border_color))
+        .when(show_bottom_divider, |this| {
+          this.child(Divider::horizontal())
         })
         .into_any_element();
     }
 
     let tabs_count = self.panels.len();
-
-    let is_bottom_dock = bottom_dock_button.is_some();
-
     let tab_bar = TabBar::new("tab-bar")
       .track_scroll(&self.tab_bar_scroll_handle)
       .when_some(bottom_dock_button, |this, btn| {
@@ -885,9 +884,6 @@ impl TabPanel {
         )
       });
 
-    let show_bottom_divider =
-      !is_bottom_dock_collapsed || !is_bottom_dock || tab_bar_direction.is_bottom();
-
     v_flex()
       .child(tab_bar)
       .when(show_bottom_divider, |this| {
@@ -935,14 +931,21 @@ impl TabPanel {
             )
           })
       }));
-      if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_left() {
-        h_flex().h_full().child(tab_bar).child(Divider::vertical()).into_any_element()
-      } else if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_right() {
-        h_flex().h_full().child(Divider::vertical()).child(tab_bar).into_any_element()
-      } else {
-        tab_bar.into_any_element()
-      }
-    
+    if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_left() {
+      h_flex()
+        .h_full()
+        .child(tab_bar)
+        .child(Divider::vertical())
+        .into_any_element()
+    } else if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_right() {
+      h_flex()
+        .h_full()
+        .child(Divider::vertical())
+        .child(tab_bar)
+        .into_any_element()
+    } else {
+      tab_bar.into_any_element()
+    }
   }
 
   fn render_active_panel(
