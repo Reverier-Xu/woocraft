@@ -14,7 +14,9 @@ use super::{
   },
   Tab,
 };
-use crate::{ActiveTheme, IconName, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex};
+use crate::{
+  ActiveTheme, IconName, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex, v_flex,
+};
 
 type TabBarClickHandler = dyn Fn(&usize, &mut Window, &mut App);
 
@@ -31,6 +33,7 @@ pub struct TabBar {
   selected_index: Option<usize>,
   size: Size,
   menu: bool,
+  vertical: bool,
   on_click: Option<Rc<TabBarClickHandler>>,
 }
 
@@ -49,7 +52,15 @@ impl TabBar {
       selected_index: None,
       on_click: None,
       menu: false,
+      vertical: false,
     }
+  }
+
+  /// Set whether to use vertical layout, default is false.
+  /// When true, tabs will be stacked vertically with icons only.
+  pub fn vertical(mut self, vertical: bool) -> Self {
+    self.vertical = vertical;
+    self
   }
 
   /// Set whether to show the menu button when tabs overflow, default is false.
@@ -106,7 +117,8 @@ impl TabBar {
   /// When this is set, the children's on_click will be ignored.
   pub fn on_click<F>(mut self, on_click: F) -> Self
   where
-    F: Fn(&usize, &mut Window, &mut App) + 'static, {
+    F: Fn(&usize, &mut Window, &mut App) + 'static,
+  {
     self.on_click = Some(Rc::new(on_click));
     self
   }
@@ -130,68 +142,112 @@ impl RenderOnce for TabBar {
     let mut item_labels = Vec::new();
     let selected_index = self.selected_index;
     let on_click = self.on_click.clone();
+    let vertical = self.vertical;
 
-    self
-      .base
-      .group("tab-bar")
-      .relative()
-      .flex()
-      .items_center()
-      .container_size(self.size)
-      .container_h(self.size)
-      .gap_1()
-      .text_color(cx.theme().tab_foreground)
-      .refine_style(&self.style)
-      .when_some(self.prefix, |this, prefix| this.child(prefix))
-      .child(
-        h_flex()
-          .id("tabs")
-          .flex_1()
-          .gap_1()
-          .items_center()
-          .overflow_x_scroll()
-          .when_some(self.scroll_handle, |this, scroll_handle| {
-            this.track_scroll(&scroll_handle)
-          })
-          .children(self.children.into_iter().enumerate().map(|(ix, child)| {
-            item_labels.push((child.label.clone(), child.disabled));
-            child
-              .ix(ix)
-              .with_size(self.size)
-              .when_some(self.selected_index, |this, selected_ix| {
-                this.selected(selected_ix == ix)
-              })
-              .when_some(self.on_click.clone(), move |this, on_click| {
-                this.on_click(move |_, window, cx| on_click(&ix, window, cx))
-              })
-          }))
-          .when(self.suffix.is_some() || self.menu, |this| {
-            this.child(self.last_empty_space)
-          }),
-      )
-      .when(self.menu, |this| {
-        this.child(
-          Button::new("more")
-            .flat()
-            .icon(IconName::ChevronDown)
-            .dropdown_menu(move |mut this: crate::PopupMenu, _, _| {
-              this = this.scrollable(true);
-              for (ix, (label, disabled)) in item_labels.iter().enumerate() {
-                this = this.item(
-                  PopupMenuItem::new(label.clone().unwrap_or_default())
-                    .checked(selected_index == Some(ix))
-                    .disabled(*disabled)
-                    .when_some(on_click.clone(), |this, on_click| {
-                      this.on_click(move |_, window, cx| on_click(&ix, window, cx))
-                    }),
-                )
-              }
+    let last_empty_space = if vertical {
+      div().flex_1().into_any_element()
+    } else {
+      self.last_empty_space
+    };
 
-              this
+    let tabs_children = self.children.into_iter().enumerate().map(|(ix, child)| {
+      item_labels.push((child.label.clone(), child.disabled));
+      child
+        .ix(ix)
+        .with_size(self.size)
+        .set_icon_only(vertical)
+        .when_some(self.selected_index, |this, selected_ix| {
+          this.selected(selected_ix == ix)
+        })
+        .when_some(self.on_click.clone(), move |this, on_click| {
+          this.on_click(move |_, window, cx| on_click(&ix, window, cx))
+        })
+    });
+
+    if vertical {
+      self
+        .base
+        .group("tab-bar")
+        .relative()
+        .flex()
+        .flex_col()
+        .items_center()
+        .container_size(self.size)
+        .w(self.size.container_height())
+        .h_full()
+        .gap_1()
+        .text_color(cx.theme().tab_foreground)
+        .refine_style(&self.style)
+        .when_some(self.prefix, |this, prefix| this.child(prefix))
+        .child(
+          v_flex()
+            .id("tabs")
+            .flex_1()
+            .w_full()
+            .gap_1()
+            .items_center()
+            .overflow_y_scroll()
+            .when_some(self.scroll_handle, |this, scroll_handle| {
+              this.track_scroll(&scroll_handle)
             })
-            .anchor(Corner::TopRight),
+            .children(tabs_children)
+            .when(self.suffix.is_some() || self.menu, |this| {
+              this.child(last_empty_space)
+            }),
         )
-      })
-      .when_some(self.suffix, |this, suffix| this.child(suffix))
+        .when_some(self.suffix, |this, suffix| this.child(suffix))
+    } else {
+      self
+        .base
+        .group("tab-bar")
+        .relative()
+        .flex()
+        .items_center()
+        .container_size(self.size)
+        .container_h(self.size)
+        .gap_1()
+        .text_color(cx.theme().tab_foreground)
+        .refine_style(&self.style)
+        .when_some(self.prefix, |this, prefix| this.child(prefix))
+        .child(
+          h_flex()
+            .id("tabs")
+            .flex_1()
+            .gap_1()
+            .items_center()
+            .overflow_x_scroll()
+            .when_some(self.scroll_handle, |this, scroll_handle| {
+              this.track_scroll(&scroll_handle)
+            })
+            .children(tabs_children)
+            .when(self.suffix.is_some() || self.menu, |this| {
+              this.child(last_empty_space)
+            }),
+        )
+        .when(self.menu, |this| {
+          this.child(
+            Button::new("more")
+              .flat()
+              .icon(IconName::ChevronDown)
+              .dropdown_menu(move |mut this: crate::PopupMenu, _, _| {
+                this = this.scrollable(true);
+                for (ix, (label, disabled)) in item_labels.iter().enumerate() {
+                  this = this.item(
+                    PopupMenuItem::new(label.clone().unwrap_or_default())
+                      .checked(selected_index == Some(ix))
+                      .disabled(*disabled)
+                      .when_some(on_click.clone(), |this, on_click| {
+                        this.on_click(move |_, window, cx| on_click(&ix, window, cx))
+                      }),
+                  )
+                }
+
+                this
+              })
+              .anchor(Corner::TopRight),
+          )
+        })
+        .when_some(self.suffix, |this, suffix| this.child(suffix))
+    }
   }
 }

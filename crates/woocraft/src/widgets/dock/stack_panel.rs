@@ -14,7 +14,7 @@ use super::{
   },
   DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel,
 };
-use crate::{ActiveTheme, AxisExt as _, IconName, Placement, h_flex};
+use crate::{ActiveTheme, IconName, Placement, h_flex};
 
 pub struct StackPanel {
   pub(super) parent: Option<WeakEntity<StackPanel>>,
@@ -313,36 +313,6 @@ impl StackPanel {
         Some(tab_panel)
       } else if let Ok(stack_panel) = view.view().downcast::<StackPanel>() {
         stack_panel.read(cx).left_top_tab_panel(false, cx)
-      } else {
-        None
-      }
-    } else {
-      None
-    }
-  }
-
-  /// Find the first top right in the stack.
-  pub(super) fn right_top_tab_panel(
-    &self, check_parent: bool, cx: &App,
-  ) -> Option<Entity<TabPanel>> {
-    if check_parent
-      && let Some(parent) = self.parent.as_ref().and_then(|parent| parent.upgrade())
-      && let Some(panel) = parent.read(cx).right_top_tab_panel(true, cx)
-    {
-      return Some(panel);
-    }
-
-    let panel = if self.axis.is_vertical() {
-      self.panels.first()
-    } else {
-      self.panels.last()
-    };
-
-    if let Some(view) = panel {
-      if let Ok(tab_panel) = view.view().downcast::<TabPanel>() {
-        Some(tab_panel)
-      } else if let Ok(stack_panel) = view.view().downcast::<StackPanel>() {
-        stack_panel.read(cx).right_top_tab_panel(false, cx)
       } else {
         None
       }

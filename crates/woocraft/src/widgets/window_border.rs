@@ -125,7 +125,10 @@ impl RenderOnce for WindowBorder {
             let size = window.window_bounds().get_bounds().size;
             let pos = window.mouse_position();
 
-            if let Some(edge) = resize_edge(pos, SHADOW_SIZE, size) {
+            if let Some(edge) = resize_edge(pos, SHADOW_SIZE, size)
+              && !window.is_maximized()
+              && !window.is_fullscreen()
+            {
               window.start_window_resize(edge);
             }
           }),

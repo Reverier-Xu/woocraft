@@ -28,17 +28,25 @@ pub struct DockState {
   panel: PanelState,
   placement: DockPlacement,
   size: Pixels,
-  open: bool,
+  #[serde(default)]
+  collapsed: bool,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  open: Option<bool>,
 }
 
 impl DockState {
+  fn is_collapsed(&self) -> bool {
+    self.open.map(|open| !open).unwrap_or(self.collapsed)
+  }
+
   pub fn new(dock: Entity<Dock>, cx: &App) -> Self {
     let dock = dock.read(cx);
 
     Self {
       placement: dock.placement,
       size: dock.size,
-      open: dock.open,
+      collapsed: dock.collapsed,
+      open: None,
       panel: dock.panel.view().dump(cx),
     }
   }
@@ -54,7 +62,7 @@ impl DockState {
         self.placement,
         self.size,
         item,
-        self.open,
+        self.is_collapsed(),
         window,
         cx,
       )

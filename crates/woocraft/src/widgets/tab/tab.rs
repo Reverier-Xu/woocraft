@@ -7,8 +7,8 @@ use gpui::{
 };
 
 use crate::{
-  Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized,
-  h_flex,
+  Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size,
+  Tooltip, h_flex,
 };
 
 type TabClickHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
@@ -28,6 +28,7 @@ pub struct Tab {
   pub(super) disabled: bool,
   pub(super) selected: bool,
   closable: bool,
+  icon_only: bool,
   on_click: Option<Rc<TabClickHandler>>,
   on_close: Option<Rc<TabCloseHandler>>,
 }
@@ -76,6 +77,7 @@ impl Default for Tab {
       suffix: None,
       size: Size::default(),
       closable: false,
+      icon_only: false,
       on_click: None,
       on_close: None,
     }
@@ -132,6 +134,13 @@ impl Tab {
     self
   }
 
+  /// Set whether to only show icon (without label), default is false.
+  /// When true, the label will be shown as a tooltip.
+  pub fn icon_only(mut self, icon_only: bool) -> Self {
+    self.icon_only = icon_only;
+    self
+  }
+
   /// Set the close handler for the tab.
   pub fn on_close(
     mut self, on_close: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -143,6 +152,12 @@ impl Tab {
   /// Set index to the tab.
   pub(crate) fn ix(mut self, ix: usize) -> Self {
     self.ix = ix;
+    self
+  }
+
+  /// Set icon_only flag (used by TabBar for vertical mode).
+  pub(crate) fn set_icon_only(mut self, icon_only: bool) -> Self {
+    self.icon_only = icon_only;
     self
   }
 }
@@ -190,6 +205,8 @@ impl RenderOnce for Tab {
     let button_id = SharedString::from(format!("tab-{}", self.ix));
     let close_button_id = SharedString::from(format!("tab-close-{}", self.ix));
 
+    let tooltip_label = self.label.clone();
+
     let mut button = Button::new(button_id)
       .with_size(self.size)
       .flat()
@@ -203,7 +220,9 @@ impl RenderOnce for Tab {
     if let Some(icon) = self.icon {
       button = button.child(icon);
     }
-    if let Some(label) = self.label {
+    if !self.icon_only
+      && let Some(label) = self.label
+    {
       button = button.child(label);
     }
     if let Some(prefix) = self.prefix {
@@ -212,6 +231,12 @@ impl RenderOnce for Tab {
     button = button.children(self.children);
     if let Some(suffix) = self.suffix {
       button = button.child(suffix);
+    }
+
+    if self.icon_only
+      && let Some(label) = tooltip_label
+    {
+      button = button.tooltip(move |window, cx| Tooltip::new(label.clone()).build(window, cx));
     }
 
     let close_button = if self.closable {
@@ -237,7 +262,6 @@ impl RenderOnce for Tab {
     self
       .base
       .id(self.ix)
-      .container_h(self.size)
       .items_center()
       .child(button)
       .on_mouse_down(MouseButton::Left, |_, _, cx| {

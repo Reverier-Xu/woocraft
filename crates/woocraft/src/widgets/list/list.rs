@@ -555,21 +555,23 @@ where
       .overflow_hidden()
       .when_some(query_input, |this, input| {
         this.child(
-          div()
-            .px(self.options.size.container_px())
-            .py(self.options.size.container_py())
-            .border_b_1()
-            .border_color(cx.theme().border)
+          v_flex()
             .child(
-              WidgetGroup::new("list-search-input")
-                .with_size(self.options.size)
-                .child(WidgetGroupChild::from(Icon::new(IconName::Search)))
-                .child(WidgetGroupChild::from(
-                  Input::new(&input)
+              div()
+                .px(self.options.size.container_px())
+                .py(self.options.size.container_py())
+                .child(
+                  WidgetGroup::new("list-search-input")
                     .with_size(self.options.size)
-                    .cleanable(true),
-                )),
-            ),
+                    .child(WidgetGroupChild::from(Icon::new(IconName::Search)))
+                    .child(WidgetGroupChild::from(
+                      Input::new(&input)
+                        .with_size(self.options.size)
+                        .cleanable(true),
+                    )),
+                ),
+            )
+            .child(div().w_full().h(px(1.0)).bg(cx.theme().border)),
         )
       })
       .when(!loading, |this| {

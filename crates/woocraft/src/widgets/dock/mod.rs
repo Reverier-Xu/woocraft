@@ -479,16 +479,6 @@ impl DockItem {
       DockItem::Panel { .. } => None,
     }
   }
-
-  /// Recursively traverses to find the right-most and top-most TabPanel.
-  pub(crate) fn right_top_tab_panel(&self, cx: &App) -> Option<Entity<TabPanel>> {
-    match self {
-      DockItem::Tabs { view, .. } => Some(view.clone()),
-      DockItem::Split { view, .. } => view.read(cx).right_top_tab_panel(true, cx),
-      DockItem::Tiles { .. } => None,
-      DockItem::Panel { .. } => None,
-    }
-  }
 }
 
 impl DockArea {
@@ -617,7 +607,7 @@ impl DockArea {
   }
 
   pub fn set_left_dock(
-    &mut self, panel: DockItem, size: Option<Pixels>, open: bool, window: &mut Window,
+    &mut self, panel: DockItem, size: Option<Pixels>, collapsed: bool, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     self.subscribe_item(&panel, window, cx);
@@ -628,14 +618,14 @@ impl DockArea {
         dock.set_size(size, window, cx);
       }
       dock.set_panel(panel, window, cx);
-      dock.set_open(open, window, cx);
+      dock.set_collapsed(collapsed, window, cx);
       dock
     }));
     self.update_toggle_button_tab_panels(window, cx);
   }
 
   pub fn set_bottom_dock(
-    &mut self, panel: DockItem, size: Option<Pixels>, open: bool, window: &mut Window,
+    &mut self, panel: DockItem, size: Option<Pixels>, collapsed: bool, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     self.subscribe_item(&panel, window, cx);
@@ -646,14 +636,14 @@ impl DockArea {
         dock.set_size(size, window, cx);
       }
       dock.set_panel(panel, window, cx);
-      dock.set_open(open, window, cx);
+      dock.set_collapsed(collapsed, window, cx);
       dock
     }));
     self.update_toggle_button_tab_panels(window, cx);
   }
 
   pub fn set_right_dock(
-    &mut self, panel: DockItem, size: Option<Pixels>, open: bool, window: &mut Window,
+    &mut self, panel: DockItem, size: Option<Pixels>, collapsed: bool, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     self.subscribe_item(&panel, window, cx);
@@ -664,7 +654,7 @@ impl DockArea {
         dock.set_size(size, window, cx);
       }
       dock.set_panel(panel, window, cx);
-      dock.set_open(open, window, cx);
+      dock.set_collapsed(collapsed, window, cx);
       dock
     }));
     self.update_toggle_button_tab_panels(window, cx);
@@ -692,31 +682,31 @@ impl DockArea {
     }
   }
 
-  /// Determine if the dock at the given placement is open.
-  pub fn is_dock_open(&self, placement: DockPlacement, cx: &App) -> bool {
+  /// Determine if the dock at the given placement is collapsed.
+  pub fn is_dock_collapsed(&self, placement: DockPlacement, cx: &App) -> bool {
     match placement {
       DockPlacement::Left => self
         .left_dock
         .as_ref()
-        .map(|dock| dock.read(cx).is_open())
-        .unwrap_or(false),
+        .map(|dock| dock.read(cx).is_collapsed())
+        .unwrap_or(true),
       DockPlacement::Bottom => self
         .bottom_dock
         .as_ref()
-        .map(|dock| dock.read(cx).is_open())
-        .unwrap_or(false),
+        .map(|dock| dock.read(cx).is_collapsed())
+        .unwrap_or(true),
       DockPlacement::Right => self
         .right_dock
         .as_ref()
-        .map(|dock| dock.read(cx).is_open())
-        .unwrap_or(false),
-      DockPlacement::Center => false,
+        .map(|dock| dock.read(cx).is_collapsed())
+        .unwrap_or(true),
+      DockPlacement::Center => true,
     }
   }
 
-  /// Set the dock at the given placement to be open or closed.
+  /// Set whether each dock edge is collapsible.
   ///
-  /// Only the left, bottom, right dock can be toggled.
+  /// Only the left, bottom, right dock can be configured.
   pub fn set_dock_collapsible(
     &mut self, collapsible_edges: Edges<bool>, window: &mut Window, cx: &mut Context<Self>,
   ) {
@@ -772,7 +762,7 @@ impl DockArea {
 
     if let Some(dock) = dock {
       dock.update(cx, |view, cx| {
-        view.toggle_open(window, cx);
+        view.toggle_collapsed(window, cx);
       })
     }
   }
@@ -796,7 +786,7 @@ impl DockArea {
           self.set_left_dock(
             DockItem::tabs(vec![panel], &weak_self, window, cx),
             None,
-            true,
+            false,
             window,
             cx,
           );
@@ -809,7 +799,7 @@ impl DockArea {
           self.set_bottom_dock(
             DockItem::tabs(vec![panel], &weak_self, window, cx),
             None,
-            true,
+            false,
             window,
             cx,
           );
@@ -822,7 +812,7 @@ impl DockArea {
           self.set_right_dock(
             DockItem::tabs(vec![panel], &weak_self, window, cx),
             None,
-            true,
+            false,
             window,
             cx,
           );
@@ -1038,18 +1028,6 @@ impl DockArea {
   }
 
   pub fn update_toggle_button_tab_panels(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-    // Left toggle button
-    self.toggle_button_panels.left = self
-      .center
-      .left_top_tab_panel(cx)
-      .map(|view| view.entity_id());
-
-    // Right toggle button
-    self.toggle_button_panels.right = self
-      .center
-      .right_top_tab_panel(cx)
-      .map(|view| view.entity_id());
-
     // Bottom toggle button
     self.toggle_button_panels.bottom = self
       .bottom_dock

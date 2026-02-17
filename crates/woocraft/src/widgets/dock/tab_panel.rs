@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use gpui::{
-  AnyElement, App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity, EventEmitter,
-  FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement, Pixels, Render,
-  ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity,
-  Window, div, prelude::FluentBuilder, relative,
+  AnyElement, App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
+  EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
+  Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+  WeakEntity, Window, div, prelude::FluentBuilder, px, relative,
 };
 use rust_i18n::t;
 
@@ -18,8 +18,8 @@ use super::{
   PanelView, StackPanel, ToggleZoom,
 };
 use crate::{
-  ActiveTheme, AxisExt, DockPlacement, IconLabel, IconName, Placement, Selectable, Size,
-  StyleSized, Tooltip, h_flex, v_flex,
+  ActiveTheme, AxisExt, Divider, DockPlacement, IconLabel, IconName, Placement, Selectable, Size,
+  StyleSized, TabBarDirection, Tooltip, h_flex, v_flex,
 };
 
 #[derive(Clone)]
@@ -69,6 +69,8 @@ impl Render for DragPanel {
 pub struct TabPanel {
   focus_handle: FocusHandle,
   dock_area: WeakEntity<DockArea>,
+  /// The dock this TabPanel belongs to (None for center panels)
+  dock: Option<WeakEntity<super::Dock>>,
   /// The stock_panel can be None, if is None, that means the panels can't be
   /// split or move
   stack_panel: Option<WeakEntity<StackPanel>>,
@@ -83,7 +85,6 @@ pub struct TabPanel {
 
   tab_bar_scroll_handle: ScrollHandle,
   zoomed: bool,
-  collapsed: bool,
   /// When drag move, will get the placement of the panel to be split
   will_split_placement: Option<Placement>,
   /// Is TabPanel used in Tiles.
@@ -177,16 +178,40 @@ impl TabPanel {
     Self {
       focus_handle: cx.focus_handle(),
       dock_area,
+      dock: None,
       stack_panel,
       panels: Vec::new(),
       active_ix: 0,
       tab_bar_scroll_handle: ScrollHandle::new(),
       will_split_placement: None,
       zoomed: false,
-      collapsed: false,
       closable: true,
       in_tiles: false,
     }
+  }
+
+  pub(crate) fn set_dock(&mut self, dock: WeakEntity<super::Dock>) {
+    self.dock = Some(dock);
+  }
+
+  fn get_tab_bar_direction(&self, cx: &App) -> TabBarDirection {
+    if let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
+      return dock.read(cx).tab_bar_direction;
+    }
+    self
+      .dock_area
+      .upgrade()
+      .map(|dock_area| dock_area.read(cx).tab_bar_direction)
+      .unwrap_or_default()
+  }
+
+  fn is_dock_collapsed(&self, cx: &App) -> bool {
+    self
+      .dock
+      .as_ref()
+      .and_then(|d| d.upgrade())
+      .map(|dock| dock.read(cx).collapsed)
+      .unwrap_or(false)
   }
 
   /// Mark the TabPanel as being used in Tiles.
@@ -246,6 +271,39 @@ impl TabPanel {
 
     cx.emit(PanelEvent::LayoutChanged);
     cx.notify();
+  }
+
+  fn handle_tab_click(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+    let is_dock_collapsed = self.is_dock_collapsed(cx);
+    let has_dock = self.dock.is_some();
+
+    if !has_dock {
+      if ix != self.active_ix {
+        self.set_active_ix(ix, window, cx);
+      }
+      return;
+    }
+
+    if is_dock_collapsed {
+      if let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(false, window, cx);
+        });
+      }
+      if ix != self.active_ix {
+        self.set_active_ix(ix, window, cx);
+      } else {
+        cx.notify();
+      }
+    } else if ix == self.active_ix {
+      if let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(true, window, cx);
+        });
+      }
+    } else {
+      self.set_active_ix(ix, window, cx);
+    }
   }
 
   /// Add a panel to the end of the tabs
@@ -359,7 +417,6 @@ impl TabPanel {
   pub(super) fn set_collapsed(
     &mut self, collapsed: bool, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    self.collapsed = collapsed;
     if let Some(panel) = self.panels.get(self.active_ix) {
       panel.set_active(!collapsed, window, cx);
     }
@@ -422,7 +479,7 @@ impl TabPanel {
   fn render_toolbar(
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> impl IntoElement {
-    if self.collapsed {
+    if self.is_dock_collapsed(cx) {
       return div();
     }
 
@@ -504,6 +561,11 @@ impl TabPanel {
       return None;
     }
 
+    // Only bottom dock toggle button for center panels
+    if matches!(placement, DockPlacement::Left | DockPlacement::Right) {
+      return None;
+    }
+
     let dock_area = self.dock_area.upgrade()?.read(cx);
     if !dock_area.toggle_button_visible {
       return None;
@@ -532,28 +594,28 @@ impl TabPanel {
       return None;
     }
 
-    let is_open = dock_area.is_dock_open(placement, cx);
+    let is_collapsed = dock_area.is_dock_collapsed(placement, cx);
 
     let icon = match placement {
       DockPlacement::Left => {
-        if is_open {
-          IconName::PanelLeft
-        } else {
+        if is_collapsed {
           IconName::PanelLeftExpand
+        } else {
+          IconName::PanelLeft
         }
       }
       DockPlacement::Right => {
-        if is_open {
-          IconName::PanelRight
-        } else {
+        if is_collapsed {
           IconName::PanelRightContract
+        } else {
+          IconName::PanelRight
         }
       }
       DockPlacement::Bottom => {
-        if is_open {
-          IconName::ArrowMinimize
-        } else {
+        if is_collapsed {
           IconName::ArrowMaximize
+        } else {
+          IconName::ArrowMinimize
         }
       }
       DockPlacement::Center => unreachable!(),
@@ -566,10 +628,10 @@ impl TabPanel {
         .tab_stop(false)
         .tooltip({
           let label = SharedString::from(
-            if is_open {
-              t!("dock.collapse")
-            } else {
+            if is_collapsed {
               t!("dock.expand")
+            } else {
+              t!("dock.collapse")
             }
             .to_string(),
           );
@@ -586,6 +648,54 @@ impl TabPanel {
     )
   }
 
+  fn render_dock_collapse_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<Button> {
+    if self.zoomed {
+      return None;
+    }
+
+    let dock = self.dock.as_ref()?.upgrade()?;
+    let dock_ref = dock.read(cx);
+    let placement = dock_ref.placement;
+    if !matches!(placement, DockPlacement::Left | DockPlacement::Right) {
+      return None;
+    }
+
+    let is_collapsed = dock_ref.collapsed;
+
+    let icon = if is_collapsed {
+      IconName::ArrowMaximize
+    } else {
+      IconName::ArrowMinimize
+    };
+
+    Some(
+      Button::new(SharedString::from("collapse-dock-content"))
+        .icon(icon)
+        .flat()
+        .tab_stop(false)
+        .tooltip({
+          let label = SharedString::from(
+            if is_collapsed {
+              t!("dock.expand")
+            } else {
+              t!("dock.collapse")
+            }
+            .to_string(),
+          );
+          move |window, cx| Tooltip::new(label.clone()).build(window, cx)
+        })
+        .on_click(cx.listener({
+          move |this, _, window, cx| {
+            if let Some(dock) = this.dock.as_ref().and_then(|d| d.upgrade()) {
+              dock.update(cx, |dock, cx| {
+                dock.toggle_collapsed(window, cx);
+              });
+            }
+          }
+        })),
+    )
+  }
+
   fn render_title_bar(
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
@@ -595,15 +705,12 @@ impl TabPanel {
       return div().into_any_element();
     };
 
-    let left_dock_button = self.render_dock_toggle_button(DockPlacement::Left, window, cx);
     let bottom_dock_button = self.render_dock_toggle_button(DockPlacement::Bottom, window, cx);
-    let right_dock_button = self.render_dock_toggle_button(DockPlacement::Right, window, cx);
-    let has_extend_dock_button = left_dock_button.is_some() || bottom_dock_button.is_some();
-
-    let is_bottom_dock = bottom_dock_button.is_some();
+    let is_bottom_dock_collapsed =
+      bottom_dock_button.is_some() && dock_area.read(cx).is_dock_collapsed(DockPlacement::Bottom, cx);
 
     let panel_style = dock_area.read(cx).panel_style;
-    let tab_bar_direction = dock_area.read(cx).tab_bar_direction;
+    let tab_bar_direction = self.get_tab_bar_direction(cx);
     let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
 
     let show_single_title = tab_bar_direction.is_vertical()
@@ -620,18 +727,15 @@ impl TabPanel {
 
       let icon = panel.icon(cx);
       let title = panel.title(cx);
+      let border_color = cx.theme().border;
 
-      return h_flex()
+      let title_content = h_flex()
         .items_center()
         .justify_between()
         .gap_1()
-        .border_b_1()
-        .border_color(cx.theme().border)
         .container_size(Size::Medium)
         .container_h(Size::Medium)
-        .when(has_extend_dock_button, |this| {
-          this.children(left_dock_button).children(bottom_dock_button)
-        })
+        .when_some(bottom_dock_button, |this, btn| this.child(btn))
         .child(
           div()
             .id("tab")
@@ -655,38 +759,39 @@ impl TabPanel {
             }),
         )
         .children(panel.title_suffix(window, cx))
-        .child(self.render_toolbar(state, window, cx))
-        .children(right_dock_button)
+        .child(self.render_toolbar(state, window, cx));
+
+      return v_flex()
+        .when(is_bottom_dock_collapsed && !tab_bar_direction.is_bottom(), |this| {
+          this.child(div().w_full().h(px(1.0)).bg(border_color))
+        })
+        .child(title_content)
+        .when(!is_bottom_dock_collapsed || tab_bar_direction.is_bottom(), |this| {
+          this.child(div().w_full().h(px(1.0)).bg(border_color))
+        })
         .into_any_element();
     }
 
     let tabs_count = self.panels.len();
 
-    TabBar::new("tab-bar")
+    let is_bottom_dock = bottom_dock_button.is_some();
+
+    let tab_bar = TabBar::new("tab-bar")
       .track_scroll(&self.tab_bar_scroll_handle)
-      .border_b_1()
-      .border_color(cx.theme().border)
-      .when(has_extend_dock_button, |this| {
-        this.prefix(
-          h_flex()
-            .items_center()
-            .top_0()
-            // Right -1 for avoid border overlap with the first tab
-            .right_0()
-            .children(left_dock_button)
-            .children(bottom_dock_button),
-        )
+      .when_some(bottom_dock_button, |this, btn| {
+        this.prefix(h_flex().items_center().top_0().right_0().child(btn))
       })
       .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
         let mut active = state.active_panel.as_ref() == Some(panel);
-        let droppable = self.collapsed;
+        let is_collapsed = self.is_dock_collapsed(cx);
+        let droppable = is_collapsed;
 
         if !panel.visible(cx) {
           return None;
         }
 
         // Always not show active tab style, if the panel is collapsed
-        if self.collapsed {
+        if is_collapsed {
           active = false;
         }
 
@@ -710,17 +815,8 @@ impl TabPanel {
               }))
             })
             .on_click(cx.listener({
-              let is_collapsed = self.collapsed;
-              let dock_area = self.dock_area.clone();
               move |view, _, window, cx| {
-                view.set_active_ix(ix, window, cx);
-
-                // Open dock if clicked on the collapsed bottom dock
-                if is_bottom_dock && is_collapsed {
-                  _ = dock_area.update(cx, |dock_area, cx| {
-                    dock_area.toggle_dock(DockPlacement::Bottom, window, cx);
-                  });
-                }
+                view.handle_tab_click(ix, window, cx);
               }
             }))
             .when(!droppable, |this| {
@@ -774,83 +870,88 @@ impl TabPanel {
               }))
           }),
       )
-      .when(!self.collapsed, |this| {
+      .when(!self.is_dock_collapsed(cx), |this| {
         this.suffix(
           h_flex()
             .items_center()
             .top_0()
             .right_0()
-            .border_l_1()
             .children(
               self
                 .active_panel(cx)
                 .and_then(|panel| panel.title_suffix(window, cx)),
             )
-            .child(self.render_toolbar(state, window, cx))
-            .when_some(right_dock_button, |this, btn| this.child(btn)),
+            .child(self.render_toolbar(state, window, cx)),
         )
+      });
+
+    let show_bottom_divider =
+      !is_bottom_dock_collapsed || !is_bottom_dock || tab_bar_direction.is_bottom();
+
+    v_flex()
+      .child(tab_bar)
+      .when(show_bottom_divider, |this| {
+        this.child(Divider::horizontal())
       })
       .into_any_element()
   }
 
   fn render_vertical_tab_bar(
-    &mut self, state: &TabState, _window: &mut Window, cx: &mut Context<Self>,
+    &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
     let view = cx.entity().clone();
     let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
 
-    if visible_panels.len() <= 1 {
-      return div().into_any_element();
-    }
+    let collapse_button = self.render_dock_collapse_button(window, cx);
 
-    v_flex()
-      .id("vertical-tab-bar")
-      .items_center()
-      .justify_start()
-      .gap_1()
-      .p_1()
-      .border_color(cx.theme().border)
-      .bg(cx.theme().tab_bar)
-      .children(visible_panels.iter().enumerate().filter_map(|(ix, panel)| {
+    let is_dock_collapsed = self.is_dock_collapsed(cx);
+
+    let tab_bar = TabBar::new("vertical-tab-bar")
+      .vertical(true)
+      .h_full()
+      .when_some(collapse_button, |this, btn| this.suffix(btn))
+      .children(visible_panels.iter().enumerate().map(|(ix, panel)| {
         let active = state.active_panel.as_ref() == Some(panel);
 
-        Some(
-          div()
-            .id(("vertical-tab", ix))
-            .p_1()
-            .rounded(cx.theme().radius)
-            .cursor_pointer()
-            .map(|this| {
-              if active {
-                this.bg(cx.theme().tab_active)
-              } else {
-                this
-              }
-            })
-            .child(crate::Icon::new(panel.icon(cx)).size(cx.theme().icon_size))
-            .on_click(cx.listener({
-              move |view, _, window, cx| {
-                view.set_active_ix(ix, window, cx);
-              }
-            }))
-            .when(state.draggable, |this| {
-              this.on_drag(
-                DragPanel::new(panel.clone(), view.clone()),
-                |drag, _, _, cx| {
-                  cx.stop_propagation();
-                  cx.new(|_| drag.clone())
-                },
-              )
-            }),
-        )
-      }))
-      .into_any_element()
+        let is_active = if is_dock_collapsed { false } else { active };
+
+        Tab::new()
+          .ix(ix)
+          .icon(panel.icon(cx))
+          .label(panel.tab_name(cx).unwrap_or_else(|| panel.title(cx)))
+          .selected(is_active)
+          .on_click(cx.listener({
+            move |view, _, window, cx| {
+              view.handle_tab_click(ix, window, cx);
+            }
+          }))
+          .when(state.draggable, |this| {
+            this.on_drag(
+              DragPanel::new(panel.clone(), view.clone()),
+              |drag, _, _, cx| {
+                cx.stop_propagation();
+                cx.new(|_| drag.clone())
+              },
+            )
+          })
+      }));
+      if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_left() {
+        h_flex().h_full().child(tab_bar).child(Divider::vertical()).into_any_element()
+      } else if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_right() {
+        h_flex().h_full().child(Divider::vertical()).child(tab_bar).into_any_element()
+      } else {
+        tab_bar.into_any_element()
+      }
+    
   }
 
   fn render_active_panel(
     &self, state: &TabState, _: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
-    if self.collapsed {
+    let is_dock_collapsed = self.is_dock_collapsed(cx);
+    let is_vertical = self.get_tab_bar_direction(cx).is_vertical();
+
+    if is_dock_collapsed && is_vertical {
       return Empty {}.into_any_element();
     }
 
@@ -1145,7 +1246,7 @@ impl TabPanel {
 
   // Bind actions to the tab panel, only when the tab panel is not collapsed.
   fn bind_actions(&self, cx: &mut Context<Self>) -> Div {
-    v_flex().when(!self.collapsed, |this| {
+    v_flex().when(!self.is_dock_collapsed(cx), |this| {
       this
         .on_action(cx.listener(Self::on_action_toggle_zoom))
         .on_action(cx.listener(Self::on_action_close_panel))
@@ -1176,15 +1277,25 @@ impl Render for TabPanel {
       active_panel,
     };
 
-    let direction = self
-      .dock_area
-      .upgrade()
-      .map(|dock_area| dock_area.read(cx).tab_bar_direction)
-      .unwrap_or_default();
+    let direction = self.get_tab_bar_direction(cx);
 
     if direction.is_vertical() {
-      let title_bar = self.render_title_bar(&state, window, cx);
+      let is_dock_collapsed = self.is_dock_collapsed(cx);
       let vertical_tab_bar = self.render_vertical_tab_bar(&state, window, cx);
+
+      if is_dock_collapsed {
+        return self
+          .bind_actions(cx)
+          .id("tab-panel")
+          .track_focus(&focus_handle)
+          .tab_group()
+          .size_full()
+          .overflow_hidden()
+          .child(vertical_tab_bar)
+          .into_any_element();
+      }
+
+      let title_bar = self.render_title_bar(&state, window, cx);
       let active_panel_content = self.render_active_panel(&state, window, cx);
 
       let content = v_flex()

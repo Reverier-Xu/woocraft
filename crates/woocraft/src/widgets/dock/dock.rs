@@ -12,7 +12,7 @@ use super::{
   super::resizable::{PANEL_MIN_SIZE, resize_handle},
   DockArea, DockItem, PanelView, TabPanel,
 };
-use crate::{DockPlacement, Size, StyledExt};
+use crate::{ActiveTheme, DockPlacement, Size, StyledExt, TabBarDirection};
 
 #[derive(Clone)]
 struct ResizePanel;
@@ -34,9 +34,11 @@ pub struct Dock {
   /// The size is means the width or height of the Dock, if the placement is
   /// left or right, the size is width, otherwise the size is height.
   pub(super) size: Pixels,
-  pub(super) open: bool,
+  pub(super) collapsed: bool,
   /// Whether the Dock is collapsible, default: true
   pub(super) collapsible: bool,
+  /// The tab bar direction for this dock
+  pub(super) tab_bar_direction: TabBarDirection,
 
   // Runtime state
   /// Whether the Dock is resizing
@@ -48,7 +50,14 @@ impl Dock {
     dock_area: WeakEntity<DockArea>, placement: DockPlacement, window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Self {
-    let panel = cx.new(|cx| {
+    let tab_bar_direction = match placement {
+      DockPlacement::Left => TabBarDirection::Left,
+      DockPlacement::Right => TabBarDirection::Right,
+      DockPlacement::Bottom => TabBarDirection::default(),
+      DockPlacement::Center => TabBarDirection::default(),
+    };
+
+    let tab_panel = cx.new(|cx| {
       let mut tab = TabPanel::new(None, dock_area.clone(), window, cx);
       tab.closable = false;
       tab
@@ -58,20 +67,28 @@ impl Dock {
       size: None,
       items: Vec::new(),
       active_ix: 0,
-      view: panel.clone(),
+      view: tab_panel.clone(),
     };
 
     Self::subscribe_panel_events(dock_area.clone(), &panel, window, cx);
 
-    Self {
+    let dock = Self {
       placement,
       dock_area,
       panel,
-      open: true,
+      collapsed: false,
       collapsible: true,
       size: px(200.0),
+      tab_bar_direction,
       resizing: false,
-    }
+    };
+
+    let dock_entity = cx.entity().clone();
+    tab_panel.update(cx, |tab_panel, _| {
+      tab_panel.set_dock(dock_entity.downgrade());
+    });
+
+    dock
   }
 
   pub fn left(
@@ -94,22 +111,22 @@ impl Dock {
 
   /// Update the Dock to be collapsible or not.
   ///
-  /// And if the Dock is not collapsible, it will be open.
+  /// And if the Dock is not collapsible, it will be expanded.
   pub fn set_collapsible(&mut self, collapsible: bool, _: &mut Window, cx: &mut Context<Self>) {
     self.collapsible = collapsible;
     if !collapsible {
-      self.open = true
+      self.collapsed = false
     }
     cx.notify();
   }
 
   pub(super) fn from_state(
     dock_area: WeakEntity<DockArea>, placement: DockPlacement, size: Pixels, panel: DockItem,
-    open: bool, window: &mut Window, cx: &mut Context<Self>,
+    collapsed: bool, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self {
     Self::subscribe_panel_events(dock_area.clone(), &panel, window, cx);
 
-    if !open {
+    if collapsed {
       match panel.clone() {
         DockItem::Tabs { view, .. } => {
           view.update(cx, |panel, cx| {
@@ -125,14 +142,43 @@ impl Dock {
       }
     }
 
-    Self {
+    let tab_bar_direction = match placement {
+      DockPlacement::Left => TabBarDirection::Left,
+      DockPlacement::Right => TabBarDirection::Right,
+      DockPlacement::Bottom => TabBarDirection::default(),
+      DockPlacement::Center => TabBarDirection::default(),
+    };
+
+    let dock = Self {
       placement,
       dock_area,
       panel,
-      open,
+      collapsed,
       size,
       collapsible: true,
+      tab_bar_direction,
       resizing: false,
+    };
+
+    let dock_entity = cx.entity().clone();
+    Self::set_dock_reference(&dock.panel, dock_entity.downgrade(), cx);
+
+    dock
+  }
+
+  fn set_dock_reference(panel: &DockItem, dock: WeakEntity<Self>, cx: &mut App) {
+    match panel {
+      DockItem::Tabs { view, .. } => {
+        view.update(cx, |tab_panel, _| {
+          tab_panel.set_dock(dock);
+        });
+      }
+      DockItem::Split { items, .. } => {
+        for item in items {
+          Self::set_dock_reference(item, dock.clone(), cx);
+        }
+      }
+      _ => {}
     }
   }
 
@@ -180,6 +226,8 @@ impl Dock {
   }
 
   pub fn set_panel(&mut self, panel: DockItem, _: &mut Window, cx: &mut Context<Self>) {
+    let dock_weak = cx.entity().downgrade();
+    Self::set_dock_reference(&panel, dock_weak, cx);
     self.panel = panel;
     cx.notify();
   }
@@ -188,12 +236,12 @@ impl Dock {
     &self.panel
   }
 
-  pub fn is_open(&self) -> bool {
-    self.open
+  pub fn is_collapsed(&self) -> bool {
+    self.collapsed
   }
 
-  pub fn toggle_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    self.set_open(!self.open, window, cx);
+  pub fn toggle_collapsed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    self.set_collapsed(!self.collapsed, window, cx);
   }
 
   /// Returns the size of the Dock, the size is means the width or height of
@@ -209,12 +257,12 @@ impl Dock {
     cx.notify();
   }
 
-  /// Set the open state of the Dock.
-  pub fn set_open(&mut self, open: bool, window: &mut Window, cx: &mut Context<Self>) {
-    self.open = open;
+  /// Set the collapsed state of the Dock.
+  pub fn set_collapsed(&mut self, collapsed: bool, window: &mut Window, cx: &mut Context<Self>) {
+    self.collapsed = collapsed;
     let item = self.panel.clone();
     cx.defer_in(window, move |_, window, cx| {
-      item.set_collapsed(!open, window, cx);
+      item.set_collapsed(collapsed, window, cx);
     });
     cx.notify();
   }
@@ -265,12 +313,12 @@ impl Dock {
     let mut left_dock_size = px(0.0);
     let mut right_dock_size = px(0.0);
 
-    // Get the size of the left dock if it's open and not the current dock
+    // Get the size of the left dock if it's expanded and not the current dock
     if let Some(left_dock) = &dock_area.left_dock
       && left_dock.entity_id() != cx.entity().entity_id()
     {
       let left_dock_read = left_dock.read(cx);
-      if left_dock_read.is_open() {
+      if !left_dock_read.is_collapsed() {
         left_dock_size = left_dock_read.size;
       }
     }
@@ -279,7 +327,7 @@ impl Dock {
       && right_dock.entity_id() != cx.entity().entity_id()
     {
       let right_dock_read = right_dock.read(cx);
-      if right_dock_read.is_open() {
+      if !right_dock_read.is_collapsed() {
         right_dock_size = right_dock_read.size;
       }
     }
@@ -316,32 +364,64 @@ impl Dock {
 
 impl Render for Dock {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
-    if !self.open && !self.placement.is_bottom() {
-      return div();
-    }
-
     let cache_style = StyleRefinement::default().absolute().size_full();
+
+    let collapsed_width = px(40.0);
 
     div()
       .relative()
       .overflow_hidden()
       .map(|this| match self.placement {
-        DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(self.size),
+        DockPlacement::Left | DockPlacement::Right => {
+          this.h_flex().h_full().w(self.size)
+        }
         DockPlacement::Bottom => this.w_full().h(self.size),
         DockPlacement::Center => unreachable!(),
       })
-      // Bottom Dock should keep the title bar, then user can click the Toggle button
-      .when(!self.open && self.placement.is_bottom(), |this| {
-        this.h(Size::Medium.container_height())
+      .when(self.collapsed, |this| match self.placement {
+        DockPlacement::Left | DockPlacement::Right => this.w(collapsed_width),
+        DockPlacement::Bottom => this.h(Size::Medium.container_height()),
+        DockPlacement::Center => this,
       })
       .map(|this| match &self.panel {
         DockItem::Split { view, .. } => this.child(view.clone()),
         DockItem::Tabs { view, .. } => this.child(view.clone()),
         DockItem::Panel { view, .. } => this.child(view.clone().view().cached(cache_style)),
-        // Not support to render Tiles and Tile into Dock
         DockItem::Tiles { .. } => this,
       })
-      .child(self.render_resize_handle(window, cx))
+      .when(!self.collapsed, |this| {
+        this.child(self.render_resize_handle(window, cx))
+      })
+      .when(self.collapsed, |this| match self.placement {
+        DockPlacement::Left => this.child(
+          div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .right_0()
+            .w(px(1.0))
+            .bg(cx.theme().border),
+        ),
+        DockPlacement::Right => this.child(
+          div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .left_0()
+            .w(px(1.0))
+            .bg(cx.theme().border),
+        ),
+        DockPlacement::Bottom => this.child(
+          div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .top_0()
+            .h(px(1.0))
+            .bg(cx.theme().border),
+        ),
+        DockPlacement::Center => this,
+      })
       .child(DockElement {
         view: cx.entity().clone(),
       })
