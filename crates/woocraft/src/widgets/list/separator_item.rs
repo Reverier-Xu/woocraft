@@ -10,9 +10,9 @@ pub struct ListSeparatorItem {
 }
 
 impl Default for ListSeparatorItem {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl ListSeparatorItem {

@@ -9,7 +9,8 @@
 //!
 //! Unlike the `uniform_list`, the each item can have different size.
 //!
-//! This is useful for more complex layout, for example, a table with different row height.
+//! This is useful for more complex layout, for example, a table with different
+//! row height.
 use std::{
   cell::RefCell,
   cmp,
@@ -133,7 +134,8 @@ impl Default for VirtualListScrollHandle {
 /// This is like `uniform_list` in GPUI, but support two axis.
 ///
 /// The `item_sizes` is the size of each column,
-/// only the `height` is used, `width` is ignored and VirtualList will measure the first item width.
+/// only the `height` is used, `width` is ignored and VirtualList will measure
+/// the first item width.
 ///
 /// See also [`h_virtual_list`]
 #[inline]
@@ -143,15 +145,15 @@ pub fn v_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render,
-{
+  V: Render, {
   virtual_list(view, id, Axis::Vertical, item_sizes, f)
 }
 
 /// Create a [`VirtualList`] in horizontal direction.
 ///
 /// The `item_sizes` is the size of each column,
-/// only the `width` is used, `height` is ignored and VirtualList will measure the first item height.
+/// only the `width` is used, `height` is ignored and VirtualList will measure
+/// the first item height.
 ///
 /// See also [`v_virtual_list`]
 #[inline]
@@ -161,8 +163,7 @@ pub fn h_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render,
-{
+  V: Render, {
   virtual_list(view, id, Axis::Horizontal, item_sizes, f)
 }
 
@@ -172,8 +173,7 @@ pub(crate) fn virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render,
-{
+  V: Render, {
   let id: ElementId = id.into();
   let scroll_handle = VirtualListScrollHandle::new();
   let render_range = move |visible_range, window: &mut Window, cx: &mut App| {
@@ -201,7 +201,8 @@ where
   }
 }
 
-/// VirtualList component for rendering a large number of differently sized items.
+/// VirtualList component for rendering a large number of differently sized
+/// items.
 pub struct VirtualList {
   id: ElementId,
   axis: Axis,

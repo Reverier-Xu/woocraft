@@ -207,8 +207,6 @@ impl EventEmitter<InputEvent> for InputState {}
 
 impl InputState {
   pub fn new(cx: &mut Context<Self>) -> Self {
-    
-
     Self {
       focus_handle: cx.focus_handle().tab_stop(true),
       text: String::new(),
@@ -614,9 +612,10 @@ impl InputState {
 
   fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
     if let Some(pattern) = &self.pattern
-      && !pattern.is_match(new_text) {
-        return false;
-      }
+      && !pattern.is_match(new_text)
+    {
+      return false;
+    }
 
     if let Some(validate) = &self.validate {
       return validate(new_text, cx);
@@ -943,15 +942,17 @@ impl OtpState {
       }
       _ => {
         if let Some(ch) = key.chars().next()
-          && ch.is_ascii_digit() && chars.len() < self.length {
-            chars.push(ch);
-            self.value = chars.iter().collect::<String>().into();
-            self.hold_caret_visible();
-            cx.emit(InputEvent::Change);
-            cx.notify();
-            window.prevent_default();
-            cx.stop_propagation();
-          }
+          && ch.is_ascii_digit()
+          && chars.len() < self.length
+        {
+          chars.push(ch);
+          self.value = chars.iter().collect::<String>().into();
+          self.hold_caret_visible();
+          cx.emit(InputEvent::Change);
+          cx.notify();
+          window.prevent_default();
+          cx.stop_propagation();
+        }
       }
     }
   }

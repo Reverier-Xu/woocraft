@@ -11,6 +11,8 @@ use crate::{
   Sizable, Size, StyleSized, StyledExt, Tooltip, h_flex,
 };
 
+type PageClickHandler = dyn Fn(&usize, &mut Window, &mut App);
+
 #[derive(IntoElement)]
 pub struct Pagination {
   id: ElementId,
@@ -21,7 +23,7 @@ pub struct Pagination {
   disabled: bool,
   compact: bool,
   visible_pages: usize,
-  on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App)>>,
+  on_click: Option<Rc<PageClickHandler>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -205,13 +207,12 @@ impl RenderOnce for Pagination {
                     .checked(is_selected)
                     .disabled(is_disabled || is_selected);
 
-                  if !is_selected {
-                    if let Some(handler) = on_click_for_page.clone() {
+                  if !is_selected
+                    && let Some(handler) = on_click_for_page.clone() {
                       item = item.on_click(move |_, window, cx| {
                         handler(&page, window, cx);
                       });
                     }
-                  }
                   menu = menu.item(item);
                 }
                 menu

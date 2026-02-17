@@ -1,10 +1,11 @@
-use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable, StyledExt, h_flex};
 use gpui::{
   AnyElement, App, ClickEvent, Div, ElementId, Hsla, InteractiveElement, IntoElement,
   MouseMoveEvent, ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _,
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
+
+use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable, StyledExt, h_flex};
 
 type ListItemClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 type ListItemMouseEnterHandler = Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>;
@@ -92,8 +93,7 @@ impl ListItem {
   pub fn suffix<F, E>(mut self, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.suffix = Some(Box::new(move |window, cx| {
       builder(window, cx).into_any_element()
     }));
@@ -155,14 +155,8 @@ impl RenderOnce for ListItem {
     let is_active = self.confirmed || self.selected;
     let is_selectable = !(self.disabled || self.mode.is_separator());
     let base_fg = cx.theme().foreground;
-    let hover_bg = Hsla {
-      a: 0.05,
-      ..base_fg
-    };
-    let active_bg = Hsla {
-      a: 0.1,
-      ..base_fg
-    };
+    let hover_bg = Hsla { a: 0.05, ..base_fg };
+    let active_bg = Hsla { a: 0.1, ..base_fg };
     let selected_fg = cx.theme().primary;
 
     self

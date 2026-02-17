@@ -25,9 +25,9 @@ pub struct Badge {
 }
 
 impl Default for Badge {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl Badge {

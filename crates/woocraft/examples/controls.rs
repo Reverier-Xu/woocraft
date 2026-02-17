@@ -5,11 +5,10 @@ use gpui::{
 use woocraft::{
   ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider, Icon,
   IconLabel, IndexPath, Input, InputState, Kbd, Label, Link, List, ListDelegate, ListItem,
-  ListState, Notification, NotificationCenter, NotificationPlacement,
-  NotificationState, NotificationType, NumberInput, OtpInput, OtpState, Popover, Progress,
-  Pagination, ProgressCircle, ScrollableElement, Selectable, Slider, SliderState, Spinner,
-  StyledExt, Switch, Sizable, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex,
-  init, v_flex, window_border,
+  ListState, Notification, NotificationCenter, NotificationPlacement, NotificationState,
+  NotificationType, NumberInput, OtpInput, OtpState, Pagination, Popover, Progress, ProgressCircle,
+  ScrollableElement, Selectable, Sizable, Slider, SliderState, Spinner, StyledExt, Switch, Tag,
+  Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex, window_border,
 };
 
 #[derive(Clone)]
@@ -144,7 +143,12 @@ impl DemoListDelegate {
   }
 
   fn total_pages(&self) -> usize {
-    let max_len = self.filtered_indices.iter().map(Vec::len).max().unwrap_or(0);
+    let max_len = self
+      .filtered_indices
+      .iter()
+      .map(Vec::len)
+      .max()
+      .unwrap_or(0);
     let page_size = self.page_size.max(1);
     ((max_len + page_size - 1) / page_size).max(1)
   }
@@ -232,7 +236,7 @@ impl ListDelegate for DemoListDelegate {
   fn render_item(
     &mut self, ix: IndexPath, _window: &mut Window, cx: &mut Context<ListState<Self>>,
   ) -> Option<Self::Item> {
-    let (start, _, _) = self.visible_bounds(ix.section);
+    let (start, ..) = self.visible_bounds(ix.section);
     let filtered_ix = *self.filtered_indices.get(ix.section)?.get(start + ix.row)?;
     let item = self.entries.get(ix.section)?.get(filtered_ix)?;
     let title = item.title;
@@ -270,7 +274,11 @@ impl ListDelegate for DemoListDelegate {
         .justify_between()
         .bg(cx.theme().muted.opacity(0.3))
         .child(div().font_semibold().child(self.section_titles[section]))
-        .child(div().text_color(cx.theme().muted_foreground).child(format!("{total} items"))),
+        .child(
+          div()
+            .text_color(cx.theme().muted_foreground)
+            .child(format!("{total} items")),
+        ),
     )
   }
 
@@ -396,7 +404,14 @@ impl Render for ControlsWindow {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let slider_value = self.slider_state.read(cx).value().end();
     let is_dark = cx.theme().mode.is_dark();
-    let (list_selected, list_right_clicked, list_confirmed, list_loading, list_page, list_total_pages) = {
+    let (
+      list_selected,
+      list_right_clicked,
+      list_confirmed,
+      list_loading,
+      list_page,
+      list_total_pages,
+    ) = {
       let list_state = self.list_state.read(cx);
       let delegate = list_state.delegate();
       (

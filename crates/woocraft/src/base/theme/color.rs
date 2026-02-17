@@ -25,6 +25,19 @@ pub struct ThemeColors {
   pub scrollbar: Hsla,
   pub scrollbar_thumb: Hsla,
   pub scrollbar_thumb_hover: Hsla,
+  pub transparent: Hsla,
+  pub secondary: Hsla,
+  pub secondary_hover: Hsla,
+  pub secondary_foreground: Hsla,
+  pub tab_bar: Hsla,
+  pub tab_bar_segmented: Hsla,
+  pub tab_foreground: Hsla,
+  pub tab_active: Hsla,
+  pub tab_active_foreground: Hsla,
+  pub title_bar: Hsla,
+  pub drag_border: Hsla,
+  pub drop_target: Hsla,
+  pub tiles: Hsla,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -195,6 +208,19 @@ impl ThemeColors {
     let scrollbar = with_alpha(background, 0.4);
     let scrollbar_thumb = with_alpha(foreground, 0.4);
     let scrollbar_thumb_hover = with_alpha(foreground, 0.6);
+    let transparent = gpui::transparent_white();
+    let secondary = muted;
+    let secondary_hover = with_alpha(muted, 0.9);
+    let secondary_foreground = foreground;
+    let tab_bar = card;
+    let tab_bar_segmented = muted;
+    let tab_foreground = muted_foreground;
+    let tab_active = background;
+    let tab_active_foreground = foreground;
+    let title_bar = card;
+    let drag_border = primary;
+    let drop_target = with_alpha(primary, 0.2);
+    let tiles = card;
 
     Self {
       background,
@@ -216,6 +242,19 @@ impl ThemeColors {
       scrollbar,
       scrollbar_thumb,
       scrollbar_thumb_hover,
+      transparent,
+      secondary,
+      secondary_hover,
+      secondary_foreground,
+      tab_bar,
+      tab_bar_segmented,
+      tab_foreground,
+      tab_active,
+      tab_active_foreground,
+      title_bar,
+      drag_border,
+      drop_target,
+      tiles,
     }
   }
 
@@ -244,6 +283,19 @@ impl ThemeColors {
       scrollbar: with_alpha(self.scrollbar, alpha),
       scrollbar_thumb: with_alpha(self.scrollbar_thumb, alpha),
       scrollbar_thumb_hover: with_alpha(self.scrollbar_thumb_hover, alpha),
+      transparent: with_alpha(self.transparent, alpha),
+      secondary: with_alpha(self.secondary, alpha),
+      secondary_hover: with_alpha(self.secondary_hover, alpha),
+      secondary_foreground: with_alpha(self.secondary_foreground, alpha),
+      tab_bar: with_alpha(self.tab_bar, alpha),
+      tab_bar_segmented: with_alpha(self.tab_bar_segmented, alpha),
+      tab_foreground: with_alpha(self.tab_foreground, alpha),
+      tab_active: with_alpha(self.tab_active, alpha),
+      tab_active_foreground: with_alpha(self.tab_active_foreground, alpha),
+      title_bar: with_alpha(self.title_bar, alpha),
+      drag_border: with_alpha(self.drag_border, alpha),
+      drop_target: with_alpha(self.drop_target, alpha),
+      tiles: with_alpha(self.tiles, alpha),
     }
   }
 

@@ -16,9 +16,9 @@ pub struct Spinner {
 }
 
 impl Default for Spinner {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl Spinner {

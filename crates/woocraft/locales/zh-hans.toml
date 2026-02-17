@@ -10,3 +10,11 @@ search_placeholder = "搜索..."
 [pagination]
 previous = "上一页"
 next = "下一页"
+
+[dock]
+unnamed = "未命名"
+zoom_in = "放大"
+zoom_out = "缩小"
+close = "关闭"
+collapse = "折叠"
+expand = "展开"

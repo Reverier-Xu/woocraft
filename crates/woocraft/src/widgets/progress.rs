@@ -19,9 +19,9 @@ pub struct Progress {
 }
 
 impl Default for Progress {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl Progress {
@@ -141,9 +141,9 @@ pub struct ProgressCircle {
 }
 
 impl Default for ProgressCircle {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl ProgressCircle {

@@ -78,9 +78,9 @@ pub struct Notification {
 }
 
 impl Default for Notification {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl Notification {
@@ -210,9 +210,9 @@ pub struct NotificationState {
 }
 
 impl Default for NotificationState {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl NotificationState {
@@ -340,11 +340,12 @@ impl NotificationState {
 
   fn pause_and_reset_timer(&mut self, id: usize) {
     if let Some(item) = self.items.iter_mut().find(|item| item.id == id)
-      && item.autohide {
-        item.hovered = true;
-        item.started_at = None;
-        item.timer_epoch = item.timer_epoch.wrapping_add(1);
-      }
+      && item.autohide
+    {
+      item.hovered = true;
+      item.started_at = None;
+      item.timer_epoch = item.timer_epoch.wrapping_add(1);
+    }
   }
 
   fn progress_ratio(&self, id: usize) -> Option<f32> {

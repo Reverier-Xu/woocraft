@@ -1,12 +1,5 @@
 use std::ops::Range;
 
-use super::cache::{MeasuredEntrySize, RowEntry, RowsCache};
-use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
-use crate::{
-  ActiveTheme as _, Icon, IconName, IndexPath, Input, InputEvent, InputState, ListDelegate,
-  Scrollbar, Selectable, Sizable, Size, StyledExt, VirtualListScrollHandle, WidgetGroup,
-  WidgetGroupChild, v_flex, v_virtual_list,
-};
 use gpui::{
   App, AppContext, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement,
   EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length,
@@ -15,6 +8,15 @@ use gpui::{
   prelude::FluentBuilder, px, size,
 };
 use rust_i18n::t;
+
+use super::cache::{MeasuredEntrySize, RowEntry, RowsCache};
+use crate::{
+  ActiveTheme as _, Icon, IconName, IndexPath, Input, InputEvent, InputState, ListDelegate,
+  Scrollbar, Selectable, Sizable, Size, StyledExt, VirtualListScrollHandle, WidgetGroup,
+  WidgetGroupChild,
+  actions::{Cancel, Confirm, SelectDown, SelectUp},
+  v_flex, v_virtual_list,
+};
 
 pub(crate) fn init(cx: &mut App) {
   let context: Option<&str> = Some("List");

@@ -14,8 +14,9 @@ use crate::{
 };
 
 type PopoverTriggerBuilder = Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>;
-type PopoverContentBuilder =
-  Rc<dyn Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> AnyElement + 'static>;
+type PopoverContentBuilder = Rc<
+  dyn Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> AnyElement + 'static,
+>;
 type OpenChangeHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
 #[derive(IntoElement)]
@@ -31,7 +32,6 @@ pub struct Popover {
   children: Vec<AnyElement>,
   trigger_style: Option<StyleRefinement>,
   mouse_button: MouseButton,
-  appearance: bool,
   overlay_closable: bool,
   on_open_change: Option<OpenChangeHandler>,
 }
@@ -50,7 +50,6 @@ impl Popover {
       children: vec![],
       trigger_style: None,
       mouse_button: MouseButton::Left,
-      appearance: true,
       overlay_closable: true,
       on_open_change: None,
     }
@@ -116,11 +115,6 @@ impl Popover {
     self
   }
 
-  pub fn appearance(mut self, appearance: bool) -> Self {
-    self.appearance = appearance;
-    self
-  }
-
   pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
     self.tracked_focus_handle = Some(handle.clone());
     self
@@ -157,23 +151,18 @@ impl Popover {
     .with_priority(1)
   }
 
-  fn render_popover_content(
-    anchor: Anchor, appearance: bool, _: &mut Window, cx: &mut App,
-  ) -> Stateful<gpui::Div> {
+  fn render_popover_content(anchor: Anchor, _: &mut Window, cx: &mut App) -> Stateful<gpui::Div> {
     h_flex()
       .id("content")
       .occlude()
       .tab_group()
-      .when(appearance, |this| {
-        this
-          .bg(cx.theme().popover)
-          .text_color(cx.theme().popover_foreground)
-          .border_1()
-          .shadow_sm()
-          .border_color(cx.theme().border)
-          .rounded(cx.theme().radius_container)
-          .p_2()
-      })
+      .bg(cx.theme().popover)
+      .text_color(cx.theme().popover_foreground)
+      .border_1()
+      .shadow_sm()
+      .border_color(cx.theme().border)
+      .rounded(cx.theme().radius_container)
+      .p_1()
       .map(|this| match anchor {
         Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top_1(),
         Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => this.bottom_1(),
@@ -342,7 +331,7 @@ impl RenderOnce for Popover {
       return el;
     }
 
-    let popover_content = Self::render_popover_content(self.anchor, self.appearance, window, cx)
+    let popover_content = Self::render_popover_content(self.anchor, window, cx)
       .track_focus(&focus_handle)
       .key_context(POPOVER_CONTEXT)
       .on_action(window.listener_for(&state, PopoverState::on_action_cancel))

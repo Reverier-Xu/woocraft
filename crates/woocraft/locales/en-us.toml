@@ -10,3 +10,11 @@ search_placeholder = "Search..."
 [pagination]
 previous = "Previous"
 next = "Next"
+
+[dock]
+unnamed = "Unnamed"
+zoom_in = "Zoom In"
+zoom_out = "Zoom Out"
+close = "Close"
+collapse = "Collapse"
+expand = "Expand"

@@ -31,9 +31,9 @@ pub struct Tag {
 }
 
 impl Default for Tag {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl Tag {

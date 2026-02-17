@@ -27,9 +27,9 @@ pub struct BreadcrumbItem {
 }
 
 impl Default for Breadcrumb {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl Breadcrumb {

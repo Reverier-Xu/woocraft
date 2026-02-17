@@ -54,7 +54,10 @@ pub struct Theme {
   pub font_size: Pixels,
   pub icon_size: Pixels,
   pub radius: Pixels,
+  pub radius_lg: Pixels,
   pub radius_container: Pixels,
+  pub tile_grid_size: Pixels,
+  pub tile_radius: Pixels,
   pub scrollbar_show: ScrollbarShow,
 }
 
@@ -68,7 +71,10 @@ impl Default for Theme {
       font_size: px(16.),
       icon_size: px(16.),
       radius: px(4.),
+      radius_lg: px(8.),
       radius_container: px(6.),
+      tile_grid_size: px(10.),
+      tile_radius: px(6.),
       scrollbar_show: ScrollbarShow::default(),
     }
   }

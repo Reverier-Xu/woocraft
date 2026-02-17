@@ -1,18 +1,19 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  Animation, AnimationExt as _, AnyElement, AnyView, App, ClickEvent, Corners, ElementId, Hsla,
-  InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
-  percentage, prelude::FluentBuilder, px,
+  div, linear, percentage, prelude::FluentBuilder, px, Animation, AnimationExt as _, AnyElement,
+  AnyView, App, ClickEvent, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement,
+  ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _,
+  StyleRefinement, Styled, Transformation, Window,
 };
 
 use crate::{
-  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
-  h_flex,
+  h_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized,
+  StyledExt,
 };
 
 type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+type ButtonHoverHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 type TooltipBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -100,6 +101,7 @@ pub struct Button {
   loading: bool,
   loading_icon: Option<IconName>,
   on_click: Option<ButtonClickHandler>,
+  on_hover: Option<ButtonHoverHandler>,
   tooltip_builder: Option<TooltipBuilder>,
 }
 
@@ -124,6 +126,7 @@ impl Button {
       loading: false,
       loading_icon: None,
       on_click: None,
+      on_hover: None,
       tooltip_builder: None,
     }
   }
@@ -142,6 +145,11 @@ impl Button {
     mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
   ) -> Self {
     self.on_click = Some(Rc::new(handler));
+    self
+  }
+
+  pub fn on_hover(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+    self.on_hover = Some(Rc::new(handler));
     self
   }
 
@@ -391,7 +399,10 @@ impl RenderOnce for Button {
     };
 
     let selected_bg = if is_flat {
-      bg
+      Hsla {
+        a: 0.1,
+        ..theme.foreground
+      }
     } else if self.outline {
       background_hover
     } else {
@@ -469,15 +480,26 @@ impl RenderOnce for Button {
           selected_border,
         )
       };
-    let (bg, border) = if self.disabled
-      && matches!(
-        self.variant,
-        ButtonVariant::Flat | ButtonVariant::Link | ButtonVariant::Default
-      ) {
-      (theme.foreground.alpha(0.1), transparent)
-    } else {
-      (bg, border)
-    };
+    let (bg, border) =
+      if self.disabled && matches!(self.variant, ButtonVariant::Link | ButtonVariant::Default) {
+        (theme.foreground.alpha(0.1), transparent)
+      } else {
+        (bg, border)
+      };
+
+    let (bg, border, hover_bg, active_bg, selected_bg) =
+      if self.disabled && self.variant == ButtonVariant::Flat {
+        (
+          transparent,
+          transparent,
+          theme.foreground.alpha(0.05),
+          theme.foreground.alpha(0.05),
+          theme.foreground.alpha(0.05),
+        )
+      } else {
+        (bg, border, hover_bg, active_bg, selected_bg)
+      };
+
     let has_only_icon = self.label.is_none() && self.children.is_empty() && self.icon.is_some();
     let clickable = self.clickable();
     let hoverable = self.hoverable();
@@ -582,13 +604,16 @@ impl RenderOnce for Button {
         )
       })
       .child(content)
-      .when(hoverable, |this| {
+      .when(hoverable && !self.disabled, |this| {
         this
           .cursor_pointer()
           .hover(move |this| this.bg(hover_bg).border_color(border))
           .active(move |this| this.bg(active_bg).border_color(border))
       })
       .when(self.disabled, |this| this.cursor_not_allowed())
+      .when_some(self.on_hover, |this, on_hover| {
+        this.on_hover(move |hovered, window, cx| on_hover(hovered, window, cx))
+      })
       .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
         this.on_click(move |event, window, cx| on_click(event, window, cx))
       })

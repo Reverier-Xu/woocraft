@@ -144,8 +144,7 @@ impl RowsCache {
   pub(crate) fn prepare_if_needed<F>(
     &mut self, sections_count: usize, measured_size: MeasuredEntrySize, cx: &App, rows_count_f: F,
   ) where
-    F: Fn(usize, &App) -> usize,
-  {
+    F: Fn(usize, &App) -> usize, {
     let mut new_sections = vec![];
     for section_ix in 0..sections_count {
       new_sections.push(rows_count_f(section_ix, cx));

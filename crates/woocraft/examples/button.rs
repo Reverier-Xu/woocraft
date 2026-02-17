@@ -3,7 +3,7 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, Disableable, IconName, Selectable, Sizable as _, Size,
+  ActiveTheme, Button, ButtonVariants as _, Disableable, IconName, Selectable, Sizable as _,
   StyledExt, Theme, ThemeMode, h_flex, init, v_flex,
 };
 
@@ -95,11 +95,7 @@ impl Render for ButtonWindow {
           .items_end()
           .gap_3()
           .child(Button::new("btn-sm").label("Small").small())
-          .child(
-            Button::new("btn-md")
-              .label("Medium")
-              .with_size(Size::Medium),
-          )
+          .child(Button::new("btn-md").label("Medium"))
           .child(Button::new("btn-lg").label("Large").large()),
       )
       .child(div().text_sm().child("States"))

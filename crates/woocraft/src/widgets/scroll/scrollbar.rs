@@ -766,11 +766,11 @@ impl Element for Scrollbar {
                 if state.get().hovered_axis != Some(axis) {
                   notify = true;
                 }
-              } else if state.get().hovered_axis == Some(axis)
-                && state.get().hovered_axis.is_some() {
-                  state.set(state.get().with_hovered(None));
-                  notify = true;
-                }
+              } else if state.get().hovered_axis == Some(axis) && state.get().hovered_axis.is_some()
+              {
+                state.set(state.get().with_hovered(None));
+                notify = true;
+              }
 
               if thumb_bounds.contains(&event.position) {
                 if state.get().hovered_on_thumb != Some(axis) {
@@ -812,11 +812,12 @@ impl Element for Scrollbar {
 
                 if ((scroll_handle.offset().y - offset.y).abs() > px(1.)
                   || (scroll_handle.offset().x - offset.x).abs() > px(1.))
-                  && state.get().last_update.elapsed() > max_fps_duration {
-                    scroll_handle.set_offset(offset);
-                    state.set(state.get().with_last_update(Instant::now()));
-                    notify = true;
-                  }
+                  && state.get().last_update.elapsed() > max_fps_duration
+                {
+                  scroll_handle.set_offset(offset);
+                  state.set(state.get().with_last_update(Instant::now()));
+                  notify = true;
+                }
               }
 
               if notify {

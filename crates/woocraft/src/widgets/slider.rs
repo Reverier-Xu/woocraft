@@ -98,9 +98,9 @@ pub struct SliderState {
 }
 
 impl Default for SliderState {
-    fn default() -> Self {
-        Self::new()
-    }
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl SliderState {

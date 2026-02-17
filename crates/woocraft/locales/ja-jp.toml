@@ -10,3 +10,11 @@ search_placeholder = "検索..."
 [pagination]
 previous = "前へ"
 next = "次へ"
+
+[dock]
+unnamed = "無題"
+zoom_in = "拡大"
+zoom_out = "縮小"
+close = "閉じる"
+collapse = "折りたたむ"
+expand = "展開"
