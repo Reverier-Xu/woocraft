@@ -8,10 +8,10 @@ edition      = "2024"
 homepage     = "https://design.woooo.tech/"
 license      = "Apache-2.0"
 publish      = true
+readme       = "README.md"
 repository   = "https://github.com/Reverier-Xu/woocraft"
 rust-version = "1.93.0"
-version      = "0.1.0"
-readme       = "README.md"
+version      = "0.1.1"
 
 [profile.release]
 codegen-units = 1
@@ -25,12 +25,12 @@ anyhow      = "1.0"
 gpui        = "0.2"
 gpui-macros = "0.2"
 palette     = "0.7"
+regex       = "1.12"
 serde       = { version = "1.0", features = ["derive"] }
 serde_json  = "1.0"
+smallvec    = "1.15"
 thiserror   = "2.0"
-toml        = "0.9"
-regex = "1.12"
-smallvec = "1.15"
+toml        = "1.0"
 
-rust-embed = { version = "8.7", features = ["interpolate-folder-path"] }
+rust-embed = { version = "8.11", features = ["interpolate-folder-path"] }
 rust-i18n  = "3.1"
