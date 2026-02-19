@@ -597,7 +597,7 @@ impl Render for ControlsWindow {
               div()
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child("组件与值已绑定：交互后下方 Label 会实时反映状态"),
+                .child("Component and value are bound: the Label below will reflect state in real-time after interaction"),
             )
             .child(
               v_flex()

@@ -18,8 +18,8 @@ use super::{
   PanelView, StackPanel, ToggleZoom,
 };
 use crate::{
-  ActiveTheme, AxisExt, Divider, DockPlacement, IconLabel, IconName, Placement, Selectable, Size,
-  StyleSized, TabBarDirection, Tooltip, h_flex, v_flex,
+  ActiveTheme, AxisExt, Divider, DockPlacement, IconLabel, IconName, Placement, Selectable,
+  Sizable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, v_flex,
 };
 
 #[derive(Clone)]
@@ -35,11 +35,23 @@ struct TabState {
 pub(crate) struct DragPanel {
   pub(crate) panel: Arc<dyn PanelView>,
   pub(crate) tab_panel: Entity<TabPanel>,
+  size: Size,
 }
 
 impl DragPanel {
   pub(crate) fn new(panel: Arc<dyn PanelView>, tab_panel: Entity<TabPanel>) -> Self {
-    Self { panel, tab_panel }
+    Self {
+      panel,
+      tab_panel,
+      size: Size::Medium,
+    }
+  }
+}
+
+impl Sizable for DragPanel {
+  fn with_size(mut self, size: impl Into<Size>) -> Self {
+    self.size = size.into();
+    self
   }
 }
 
@@ -48,7 +60,7 @@ impl Render for DragPanel {
     div()
       .id("drag-panel")
       .cursor_grab()
-      .py_1()
+      .container_py(self.size)
       .w_48()
       .text_ellipsis()
       .whitespace_nowrap()
@@ -755,6 +767,7 @@ impl TabPanel {
                 DragPanel {
                   panel: panel.clone(),
                   tab_panel: view,
+                  size: Size::Medium,
                 },
                 |drag, _, _, cx| {
                   cx.stop_propagation();

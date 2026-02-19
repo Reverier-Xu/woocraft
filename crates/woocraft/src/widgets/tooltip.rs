@@ -3,7 +3,7 @@ use gpui::{
   SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
 
-use crate::{ActiveTheme, Kbd, StyledExt, h_flex};
+use crate::{ActiveTheme, Kbd, Sizable, Size, StyleSized, StyledExt, h_flex};
 
 type TooltipElementBuilder = Box<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
@@ -17,6 +17,7 @@ pub struct Tooltip {
   content: TooltipContent,
   key_binding: Option<Kbd>,
   action: Option<(Box<dyn Action>, Option<SharedString>)>,
+  size: Size,
 }
 
 impl Tooltip {
@@ -26,6 +27,7 @@ impl Tooltip {
       content: TooltipContent::Text(text.into()),
       key_binding: None,
       action: None,
+      size: Size::Medium,
     }
   }
 
@@ -40,6 +42,7 @@ impl Tooltip {
       content: TooltipContent::Element(Box::new(move |window, cx| {
         builder(window, cx).into_any_element()
       })),
+      size: Size::Medium,
     }
   }
 
@@ -59,6 +62,13 @@ impl Tooltip {
 }
 
 impl FluentBuilder for Tooltip {}
+
+impl Sizable for Tooltip {
+  fn with_size(mut self, size: impl Into<Size>) -> Self {
+    self.size = size.into();
+    self
+  }
+}
 
 impl Styled for Tooltip {
   fn style(&mut self) -> &mut StyleRefinement {
@@ -90,9 +100,8 @@ impl Render for Tooltip {
         .shadow_sm()
         .rounded(cx.theme().radius)
         .justify_between()
-        .py_1()
-        .px_2()
-        .gap_3()
+        .input_padding(self.size)
+        .component_gap(self.size)
         .refine_style(&self.style)
         .map(|this| {
           this.child(div().map(|this| match self.content {

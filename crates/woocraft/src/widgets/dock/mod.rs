@@ -73,7 +73,8 @@ pub struct DockArea {
   /// The panel style, default is [`PanelStyle::Default`](PanelStyle::Default).
   pub(crate) panel_style: PanelStyle,
 
-  /// The tab bar direction, default is [`TabBarDirection::Top`](TabBarDirection::Top).
+  /// The tab bar direction, default is
+  /// [`TabBarDirection::Top`](TabBarDirection::Top).
   pub(crate) tab_bar_direction: TabBarDirection,
 
   _subscriptions: Vec<Subscription>,

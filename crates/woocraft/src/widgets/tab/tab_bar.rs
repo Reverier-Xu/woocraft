@@ -117,8 +117,7 @@ impl TabBar {
   /// When this is set, the children's on_click will be ignored.
   pub fn on_click<F>(mut self, on_click: F) -> Self
   where
-    F: Fn(&usize, &mut Window, &mut App) + 'static,
-  {
+    F: Fn(&usize, &mut Window, &mut App) + 'static, {
     self.on_click = Some(Rc::new(on_click));
     self
   }
@@ -175,7 +174,7 @@ impl RenderOnce for TabBar {
         .container_size(self.size)
         .w(self.size.container_height())
         .h_full()
-        .gap_1()
+        .container_gap(self.size)
         .text_color(cx.theme().tab_foreground)
         .refine_style(&self.style)
         .when_some(self.prefix, |this, prefix| this.child(prefix))
@@ -184,7 +183,7 @@ impl RenderOnce for TabBar {
             .id("tabs")
             .flex_1()
             .w_full()
-            .gap_1()
+            .container_gap(self.size)
             .items_center()
             .overflow_y_scroll()
             .when_some(self.scroll_handle, |this, scroll_handle| {
@@ -205,7 +204,7 @@ impl RenderOnce for TabBar {
         .items_center()
         .container_size(self.size)
         .container_h(self.size)
-        .gap_1()
+        .container_gap(self.size)
         .text_color(cx.theme().tab_foreground)
         .refine_style(&self.style)
         .when_some(self.prefix, |this, prefix| this.child(prefix))
@@ -213,7 +212,7 @@ impl RenderOnce for TabBar {
           h_flex()
             .id("tabs")
             .flex_1()
-            .gap_1()
+            .container_gap(self.size)
             .items_center()
             .overflow_x_scroll()
             .when_some(self.scroll_handle, |this, scroll_handle| {

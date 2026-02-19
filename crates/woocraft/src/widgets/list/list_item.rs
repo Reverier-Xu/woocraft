@@ -5,7 +5,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable, StyledExt, h_flex};
+use crate::{ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex};
 
 type ListItemClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 type ListItemMouseEnterHandler = Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>;
@@ -30,6 +30,7 @@ pub struct ListItem {
   base: Stateful<Div>,
   mode: ListItemMode,
   style: StyleRefinement,
+  size: Size,
   disabled: bool,
   selected: bool,
   secondary_selected: bool,
@@ -48,6 +49,7 @@ impl ListItem {
       mode: ListItemMode::Entry,
       base: h_flex().id(id),
       style: StyleRefinement::default(),
+      size: Size::Medium,
       disabled: false,
       selected: false,
       secondary_selected: false,
@@ -115,9 +117,9 @@ impl ListItem {
   }
 }
 
-impl Disableable for ListItem {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
+impl Sizable for ListItem {
+  fn with_size(mut self, size: impl Into<Size>) -> Self {
+    self.size = size.into();
     self
   }
 }
@@ -162,9 +164,8 @@ impl RenderOnce for ListItem {
     self
       .base
       .relative()
-      .gap_x_1()
-      .py_1()
-      .px_2()
+      .gap_x(self.size.component_gap())
+      .input_padding(self.size)
       .text_base()
       .text_color(base_fg)
       .relative()
@@ -191,7 +192,7 @@ impl RenderOnce for ListItem {
           .w_full()
           .items_center()
           .justify_between()
-          .gap_x_1()
+          .gap_x(self.size.component_gap())
           .child(div().w_full().children(self.children))
           .when_some(self.check_icon, |this, icon| {
             this.child(

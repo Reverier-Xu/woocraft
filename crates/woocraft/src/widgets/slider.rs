@@ -388,10 +388,10 @@ impl RenderOnce for Slider {
           .id(("slider-track", self.state.entity_id().as_u64()))
           .relative()
           .when(matches!(axis, Axis::Horizontal), |this| {
-            this.h(px(2.0)).w_full()
+            this.h(self.size.track_thickness()).w_full()
           })
           .when(matches!(axis, Axis::Vertical), |this| {
-            this.w(px(2.0)).h_full()
+            this.w(self.size.track_thickness()).h_full()
           })
           .rounded_full()
           .bg(cx.theme().muted)
@@ -435,22 +435,22 @@ impl RenderOnce for Slider {
               div()
                 .id(("slider-thumb-start", self.state.entity_id().as_u64()))
                 .absolute()
-                .size(px(16.0))
+                .size(self.size.thumb_size())
                 .rounded_full()
                 .border_2()
                 .border_color(cx.theme().primary)
                 .bg(cx.theme().background)
                 .when(matches!(axis, Axis::Horizontal), |this| {
                   this
-                    .top(px(-7.0))
+                    .top(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
                     .left(relative(percentage.start))
-                    .ml(-px(8.0))
+                    .ml(-self.size.thumb_size() / 2.0)
                 })
                 .when(matches!(axis, Axis::Vertical), |this| {
                   this
-                    .left(px(-7.0))
+                    .left(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
                     .bottom(relative(percentage.start))
-                    .mb(-px(8.0))
+                    .mb(-self.size.thumb_size() / 2.0)
                 })
                 .when(!self.disabled, |this| {
                   this
@@ -483,22 +483,22 @@ impl RenderOnce for Slider {
             div()
               .id(("slider-thumb-end", self.state.entity_id().as_u64()))
               .absolute()
-              .size(px(16.0))
+              .size(self.size.thumb_size())
               .rounded_full()
               .border_2()
               .border_color(cx.theme().primary)
               .bg(cx.theme().background)
               .when(matches!(axis, Axis::Horizontal), |this| {
                 this
-                  .top(px(-7.0))
+                  .top(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
                   .left(relative(percentage.end))
-                  .ml(-px(8.0))
+                  .ml(-self.size.thumb_size() / 2.0)
               })
               .when(matches!(axis, Axis::Vertical), |this| {
                 this
-                  .left(px(-7.0))
+                  .left(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
                   .bottom(relative(percentage.end))
-                  .mb(-px(8.0))
+                  .mb(-self.size.thumb_size() / 2.0)
               })
               .when(!self.disabled, |this| {
                 this

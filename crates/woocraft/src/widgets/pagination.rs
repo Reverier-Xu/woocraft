@@ -160,7 +160,7 @@ impl RenderOnce for Pagination {
     h_flex()
       .id(self.id.clone())
       .container_size(size)
-      .gap_2()
+      .container_gap(size)
       .items_center()
       .refine_style(&self.style)
       .child(self.render_nav_button(true, current_page, total_pages))

@@ -6,13 +6,14 @@ use gpui::{
   prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme, Icon, IconName, Sizable, StyledExt, h_flex};
+use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt, h_flex};
 
 type BreadcrumbClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 #[derive(IntoElement)]
 pub struct Breadcrumb {
   style: StyleRefinement,
+  size: Size,
   items: Vec<BreadcrumbItem>,
 }
 
@@ -36,6 +37,7 @@ impl Breadcrumb {
   pub fn new() -> Self {
     Self {
       style: StyleRefinement::default(),
+      size: Size::Medium,
       items: Vec::new(),
     }
   }
@@ -57,6 +59,13 @@ impl Styled for Breadcrumb {
   }
 }
 
+impl Sizable for Breadcrumb {
+  fn with_size(mut self, size: impl Into<Size>) -> Self {
+    self.size = size.into();
+    self
+  }
+}
+
 impl RenderOnce for Breadcrumb {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let items_count = self.items.len();
@@ -72,7 +81,7 @@ impl RenderOnce for Breadcrumb {
     }
 
     h_flex()
-      .gap_1p5()
+      .component_gap(self.size)
       .text_sm()
       .text_color(cx.theme().muted_foreground)
       .refine_style(&self.style)

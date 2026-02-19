@@ -1,9 +1,9 @@
 use gpui::{
   AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
+  StyleRefinement, Styled, Window, div, px,
 };
 
-use crate::{ActiveTheme, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, Sizable, Size, StyleSized, StyledExt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TagVariant {
@@ -186,17 +186,16 @@ impl RenderOnce for Tag {
     };
     let rounded = self.rounded.unwrap_or(cx.theme().radius);
 
+    // Tag/Badge Medium = Small Input Size
+    let size = self.size.smaller();
+
     div()
       .flex()
       .items_center()
       .border_1()
       .line_height(gpui::relative(1.0))
       .text_xs()
-      .map(|this| match self.size {
-        Size::Small => this.px_1p5().py_0p5(),
-        Size::Medium => this.px_2().py_1(),
-        Size::Large => this.px_2p5().py_1(),
-      })
+      .input_padding(size)
       .bg(bg)
       .text_color(fg)
       .border_color(default_border)

@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Anchor, ElementExt, Selectable, StyledExt,
+  ActiveTheme, Anchor, ElementExt, Selectable, Sizable, Size, StyleSized, StyledExt,
   actions::{Cancel, POPOVER_CONTEXT},
   h_flex,
 };
@@ -34,6 +34,7 @@ pub struct Popover {
   mouse_button: MouseButton,
   overlay_closable: bool,
   on_open_change: Option<OpenChangeHandler>,
+  size: Size,
 }
 
 impl Popover {
@@ -52,6 +53,7 @@ impl Popover {
       mouse_button: MouseButton::Left,
       overlay_closable: true,
       on_open_change: None,
+      size: Size::Medium,
     }
   }
 
@@ -147,7 +149,9 @@ impl Popover {
     .with_priority(1)
   }
 
-  fn render_popover_content(anchor: Anchor, _: &mut Window, cx: &mut App) -> Stateful<gpui::Div> {
+  fn render_popover_content(
+    anchor: Anchor, size: Size, _: &mut Window, cx: &mut App,
+  ) -> Stateful<gpui::Div> {
     h_flex()
       .id("content")
       .occlude()
@@ -158,10 +162,12 @@ impl Popover {
       .shadow_sm()
       .border_color(cx.theme().border)
       .rounded(cx.theme().radius_container)
-      .p_1()
+      .container_padding(size)
       .map(|this| match anchor {
-        Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top_1(),
-        Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => this.bottom_1(),
+        Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top(size.container_py()),
+        Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => {
+          this.bottom(size.container_py())
+        }
       })
   }
 }
@@ -169,6 +175,13 @@ impl Popover {
 impl ParentElement for Popover {
   fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
     self.children.extend(elements);
+  }
+}
+
+impl Sizable for Popover {
+  fn with_size(mut self, size: impl Into<Size>) -> Self {
+    self.size = size.into();
+    self
   }
 }
 
@@ -327,7 +340,7 @@ impl RenderOnce for Popover {
       return el;
     }
 
-    let popover_content = Self::render_popover_content(self.anchor, window, cx)
+    let popover_content = Self::render_popover_content(self.anchor, self.size, window, cx)
       .track_focus(&focus_handle)
       .key_context(POPOVER_CONTEXT)
       .on_action(window.listener_for(&state, PopoverState::on_action_cancel))

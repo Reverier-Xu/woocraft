@@ -129,15 +129,11 @@ impl RenderOnce for Switch {
       .detach();
     }
 
-    let track_h = self.size.component_height();
-    let track_w = match self.size {
-      Size::Small => gpui::px(24.0),
-      Size::Medium => gpui::px(28.0),
-      Size::Large => gpui::px(32.0),
-    };
-    let thumb_size = gpui::px(16.0);
-    let thumb_offset = gpui::px(8.0);
-    let track_thickness = gpui::px(2.0);
+    let track_h = self.size.track_height();
+    let track_w = self.size.track_height() * 1.5;
+    let thumb_size = self.size.thumb_size();
+    let thumb_offset = thumb_size / 2.0;
+    let track_thickness = self.size.track_thickness();
     let track_radius = self.size.component_radius();
 
     let track_bg = cx.theme().muted;
@@ -239,7 +235,7 @@ impl RenderOnce for Switch {
       .id(self.id.clone())
       .h(track_h)
       .items_center()
-      .gap_2()
+      .component_gap(self.size)
       .child(
         div()
           .id((self.id.clone(), "track"))

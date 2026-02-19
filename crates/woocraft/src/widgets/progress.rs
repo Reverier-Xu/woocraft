@@ -83,8 +83,8 @@ impl RenderOnce for Progress {
     let text_color = self.text_color.unwrap_or(cx.theme().muted_foreground);
     let text_size = self.size.text_size();
     let progress = format!("{:.0}%", self.value);
-    let line_h = gpui::px(2.0);
-    let label_gap = gpui::px(6.0);
+    let line_h = self.size.track_thickness();
+    let label_gap = self.size.component_gap();
 
     div()
       .w_full()
@@ -206,17 +206,8 @@ impl RenderOnce for ProgressCircle {
     let text_color = self.text_color.unwrap_or(cx.theme().muted_foreground);
     let percentage_text = format!("{:.0}%", self.value);
 
-    let diameter = match self.size {
-      Size::Small => px(32.0),
-      Size::Medium => px(40.0),
-      Size::Large => px(48.0),
-    };
-
-    let stroke = match self.size {
-      Size::Small => px(2.0),
-      Size::Medium => px(3.0),
-      Size::Large => px(4.0),
-    };
+    let diameter = self.size.circle_diameter();
+    let stroke = self.size.stroke_width();
 
     let progress = (self.value / 100.0).clamp(0.0, 1.0);
 

@@ -7,7 +7,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex,
+  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
+  h_flex,
 };
 
 type CheckboxClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
@@ -125,7 +126,7 @@ impl RenderOnce for Checkbox {
     h_flex()
       .id(self.id)
       .items_center()
-      .gap_2()
+      .component_gap(self.size)
       .text_color(if self.disabled {
         cx.theme().muted_foreground
       } else {

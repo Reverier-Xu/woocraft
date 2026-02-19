@@ -124,8 +124,7 @@ pub trait StyledExt: Styled + Sized {
 
   fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
-  {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
     let paddings = paddings.into();
     self
       .pt(paddings.top.into())
@@ -136,8 +135,7 @@ pub trait StyledExt: Styled + Sized {
 
   fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
-  {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
     let margins = margins.into();
     self
       .mt(margins.top.into())
@@ -338,6 +336,112 @@ impl Size {
       Size::Large => px(6.),
     }
   }
+
+  #[inline]
+  pub fn input_padding(&self) -> Edges<Pixels> {
+    let px = self.input_px();
+    Edges {
+      top: self.input_py(),
+      bottom: self.input_py(),
+      left: px,
+      right: px,
+    }
+  }
+
+  #[inline]
+  pub fn container_padding(&self) -> Edges<Pixels> {
+    let px = self.container_px();
+    Edges {
+      top: self.container_py(),
+      bottom: self.container_py(),
+      left: px,
+      right: px,
+    }
+  }
+
+  /// Spacing between inner components in a Container (container-level)
+  /// Small: 2px, Medium: 4px, Large: 8px
+  #[inline]
+  pub fn container_gap(&self) -> Pixels {
+    match self {
+      Size::Small => px(2.),
+      Size::Medium => px(4.),
+      Size::Large => px(8.),
+    }
+  }
+
+  /// Spacing between inner elements in a component (component-level)
+  /// Small: 4px, Medium: 8px, Large: 12px
+  #[inline]
+  pub fn component_gap(&self) -> Pixels {
+    match self {
+      Size::Small => px(4.),
+      Size::Medium => px(8.),
+      Size::Large => px(12.),
+    }
+  }
+
+  /// Height system for interactive tracks/sliders
+  /// Small: 16px, Medium: 20px, Large: 24px
+  #[inline]
+  pub fn track_height(&self) -> Pixels {
+    match self {
+      Size::Small => px(16.),
+      Size::Medium => px(20.),
+      Size::Large => px(24.),
+    }
+  }
+
+  /// Slider thumb size (based on track_height)
+  /// Small: 12px, Medium: 16px, Large: 20px
+  #[inline]
+  pub fn thumb_size(&self) -> Pixels {
+    match self {
+      Size::Small => px(12.),
+      Size::Medium => px(16.),
+      Size::Large => px(20.),
+    }
+  }
+
+  /// Track/slider thickness
+  /// Small: 1.5px, Medium: 2px, Large: 3px
+  #[inline]
+  pub fn track_thickness(&self) -> Pixels {
+    match self {
+      Size::Small => px(1.5),
+      Size::Medium => px(2.),
+      Size::Large => px(3.),
+    }
+  }
+
+  /// Badge dot size (follows component height)
+  /// Small: 4px, Medium: 6px, Large: 8px
+  #[inline]
+  pub fn badge_dot_size(&self) -> Pixels {
+    match self {
+      Size::Small => px(4.),
+      Size::Medium => px(6.),
+      Size::Large => px(8.),
+    }
+  }
+
+  /// Circular progress bar diameter (based on container height)
+  /// Small: 32px, Medium: 40px, Large: 48px
+  #[inline]
+  pub fn circle_diameter(&self) -> Pixels {
+    self.container_height()
+  }
+
+  /// Stroke width
+  /// Small: 2px, Medium: 3px, Large: 4px
+  #[inline]
+  pub fn stroke_width(&self) -> Pixels {
+    match self {
+      Size::Small => px(2.),
+      Size::Medium => px(3.),
+      Size::Large => px(4.),
+    }
+  }
 }
 
 pub trait Selectable: Sized {
@@ -393,12 +497,18 @@ pub trait StyleSized<T: Styled> {
   fn container_px(self, size: Size) -> Self;
   fn container_py(self, size: Size) -> Self;
   fn container_size(self, size: Size) -> Self;
+  fn container_gap(self, size: Size) -> Self;
+  fn container_gap_x(self, size: Size) -> Self;
+  fn container_gap_y(self, size: Size) -> Self;
+  fn component_gap(self, size: Size) -> Self;
   fn list_size(self, size: Size) -> Self;
   fn list_px(self, size: Size) -> Self;
   fn list_py(self, size: Size) -> Self;
   fn size_with(self, size: Size) -> Self;
   fn table_cell_size(self, size: Size) -> Self;
   fn button_text_size(self, size: Size) -> Self;
+  fn input_padding(self, size: Size) -> Self;
+  fn container_padding(self, size: Size) -> Self;
 }
 
 impl<T: Styled> StyleSized<T> for T {
@@ -485,6 +595,26 @@ impl<T: Styled> StyleSized<T> for T {
   }
 
   #[inline]
+  fn container_gap(self, size: Size) -> Self {
+    self.gap(size.container_gap())
+  }
+
+  #[inline]
+  fn container_gap_x(self, size: Size) -> Self {
+    self.gap_x(size.container_gap())
+  }
+
+  #[inline]
+  fn container_gap_y(self, size: Size) -> Self {
+    self.gap_y(size.container_gap())
+  }
+
+  #[inline]
+  fn component_gap(self, size: Size) -> Self {
+    self.gap(size.component_gap())
+  }
+
+  #[inline]
   fn list_size(self, size: Size) -> Self {
     self
       .list_px(size)
@@ -521,6 +651,26 @@ impl<T: Styled> StyleSized<T> for T {
 
   fn button_text_size(self, size: Size) -> Self {
     self.input_text_size(size)
+  }
+
+  #[inline]
+  fn input_padding(self, size: Size) -> Self {
+    let padding = size.input_padding();
+    self
+      .pt(padding.top)
+      .pb(padding.bottom)
+      .pl(padding.left)
+      .pr(padding.right)
+  }
+
+  #[inline]
+  fn container_padding(self, size: Size) -> Self {
+    let padding = size.container_padding();
+    self
+      .pt(padding.top)
+      .pb(padding.bottom)
+      .pl(padding.left)
+      .pr(padding.right)
   }
 }
 

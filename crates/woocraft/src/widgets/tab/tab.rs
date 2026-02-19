@@ -7,8 +7,8 @@ use gpui::{
 };
 
 use crate::{
-  Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size,
-  Tooltip, h_flex,
+  Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size, Tooltip,
+  h_flex,
 };
 
 type TabClickHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);

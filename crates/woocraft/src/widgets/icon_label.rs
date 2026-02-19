@@ -140,7 +140,7 @@ impl RenderOnce for IconLabel {
 
     let content = h_flex()
       .items_center()
-      .gap_2()
+      .component_gap(self.size)
       .when_some(icon, |this, icon| {
         let icon = Icon::new(icon).with_size(self.size);
         if self.loading {

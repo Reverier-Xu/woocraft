@@ -512,7 +512,7 @@ impl RenderOnce for Button {
     let content = h_flex()
       .items_center()
       .justify_center()
-      .gap_2()
+      .component_gap(self.size)
       .when_some(icon, |this, icon| {
         let icon = Icon::new(icon).with_size(self.size);
         if self.loading {

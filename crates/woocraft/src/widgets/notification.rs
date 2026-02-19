@@ -10,7 +10,10 @@ use gpui::{
   prelude::FluentBuilder as _, px, relative,
 };
 
-use crate::{ActiveTheme, Button, ButtonVariants, Icon, IconName, StyledExt, h_flex, v_flex};
+use crate::{
+  ActiveTheme, Button, ButtonVariants, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
+  h_flex, v_flex,
+};
 
 type NotificationClickHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
@@ -386,6 +389,7 @@ pub struct NotificationCenter {
   margin_bottom: gpui::Pixels,
   margin_left: gpui::Pixels,
   width: gpui::Pixels,
+  size: Size,
 }
 
 impl NotificationCenter {
@@ -399,6 +403,7 @@ impl NotificationCenter {
       margin_bottom: px(16.0),
       margin_left: px(16.0),
       width: px(360.0),
+      size: Size::Medium,
     }
   }
 
@@ -419,6 +424,13 @@ impl NotificationCenter {
 
   pub fn width(mut self, width: gpui::Pixels) -> Self {
     self.width = width;
+    self
+  }
+}
+
+impl Sizable for NotificationCenter {
+  fn with_size(mut self, size: impl Into<Size>) -> Self {
+    self.size = size.into();
     self
   }
 }
@@ -474,13 +486,11 @@ impl RenderOnce for NotificationCenter {
       )
       .w(self.width)
       .max_h(px(560.0))
-      .gap_2()
+      .container_gap(self.size)
       .when(placement.is_bottom(), |this| this.flex_col_reverse())
-      .children(
-        items
-          .into_iter()
-          .map(|item| NotificationCard::new(item.id, item.data, &self.state).into_any_element()),
-      )
+      .children(items.into_iter().map(|item| {
+        NotificationCard::new(item.id, item.data, &self.state, self.size).into_any_element()
+      }))
       .refine_style(&self.style)
   }
 }
@@ -490,14 +500,16 @@ struct NotificationCard {
   id: usize,
   data: Notification,
   state: Entity<NotificationState>,
+  size: Size,
 }
 
 impl NotificationCard {
-  fn new(id: usize, data: Notification, state: &Entity<NotificationState>) -> Self {
+  fn new(id: usize, data: Notification, state: &Entity<NotificationState>, size: Size) -> Self {
     Self {
       id,
       data,
       state: state.clone(),
+      size,
     }
   }
 }
@@ -515,7 +527,7 @@ impl RenderOnce for NotificationCard {
       .border_color(cx.theme().border)
       .bg(cx.theme().popover)
       .rounded(cx.theme().radius_container)
-      .p_1()
+      .container_padding(self.size)
       .shadow_sm()
       .items_start()
       .on_hover({
@@ -538,7 +550,7 @@ impl RenderOnce for NotificationCard {
           .items_center()
           .bg(icon_color.opacity(0.2))
           .pl_2()
-          .gap_2()
+          .container_gap(self.size)
           .rounded(cx.theme().radius)
           .child(Icon::new(icon_name).text_color(icon_color))
           .child(
@@ -567,8 +579,7 @@ impl RenderOnce for NotificationCard {
       .child(
         v_flex()
           .w_full()
-          .px_2()
-          .py_1()
+          .container_padding(self.size)
           .flex_1()
           .when_some(self.data.message.clone(), |this, message| {
             this.child(div().text_color(cx.theme().muted_foreground).child(message))

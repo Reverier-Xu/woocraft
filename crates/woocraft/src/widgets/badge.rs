@@ -3,7 +3,7 @@ use gpui::{
   div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{ActiveTheme, Icon, Sizable, Size, StyledExt, h_flex};
+use crate::{ActiveTheme, Icon, Sizable, Size, StyleSized, StyledExt, h_flex};
 
 #[derive(Default, Clone)]
 enum BadgeVariant {
@@ -98,6 +98,9 @@ impl RenderOnce for Badge {
     let badge_color = self.color.unwrap_or(cx.theme().danger);
     let text_color = cx.theme().primary_foreground;
 
+    // Badge Medium = Small Input Size
+    let size = self.size.smaller();
+
     let overlay = match self.variant {
       BadgeVariant::Dot => h_flex()
         .absolute()
@@ -109,7 +112,7 @@ impl RenderOnce for Badge {
         .text_xs()
         .top_0()
         .right_0()
-        .size(px(6.0))
+        .size(size.badge_dot_size())
         .into_any_element(),
       BadgeVariant::Number => {
         let count = if self.count > self.max {
@@ -128,9 +131,8 @@ impl RenderOnce for Badge {
           .text_xs()
           .top(-px(5.0))
           .right(-px(6.0))
-          .py_0p5()
-          .px_1()
-          .min_w(px(16.0))
+          .input_padding(size)
+          .min_w(size.component_height())
           .line_height(px(12.0))
           .child(count)
           .into_any_element()
@@ -144,10 +146,10 @@ impl RenderOnce for Badge {
         .text_color(text_color)
         .right_0()
         .bottom_0()
-        .size(self.size.component_height() / 2.)
+        .size(size.component_height())
         .border_1()
         .border_color(cx.theme().background)
-        .child((*icon).with_size(self.size.smaller()))
+        .child((*icon).with_size(size))
         .into_any_element(),
     };
 

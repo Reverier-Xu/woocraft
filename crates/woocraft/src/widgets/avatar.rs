@@ -1,6 +1,6 @@
 use gpui::{
-  div, img, prelude::FluentBuilder, App, Div, Hsla, ImageSource, InteractiveElement, Interactivity,
-  IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+  App, Div, Hsla, ImageSource, InteractiveElement, Interactivity, IntoElement, ParentElement as _,
+  RenderOnce, SharedString, StyleRefinement, Styled, Window, div, img, prelude::FluentBuilder,
 };
 
 use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyledExt};

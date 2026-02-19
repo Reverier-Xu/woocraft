@@ -1096,12 +1096,13 @@ impl RenderOnce for OtpInput {
         this.on_key_down(window.listener_for(&self.state, OtpState::on_key_down))
       })
       .items_center()
-      .gap_4()
-      .children(
-        groups
-          .into_iter()
-          .map(|cells| h_flex().items_center().gap_1().children(cells)),
-      )
+      .gap(self.size.container_gap() * 2.0)
+      .children(groups.into_iter().map(|cells| {
+        h_flex()
+          .items_center()
+          .gap(self.size.container_gap())
+          .children(cells)
+      }))
   }
 }
 
