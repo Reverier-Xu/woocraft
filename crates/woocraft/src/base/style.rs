@@ -362,6 +362,11 @@ pub trait Sizable: Sized {
   }
 
   #[inline(always)]
+  fn medium(self) -> Self {
+    self.with_size(Size::Medium)
+  }
+
+  #[inline(always)]
   fn large(self) -> Self {
     self.with_size(Size::Large)
   }

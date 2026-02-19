@@ -1,4 +1,4 @@
-use gpui::{App, Global, Pixels, WindowAppearance, px};
+use gpui::{px, App, Global, Pixels, WindowAppearance};
 use serde::{Deserialize, Serialize};
 
 mod color;

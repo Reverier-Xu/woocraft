@@ -1,3 +1,4 @@
+mod avatar;
 mod badge;
 mod breadcrumb;
 mod button;
@@ -29,6 +30,7 @@ mod virtual_list;
 mod widget_group;
 mod window_border;
 
+pub use avatar::*;
 pub use badge::*;
 pub use breadcrumb::*;
 pub use button::*;

@@ -3,12 +3,13 @@ use gpui::{
   ScrollStrategy, Size as GpuiSize, Styled, Task, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants, Checkbox, Divider, Icon,
-  IconLabel, IndexPath, Input, InputState, Kbd, Label, Link, List, ListDelegate, ListItem,
-  ListState, Notification, NotificationCenter, NotificationPlacement, NotificationState,
-  NotificationType, NumberInput, OtpInput, OtpState, Pagination, Popover, Progress, ProgressCircle,
-  ScrollableElement, Selectable, Sizable, Slider, SliderState, Spinner, StyledExt, Switch, Tag,
-  Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex, window_border,
+  ActiveTheme, Avatar, AvatarGroup, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants,
+  Checkbox, Divider, Icon, IconLabel, IndexPath, Input, InputState, Kbd, Label, Link, List,
+  ListDelegate, ListItem, ListState, Notification, NotificationCenter, NotificationPlacement,
+  NotificationState, NotificationType, NumberInput, OtpInput, OtpState, Pagination, Popover,
+  Progress, ProgressCircle, ScrollableElement, Selectable, Sizable, Slider, SliderState, Spinner,
+  StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex,
+  window_border,
 };
 
 #[derive(Clone)]
@@ -150,7 +151,7 @@ impl DemoListDelegate {
       .max()
       .unwrap_or(0);
     let page_size = self.page_size.max(1);
-    ((max_len + page_size - 1) / page_size).max(1)
+    max_len.div_ceil(page_size).max(1)
   }
 
   fn current_page(&self) -> usize {
@@ -791,6 +792,73 @@ impl Render for ControlsWindow {
                 ),
             )
             .child(Divider::horizontal_dashed().label("newly added capabilities"))
+            .child(
+              v_flex()
+                .gap_3()
+                .child(div().text_sm().child("Avatar"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_4()
+                    .child(Avatar::new().name("John Doe").small())
+                    .child(Avatar::new().name("Jane Smith").medium())
+                    .child(Avatar::new().name("Bob Wilson").large())
+                )
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_4()
+                    .child(Avatar::new().name("Alice").small())
+                    .child(Avatar::new().name("Charlie").medium())
+                    .child(Avatar::new().name("Eve").large())
+                )
+                .child(div().text_sm().child("AvatarGroup"))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_4()
+                    .child(
+                      AvatarGroup::new()
+                        .child(Avatar::new().name("Alice"))
+                        .child(Avatar::new().name("Bob"))
+                        .child(Avatar::new())
+                        .child(Avatar::new().name("David"))
+                        .small(),
+                    )
+                    .child(
+                      AvatarGroup::new()
+                        .child(Avatar::new().name("Alice"))
+                        .child(Avatar::new().name("Bob"))
+                        .child(Avatar::new())
+                        .child(Avatar::new().name("David"))
+                        .medium(),
+                    )
+                    .child(
+                      AvatarGroup::new()
+                        .child(Avatar::new().name("Alice"))
+                        .child(Avatar::new().name("Bob"))
+                        .child(Avatar::new())
+                        .child(Avatar::new().name("David"))
+                        .large(),
+                    ),
+                )
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_4()
+                    .child(
+                      AvatarGroup::new()
+                        .child(Avatar::new().name("Alice"))
+                        .child(Avatar::new().name("Bob"))
+                        .child(Avatar::new().name("Charlie"))
+                        .child(Avatar::new().name("David"))
+                        .child(Avatar::new().name("Eve"))
+                        .limit(3)
+                        .ellipsis()
+                        .medium(),
+                    ),
+                )
+            )
             .child(
               v_flex()
                 .gap_3()
