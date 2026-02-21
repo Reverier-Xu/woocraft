@@ -1,14 +1,14 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-  div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, Corners, ElementId, Hsla,
-  InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+  AnyElement, App, Axis, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement,
+  ParentElement as _, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+  div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
-  h_flex, ActiveTheme, Button, ButtonVariant, ButtonVariants as _, Disableable, Icon, IconLabel,
-  Input, Label, Selectable, Sizable, Size, StyleSized as _, StyledExt,
+  ActiveTheme, Button, ButtonVariant, ButtonVariants as _, Disableable, Icon, IconLabel, Input,
+  Label, Selectable, Sizable, Size, StyleSized as _, StyledExt, h_flex,
 };
 
 type WidgetGroupClickHandler = Box<dyn Fn(&Vec<usize>, &mut Window, &mut App) + 'static>;

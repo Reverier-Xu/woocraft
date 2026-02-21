@@ -1,11 +1,11 @@
 use gpui::{
-  div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId, Hsla,
-  InteractiveElement, IntoElement, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+  AnyElement, App, ClickEvent, Div, ElementId, Hsla, InteractiveElement, IntoElement,
+  MouseMoveEvent, ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
-use crate::{h_flex, ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt};
+use crate::{ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex};
 
 type ListItemClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 type ListItemMouseEnterHandler = Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>;
@@ -95,8 +95,7 @@ impl ListItem {
   pub fn suffix<F, E>(mut self, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.suffix = Some(Box::new(move |window, cx| {
       builder(window, cx).into_any_element()
     }));

@@ -1,6 +1,6 @@
 use gpui::{
-  div, px, AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-  RenderOnce, StyleRefinement, Styled, Window,
+  AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
+  StyleRefinement, Styled, Window, div, px,
 };
 
 use crate::{ActiveTheme, Sizable, Size, StyleSized, StyledExt};

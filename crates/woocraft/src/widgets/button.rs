@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-  div, percentage, prelude::FluentBuilder, px, AnimationExt as _, AnyElement, AnyView, App,
-  ClickEvent, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-  Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-  Transformation, Window,
+  AnimationExt as _, AnyElement, AnyView, App, ClickEvent, Corners, ElementId, Hsla,
+  InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div,
+  percentage, prelude::FluentBuilder, px,
 };
 
 use crate::{
-  h_flex, opacity, spinner_animation, ActiveTheme, ColorExt, Disableable, Icon, IconName,
-  InteractionColors, Selectable, Sizable, Size, StyleSized, StyledExt,
+  ActiveTheme, ColorExt, Disableable, Icon, IconName, InteractionColors, Selectable, Sizable, Size,
+  StyleSized, StyledExt, h_flex, opacity, spinner_animation,
 };
 
 type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;

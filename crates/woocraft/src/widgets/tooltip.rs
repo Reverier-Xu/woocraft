@@ -1,9 +1,9 @@
 use gpui::{
-  div, prelude::FluentBuilder, Action, AnyElement, AnyView, App, AppContext, Context, IntoElement,
-  ParentElement, Render, SharedString, StyleRefinement, Styled, Window,
+  Action, AnyElement, AnyView, App, AppContext, Context, IntoElement, ParentElement, Render,
+  SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
 
-use crate::{h_flex, ActiveTheme, CardStyle, Kbd, Sizable, Size, StyleSized, StyledExt};
+use crate::{ActiveTheme, CardStyle, Kbd, Sizable, Size, StyleSized, StyledExt, h_flex};
 
 type TooltipElementBuilder = Box<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
@@ -34,8 +34,7 @@ impl Tooltip {
   pub fn element<E, F>(builder: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static,
-  {
+    F: Fn(&mut Window, &mut App) -> E + 'static, {
     Self {
       style: StyleRefinement::default(),
       key_binding: None,

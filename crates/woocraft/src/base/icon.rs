@@ -1,7 +1,7 @@
 use gpui::{
-  prelude::FluentBuilder as _, svg, AnyElement, App, AppContext, Context, Entity, Hsla,
-  IntoElement, Radians, Render, RenderOnce, SharedString, StyleRefinement, Styled, Svg,
-  Transformation, Window,
+  AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
+  SharedString, StyleRefinement, Styled, Svg, Transformation, Window, prelude::FluentBuilder as _,
+  svg,
 };
 
 use crate::base::{Sizable, Size};

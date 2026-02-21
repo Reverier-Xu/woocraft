@@ -1,15 +1,15 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  div, linear, percentage, prelude::FluentBuilder as _, Animation, AnimationExt as _, AnyElement,
-  App, ClickEvent, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-  RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-  Transformation, Window,
+  Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,
+  InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
+  percentage, prelude::FluentBuilder as _,
 };
 
 use crate::{
-  h_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized,
-  StyledExt,
+  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
+  h_flex,
 };
 
 type IconLabelClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;

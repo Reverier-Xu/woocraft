@@ -1,4 +1,4 @@
-use gpui::{linear, Animation};
+use gpui::{Animation, linear};
 
 use crate::base::theme::duration;
 
