@@ -1,6 +1,6 @@
 use gpui::{
-  BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks, FontFeatures, Hsla, Pixels,
-  Refineable, StyleRefinement, Styled, div, point, px,
+  div, point, px, BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks,
+  FontFeatures, Hsla, Pixels, Refineable, StyleRefinement, Styled,
 };
 use serde::{Deserialize, Serialize};
 
@@ -124,7 +124,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let paddings = paddings.into();
     self
       .pt(paddings.top.into())
@@ -135,7 +136,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let margins = margins.into();
     self
       .mt(margins.top.into())
@@ -160,6 +162,21 @@ pub trait StyledExt: Styled + Sized {
       .rounded_tr(radius.top_right)
       .rounded_bl(radius.bottom_left)
       .rounded_br(radius.bottom_right)
+  }
+
+  #[inline(always)]
+  fn center(self) -> Self {
+    self.items_center().justify_center()
+  }
+
+  #[inline(always)]
+  fn v_center(self) -> Self {
+    self.justify_center()
+  }
+
+  #[inline(always)]
+  fn h_center(self) -> Self {
+    self.items_center()
   }
 }
 
@@ -280,10 +297,10 @@ impl Size {
 
   #[inline]
   pub fn table_cell_padding(&self) -> Edges<Pixels> {
-    let padding = self.input_px();
+    let padding = self.component_px();
     Edges {
-      top: self.input_py(),
-      bottom: self.input_py(),
+      top: self.component_py(),
+      bottom: self.component_py(),
       left: padding,
       right: padding,
     }
@@ -321,7 +338,7 @@ impl Size {
     }
   }
 
-  pub fn input_px(&self) -> Pixels {
+  pub fn component_px(&self) -> Pixels {
     match self {
       Self::Small => px(4.),
       Self::Medium => px(8.),
@@ -329,7 +346,7 @@ impl Size {
     }
   }
 
-  pub fn input_py(&self) -> Pixels {
+  pub fn component_py(&self) -> Pixels {
     match self {
       Size::Small => px(2.),
       Size::Medium => px(4.),
@@ -338,11 +355,11 @@ impl Size {
   }
 
   #[inline]
-  pub fn input_padding(&self) -> Edges<Pixels> {
-    let px = self.input_px();
+  pub fn component_padding(&self) -> Edges<Pixels> {
+    let px = self.component_px();
     Edges {
-      top: self.input_py(),
-      bottom: self.input_py(),
+      top: self.component_py(),
+      bottom: self.component_py(),
       left: px,
       right: px,
     }
@@ -482,14 +499,13 @@ pub trait Collapsible {
 }
 
 pub trait StyleSized<T: Styled> {
-  fn input_text_size(self, size: Size) -> Self;
-  fn input_size(self, size: Size) -> Self;
-  fn input_pl(self, size: Size) -> Self;
-  fn input_pr(self, size: Size) -> Self;
-  fn input_px(self, size: Size) -> Self;
-  fn input_py(self, size: Size) -> Self;
-  fn input_h(self, size: Size) -> Self;
-  fn input_rounded(self, size: Size) -> Self;
+  fn component_size(self, size: Size) -> Self;
+  fn component_pl(self, size: Size) -> Self;
+  fn component_pr(self, size: Size) -> Self;
+  fn component_px(self, size: Size) -> Self;
+  fn component_py(self, size: Size) -> Self;
+  fn component_h(self, size: Size) -> Self;
+  fn component_rounded(self, size: Size) -> Self;
   fn container_h(self, size: Size) -> Self;
   fn container_min_h(self, size: Size) -> Self;
   fn container_multiline_h(self, size: Size, lines: u32) -> Self;
@@ -506,53 +522,47 @@ pub trait StyleSized<T: Styled> {
   fn list_py(self, size: Size) -> Self;
   fn size_with(self, size: Size) -> Self;
   fn table_cell_size(self, size: Size) -> Self;
-  fn button_text_size(self, size: Size) -> Self;
-  fn input_padding(self, size: Size) -> Self;
+  fn component_padding(self, size: Size) -> Self;
   fn container_padding(self, size: Size) -> Self;
 }
 
 impl<T: Styled> StyleSized<T> for T {
   #[inline]
-  fn input_text_size(self, size: Size) -> Self {
-    self.text_size(size.text_size())
-  }
-
-  #[inline]
-  fn input_size(self, size: Size) -> Self {
+  fn component_size(self, size: Size) -> Self {
     self
-      .input_px(size)
-      .input_py(size)
-      .input_h(size)
-      .input_rounded(size)
+      .component_px(size)
+      .component_py(size)
+      .component_h(size)
+      .component_rounded(size)
   }
 
   #[inline]
-  fn input_pl(self, size: Size) -> Self {
-    self.pl(size.input_px())
+  fn component_pl(self, size: Size) -> Self {
+    self.pl(size.component_px())
   }
 
   #[inline]
-  fn input_pr(self, size: Size) -> Self {
-    self.pr(size.input_px())
+  fn component_pr(self, size: Size) -> Self {
+    self.pr(size.component_px())
   }
 
   #[inline]
-  fn input_px(self, size: Size) -> Self {
-    self.px(size.input_px())
+  fn component_px(self, size: Size) -> Self {
+    self.px(size.component_px())
   }
 
   #[inline]
-  fn input_py(self, size: Size) -> Self {
-    self.py(size.input_py())
+  fn component_py(self, size: Size) -> Self {
+    self.py(size.component_py())
   }
 
   #[inline]
-  fn input_h(self, size: Size) -> Self {
+  fn component_h(self, size: Size) -> Self {
     self.h(size.component_height())
   }
 
   #[inline]
-  fn input_rounded(self, size: Size) -> Self {
+  fn component_rounded(self, size: Size) -> Self {
     self.rounded(size.component_radius())
   }
 
@@ -620,17 +630,17 @@ impl<T: Styled> StyleSized<T> for T {
       .list_px(size)
       .list_py(size)
       .container_h(size)
-      .input_text_size(size)
+      .text_size(size.text_size())
   }
 
   #[inline]
   fn list_px(self, size: Size) -> Self {
-    self.px(size.input_px())
+    self.px(size.component_px())
   }
 
   #[inline]
   fn list_py(self, size: Size) -> Self {
-    self.py(size.input_py())
+    self.py(size.component_py())
   }
 
   #[inline]
@@ -642,20 +652,16 @@ impl<T: Styled> StyleSized<T> for T {
   fn table_cell_size(self, size: Size) -> Self {
     let padding = size.table_cell_padding();
     self
-      .input_text_size(size)
+      .text_size(size.text_size())
       .pl(padding.left)
       .pr(padding.right)
       .pt(padding.top)
       .pb(padding.bottom)
   }
 
-  fn button_text_size(self, size: Size) -> Self {
-    self.input_text_size(size)
-  }
-
   #[inline]
-  fn input_padding(self, size: Size) -> Self {
-    let padding = size.input_padding();
+  fn component_padding(self, size: Size) -> Self {
+    let padding = size.component_padding();
     self
       .pt(padding.top)
       .pb(padding.bottom)
@@ -673,6 +679,32 @@ impl<T: Styled> StyleSized<T> for T {
       .pr(padding.right)
   }
 }
+
+use crate::base::theme::Theme;
+
+pub trait CardStyle: Styled + Sized {
+  #[inline]
+  fn card_style(self, theme: &Theme) -> Self {
+    self
+      .bg(theme.card)
+      .text_color(theme.card_foreground)
+      .border_1()
+      .border_color(theme.border)
+      .rounded(theme.radius_container)
+  }
+
+  #[inline]
+  fn popover_style(self, theme: &Theme) -> Self {
+    self.card_style(theme).shadow_sm()
+  }
+
+  #[inline]
+  fn tooltip_style(self, theme: &Theme) -> Self {
+    self.popover_style(theme).rounded(theme.radius)
+  }
+}
+
+impl<E: Styled> CardStyle for E {}
 
 #[cfg(test)]
 mod tests {
@@ -744,15 +776,15 @@ mod tests {
     assert_eq!(Size::Medium.container_radius(), px(6.));
     assert_eq!(Size::Large.container_radius(), px(8.));
 
-    assert_eq!(Size::Small.input_px(), px(4.));
-    assert_eq!(Size::Medium.input_px(), px(8.));
-    assert_eq!(Size::Large.input_px(), px(12.));
+    assert_eq!(Size::Small.component_px(), px(4.));
+    assert_eq!(Size::Medium.component_px(), px(8.));
+    assert_eq!(Size::Large.component_px(), px(12.));
 
-    assert_eq!(Size::Small.input_py(), px(2.));
-    assert_eq!(Size::Medium.input_py(), px(4.));
-    assert_eq!(Size::Large.input_py(), px(6.));
+    assert_eq!(Size::Small.component_py(), px(2.));
+    assert_eq!(Size::Medium.component_py(), px(4.));
+    assert_eq!(Size::Large.component_py(), px(6.));
 
-    let padding = Size::Medium.table_cell_padding();
+    let padding = Size::Medium.component_padding();
     assert_eq!(padding.top, px(4.));
     assert_eq!(padding.bottom, px(4.));
     assert_eq!(padding.left, px(8.));

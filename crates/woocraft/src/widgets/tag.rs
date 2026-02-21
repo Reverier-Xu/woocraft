@@ -1,6 +1,6 @@
 use gpui::{
-  AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
-  StyleRefinement, Styled, Window, div, px,
+  div, px, AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+  RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use crate::{ActiveTheme, Sizable, Size, StyleSized, StyledExt};
@@ -195,7 +195,7 @@ impl RenderOnce for Tag {
       .border_1()
       .line_height(gpui::relative(1.0))
       .text_xs()
-      .input_padding(size)
+      .component_padding(size)
       .bg(bg)
       .text_color(fg)
       .border_color(default_border)

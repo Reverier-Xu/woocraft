@@ -1058,7 +1058,7 @@ impl RenderOnce for OtpInput {
           } else {
             cx.theme().foreground
           })
-          .input_h(self.size)
+          .component_h(self.size)
           .w(self.size.component_height())
           .on_mouse_down(
             MouseButton::Left,
@@ -1696,7 +1696,7 @@ impl RenderOnce for Input {
         window.listener_for(&self.state, InputState::on_mouse_up),
       )
       .size_full()
-      .input_size(self.size)
+      .component_size(self.size)
       .when(has_suffix, |this| this.pr_0())
       .cursor_text()
       .gap(gap_x)
@@ -1814,7 +1814,7 @@ impl RenderOnce for Input {
           }),
       )
       .when(has_suffix, |this| {
-        this.pr(self.size.input_px() / 2.).child(
+        this.pr(self.size.component_px() / 2.).child(
           h_flex()
             .id("suffix")
             .gap(gap_x)

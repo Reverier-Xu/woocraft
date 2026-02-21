@@ -273,7 +273,7 @@ impl RenderOnce for Switch {
       .when_some(self.label, |this, label| {
         this.child(
           div()
-            .input_text_size(self.size)
+            .text_size(self.size.text_size())
             .text_color(if self.disabled {
               cx.theme().muted_foreground
             } else {

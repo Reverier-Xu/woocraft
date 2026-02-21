@@ -1,14 +1,14 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-  AnyElement, App, Axis, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement,
-  ParentElement as _, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
-  div, prelude::FluentBuilder as _, px,
+  div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, Corners, ElementId, Hsla,
+  InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariant, ButtonVariants as _, Disableable, Icon, IconLabel, Input,
-  Label, Selectable, Sizable, Size, StyleSized as _, StyledExt, h_flex,
+  h_flex, ActiveTheme, Button, ButtonVariant, ButtonVariants as _, Disableable, Icon, IconLabel,
+  Input, Label, Selectable, Sizable, Size, StyleSized as _, StyledExt,
 };
 
 type WidgetGroupClickHandler = Box<dyn Fn(&Vec<usize>, &mut Window, &mut App) + 'static>;
@@ -408,8 +408,8 @@ impl RenderOnce for WidgetGroup {
                 .into_any_element(),
               WidgetGroupChild::Element(element) => h_flex()
                 .items_center()
-                .input_h(effective_size)
-                .px(effective_size.input_px())
+                .component_h(effective_size)
+                .px(effective_size.component_px())
                 .bg(if self.disabled {
                   cx.theme().muted
                 } else {

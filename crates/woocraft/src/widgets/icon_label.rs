@@ -1,15 +1,15 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,
-  InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
-  percentage, prelude::FluentBuilder as _,
+  div, linear, percentage, prelude::FluentBuilder as _, Animation, AnimationExt as _, AnyElement,
+  App, ClickEvent, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+  RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  Transformation, Window,
 };
 
 use crate::{
-  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
-  h_flex,
+  h_flex, ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized,
+  StyledExt,
 };
 
 type IconLabelClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -159,12 +159,12 @@ impl RenderOnce for IconLabel {
       })
       .when_some(self.label, |this, label| this.child(label))
       .children(self.children)
-      .button_text_size(self.size);
+      .text_size(self.size.text_size());
 
     div()
       .id(self.id)
       .h_flex()
-      .input_px(self.size)
+      .px(self.size.component_px())
       .items_center()
       .text_color(text_color)
       .when(clickable, |this| this.cursor_pointer())

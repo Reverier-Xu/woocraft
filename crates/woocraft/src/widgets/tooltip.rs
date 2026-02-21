@@ -1,9 +1,9 @@
 use gpui::{
-  Action, AnyElement, AnyView, App, AppContext, Context, IntoElement, ParentElement, Render,
-  SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
+  div, prelude::FluentBuilder, Action, AnyElement, AnyView, App, AppContext, Context, IntoElement,
+  ParentElement, Render, SharedString, StyleRefinement, Styled, Window,
 };
 
-use crate::{ActiveTheme, Kbd, Sizable, Size, StyleSized, StyledExt, h_flex};
+use crate::{h_flex, ActiveTheme, CardStyle, Kbd, Sizable, Size, StyleSized, StyledExt};
 
 type TooltipElementBuilder = Box<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
@@ -34,7 +34,8 @@ impl Tooltip {
   pub fn element<E, F>(builder: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static, {
+    F: Fn(&mut Window, &mut App) -> E + 'static,
+  {
     Self {
       style: StyleRefinement::default(),
       key_binding: None,
@@ -93,14 +94,9 @@ impl Render for Tooltip {
     div().child(
       h_flex()
         .m_3()
-        .bg(cx.theme().popover)
-        .text_color(cx.theme().popover_foreground)
-        .border_1()
-        .border_color(cx.theme().border)
-        .shadow_sm()
-        .rounded(cx.theme().radius)
+        .tooltip_style(cx.theme())
         .justify_between()
-        .input_padding(self.size)
+        .component_padding(self.size)
         .component_gap(self.size)
         .refine_style(&self.style)
         .map(|this| {

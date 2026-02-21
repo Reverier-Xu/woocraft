@@ -1,15 +1,15 @@
-use std::{rc::Rc, time::Duration};
+use std::rc::Rc;
 
 use gpui::{
-  Animation, AnimationExt as _, AnyElement, AnyView, App, ClickEvent, Corners, ElementId, Hsla,
-  InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
-  percentage, prelude::FluentBuilder, px,
+  div, percentage, prelude::FluentBuilder, px, AnimationExt as _, AnyElement, AnyView, App,
+  ClickEvent, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+  Pixels, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  Transformation, Window,
 };
 
 use crate::{
-  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
-  h_flex,
+  h_flex, opacity, spinner_animation, ActiveTheme, ColorExt, Disableable, Icon, IconName,
+  InteractionColors, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 
 type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -260,149 +260,54 @@ impl RenderOnce for Button {
     let theme = cx.theme();
     let is_flat = matches!(self.variant, ButtonVariant::Flat | ButtonVariant::Link);
 
-    let transparent = Hsla::transparent_black();
-    let (base_bg, base_fg, base_border, hover_bg, active_bg) = match self.variant {
-      ButtonVariant::Primary => (
-        theme.primary,
-        theme.primary_foreground,
-        theme.primary,
-        Hsla {
-          a: 0.9,
-          ..theme.primary
-        },
-        Hsla {
-          a: 0.8,
-          ..theme.primary
-        },
-      ),
-      ButtonVariant::Success => (
-        theme.success,
-        theme.primary_foreground,
-        theme.success,
-        Hsla {
-          a: 0.9,
-          ..theme.success
-        },
-        Hsla {
-          a: 0.8,
-          ..theme.success
-        },
-      ),
-      ButtonVariant::Warning => (
-        theme.warning,
-        theme.primary_foreground,
-        theme.warning,
-        Hsla {
-          a: 0.9,
-          ..theme.warning
-        },
-        Hsla {
-          a: 0.8,
-          ..theme.warning
-        },
-      ),
-      ButtonVariant::Info => (
-        theme.ring,
-        theme.primary_foreground,
-        theme.ring,
-        Hsla {
-          a: 0.9,
-          ..theme.ring
-        },
-        Hsla {
-          a: 0.8,
-          ..theme.ring
-        },
-      ),
-      ButtonVariant::Default => (
-        transparent,
-        theme.foreground,
-        theme.border,
-        Hsla {
-          a: 0.05,
-          ..theme.foreground
-        },
-        Hsla {
-          a: 0.1,
-          ..theme.foreground
-        },
-      ),
-      ButtonVariant::Link => (
-        transparent,
-        theme.primary,
-        transparent,
-        Hsla {
-          a: 0.1,
-          ..theme.primary
-        },
-        Hsla {
-          a: 0.15,
-          ..theme.primary
-        },
-      ),
-      ButtonVariant::Flat => (
-        transparent,
-        theme.foreground,
-        transparent,
-        Hsla {
-          a: 0.05,
-          ..theme.foreground
-        },
-        Hsla {
-          a: 0.1,
-          ..theme.foreground
-        },
-      ),
-      ButtonVariant::Danger => (
-        theme.danger,
-        theme.primary_foreground,
-        theme.danger,
-        Hsla {
-          a: 0.9,
-          ..theme.danger
-        },
-        Hsla {
-          a: 0.8,
-          ..theme.danger
-        },
-      ),
+    let interaction_colors = match self.variant {
+      ButtonVariant::Primary => InteractionColors::solid(theme.primary, theme.primary_foreground),
+      ButtonVariant::Success => InteractionColors::solid(theme.success, theme.primary_foreground),
+      ButtonVariant::Warning => InteractionColors::solid(theme.warning, theme.primary_foreground),
+      ButtonVariant::Info => InteractionColors::solid(theme.ring, theme.primary_foreground),
+      ButtonVariant::Danger => InteractionColors::solid(theme.danger, theme.primary_foreground),
+      ButtonVariant::Default => {
+        InteractionColors::transparent(theme.foreground).with_border(theme.border)
+      }
+      ButtonVariant::Link => InteractionColors::transparent(theme.primary),
+      ButtonVariant::Flat => InteractionColors::transparent(theme.foreground),
     };
 
+    let transparent = Hsla::transparent_black();
     let (bg, fg, border) = if self.outline {
       if self.variant == ButtonVariant::Default {
         (transparent, theme.foreground, theme.foreground)
       } else {
-        (transparent, base_bg, base_bg)
+        (
+          transparent,
+          interaction_colors.base,
+          interaction_colors.base,
+        )
       }
     } else {
-      (base_bg, base_fg, base_border)
+      (
+        interaction_colors.base,
+        interaction_colors.foreground,
+        interaction_colors.border,
+      )
     };
 
-    let background_hover = Hsla {
-      l: (theme.background.l - 0.04).clamp(0.0, 1.0),
-      ..theme.background
-    };
-    let background_active = Hsla {
-      l: (theme.background.l - 0.08).clamp(0.0, 1.0),
-      ..theme.background
-    };
+    let background_hover = theme.background.darken(0.04);
+    let background_active = theme.background.darken(0.08);
 
     let hover_bg = if self.outline {
       background_hover
     } else {
-      hover_bg
+      interaction_colors.hover
     };
     let active_bg = if self.outline {
       background_active
     } else {
-      active_bg
+      interaction_colors.active
     };
 
     let selected_bg = if is_flat {
-      Hsla {
-        a: 0.1,
-        ..theme.foreground
-      }
+      theme.foreground.opacity(opacity::transparent::ACTIVE)
     } else if self.outline {
       background_hover
     } else {
@@ -414,7 +319,7 @@ impl RenderOnce for Button {
       if self.variant == ButtonVariant::Default {
         theme.foreground
       } else {
-        base_bg
+        interaction_colors.base
       }
     } else {
       fg
@@ -425,48 +330,23 @@ impl RenderOnce for Button {
       if self.variant == ButtonVariant::Default {
         theme.foreground
       } else {
-        base_bg
+        interaction_colors.base
       }
     } else {
       border
     };
 
-    let disabled_alpha = 0.6;
     let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) =
       if self.disabled {
         (
-          Hsla {
-            a: disabled_alpha,
-            ..bg
-          },
-          Hsla {
-            a: disabled_alpha,
-            ..fg
-          },
-          Hsla {
-            a: disabled_alpha,
-            ..border
-          },
-          Hsla {
-            a: disabled_alpha,
-            ..hover_bg
-          },
-          Hsla {
-            a: disabled_alpha,
-            ..active_bg
-          },
-          Hsla {
-            a: disabled_alpha,
-            ..selected_bg
-          },
-          Hsla {
-            a: disabled_alpha,
-            ..selected_fg
-          },
-          Hsla {
-            a: disabled_alpha,
-            ..selected_border
-          },
+          bg.opacity(opacity::DISABLED),
+          fg.opacity(opacity::DISABLED),
+          border.opacity(opacity::DISABLED),
+          hover_bg.opacity(opacity::DISABLED),
+          active_bg.opacity(opacity::DISABLED),
+          selected_bg.opacity(opacity::DISABLED),
+          selected_fg.opacity(opacity::DISABLED),
+          selected_border.opacity(opacity::DISABLED),
         )
       } else {
         (
@@ -480,9 +360,10 @@ impl RenderOnce for Button {
           selected_border,
         )
       };
+
     let (bg, border) =
       if self.disabled && matches!(self.variant, ButtonVariant::Link | ButtonVariant::Default) {
-        (theme.foreground.alpha(0.1), transparent)
+        (theme.foreground.opacity(0.1), transparent)
       } else {
         (bg, border)
       };
@@ -492,9 +373,9 @@ impl RenderOnce for Button {
         (
           transparent,
           transparent,
-          theme.foreground.alpha(0.05),
-          theme.foreground.alpha(0.05),
-          theme.foreground.alpha(0.05),
+          theme.foreground.opacity(0.05),
+          theme.foreground.opacity(0.05),
+          theme.foreground.opacity(0.05),
         )
       } else {
         (bg, border, hover_bg, active_bg, selected_bg)
@@ -516,15 +397,11 @@ impl RenderOnce for Button {
       .when_some(icon, |this, icon| {
         let icon = Icon::new(icon).with_size(self.size);
         if self.loading {
-          this.child(
-            icon.with_animation(
-              "loading-spin",
-              Animation::new(Duration::from_secs_f64(0.8))
-                .repeat()
-                .with_easing(linear),
-              |this, delta| this.transform(Transformation::rotate(percentage(delta))),
-            ),
-          )
+          this.child(icon.with_animation(
+            "loading-spin",
+            spinner_animation(),
+            |this: Icon, delta| this.transform(Transformation::rotate(percentage(delta))),
+          ))
         } else {
           this.child(icon)
         }
@@ -534,7 +411,7 @@ impl RenderOnce for Button {
       .when(self.dropdown_caret, |this| {
         this.child(Icon::new(IconName::ChevronDown).with_size(self.size.smaller()))
       })
-      .button_text_size(self.size);
+      .text_size(self.size.text_size());
 
     let radius = match self.rounded {
       ButtonRounded::None => px(0.0),
@@ -558,7 +435,7 @@ impl RenderOnce for Button {
       .bg(bg)
       .border_color(border)
       .text_color(fg)
-      .input_size(self.size)
+      .component_size(self.size)
       .rounded_tl(if self.border_corners.top_left {
         radius
       } else {
@@ -587,7 +464,7 @@ impl RenderOnce for Button {
       })
       .when(!has_only_icon, |this| {
         this
-          .px(self.size.input_px())
+          .px(self.size.component_px())
           .min_w(self.size.component_height())
       })
       .when(has_only_icon, |this| {

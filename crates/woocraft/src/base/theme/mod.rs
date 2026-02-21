@@ -1,9 +1,11 @@
-use gpui::{App, Global, Pixels, WindowAppearance, px};
+use gpui::{px, App, Global, Pixels, WindowAppearance};
 use serde::{Deserialize, Serialize};
 
 mod color;
+mod tokens;
 
 pub use color::*;
+pub use tokens::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default)]
 pub enum ScrollbarShow {

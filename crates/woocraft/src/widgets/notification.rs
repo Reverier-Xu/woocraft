@@ -11,8 +11,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
-  h_flex, v_flex,
+  ActiveTheme, Button, ButtonVariants, CardStyle, Icon, IconName, Sizable, Size, StyleSized,
+  StyledExt, h_flex, v_flex,
 };
 
 type NotificationClickHandler = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -523,12 +523,8 @@ impl RenderOnce for NotificationCard {
     v_flex()
       .id(("notification-card", self.id as u64))
       .w_full()
-      .border_1()
-      .border_color(cx.theme().border)
-      .bg(cx.theme().popover)
-      .rounded(cx.theme().radius_container)
+      .popover_style(cx.theme())
       .container_padding(self.size)
-      .shadow_sm()
       .items_start()
       .on_hover({
         let state = self.state.clone();

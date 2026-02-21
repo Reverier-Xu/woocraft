@@ -1,16 +1,16 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, Bounds, Deferred, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable,
-  Half, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, Render,
-  RenderOnce, Stateful, StyleRefinement, Styled, Subscription, Window, anchored, deferred, div,
-  point, prelude::FluentBuilder as _, px,
+  anchored, deferred, div, point, prelude::FluentBuilder as _, px, AnyElement, App, Bounds,
+  Deferred, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable, Half,
+  InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, Render,
+  RenderOnce, Stateful, StyleRefinement, Styled, Subscription, Window,
 };
 
 use crate::{
-  ActiveTheme, Anchor, ElementExt, Selectable, Sizable, Size, StyleSized, StyledExt,
   actions::{Cancel, POPOVER_CONTEXT},
-  h_flex,
+  h_flex, ActiveTheme, Anchor, CardStyle, ElementExt, Selectable, Sizable, Size, StyleSized,
+  StyledExt,
 };
 
 type PopoverTriggerBuilder = Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>;
@@ -69,7 +69,8 @@ impl Popover {
 
   pub fn trigger<T>(mut self, trigger: T) -> Self
   where
-    T: Selectable + IntoElement + 'static, {
+    T: Selectable + IntoElement + 'static,
+  {
     self.trigger = Some(Box::new(|is_open, _, _| {
       let selected = trigger.is_selected();
       trigger.selected(selected || is_open).into_any_element()
@@ -89,7 +90,8 @@ impl Popover {
 
   pub fn on_open_change<F>(mut self, callback: F) -> Self
   where
-    F: Fn(&bool, &mut Window, &mut App) + 'static, {
+    F: Fn(&bool, &mut Window, &mut App) + 'static,
+  {
     self.on_open_change = Some(Rc::new(callback));
     self
   }
@@ -107,7 +109,8 @@ impl Popover {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> E + 'static, {
+    F: Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> E + 'static,
+  {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));
@@ -138,7 +141,8 @@ impl Popover {
     anchor: Anchor, trigger_bounds: Bounds<Pixels>, content: E, _: &mut Window, _: &mut App,
   ) -> Deferred
   where
-    E: IntoElement + 'static, {
+    E: IntoElement + 'static,
+  {
     deferred(
       anchored()
         .snap_to_window_with_margin(px(8.))
@@ -156,12 +160,7 @@ impl Popover {
       .id("content")
       .occlude()
       .tab_group()
-      .bg(cx.theme().popover)
-      .text_color(cx.theme().popover_foreground)
-      .border_1()
-      .shadow_sm()
-      .border_color(cx.theme().border)
-      .rounded(cx.theme().radius_container)
+      .popover_style(cx.theme())
       .container_padding(size)
       .map(|this| match anchor {
         Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top(size.container_py()),

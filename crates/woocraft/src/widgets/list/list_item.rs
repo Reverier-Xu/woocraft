@@ -1,11 +1,11 @@
 use gpui::{
-  AnyElement, App, ClickEvent, Div, ElementId, Hsla, InteractiveElement, IntoElement,
-  MouseMoveEvent, ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+  div, prelude::FluentBuilder as _, AnyElement, App, ClickEvent, Div, ElementId, Hsla,
+  InteractiveElement, IntoElement, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
 
-use crate::{ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex};
+use crate::{h_flex, ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt};
 
 type ListItemClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 type ListItemMouseEnterHandler = Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>;
@@ -95,7 +95,8 @@ impl ListItem {
   pub fn suffix<F, E>(mut self, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.suffix = Some(Box::new(move |window, cx| {
       builder(window, cx).into_any_element()
     }));
@@ -165,7 +166,7 @@ impl RenderOnce for ListItem {
       .base
       .relative()
       .gap_x(self.size.component_gap())
-      .input_padding(self.size)
+      .component_padding(self.size)
       .text_base()
       .text_color(base_fg)
       .relative()
