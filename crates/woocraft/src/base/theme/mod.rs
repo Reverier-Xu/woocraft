@@ -137,6 +137,11 @@ impl Theme {
       ScrollbarShow::Hover
     };
   }
+
+  #[inline]
+  pub fn editor_background(&self) -> gpui::Hsla {
+    self.editor_background
+  }
 }
 
 pub fn init(cx: &mut App) {

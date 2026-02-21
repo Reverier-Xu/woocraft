@@ -1,53 +1,28 @@
-use std::{
-  ops::Range,
-  time::{Duration, Instant},
-};
+use std::{ops::Range, rc::Rc, time::Instant};
 
 use gpui::{
-  Action, Animation, AnimationExt as _, AnyElement, App, Bounds, ClipboardItem, Context, Corners,
-  ElementInputHandler, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla,
-  InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
-  MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render, RenderOnce, SharedString,
-  StyleRefinement, Styled, UTF16Selection, Window, actions, div, linear, point,
-  prelude::FluentBuilder as _, px, relative,
+  Action, AnyElement, App, Bounds, ClipboardItem, Context, Corners, Element, ElementInputHandler,
+  Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, GlobalElementId,
+  InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, LayoutId,
+  MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render,
+  RenderOnce, SharedString, StyleRefinement, Styled, TextStyle, UTF16Selection, Window, actions,
+  div, point, prelude::FluentBuilder as _, px, relative,
 };
 use regex::Regex;
+use rust_i18n::t;
 use serde::Deserialize;
 
 use crate::{
-  ActiveTheme as _, Button, ButtonVariants as _, Disableable, ElementExt, IconName, Selectable,
-  Sizable, Size, StyleSized, StyledExt, WidgetGroup, WidgetGroupChild, h_flex,
+  ActiveTheme as _, Button, ButtonVariants as _, CARET_STEADY_DURATION, ContextMenuExt,
+  Disableable, ElementExt, IconName, PopupMenu, Selectable, Selection, Sizable, Size, StyleSized,
+  StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret,
 };
 
 const CONTEXT: &str = "Input";
-const CARET_THICKNESS: Pixels = px(2.);
-const CARET_BLINK_DURATION: Duration = Duration::from_millis(1200);
-const CARET_STEADY_DURATION: Duration = Duration::from_millis(700);
-
-fn caret_opacity(delta: f32) -> f32 {
-  let wave = (1.0 + (delta * std::f32::consts::TAU).cos()) * 0.5;
-  0.1 + wave * 0.9
-}
-
-fn shared_caret(color: Hsla, animate: bool, animation_id: &'static str) -> AnyElement {
-  let caret = div().h_full().w(CARET_THICKNESS).bg(color);
-
-  if animate {
-    caret
-      .with_animation(
-        animation_id,
-        Animation::new(CARET_BLINK_DURATION)
-          .repeat()
-          .with_easing(linear),
-        |this, delta| this.opacity(caret_opacity(delta)),
-      )
-      .into_any_element()
-  } else {
-    caret.into_any_element()
-  }
-}
 
 type InputValidate = Box<dyn Fn(&str, &mut Context<InputState>) -> bool + 'static>;
+type ContextMenuBuilder =
+  Rc<dyn Fn(PopupMenu, &Entity<InputState>, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -136,38 +111,6 @@ pub fn init(cx: &mut App) {
   ]);
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-pub struct Selection {
-  pub start: usize,
-  pub end: usize,
-}
-
-impl Selection {
-  pub fn new(start: usize, end: usize) -> Self {
-    Self { start, end }
-  }
-
-  pub fn is_empty(&self) -> bool {
-    self.start == self.end
-  }
-
-  pub fn normalized(&self) -> Range<usize> {
-    self.start.min(self.end)..self.start.max(self.end)
-  }
-}
-
-impl From<Range<usize>> for Selection {
-  fn from(value: Range<usize>) -> Self {
-    Self::new(value.start, value.end)
-  }
-}
-
-impl From<Selection> for Range<usize> {
-  fn from(value: Selection) -> Self {
-    value.start..value.end
-  }
-}
-
 #[derive(Clone)]
 pub enum InputEvent {
   Change,
@@ -192,11 +135,13 @@ pub struct InputState {
   input_bounds: Bounds<Pixels>,
   horizontal_scroll: Pixels,
   caret_steady_until: Option<Instant>,
+  shared_context_menu_open: bool,
   disabled: bool,
   loading: bool,
   masked: bool,
   clean_on_escape: bool,
   size: Size,
+  text_style: Option<TextStyle>,
   pattern: Option<Regex>,
   validate: Option<InputValidate>,
   undo_stack: Vec<Snapshot>,
@@ -217,11 +162,13 @@ impl InputState {
       input_bounds: Bounds::default(),
       horizontal_scroll: px(0.),
       caret_steady_until: None,
+      shared_context_menu_open: false,
       disabled: false,
       loading: false,
       masked: false,
       clean_on_escape: false,
       size: Size::default(),
+      text_style: None,
       pattern: None,
       validate: None,
       undo_stack: Vec::new(),
@@ -393,12 +340,20 @@ impl InputState {
   }
 
   fn shape_line_for_display(&self, display: &str, window: &Window) -> gpui::ShapedLine {
-    let text_style = window.text_style();
+    let text_style = self.layout_text_style(window);
     let font_size = text_style.font_size.to_pixels(window.rem_size());
     let runs = [text_style.to_run(display.len())];
     window
       .text_system()
       .shape_line(display.to_string().into(), font_size, &runs, None)
+  }
+
+  fn layout_text_style(&self, window: &Window) -> TextStyle {
+    self.text_style.clone().unwrap_or_else(|| {
+      let mut text_style = window.text_style();
+      text_style.font_size = self.size.text_size().into();
+      text_style
+    })
   }
 
   fn text_byte_to_display_index(&self, display: &str, text_byte_offset: usize) -> usize {
@@ -473,11 +428,32 @@ impl InputState {
       return;
     }
 
+    if self.shared_context_menu_open {
+      if self.focus_handle.is_focused(window) {
+        self.shared_context_menu_open = false;
+      } else if event.button == MouseButton::Left {
+        return;
+      }
+    }
+
     self.focus(window, cx);
     self.hold_caret_visible();
     self.selecting = true;
 
     let offset = self.byte_offset_for_mouse_position(event.position, window);
+    if event.button == MouseButton::Right {
+      cx.stop_propagation();
+      let selected = self.selected_range_normalized();
+      let clicked_in_selection =
+        !selected.is_empty() && (selected.contains(&offset) || offset == selected.end);
+      if !clicked_in_selection {
+        self.selected_range = Selection::new(offset, offset);
+      }
+      self.ensure_cursor_visible(window);
+      cx.notify();
+      return;
+    }
+
     if event.modifiers.shift {
       self.selected_range.end = offset;
     } else {
@@ -708,7 +684,7 @@ impl InputState {
     cx.notify();
   }
 
-  fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
+  pub fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
     self.selected_range = Selection::new(0, self.text.len());
     cx.notify();
   }
@@ -1076,7 +1052,7 @@ impl RenderOnce for OtpInput {
               if focused_cell {
                 div()
                   .h_4()
-                  .child(shared_caret(caret_color, animate_caret, "otp-caret-blink"))
+                  .child(render_caret(caret_color, animate_caret, "otp-caret-blink"))
                   .into_any_element()
               } else {
                 div().into_any_element()
@@ -1421,10 +1397,17 @@ impl Focusable for InputState {
 
 impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let mut text_style = window.text_style();
+    text_style.font_size = self.size.text_size().into();
+    self.text_style = Some(text_style.clone());
     self.ensure_cursor_visible(window);
 
     let cursor = self.cursor();
     let is_focused = self.focus_handle.is_focused(window) && !self.disabled;
+    if is_focused {
+      self.shared_context_menu_open = false;
+    }
+    let keep_caret_highlight = self.shared_context_menu_open;
     let selection = self.selected_range_normalized();
     let has_selection = !selection.is_empty();
     let display = if self.masked {
@@ -1433,7 +1416,7 @@ impl Render for InputState {
       self.text.clone()
     };
 
-    let text_color = window.text_style().color;
+    let text_color = text_style.color;
     let caret_color = cx.theme().primary;
     let selection_color = cx.theme().primary.opacity(0.25);
 
@@ -1450,8 +1433,8 @@ impl Render for InputState {
     let right_text = &display[selected_byte.min(display.len())..];
 
     let caret_left = (self.cursor_x(window) - self.horizontal_scroll).max(px(0.));
-    let show_caret = is_focused && !has_selection;
-    let animate_caret = show_caret && self.should_animate_caret();
+    let show_caret = (is_focused || keep_caret_highlight) && !has_selection;
+    let animate_caret = show_caret && !keep_caret_highlight && self.should_animate_caret();
 
     h_flex()
       .id("input-state")
@@ -1487,7 +1470,7 @@ impl Render for InputState {
             .left(caret_left)
             .top_0p5()
             .bottom_0p5()
-            .child(shared_caret(
+            .child(render_caret(
               caret_color,
               animate_caret,
               "input-caret-blink",
@@ -1511,6 +1494,9 @@ pub struct Input {
   focus_bordered: bool,
   tab_index: isize,
   selected: bool,
+  context_menu_enabled: bool,
+  default_context_menu: bool,
+  context_menu_builder: Option<ContextMenuBuilder>,
 }
 
 impl Input {
@@ -1528,6 +1514,9 @@ impl Input {
       focus_bordered: true,
       tab_index: 0,
       selected: false,
+      context_menu_enabled: true,
+      default_context_menu: true,
+      context_menu_builder: None,
     }
   }
 
@@ -1568,6 +1557,30 @@ impl Input {
 
   pub fn tab_index(mut self, index: isize) -> Self {
     self.tab_index = index;
+    self
+  }
+
+  /// Enable or disable context menu support.
+  pub fn context_menu_enabled(mut self, enabled: bool) -> Self {
+    self.context_menu_enabled = enabled;
+    self
+  }
+
+  /// Enable or disable default context menu items.
+  ///
+  /// Default items: Cut, Copy, Paste, Select All.
+  pub fn default_context_menu(mut self, enabled: bool) -> Self {
+    self.default_context_menu = enabled;
+    self
+  }
+
+  /// Extend context menu items using an external builder.
+  pub fn context_menu(
+    mut self,
+    builder: impl Fn(PopupMenu, &Entity<InputState>, &mut Window, &mut Context<PopupMenu>) -> PopupMenu
+    + 'static,
+  ) -> Self {
+    self.context_menu_builder = Some(Rc::new(builder));
     self
   }
 
@@ -1628,6 +1641,106 @@ fn clear_button(cx: &App) -> Button {
     .text_color(cx.theme().muted_foreground)
 }
 
+/// Paint-phase bindings for single-line input. These APIs must be called in
+/// paint, not prepaint.
+struct InputPaintBindings {
+  state: Entity<InputState>,
+}
+
+impl InputPaintBindings {
+  fn new(state: Entity<InputState>) -> Self {
+    Self { state }
+  }
+}
+
+impl IntoElement for InputPaintBindings {
+  type Element = Self;
+
+  fn into_element(self) -> Self::Element {
+    self
+  }
+}
+
+impl Element for InputPaintBindings {
+  type RequestLayoutState = ();
+  type PrepaintState = ();
+
+  fn id(&self) -> Option<gpui::ElementId> {
+    None
+  }
+
+  fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+    None
+  }
+
+  fn request_layout(
+    &mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, window: &mut Window,
+    cx: &mut App,
+  ) -> (LayoutId, Self::RequestLayoutState) {
+    (
+      div().size_0().into_any_element().request_layout(window, cx),
+      (),
+    )
+  }
+
+  fn prepaint(
+    &mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, _: Bounds<Pixels>,
+    _: &mut Self::RequestLayoutState, _: &mut Window, _: &mut App,
+  ) -> Self::PrepaintState {
+  }
+
+  fn paint(
+    &mut self, _: Option<&GlobalElementId>, _: Option<&InspectorElementId>, _: Bounds<Pixels>,
+    _: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState, window: &mut Window,
+    cx: &mut App,
+  ) {
+    let (focus_handle, input_bounds) = {
+      let state = self.state.read(cx);
+      (state.focus_handle.clone(), state.input_bounds)
+    };
+
+    window.handle_input(
+      &focus_handle,
+      ElementInputHandler::new(input_bounds, self.state.clone()),
+      cx,
+    );
+
+    window.on_mouse_event({
+      let state = self.state.clone();
+      move |event: &MouseMoveEvent, _, window, cx| {
+        if event.pressed_button != Some(MouseButton::Left) {
+          return;
+        }
+
+        let (should_track_drag, outside_input_bounds) = {
+          let input_state = state.read(cx);
+          (
+            input_state.selecting && input_state.focus_handle.is_focused(window),
+            !input_state.input_bounds.contains(&event.position),
+          )
+        };
+
+        if should_track_drag && outside_input_bounds {
+          state.update(cx, |state, cx| {
+            state.on_mouse_move(event, window, cx);
+          });
+        }
+      }
+    });
+
+    window.on_mouse_event({
+      let state = self.state.clone();
+      move |event: &MouseUpEvent, _, window, cx| {
+        if state.read(cx).selecting {
+          state.update(cx, |state, cx| {
+            state.on_mouse_up(event, window, cx);
+          });
+        }
+      }
+    });
+  }
+}
+
 impl RenderOnce for Input {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let state_view = self.state.read(cx);
@@ -1657,11 +1770,12 @@ impl RenderOnce for Input {
       state.size = self.size;
     });
 
-    div()
+    let input = div()
       .id(("input", self.state.entity_id()))
       .flex()
       .items_center()
       .line_height(relative(1.25))
+      .text_size(self.size.text_size())
       .key_context(CONTEXT)
       .track_focus(&state_focus_handle)
       .tab_index(self.tab_index)
@@ -1690,9 +1804,17 @@ impl RenderOnce for Input {
         MouseButton::Left,
         window.listener_for(&self.state, InputState::on_mouse_down),
       )
+      .on_mouse_down(
+        MouseButton::Right,
+        window.listener_for(&self.state, InputState::on_mouse_down),
+      )
       .on_mouse_move(window.listener_for(&self.state, InputState::on_mouse_move))
       .on_mouse_up(
         MouseButton::Left,
+        window.listener_for(&self.state, InputState::on_mouse_up),
+      )
+      .on_mouse_up(
+        MouseButton::Right,
         window.listener_for(&self.state, InputState::on_mouse_up),
       )
       .size_full()
@@ -1747,47 +1869,6 @@ impl RenderOnce for Input {
           .on_prepaint({
             let state = self.state.clone();
             move |bounds, window, cx| {
-              let focus_handle = state.read(cx).focus_handle.clone();
-              window.handle_input(
-                &focus_handle,
-                ElementInputHandler::new(bounds, state.clone()),
-                cx,
-              );
-
-              window.on_mouse_event({
-                let state = state.clone();
-                move |event: &MouseMoveEvent, _, window, cx| {
-                  if event.pressed_button != Some(MouseButton::Left) {
-                    return;
-                  }
-
-                  let (should_track_drag, outside_input_bounds) = {
-                    let input_state = state.read(cx);
-                    (
-                      input_state.selecting && input_state.focus_handle.is_focused(window),
-                      !input_state.input_bounds.contains(&event.position),
-                    )
-                  };
-
-                  if should_track_drag && outside_input_bounds {
-                    state.update(cx, |state, cx| {
-                      state.on_mouse_move(event, window, cx);
-                    });
-                  }
-                }
-              });
-
-              window.on_mouse_event({
-                let state = state.clone();
-                move |event: &MouseUpEvent, _, window, cx| {
-                  if state.read(cx).selecting {
-                    state.update(cx, |state, cx| {
-                      state.on_mouse_up(event, window, cx);
-                    });
-                  }
-                }
-              });
-
               state.update(cx, |state, cx| {
                 if state.input_bounds != bounds {
                   state.input_bounds = bounds;
@@ -1797,6 +1878,7 @@ impl RenderOnce for Input {
               });
             }
           })
+          .child(InputPaintBindings::new(self.state.clone()))
           .child(self.state.clone())
           .when(show_placeholder, |this| {
             this.child(
@@ -1838,6 +1920,52 @@ impl RenderOnce for Input {
               }))
             }),
         )
+      });
+
+    if !self.context_menu_enabled {
+      return input.into_any_element();
+    }
+
+    let input_state = self.state.clone();
+    let default_context_menu = self.default_context_menu;
+    let context_menu_builder = self.context_menu_builder.clone();
+
+    input
+      .context_menu(move |menu, window, cx| {
+        input_state.update(cx, |state, _| {
+          state.shared_context_menu_open = true;
+        });
+
+        let (is_enabled, has_selection, has_paste, focus_handle) = {
+          let state = input_state.read(cx);
+          (
+            !state.disabled,
+            !state.selected_range.is_empty(),
+            !state.disabled && cx.read_from_clipboard().is_some(),
+            state.focus_handle.clone(),
+          )
+        };
+
+        let mut menu = menu.small().action_context(focus_handle);
+        if default_context_menu {
+          menu = menu
+            .menu_with_enable(
+              t!("input.context_menu.cut"),
+              Box::new(Cut),
+              is_enabled && has_selection,
+            )
+            .menu_with_enable(t!("input.context_menu.copy"), Box::new(Copy), has_selection)
+            .menu_with_enable(t!("input.context_menu.paste"), Box::new(Paste), has_paste)
+            .separator()
+            .menu(t!("input.context_menu.select_all"), Box::new(SelectAll));
+        }
+
+        if let Some(builder) = context_menu_builder.as_ref() {
+          menu = builder(menu, &input_state, window, cx);
+        }
+
+        menu
       })
+      .into_any_element()
   }
 }

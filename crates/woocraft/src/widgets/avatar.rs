@@ -106,9 +106,8 @@ impl RenderOnce for Avatar {
 
     const COLOR_COUNT: usize = 4;
 
-    fn get_color_for_name(name: &str, cx: &mut App) -> Hsla {
-      let hash = gpui::hash(&name) as usize;
-      let color_index = hash % COLOR_COUNT;
+    fn color_for_index(index: usize, cx: &mut App) -> Hsla {
+      let color_index = index % COLOR_COUNT;
 
       match color_index {
         0 => cx.theme().primary,
@@ -116,6 +115,10 @@ impl RenderOnce for Avatar {
         2 => cx.theme().warning,
         _ => cx.theme().danger,
       }
+    }
+
+    fn get_color_for_name(name: &str, cx: &mut App) -> Hsla {
+      color_for_index(gpui::hash(&name) as usize, cx)
     }
 
     const BG_OPACITY: f32 = 0.2;
@@ -133,7 +136,11 @@ impl RenderOnce for Avatar {
       .border_1()
       .border_color(cx.theme().background)
       .when(self.name.is_none() && self.src.is_none(), |this| {
+        let color = self.bg_color.unwrap_or(cx.theme().primary);
+
         this
+          .bg(color.opacity(BG_OPACITY))
+          .text_color(color)
           .text_size(self.size.component_height() * 0.6)
           .child(self.placeholder.clone())
       })

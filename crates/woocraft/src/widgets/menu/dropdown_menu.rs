@@ -21,7 +21,8 @@ impl DropdownMenuTriggerId for Button {
 
 /// A dropdown menu trait for buttons and other interactive elements
 pub trait DropdownMenu:
-  Styled + Selectable + DropdownMenuTriggerId + IntoElement + 'static {
+  Styled + Selectable + DropdownMenuTriggerId + IntoElement + 'static
+{
   /// Create a dropdown menu with the given items, anchored to the TopLeft
   /// corner
   fn dropdown_menu(

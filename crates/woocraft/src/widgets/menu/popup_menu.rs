@@ -106,7 +106,8 @@ impl PopupMenuItem {
   pub fn element<F, E>(builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     PopupMenuItem::ElementItem {
       icon: None,
       disabled: false,
@@ -218,7 +219,8 @@ impl PopupMenuItem {
   /// Only works for [`PopupMenuItem::Item`] and [`PopupMenuItem::ElementItem`].
   pub fn on_click<F>(mut self, handler: F) -> Self
   where
-    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static, {
+    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+  {
     match &mut self {
       PopupMenuItem::Item { handler: h, .. } => {
         *h = Some(Rc::new(handler));
@@ -494,7 +496,8 @@ impl PopupMenu {
   pub fn menu_element<F, E>(self, action: Box<dyn Action>, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.menu_element_with_check(false, action, builder)
   }
 
@@ -504,7 +507,8 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.menu_element_with_check_and_disabled(false, action, disabled, builder)
   }
 
@@ -514,7 +518,8 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.menu_element_with_icon_and_disabled(icon, action, false, builder)
   }
 
@@ -524,7 +529,8 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.menu_element_with_check_and_disabled(checked, action, false, builder)
   }
 
@@ -534,7 +540,8 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.menu_items.push(
       PopupMenuItem::element(builder)
         .action(action)
@@ -551,7 +558,8 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.menu_items.push(
       PopupMenuItem::element(builder)
         .action(action)
@@ -632,7 +640,8 @@ impl PopupMenu {
     mut self, items: impl IntoIterator<Item = I>, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self
   where
-    I: Into<OwnedMenuItem>, {
+    I: Into<OwnedMenuItem>,
+  {
     for item in items {
       match item.into() {
         OwnedMenuItem::Action { name, action, .. } => self = self.menu(name, action.boxed_clone()),
@@ -1053,9 +1062,12 @@ impl PopupMenu {
         let show_link_icon = *is_link && self.external_link_icon;
         let action = action.as_ref().map(|action| action.boxed_clone());
         let key = self.render_key_binding(action, window, cx);
+        let has_key = key.is_some();
+        let has_right_check = right_check_icon.is_some();
         let label = label.clone();
         let left_icon = Self::render_icon(has_left_icon, is_left_check, icon.clone());
         let disabled = *disabled;
+        let has_trailing = show_link_icon || has_key || has_right_check;
 
         Button::new(("item", ix))
           .flat()
@@ -1074,19 +1086,26 @@ impl PopupMenu {
             this.on_click(cx.listener(move |this, _, window, cx| this.on_click(ix, window, cx)))
           })
           .children(left_icon)
-          .when(!show_link_icon, |this| this.child(label.clone()))
-          .children(right_check_icon)
-          .when(show_link_icon, |this| {
-            this.child(
-              h_flex()
-                .w_full()
-                .justify_between()
-                .gap_x_2()
-                .child(label)
-                .child(Icon::new(IconName::Link).text_color(cx.theme().muted_foreground)),
-            )
-          })
-          .children(key)
+          .child(
+            h_flex()
+              .flex_1()
+              .items_center()
+              .gap_x_2()
+              .child(label)
+              .child(div().flex_1().min_w_0())
+              .when(has_trailing, |this| {
+                this.child(
+                  h_flex()
+                    .items_center()
+                    .gap_x_2()
+                    .when_some(key, |this, key| this.child(key))
+                    .when(show_link_icon, |this| {
+                      this.child(Icon::new(IconName::Link).text_color(cx.theme().muted_foreground))
+                    })
+                    .children(right_check_icon),
+                )
+              }),
+          )
           .into_any_element()
       }
       PopupMenuItem::Submenu {

@@ -7,7 +7,7 @@ use gpui::{
   Subscription, Window, anchored, deferred, div, prelude::FluentBuilder, px,
 };
 
-use crate::PopupMenu;
+use crate::{ActiveTheme, CardStyle as _, PopupMenu, Size, StyleSized as _};
 
 type MenuBuilderFn = dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu;
 
@@ -22,7 +22,8 @@ pub trait ContextMenuExt: ParentElement + Styled {
     self, f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
   ) -> ContextMenu<Self>
   where
-    Self: Sized, {
+    Self: Sized,
+  {
     // Generate a unique ID based on the element's memory address to ensure
     // each context menu has its own state and doesn't share with others
     let id = format!("context-menu-{:p}", &self as *const _);
@@ -58,7 +59,8 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
   #[must_use]
   fn menu<F>(mut self, builder: F) -> Self
   where
-    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static, {
+    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+  {
     self.menu = Some(Rc::new(builder));
     self
   }
@@ -183,7 +185,13 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                             menu.focus_handle(cx).focus(window);
                           }
 
-                          this.child(menu.clone())
+                          this.child(
+                            div()
+                              .popover_style(cx.theme())
+                              .shadow_md()
+                              .container_padding(Size::Medium)
+                              .child(menu.clone()),
+                          )
                         }),
                     ),
                 ),

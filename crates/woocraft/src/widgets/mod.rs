@@ -5,6 +5,7 @@ mod button;
 mod checkbox;
 mod divider;
 mod dock;
+mod editor;
 mod history;
 mod icon_label;
 mod input;
@@ -38,6 +39,9 @@ pub use button::*;
 pub use checkbox::*;
 pub use divider::*;
 pub use dock::*;
+pub use editor::highlighter::*;
+pub use editor::lsp::*;
+pub use editor::{CodeEditor, EditorEvent, EditorState, MaskPattern, Position, Rope, TabSize};
 pub use history::*;
 pub use icon_label::*;
 pub use input::*;
@@ -66,6 +70,7 @@ pub use window_border::*;
 
 pub fn init(cx: &mut gpui::App) {
   input::init(cx);
+  editor::init(cx);
   list::init(cx);
   menu::init(cx);
   dock::init(cx);

@@ -167,9 +167,9 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
   }
 
   /// Whether the panel has inner padding when the panel is in the tabs layout,
-  /// default is `true`.
+  /// default is `false`.
   fn inner_padding(&self, cx: &App) -> bool {
-    true
+    false
   }
 }
 
@@ -363,7 +363,8 @@ impl Global for PanelRegistry {}
 pub fn register_panel<F>(cx: &mut App, panel_name: &str, deserialize: F)
 where
   F: Fn(WeakEntity<DockArea>, &PanelState, &PanelInfo, &mut Window, &mut App) -> Box<dyn PanelView>
-    + 'static, {
+    + 'static,
+{
   PanelRegistry::init(cx);
   PanelRegistry::global_mut(cx)
     .items

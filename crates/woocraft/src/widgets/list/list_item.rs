@@ -95,7 +95,8 @@ impl ListItem {
   pub fn suffix<F, E>(mut self, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.suffix = Some(Box::new(move |window, cx| {
       builder(window, cx).into_any_element()
     }));

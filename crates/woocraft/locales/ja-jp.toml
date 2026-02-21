@@ -8,13 +8,31 @@ untitled = "無題"
 search_placeholder = "検索..."
 
 [pagination]
+next     = "次へ"
 previous = "前へ"
-next = "次へ"
 
 [dock]
-unnamed = "無題"
-zoom_in = "拡大"
-zoom_out = "縮小"
-close = "閉じる"
+close    = "閉じる"
 collapse = "折りたたむ"
-expand = "展開"
+expand   = "展開"
+unnamed  = "無題"
+zoom_in  = "拡大"
+zoom_out = "縮小"
+
+[editor.context_menu]
+go_to_definition = "定義へ移動"
+show_code_actions = "コードアクションを表示"
+cut = "切り取り"
+copy = "コピー"
+paste = "貼り付け"
+select_all = "すべて選択"
+
+[editor.search]
+replace = "置換"
+replace_all = "すべて置換"
+
+[input.context_menu]
+cut = "切り取り"
+copy = "コピー"
+paste = "貼り付け"
+select_all = "すべて選択"

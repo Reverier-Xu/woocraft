@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 pub struct ThemeColors {
   pub background: Hsla,
   pub foreground: Hsla,
+  pub accent: Hsla,
+  pub accent_foreground: Hsla,
   pub card: Hsla,
   pub card_foreground: Hsla,
   pub popover: Hsla,
@@ -22,10 +24,23 @@ pub struct ThemeColors {
   pub success: Hsla,
   pub warning: Hsla,
   pub danger: Hsla,
+  pub red: Hsla,
+  pub green: Hsla,
+  pub blue: Hsla,
+  pub yellow: Hsla,
+  pub cyan: Hsla,
   pub scrollbar: Hsla,
   pub scrollbar_thumb: Hsla,
   pub scrollbar_thumb_hover: Hsla,
   pub transparent: Hsla,
+  pub selection: Hsla,
+  pub caret: Hsla,
+  pub editor_background: Hsla,
+  pub editor_foreground: Hsla,
+  pub editor_active_line: Hsla,
+  pub editor_line_number: Hsla,
+  pub editor_active_line_number: Hsla,
+  pub editor_invisible: Hsla,
   pub secondary: Hsla,
   pub secondary_hover: Hsla,
   pub secondary_foreground: Hsla,
@@ -38,6 +53,101 @@ pub struct ThemeColors {
   pub drag_border: Hsla,
   pub drop_target: Hsla,
   pub tiles: Hsla,
+}
+
+/// Syntax token hues used by the editor highlighter.
+///
+/// Chroma and lightness come from [`ThemeTokens::chroma`] and
+/// [`ThemeTokens::lightness`] to keep a coherent palette.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct SyntaxTokenHues {
+  pub attribute: f32,
+  pub boolean: f32,
+  pub comment: f32,
+  pub comment_doc: f32,
+  pub constant: f32,
+  pub constructor: f32,
+  pub embedded: f32,
+  pub emphasis: f32,
+  pub emphasis_strong: f32,
+  pub enum_: f32,
+  pub function: f32,
+  pub hint: f32,
+  pub keyword: f32,
+  pub label: f32,
+  pub link_text: f32,
+  pub link_uri: f32,
+  pub number: f32,
+  pub operator: f32,
+  pub predictive: f32,
+  pub preproc: f32,
+  pub primary: f32,
+  pub property: f32,
+  pub punctuation: f32,
+  pub punctuation_bracket: f32,
+  pub punctuation_delimiter: f32,
+  pub punctuation_list_marker: f32,
+  pub punctuation_special: f32,
+  pub string: f32,
+  pub string_escape: f32,
+  pub string_regex: f32,
+  pub string_special: f32,
+  pub string_special_symbol: f32,
+  pub tag: f32,
+  pub tag_doctype: f32,
+  pub text_literal: f32,
+  pub title: f32,
+  pub type_: f32,
+  pub variable: f32,
+  pub variable_special: f32,
+  pub variant: f32,
+}
+
+impl Default for SyntaxTokenHues {
+  fn default() -> Self {
+    Self {
+      attribute: 45.0,
+      boolean: 12.0,
+      comment: 210.0,
+      comment_doc: 210.0,
+      constant: 12.0,
+      constructor: 225.0,
+      embedded: 0.0,
+      emphasis: 248.0,
+      emphasis_strong: 248.0,
+      enum_: 265.0,
+      function: 230.0,
+      hint: 282.0,
+      keyword: 225.0,
+      label: 265.0,
+      link_text: 220.0,
+      link_uri: 220.0,
+      number: 225.0,
+      operator: 220.0,
+      predictive: 220.0,
+      preproc: 200.0,
+      primary: 248.0,
+      property: 0.0,
+      punctuation: 0.0,
+      punctuation_bracket: 0.0,
+      punctuation_delimiter: 0.0,
+      punctuation_list_marker: 0.0,
+      punctuation_special: 12.0,
+      string: 140.0,
+      string_escape: 140.0,
+      string_regex: 140.0,
+      string_special: 15.0,
+      string_special_symbol: 15.0,
+      tag: 225.0,
+      tag_doctype: 225.0,
+      text_literal: 265.0,
+      title: 225.0,
+      type_: 265.0,
+      variable: 0.0,
+      variable_special: 12.0,
+      variant: 265.0,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -54,6 +164,8 @@ pub struct ThemeTokens {
   pub dark_bg_lightness: f32,
   pub light_bg_chroma: f32,
   pub dark_bg_chroma: f32,
+  #[serde(default)]
+  pub syntax: SyntaxTokenHues,
 }
 
 impl Default for ThemeTokens {
@@ -71,11 +183,17 @@ impl Default for ThemeTokens {
       dark_bg_lightness: 0.18,
       light_bg_chroma: 0.015,
       dark_bg_chroma: 0.0,
+      syntax: SyntaxTokenHues::default(),
     }
   }
 }
 
 impl ThemeTokens {
+  #[inline]
+  pub fn syntax_color(&self, hue: f32) -> Hsla {
+    to_hsla_from_oklch(self.lightness, self.chroma, hue, 1.0)
+  }
+
   pub fn from_json_str(input: &str) -> anyhow::Result<Self> {
     Ok(serde_json::from_str(input)?)
   }
@@ -191,6 +309,8 @@ impl ThemeColors {
     let foreground = pick_readable_text(background, light_theme_text, dark_theme_text);
     let card = to_hsla_from_oklch(card_lightness, bg_chroma, tokens.primary, 1.0);
     let card_foreground = foreground;
+    let accent = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.02, tokens.accent, 1.0);
+    let accent_foreground = foreground;
     let popover = background;
     let popover_foreground = foreground;
 
@@ -205,10 +325,23 @@ impl ThemeColors {
     let success = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.success, 1.0);
     let warning = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.warning, 1.0);
     let danger = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.error, 1.0);
+    let red = danger;
+    let green = success;
+    let blue = ring;
+    let yellow = warning;
+    let cyan = to_hsla_from_oklch(tokens.lightness, tokens.chroma, 190.0, 1.0);
     let scrollbar = with_alpha(background, 0.4);
     let scrollbar_thumb = with_alpha(foreground, 0.4);
     let scrollbar_thumb_hover = with_alpha(foreground, 0.6);
     let transparent = gpui::transparent_white();
+    let selection = with_alpha(primary, 0.3);
+    let caret = foreground;
+    let editor_background = background;
+    let editor_foreground = foreground;
+    let editor_active_line = with_alpha(foreground, if is_dark { 0.08 } else { 0.05 });
+    let editor_line_number = with_alpha(foreground, if is_dark { 0.45 } else { 0.4 });
+    let editor_active_line_number = foreground;
+    let editor_invisible = with_alpha(foreground, 0.4);
     let secondary = muted;
     let secondary_hover = with_alpha(muted, 0.9);
     let secondary_foreground = foreground;
@@ -225,6 +358,8 @@ impl ThemeColors {
     Self {
       background,
       foreground,
+      accent,
+      accent_foreground,
       card,
       card_foreground,
       popover,
@@ -239,10 +374,23 @@ impl ThemeColors {
       success,
       warning,
       danger,
+      red,
+      green,
+      blue,
+      yellow,
+      cyan,
       scrollbar,
       scrollbar_thumb,
       scrollbar_thumb_hover,
       transparent,
+      selection,
+      caret,
+      editor_background,
+      editor_foreground,
+      editor_active_line,
+      editor_line_number,
+      editor_active_line_number,
+      editor_invisible,
       secondary,
       secondary_hover,
       secondary_foreground,
@@ -266,6 +414,8 @@ impl ThemeColors {
     Self {
       background: with_alpha(self.background, alpha),
       foreground: with_alpha(self.foreground, alpha),
+      accent: with_alpha(self.accent, alpha),
+      accent_foreground: with_alpha(self.accent_foreground, alpha),
       card: with_alpha(self.card, alpha),
       card_foreground: with_alpha(self.card_foreground, alpha),
       popover: with_alpha(self.popover, alpha),
@@ -280,10 +430,23 @@ impl ThemeColors {
       success: with_alpha(self.success, alpha),
       warning: with_alpha(self.warning, alpha),
       danger: with_alpha(self.danger, alpha),
+      red: with_alpha(self.red, alpha),
+      green: with_alpha(self.green, alpha),
+      blue: with_alpha(self.blue, alpha),
+      yellow: with_alpha(self.yellow, alpha),
+      cyan: with_alpha(self.cyan, alpha),
       scrollbar: with_alpha(self.scrollbar, alpha),
       scrollbar_thumb: with_alpha(self.scrollbar_thumb, alpha),
       scrollbar_thumb_hover: with_alpha(self.scrollbar_thumb_hover, alpha),
       transparent: with_alpha(self.transparent, alpha),
+      selection: with_alpha(self.selection, alpha),
+      caret: with_alpha(self.caret, alpha),
+      editor_background: with_alpha(self.editor_background, alpha),
+      editor_foreground: with_alpha(self.editor_foreground, alpha),
+      editor_active_line: with_alpha(self.editor_active_line, alpha),
+      editor_line_number: with_alpha(self.editor_line_number, alpha),
+      editor_active_line_number: with_alpha(self.editor_active_line_number, alpha),
+      editor_invisible: with_alpha(self.editor_invisible, alpha),
       secondary: with_alpha(self.secondary, alpha),
       secondary_hover: with_alpha(self.secondary_hover, alpha),
       secondary_foreground: with_alpha(self.secondary_foreground, alpha),

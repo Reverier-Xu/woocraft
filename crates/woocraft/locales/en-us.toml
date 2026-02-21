@@ -8,13 +8,31 @@ untitled = "Untitled"
 search_placeholder = "Search..."
 
 [pagination]
+next     = "Next"
 previous = "Previous"
-next = "Next"
 
 [dock]
-unnamed = "Unnamed"
-zoom_in = "Zoom In"
-zoom_out = "Zoom Out"
-close = "Close"
+close    = "Close"
 collapse = "Collapse"
-expand = "Expand"
+expand   = "Expand"
+unnamed  = "Unnamed"
+zoom_in  = "Zoom In"
+zoom_out = "Zoom Out"
+
+[editor.context_menu]
+go_to_definition = "Go to Definition"
+show_code_actions = "Show Code Actions"
+cut = "Cut"
+copy = "Copy"
+paste = "Paste"
+select_all = "Select All"
+
+[editor.search]
+replace = "Replace"
+replace_all = "Replace All"
+
+[input.context_menu]
+cut = "Cut"
+copy = "Copy"
+paste = "Paste"
+select_all = "Select All"
