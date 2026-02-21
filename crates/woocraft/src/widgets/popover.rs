@@ -4,7 +4,7 @@ use gpui::{
   AnyElement, App, Bounds, Deferred, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable,
   Half, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, Render,
   RenderOnce, Stateful, StyleRefinement, Styled, Subscription, Window, anchored, deferred, div,
-  point, prelude::FluentBuilder as _, px,
+  point, prelude::FluentBuilder as _, px, size,
 };
 
 use crate::{
@@ -32,6 +32,7 @@ pub struct Popover {
   children: Vec<AnyElement>,
   trigger_style: Option<StyleRefinement>,
   mouse_button: MouseButton,
+  position_at_mouse: bool,
   overlay_closable: bool,
   on_open_change: Option<OpenChangeHandler>,
   size: Size,
@@ -51,6 +52,7 @@ impl Popover {
       children: vec![],
       trigger_style: None,
       mouse_button: MouseButton::Left,
+      position_at_mouse: false,
       overlay_closable: true,
       on_open_change: None,
       size: Size::Medium,
@@ -64,6 +66,11 @@ impl Popover {
 
   pub fn mouse_button(mut self, mouse_button: MouseButton) -> Self {
     self.mouse_button = mouse_button;
+    self
+  }
+
+  pub fn position_at_mouse(mut self, enabled: bool) -> Self {
+    self.position_at_mouse = enabled;
     self
   }
 
@@ -299,6 +306,7 @@ impl RenderOnce for Popover {
     let open = state.read(cx).open;
     let focus_handle = state.read(cx).focus_handle.clone();
     let trigger_bounds = state.read(cx).trigger_bounds;
+    let position_at_mouse = self.position_at_mouse;
 
     let Some(trigger) = self.trigger else {
       return div().id("empty");
@@ -317,10 +325,13 @@ impl RenderOnce for Popover {
       .child(trigger_el)
       .on_mouse_down(self.mouse_button, {
         let state = state.clone();
-        move |_, window, cx| {
+        move |event, window, cx| {
           cx.stop_propagation();
           state.update(cx, |state, cx| {
             state.open = open;
+            if position_at_mouse {
+              state.trigger_bounds = Bounds::new(event.position, size(px(0.), px(0.)));
+            }
             state.toggle_open(window, cx);
           });
           cx.notify(parent_view_id);
@@ -330,7 +341,9 @@ impl RenderOnce for Popover {
         let state = state.clone();
         move |bounds, _, cx| {
           state.update(cx, |state, _| {
-            state.trigger_bounds = bounds;
+            if !(position_at_mouse && state.open) {
+              state.trigger_bounds = bounds;
+            }
           });
         }
       });

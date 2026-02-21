@@ -3,6 +3,7 @@ use gpui::App;
 mod app_menu_bar;
 mod context_menu;
 mod dropdown_menu;
+mod popover_menu;
 mod popup_menu;
 
 pub use app_menu_bar::AppMenuBar;

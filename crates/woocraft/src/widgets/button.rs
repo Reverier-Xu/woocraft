@@ -95,6 +95,7 @@ pub struct Button {
   rounded: ButtonRounded,
   border_corners: Corners<bool>,
   dropdown_caret: bool,
+  full_width_content: bool,
   tab_stop: bool,
   tab_index: isize,
   outline: bool,
@@ -120,6 +121,7 @@ impl Button {
       rounded: ButtonRounded::default(),
       border_corners: Corners::all(true),
       dropdown_caret: false,
+      full_width_content: false,
       tab_stop: true,
       tab_index: 0,
       outline: false,
@@ -170,6 +172,11 @@ impl Button {
 
   pub fn dropdown_caret(mut self, dropdown_caret: bool) -> Self {
     self.dropdown_caret = dropdown_caret;
+    self
+  }
+
+  pub fn full_width_content(mut self, full_width: bool) -> Self {
+    self.full_width_content = full_width;
     self
   }
 
@@ -394,6 +401,7 @@ impl RenderOnce for Button {
       .items_center()
       .justify_center()
       .component_gap(self.size)
+      .when(self.full_width_content, |this| this.w_full())
       .when_some(icon, |this, icon| {
         let icon = Icon::new(icon).with_size(self.size);
         if self.loading {

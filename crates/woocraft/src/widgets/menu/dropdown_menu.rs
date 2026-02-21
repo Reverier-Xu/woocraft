@@ -1,13 +1,12 @@
 use std::rc::Rc;
 
 use gpui::{
-  Context, Corner, DismissEvent, ElementId, Entity, Focusable, IntoElement, RenderOnce,
-  SharedString, Styled, Window,
+  Context, Corner, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window,
 };
 
 use crate::{Button, Popover, PopupMenu, Selectable};
 
-type MenuBuilderFn = dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu;
+use super::popover_menu::{MenuBuilderFn, render_popup_menu};
 
 pub trait DropdownMenuTriggerId {
   fn dropdown_menu_trigger_id(&self) -> ElementId;
@@ -75,65 +74,26 @@ where
   }
 }
 
-#[derive(Default)]
-struct DropdownMenuState {
-  menu: Option<Entity<PopupMenu>>,
-}
-
 impl<T> RenderOnce for DropdownMenuPopover<T>
 where
   T: Selectable + IntoElement + 'static,
 {
-  fn render(self, window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+  fn render(self, _window: &mut Window, _cx: &mut gpui::App) -> impl IntoElement {
     let builder = self.builder.clone();
-    let menu_state =
-      window.use_keyed_state(self.id.clone(), cx, |_, _| DropdownMenuState::default());
+    let menu_state_id = self.id.clone();
 
     Popover::new(SharedString::from(format!("popover:{}", self.id)))
       .overlay_closable(false)
       .trigger(self.trigger)
       .anchor(self.anchor)
       .content(move |_, window, cx| {
-        // Here is special logic to only create the PopupMenu once and reuse it.
-        // Because this `content` will called in every time render, so we need to store
-        // the menu in state to avoid recreating at every render.
-        //
-        // And we also need to rebuild the menu when it is dismissed, to rebuild menu
-        // items dynamically for support `dropdown_menu` method, so we listen
-        // for DismissEvent below.
-        let menu = match menu_state.read(cx).menu.clone() {
-          Some(menu) => menu,
-          None => {
-            let builder = builder.clone();
-            let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
-              builder(menu, window, cx)
-            });
-            menu_state.update(cx, |state, _| {
-              state.menu = Some(menu.clone());
-            });
-            menu.focus_handle(cx).focus(window);
-
-            // Listen for dismiss events from the PopupMenu to close the popover.
-            let popover_state = cx.entity();
-            window
-              .subscribe(&menu, cx, {
-                let menu_state = menu_state.clone();
-                move |_, _: &DismissEvent, window, cx| {
-                  popover_state.update(cx, |state, cx| {
-                    state.dismiss(window, cx);
-                  });
-                  menu_state.update(cx, |state, _| {
-                    state.menu = None;
-                  });
-                }
-              })
-              .detach();
-
-            menu.clone()
-          }
-        };
-
-        menu.clone()
+        render_popup_menu(
+          menu_state_id.clone(),
+          builder.clone(),
+          cx.entity(),
+          window,
+          cx,
+        )
       })
   }
 }

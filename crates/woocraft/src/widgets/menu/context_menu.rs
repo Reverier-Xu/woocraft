@@ -7,7 +7,7 @@ use gpui::{
   Subscription, Window, anchored, deferred, div, prelude::FluentBuilder, px,
 };
 
-use crate::{ActiveTheme, CardStyle as _, PopupMenu, Size, StyleSized as _};
+use crate::{ActiveTheme, CardStyle as _, PopupMenu, Size, StyleSized as _, v_flex};
 
 type MenuBuilderFn = dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu;
 
@@ -186,7 +186,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                           }
 
                           this.child(
-                            div()
+                            v_flex()
                               .popover_style(cx.theme())
                               .shadow_md()
                               .container_padding(Size::Medium)

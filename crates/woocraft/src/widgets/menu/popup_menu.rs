@@ -1032,6 +1032,8 @@ impl PopupMenu {
 
         Button::new(("element-item", ix))
           .flat()
+          .w_full()
+          .full_width_content(true)
           .selected(selected)
           .justify_start()
           .disabled(disabled)
@@ -1071,6 +1073,8 @@ impl PopupMenu {
 
         Button::new(("item", ix))
           .flat()
+          .w_full()
+          .full_width_content(true)
           .selected(selected)
           .disabled(disabled)
           .justify_start()
@@ -1121,6 +1125,8 @@ impl PopupMenu {
           .child(
             Button::new(("submenu", ix))
               .flat()
+              .w_full()
+              .full_width_content(true)
               .selected(selected)
               .disabled(*disabled)
               .justify_start()
@@ -1234,7 +1240,14 @@ impl Render for PopupMenu {
           .filter(|(ix, item)| !(*ix + 1 == items_count && item.is_separator()))
           .map(|(ix, item)| self.render_item(ix, item, options, window, cx)),
       )
-      .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
+      .on_prepaint(move |bounds, _, cx| {
+        view.update(cx, |r, cx| {
+          if r.bounds != bounds {
+            r.bounds = bounds;
+            cx.notify();
+          }
+        })
+      })
       .when(self.scrollable, |this| {
         // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will
         // cannot be displayed.
