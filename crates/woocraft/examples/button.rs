@@ -65,8 +65,7 @@ impl Render for ButtonWindow {
           .child(
             Button::new("btn-down")
               .label("Down")
-              .default()
-              .dropdown_caret(true),
+              .default(),
           )
           .child(Button::new("btn-link").label("Link").link())
           .child(Button::new("btn-flat").label("Flat").flat())

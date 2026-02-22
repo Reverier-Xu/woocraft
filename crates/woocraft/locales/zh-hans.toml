@@ -70,3 +70,6 @@ december = "十二月"
 
 [date_picker]
 placeholder = "选择日期"
+
+[i18n]
+name = "简体中文"

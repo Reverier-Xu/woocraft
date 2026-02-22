@@ -70,3 +70,6 @@ december = "12月"
 
 [date_picker]
 placeholder = "日付を選択"
+
+[i18n]
+name = "日本語"

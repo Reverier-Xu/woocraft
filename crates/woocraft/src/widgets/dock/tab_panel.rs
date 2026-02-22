@@ -6,7 +6,6 @@ use gpui::{
   Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
   WeakEntity, Window, div, prelude::FluentBuilder, relative,
 };
-use rust_i18n::t;
 
 use super::{
   super::{
@@ -19,7 +18,7 @@ use super::{
 };
 use crate::{
   ActiveTheme, AxisExt, Divider, DockPlacement, IconLabel, IconName, Placement, Selectable,
-  Sizable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, v_flex,
+  Sizable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate, v_flex,
 };
 
 #[derive(Clone)]
@@ -546,9 +545,13 @@ impl TabPanel {
       })
       .map(|this| {
         let value = if zoomed {
-          Some(("zoom-out", IconName::ArrowMinimize, t!("dock.zoom_out")))
+          Some((
+            "zoom-out",
+            IconName::ArrowMinimize,
+            translate("dock.zoom_out"),
+          ))
         } else if zoomable_toolbar_visible {
-          Some(("zoom-in", IconName::Maximize, t!("dock.zoom_in")))
+          Some(("zoom-in", IconName::Maximize, translate("dock.zoom_in")))
         } else {
           None
         };
@@ -586,9 +589,9 @@ impl TabPanel {
                   .separator()
                   .menu_with_icon_and_disabled(
                     if zoomed {
-                      t!("dock.zoom_out")
+                      translate("dock.zoom_out")
                     } else {
-                      t!("dock.zoom_in")
+                      translate("dock.zoom_in")
                     },
                     if zoomed {
                       IconName::ArrowMinimize
@@ -600,7 +603,7 @@ impl TabPanel {
                   )
                   .when(closable, |this| {
                     this.separator().menu_with_icon(
-                      t!("dock.close"),
+                      translate("dock.close"),
                       IconName::Dismiss,
                       Box::new(ClosePanel),
                     )
@@ -687,9 +690,9 @@ impl TabPanel {
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
-              t!("dock.expand")
+              translate("dock.expand")
             } else {
-              t!("dock.collapse")
+              translate("dock.collapse")
             }
             .to_string(),
           );
@@ -738,9 +741,9 @@ impl TabPanel {
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
-              t!("dock.expand")
+              translate("dock.expand")
             } else {
-              t!("dock.collapse")
+              translate("dock.collapse")
             }
             .to_string(),
           );

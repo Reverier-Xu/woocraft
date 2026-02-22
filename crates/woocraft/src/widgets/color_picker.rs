@@ -5,11 +5,10 @@ use gpui::{
   div, fill, point, prelude::FluentBuilder as _, px, size,
 };
 use palette::{FromColor, Hsl, OklabHue, Oklch, Srgb};
-use rust_i18n::t;
 
 use crate::{
   ActiveTheme, Anchor, Button, ButtonVariant, ButtonVariants, Disableable, ElementExt, Input,
-  InputEvent, InputState, Popover, Sizable, Size, StyledExt, h_flex, v_flex,
+  InputEvent, InputState, Popover, Sizable, Size, StyledExt, h_flex, translate, v_flex,
 };
 
 const CHROMA_MAX: f32 = 0.4;
@@ -206,7 +205,7 @@ impl ColorPickerState {
     let initial_hex = self.value().rgba_hex.to_string();
     let hex_input = cx.new(|cx| {
       InputState::new(cx)
-        .placeholder(t!("color_picker.hex_placeholder"))
+        .placeholder(translate("color_picker.hex_placeholder"))
         .default_value(initial_hex.clone())
     });
     let subscription = cx.subscribe(&hex_input, Self::on_hex_input_event);
@@ -365,7 +364,7 @@ impl RenderOnce for ColorPicker {
       .with_variant(self.variant)
       .outline(self.outline)
       .disabled(self.disabled)
-      .full_width_content(true)
+      .expand(true)
       .child(
         h_flex()
           .w_full()
@@ -449,7 +448,7 @@ fn render_channel_row(
         .justify_between()
         .text_xs()
         .text_color(cx.theme().muted_foreground)
-        .child(SharedString::from(t!(channel.i18n_key()).to_string()))
+        .child(SharedString::from(translate(channel.i18n_key())))
         .child(
           h_flex()
             .items_center()
@@ -681,7 +680,7 @@ fn normalize_degrees(value: f32) -> f32 {
 
 fn format_channel_value(channel: PickerChannel, value: f32) -> String {
   match channel {
-    PickerChannel::Hue => format!("{value:.0} {}", t!("color_picker.hue_unit")),
+    PickerChannel::Hue => format!("{value:.0} {}", translate("color_picker.hue_unit")),
     _ => format!("{value:.3}"),
   }
 }

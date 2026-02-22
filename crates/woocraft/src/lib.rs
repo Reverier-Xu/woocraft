@@ -1,7 +1,7 @@
 pub mod actions;
 pub mod base;
 mod examples;
-mod i18n;
+pub mod i18n;
 mod widgets;
 
 rust_i18n::i18n!("locales", fallback = "en-us");
@@ -12,7 +12,11 @@ mod assets;
 #[cfg(feature = "resources")]
 pub use assets::*;
 pub use base::*;
-pub use i18n::{SUPPORTED_LOCALES, locale, set_locale};
+pub use i18n::{
+  SUPPORTED_LOCALES, available_locales, extend_locale, load_locale, locale, locale_display_name,
+  set_locale, translate, translate_in_locale, try_translate, try_translate_in_locale,
+};
+pub use rust_i18n::{available_locales as available_locales_macro, t, tkv};
 pub use widgets::*;
 
 pub const DEFAULT_FONT_FAMILY: &str = "Reverier Mono";

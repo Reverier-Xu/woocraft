@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{
   AnimationExt as _, AnyElement, AnyView, App, ClickEvent, Corners, ElementId, Hsla,
   InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window,
   percentage, prelude::FluentBuilder, px,
 };
 
@@ -94,8 +94,7 @@ pub struct Button {
   selected: bool,
   rounded: ButtonRounded,
   border_corners: Corners<bool>,
-  dropdown_caret: bool,
-  full_width_content: bool,
+  expanded: bool,
   tab_stop: bool,
   tab_index: isize,
   outline: bool,
@@ -120,8 +119,7 @@ impl Button {
       selected: false,
       rounded: ButtonRounded::default(),
       border_corners: Corners::all(true),
-      dropdown_caret: false,
-      full_width_content: false,
+      expanded: false,
       tab_stop: true,
       tab_index: 0,
       outline: false,
@@ -170,13 +168,8 @@ impl Button {
     self
   }
 
-  pub fn dropdown_caret(mut self, dropdown_caret: bool) -> Self {
-    self.dropdown_caret = dropdown_caret;
-    self
-  }
-
-  pub fn full_width_content(mut self, full_width: bool) -> Self {
-    self.full_width_content = full_width;
+  pub fn expand(mut self, expanded: bool) -> Self {
+    self.expanded = expanded;
     self
   }
 
@@ -401,7 +394,7 @@ impl RenderOnce for Button {
       .items_center()
       .justify_center()
       .component_gap(self.size)
-      .when(self.full_width_content, |this| this.w_full())
+      .when(self.expanded, |this| this.flex_1().w_full().justify_start())
       .when_some(icon, |this, icon| {
         let icon = Icon::new(icon).with_size(self.size);
         if self.loading {
@@ -416,9 +409,6 @@ impl RenderOnce for Button {
       })
       .when_some(self.label, |this, label| this.child(label))
       .children(self.children)
-      .when(self.dropdown_caret, |this| {
-        this.child(Icon::new(IconName::ChevronDown).with_size(self.size.smaller()))
-      })
       .text_size(self.size.text_size());
 
     let radius = match self.rounded {
@@ -434,11 +424,9 @@ impl RenderOnce for Button {
       .read(cx)
       .clone();
 
-    div()
+    h_flex()
       .id(self.id)
-      .h_flex()
       .justify_center()
-      .items_center()
       .when(!is_flat, |this| this.border_1())
       .bg(bg)
       .border_color(border)
@@ -481,6 +469,7 @@ impl RenderOnce for Button {
           .p_0()
           .flex_shrink_0()
       })
+      .when(self.expanded, |this| this.w_full())
       .when(!self.disabled, |this| {
         this.track_focus(
           &focus_handle

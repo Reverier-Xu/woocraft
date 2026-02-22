@@ -7,11 +7,10 @@ use gpui::{
   StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
   relative,
 };
-use rust_i18n::t;
 
 use crate::{
   ActiveTheme, Button, ButtonVariants as _, Date, Disableable as _, IconName, Matcher, Selectable,
-  Sizable, Size, StyledExt as _, h_flex, local_today, month_days, v_flex,
+  Sizable, Size, StyledExt as _, h_flex, local_today, month_days, translate, v_flex,
 };
 
 /// Events emitted by the calendar.
@@ -254,7 +253,7 @@ impl CalendarState {
     ];
 
     let (_, month) = self.offset_year_month(offset_month);
-    SharedString::from(t!(MONTH_KEYS[(month.saturating_sub(1)) as usize]).to_string())
+    SharedString::from(translate(MONTH_KEYS[(month.saturating_sub(1)) as usize]))
   }
 
   fn year_name(&self, offset_month: usize) -> SharedString {
@@ -285,7 +284,7 @@ impl CalendarState {
 
     MONTH_KEYS
       .iter()
-      .map(|key| SharedString::from(t!(*key).to_string()))
+      .map(|key| SharedString::from(translate(*key)))
       .collect()
   }
 }
@@ -559,7 +558,7 @@ impl Calendar {
                 h_flex().gap_0p5().justify_between().children(
                   week_keys
                     .iter()
-                    .map(|week| self.render_week(t!(*week), window, cx)),
+                    .map(|week| self.render_week(translate(*week), window, cx)),
                 ),
               )
               .children(days.iter().map(|week| {

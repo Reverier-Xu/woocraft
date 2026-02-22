@@ -4,11 +4,10 @@ use gpui::{
   App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
   StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
 };
-use rust_i18n::t;
 
 use crate::{
   Button, ButtonVariants as _, Disableable, DropdownMenu as _, Icon, IconName, PopupMenuItem,
-  Sizable, Size, StyleSized, StyledExt, Tooltip, h_flex,
+  Sizable, Size, StyleSized, StyledExt, Tooltip, h_flex, translate,
 };
 
 type PageClickHandler = dyn Fn(&usize, &mut Window, &mut App);
@@ -79,14 +78,14 @@ impl Pagination {
     let (id, label, icon, disabled) = if is_prev {
       (
         "prev",
-        SharedString::from(t!("pagination.previous").to_string()),
+        SharedString::from(translate("pagination.previous")),
         IconName::ChevronLeft,
         current_page <= 1,
       )
     } else {
       (
         "next",
-        SharedString::from(t!("pagination.next").to_string()),
+        SharedString::from(translate("pagination.next")),
         IconName::ChevronRight,
         current_page >= total_pages,
       )

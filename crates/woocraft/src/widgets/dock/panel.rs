@@ -4,10 +4,9 @@ use gpui::{
   AnyElement, AnyView, App, AppContext as _, Context, Entity, EntityId, EventEmitter, FocusHandle,
   Focusable, Global, Hsla, IntoElement, Render, SharedString, WeakEntity, Window,
 };
-use rust_i18n::t;
 
 use super::{DockArea, PanelInfo, PanelState, TabPanel, invalid_panel::InvalidPanel};
-use crate::{Button, IconName, PopupMenu};
+use crate::{Button, IconName, PopupMenu, translate};
 
 type PanelBuilderFn = dyn Fn(
   WeakEntity<DockArea>,
@@ -78,7 +77,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 
   /// The title of the panel
   fn title(&self, cx: &App) -> SharedString {
-    t!("dock.unnamed").to_string().into()
+    translate("dock.unnamed").into()
   }
 
   /// The icon of the panel, default is `IconName::Grid`

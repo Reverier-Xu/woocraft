@@ -106,6 +106,23 @@ woocraft::set_locale("zh-CN");
 let current = woocraft::locale();
 ```
 
+Load custom locale data and extend existing translations at runtime:
+
+```rust
+use std::collections::HashMap;
+
+let mut custom = HashMap::new();
+custom.insert("title_bar.untitled".into(), "Sans titre".into());
+woocraft::load_locale("fr-fr", custom);
+
+woocraft::extend_locale(
+  "en-us",
+  [("title_bar.untitled", "Untitled Window")],
+);
+```
+
+Translation interfaces from `rust-i18n` are re-exported (for example `woocraft::translate()`).
+
 ## Feature Flags
 
 - `resources` (enabled by default):
@@ -151,7 +168,7 @@ Copyright 2026 Reverier-Xu.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
-You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0 .
+You may obtain a copy of the License at [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0) .
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.

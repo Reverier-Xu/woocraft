@@ -9,13 +9,12 @@ use gpui::{
   div, point, prelude::FluentBuilder as _, px, relative,
 };
 use regex::Regex;
-use rust_i18n::t;
 use serde::Deserialize;
 
 use crate::{
   ActiveTheme as _, Button, ButtonVariants as _, CARET_STEADY_DURATION, ContextMenuExt,
   Disableable, ElementExt, IconName, PopupMenu, PopupMenuItem, Selectable, Selection, Sizable,
-  Size, StyleSized, StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret,
+  Size, StyleSized, StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret, translate,
 };
 
 const CONTEXT: &str = "Input";
@@ -1954,7 +1953,7 @@ impl RenderOnce for Input {
           let select_all_state = input_state.clone();
           menu = menu
             .item(
-              PopupMenuItem::new(t!("input.context_menu.cut"))
+              PopupMenuItem::new(translate("input.context_menu.cut"))
                 .icon(IconName::Cut)
                 .disabled(!(is_enabled && has_selection))
                 .action(Box::new(Cut))
@@ -1965,7 +1964,7 @@ impl RenderOnce for Input {
                 }),
             )
             .item(
-              PopupMenuItem::new(t!("input.context_menu.copy"))
+              PopupMenuItem::new(translate("input.context_menu.copy"))
                 .icon(IconName::Copy)
                 .disabled(!has_selection)
                 .action(Box::new(Copy))
@@ -1976,7 +1975,7 @@ impl RenderOnce for Input {
                 }),
             )
             .item(
-              PopupMenuItem::new(t!("input.context_menu.paste"))
+              PopupMenuItem::new(translate("input.context_menu.paste"))
                 .icon(IconName::ClipboardPaste)
                 .disabled(!has_paste)
                 .action(Box::new(Paste))
@@ -1988,7 +1987,7 @@ impl RenderOnce for Input {
             )
             .separator()
             .item(
-              PopupMenuItem::new(t!("input.context_menu.select_all"))
+              PopupMenuItem::new(translate("input.context_menu.select_all"))
                 .icon(IconName::SelectAllOn)
                 .action(Box::new(SelectAll))
                 .on_click(move |_, window, cx| {

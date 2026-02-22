@@ -6,11 +6,10 @@ use gpui::{
   InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce,
   StyleRefinement, Styled, Window, div, px, relative,
 };
-use rust_i18n::t;
 
 use crate::widgets::editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN};
 use crate::widgets::scroll::Scrollbar;
-use crate::{ActiveTheme, ContextMenuExt, IconName, PopupMenu, v_flex};
+use crate::{ActiveTheme, ContextMenuExt, IconName, PopupMenu, translate, v_flex};
 use crate::{Selectable, StyledExt};
 use crate::{Sizable, Size, StyleSized as _};
 
@@ -399,26 +398,26 @@ impl RenderOnce for Editor {
         if default_context_menu {
           menu = menu
             .menu_with_icon_and_disabled(
-              t!("editor.context_menu.cut"),
+              translate("editor.context_menu.cut"),
               IconName::Cut,
               Box::new(Cut),
               !(is_enabled && has_selection),
             )
             .menu_with_icon_and_disabled(
-              t!("editor.context_menu.copy"),
+              translate("editor.context_menu.copy"),
               IconName::Copy,
               Box::new(Copy),
               !has_selection,
             )
             .menu_with_icon_and_disabled(
-              t!("editor.context_menu.paste"),
+              translate("editor.context_menu.paste"),
               IconName::ClipboardPaste,
               Box::new(Paste),
               !has_paste,
             )
             .separator()
             .menu_with_icon(
-              t!("editor.context_menu.select_all"),
+              translate("editor.context_menu.select_all"),
               IconName::SelectAllOn,
               Box::new(SelectAll),
             );

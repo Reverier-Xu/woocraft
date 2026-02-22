@@ -7,7 +7,6 @@ use gpui::{
   StatefulInteractiveElement, StyleRefinement, Styled, Subscription, Task, Window, div,
   prelude::FluentBuilder, px, size,
 };
-use rust_i18n::t;
 
 use super::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::{
@@ -15,7 +14,7 @@ use crate::{
   Scrollbar, Selectable, Sizable, Size, StyledExt, VirtualListScrollHandle, WidgetGroup,
   WidgetGroupChild,
   actions::{Cancel, Confirm, SelectDown, SelectUp},
-  v_flex, v_virtual_list,
+  translate, v_flex, v_virtual_list,
 };
 
 pub(crate) fn init(cx: &mut App) {
@@ -87,7 +86,8 @@ where
   D: ListDelegate,
 {
   pub fn new(delegate: D, _window: &mut Window, cx: &mut Context<Self>) -> Self {
-    let query_input = cx.new(|cx| InputState::new(cx).placeholder(t!("list.search_placeholder")));
+    let query_input =
+      cx.new(|cx| InputState::new(cx).placeholder(translate("list.search_placeholder")));
 
     let _query_input_subscription =
       cx.subscribe_in(&query_input, _window, Self::on_query_input_event);

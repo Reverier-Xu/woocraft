@@ -1,18 +1,18 @@
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use gpui::{
-  App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
+  App, AppContext, Application, Bounds, Context, Entity, IntoElement, Menu, ParentElement, Render,
   ScrollStrategy, Size as GpuiSize, Styled, Subscription, Task, Window, WindowBounds,
   WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Avatar, AvatarGroup, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants,
-  Calendar, CalendarEvent, CalendarState, Checkbox, DatePicker, DatePickerEvent, DatePickerState,
-  DateRangePreset, Disableable, Divider, Icon, IconLabel, IndexPath, Input, InputState, Kbd, Label,
-  Link, List, ListDelegate, ListItem, ListState, Matcher, Notification, NotificationCenter,
-  NotificationPlacement, NotificationState, NotificationType, NumberInput, OtpInput, OtpState,
-  Pagination, Popover, Progress, ProgressCircle, ScrollableElement, Selectable, Sizable, Slider,
-  SliderState, Spinner, StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup,
-  h_flex, init, v_flex, window_border,
+  ActiveTheme, AppMenuBar, Avatar, AvatarGroup, Badge, Breadcrumb, BreadcrumbItem, Button,
+  ButtonVariants, Calendar, CalendarEvent, CalendarState, Checkbox, DatePicker, DatePickerEvent,
+  DatePickerState, DateRangePreset, Disableable, Divider, Icon, IconLabel, IndexPath, Input,
+  InputState, Kbd, Label, Link, List, ListDelegate, ListItem, ListState, Matcher, Notification,
+  NotificationCenter, NotificationPlacement, NotificationState, NotificationType, NumberInput,
+  OtpInput, OtpState, Pagination, Popover, PopupMenuItem, Progress, ProgressCircle,
+  ScrollableElement, Selectable, Sizable, Slider, SliderState, Spinner, StyledExt, Switch, Tag,
+  Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex, window_border,
 };
 
 #[derive(Clone)]
@@ -368,6 +368,7 @@ struct ControlsWindow {
   list_state: Entity<ListState<DemoListDelegate>>,
   list_searchable: bool,
   list_selectable: bool,
+  app_menu_bar: Entity<AppMenuBar>,
 }
 
 fn nearest_weekday(mut date: NaiveDate) -> NaiveDate {
@@ -408,6 +409,7 @@ impl ControlsWindow {
         .searchable(true)
         .selectable(true)
     });
+    let app_menu_bar = AppMenuBar::new(cx);
     let today = Local::now().date_naive();
     let single_date = nearest_weekday(today);
     let range_start = nearest_weekday(today + Duration::days(1));
@@ -527,6 +529,7 @@ impl ControlsWindow {
         list_state,
         list_searchable: true,
         list_selectable: true,
+        app_menu_bar,
       }
     })
   }
@@ -575,7 +578,20 @@ impl Render for ControlsWindow {
       v_flex()
         .size_full()
         .min_h_0()
-        .child(TitleBar::new().title("Woocraft Controls Example"))
+        .child(
+          TitleBar::new()
+            .title("Woocraft Controls Example")
+            .app_menu_bar(self.app_menu_bar.clone())
+            .title_menu(|menu, _, _| {
+              menu
+                .item(PopupMenuItem::new("New Workspace"))
+                .item(PopupMenuItem::new("Open Project"))
+                .separator()
+                .item(PopupMenuItem::new("Settings"))
+            })
+            .theme_button(true)
+            .language_button(true),
+        )
         .child(
             v_flex()
             .p_6()
@@ -1016,8 +1032,7 @@ impl Render for ControlsWindow {
                     .child(
                       Button::new("btn-info")
                         .info()
-                        .label("Info")
-                        .dropdown_caret(true),
+                        .label("Info"),
                     )
                     .child(Button::new("btn-link").link().label("Link"))
                 )
@@ -1336,6 +1351,20 @@ fn main() {
   app.run(|cx: &mut App| {
     init(cx);
     cx.activate(true);
+    cx.set_menus(vec![
+      Menu {
+        name: "File".into(),
+        items: Vec::new(),
+      },
+      Menu {
+        name: "Edit".into(),
+        items: Vec::new(),
+      },
+      Menu {
+        name: "View".into(),
+        items: Vec::new(),
+      },
+    ]);
 
     let bounds = Bounds::centered(None, GpuiSize::new(px(980.), px(680.)), cx);
     let window = cx

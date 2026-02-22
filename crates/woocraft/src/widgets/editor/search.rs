@@ -1,5 +1,4 @@
 use aho_corasick::AhoCorasick;
-use rust_i18n::t;
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
@@ -17,7 +16,7 @@ use super::{
 use crate::{
   ActiveTheme, Disableable, ElementExt, IconName, Selectable, Sizable, Size, StyleSized as _,
   actions::SelectUp,
-  h_flex, v_flex,
+  h_flex, translate, v_flex,
   widgets::{
     button::{Button, ButtonVariants as _},
     input::{
@@ -545,7 +544,7 @@ impl Render for SearchPanel {
             )
             .child(
               Button::new("replace-one")
-                .label(t!("editor.search.replace"))
+                .label(translate("editor.search.replace"))
                 .disabled(!has_matches)
                 .on_click(cx.listener(|this, _, window, cx| {
                   this.replace_next(window, cx);
@@ -553,7 +552,7 @@ impl Render for SearchPanel {
             )
             .child(
               Button::new("replace-all")
-                .label(t!("editor.search.replace_all"))
+                .label(translate("editor.search.replace_all"))
                 .disabled(!has_matches)
                 .on_click(cx.listener(|this, _, window, cx| {
                   this.replace_all(window, cx);

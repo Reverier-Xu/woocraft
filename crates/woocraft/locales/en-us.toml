@@ -70,3 +70,6 @@ december = "December"
 
 [date_picker]
 placeholder = "Select date"
+
+[i18n]
+name = "English (US)"

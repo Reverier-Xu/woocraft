@@ -5,7 +5,7 @@ use gpui::{
   StyleRefinement, Styled, Window, canvas, div, point, px, relative,
 };
 
-use crate::{ActiveTheme, Sizable, Size, StyledExt, h_flex};
+use crate::{ActiveTheme, Sizable, Size, StyledExt, h_flex, translate};
 
 #[derive(IntoElement)]
 pub struct Progress {
@@ -31,7 +31,7 @@ impl Progress {
       color: None,
       track_color: None,
       text_color: None,
-      label: rust_i18n::t!("common.loading").into(),
+      label: translate("common.loading").into(),
       style: StyleRefinement::default(),
       size: Size::default(),
     }

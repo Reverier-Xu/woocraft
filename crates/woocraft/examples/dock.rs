@@ -2,13 +2,32 @@ use std::sync::Arc;
 
 use gpui::{
   App, AppContext, Application, Bounds, Context, Edges, Entity, FocusHandle, Focusable,
-  IntoElement, ParentElement, Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds,
-  WindowOptions, div, px,
+  InteractiveElement as _, IntoElement, Menu, MenuItem, ParentElement, Render, SharedString,
+  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, actions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, DockArea, DockItem, DockPlacement, IconName, Panel,
-  PanelEvent, StyledExt as _, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
+  ActiveTheme, AppMenuBar, DockArea, DockItem, DockPlacement, IconName, Panel, PanelEvent,
+  PopupMenuItem, StyledExt as _, TitleBar, v_flex, window_border,
 };
+
+actions!(
+  dock_example_menu,
+  [
+    ToggleLeftDock,
+    ToggleBottomDock,
+    ToggleRightDock,
+    ExpandAllDocks,
+    CollapseAllDocks,
+    ResetDockSizes,
+    AboutWoocraft,
+    AboutVersion,
+    AboutLicense,
+    AboutChangelogHighlights,
+    AboutChangelogRoadmap,
+    AboutCreditsCore,
+    AboutCreditsCommunity,
+  ]
+);
 
 struct ExamplePanel {
   title: SharedString,
@@ -78,6 +97,7 @@ impl Render for ExamplePanel {
 
 struct DockExample {
   dock_area: Entity<DockArea>,
+  app_menu_bar: Entity<AppMenuBar>,
 }
 
 impl DockExample {
@@ -90,6 +110,7 @@ impl DockExample {
 
   fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
     let dock_area = cx.new(|cx| DockArea::new("dock-example", Some(1), window, cx));
+    let app_menu_bar = AppMenuBar::new(cx);
     let weak = dock_area.downgrade();
 
     let editor = Self::panel("Editor", window, cx);
@@ -153,73 +174,160 @@ impl DockExample {
       );
     });
 
-    cx.new(|_| Self { dock_area })
+    cx.new(|_| Self {
+      dock_area,
+      app_menu_bar,
+    })
+  }
+
+  fn toggle_dock(&mut self, placement: DockPlacement, window: &mut Window, cx: &mut Context<Self>) {
+    self.dock_area.update(cx, |dock, cx| {
+      dock.toggle_dock(placement, window, cx);
+    });
+  }
+
+  fn on_toggle_left_dock(
+    &mut self, _: &ToggleLeftDock, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.toggle_dock(DockPlacement::Left, window, cx);
+  }
+
+  fn on_toggle_bottom_dock(
+    &mut self, _: &ToggleBottomDock, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.toggle_dock(DockPlacement::Bottom, window, cx);
+  }
+
+  fn on_toggle_right_dock(
+    &mut self, _: &ToggleRightDock, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.toggle_dock(DockPlacement::Right, window, cx);
+  }
+
+  fn on_expand_all_docks(
+    &mut self, _: &ExpandAllDocks, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.dock_area.update(cx, |dock, cx| {
+      let left = dock.left_dock().cloned();
+      let bottom = dock.bottom_dock().cloned();
+      let right = dock.right_dock().cloned();
+
+      for dock in [left, bottom, right].into_iter().flatten() {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(false, window, cx);
+        });
+      }
+    });
+  }
+
+  fn on_collapse_all_docks(
+    &mut self, _: &CollapseAllDocks, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.dock_area.update(cx, |dock, cx| {
+      let left = dock.left_dock().cloned();
+      let bottom = dock.bottom_dock().cloned();
+      let right = dock.right_dock().cloned();
+
+      for dock in [left, bottom, right].into_iter().flatten() {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(true, window, cx);
+        });
+      }
+    });
+  }
+
+  fn on_reset_dock_sizes(
+    &mut self, _: &ResetDockSizes, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.dock_area.update(cx, |dock, cx| {
+      if let Some(left) = dock.left_dock().cloned() {
+        left.update(cx, |dock, cx| {
+          dock.set_size(px(260.), window, cx);
+          dock.set_collapsed(false, window, cx);
+        });
+      }
+      if let Some(bottom) = dock.bottom_dock().cloned() {
+        bottom.update(cx, |dock, cx| {
+          dock.set_size(px(220.), window, cx);
+          dock.set_collapsed(false, window, cx);
+        });
+      }
+      if let Some(right) = dock.right_dock().cloned() {
+        right.update(cx, |dock, cx| {
+          dock.set_size(px(280.), window, cx);
+          dock.set_collapsed(false, window, cx);
+        });
+      }
+    });
+  }
+
+  fn on_about_woocraft(&mut self, _: &AboutWoocraft, _: &mut Window, _: &mut Context<Self>) {
+    println!("Woocraft Dock Example: modular dock + title bar integration demo.");
+  }
+
+  fn on_about_version(&mut self, _: &AboutVersion, _: &mut Window, _: &mut Context<Self>) {
+    println!("Version: woocraft crate demo for dock/menu/titlebar integration.");
+  }
+
+  fn on_about_license(&mut self, _: &AboutLicense, _: &mut Window, _: &mut Context<Self>) {
+    println!("License: see repository LICENSE file for details.");
+  }
+
+  fn on_about_changelog_highlights(
+    &mut self, _: &AboutChangelogHighlights, _: &mut Window, _: &mut Context<Self>,
+  ) {
+    println!("Changelog: v0.1 highlights include migrated dock, controls and title bar features.");
+  }
+
+  fn on_about_changelog_roadmap(
+    &mut self, _: &AboutChangelogRoadmap, _: &mut Window, _: &mut Context<Self>,
+  ) {
+    println!("Roadmap: continue improving dock actions, panel workflows and menu integration.");
+  }
+
+  fn on_about_credits_core(&mut self, _: &AboutCreditsCore, _: &mut Window, _: &mut Context<Self>) {
+    println!("Credits: Core Team");
+  }
+
+  fn on_about_credits_community(
+    &mut self, _: &AboutCreditsCommunity, _: &mut Window, _: &mut Context<Self>,
+  ) {
+    println!("Credits: Community Contributors");
   }
 }
 
 impl Render for DockExample {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let view = cx.entity().clone();
-
     window_border().child(
       v_flex()
         .size_full()
         .min_h_0()
-        .child(TitleBar::new().title("Woocraft Controls Example"))
+        .on_action(cx.listener(Self::on_toggle_left_dock))
+        .on_action(cx.listener(Self::on_toggle_bottom_dock))
+        .on_action(cx.listener(Self::on_toggle_right_dock))
+        .on_action(cx.listener(Self::on_expand_all_docks))
+        .on_action(cx.listener(Self::on_collapse_all_docks))
+        .on_action(cx.listener(Self::on_reset_dock_sizes))
+        .on_action(cx.listener(Self::on_about_woocraft))
+        .on_action(cx.listener(Self::on_about_version))
+        .on_action(cx.listener(Self::on_about_license))
+        .on_action(cx.listener(Self::on_about_changelog_highlights))
+        .on_action(cx.listener(Self::on_about_changelog_roadmap))
+        .on_action(cx.listener(Self::on_about_credits_core))
+        .on_action(cx.listener(Self::on_about_credits_community))
         .child(
-          h_flex()
-            .h(px(48.))
-            .px_4()
-            .gap_2()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().title_bar)
-            .child(
-              Button::new("dock-theme")
-                .label("Toggle Theme")
-                .on_click(|_, _, cx| {
-                  let next = if cx.theme().mode.is_dark() {
-                    ThemeMode::Light
-                  } else {
-                    ThemeMode::Dark
-                  };
-                  Theme::set_mode(next, cx);
-                }),
-            )
-            .child(Button::new("toggle-left").label("Left").flat().on_click({
-              let view = view.clone();
-              move |_, window, cx| {
-                view.update(cx, |this, cx| {
-                  this.dock_area.update(cx, |dock, cx| {
-                    dock.toggle_dock(DockPlacement::Left, window, cx);
-                  });
-                });
-              }
-            }))
-            .child(
-              Button::new("toggle-bottom")
-                .label("Bottom")
-                .flat()
-                .on_click({
-                  let view = view.clone();
-                  move |_, window, cx| {
-                    view.update(cx, |this, cx| {
-                      this.dock_area.update(cx, |dock, cx| {
-                        dock.toggle_dock(DockPlacement::Bottom, window, cx);
-                      });
-                    });
-                  }
-                }),
-            )
-            .child(Button::new("toggle-right").label("Right").flat().on_click(
-              move |_, window, cx| {
-                view.update(cx, |this, cx| {
-                  this.dock_area.update(cx, |dock, cx| {
-                    dock.toggle_dock(DockPlacement::Right, window, cx);
-                  });
-                });
-              },
-            )),
+          TitleBar::new()
+            .title("Woocraft Dock Example")
+            .app_menu_bar(self.app_menu_bar.clone())
+            .title_menu(|menu, _, _| {
+              menu
+                .item(PopupMenuItem::new("New Tab"))
+                .item(PopupMenuItem::new("Split Pane"))
+                .separator()
+                .item(PopupMenuItem::new("Preferences"))
+            })
+            .theme_button(true)
+            .language_button(true),
         )
         .child(self.dock_area.clone()),
     )
@@ -232,6 +340,55 @@ fn main() {
   app.run(|cx: &mut App| {
     woocraft::init(cx);
     cx.activate(true);
+    cx.set_menus(vec![
+      Menu {
+        name: "Layout".into(),
+        items: vec![
+          MenuItem::action("Toggle Left Dock", ToggleLeftDock),
+          MenuItem::action("Toggle Bottom Dock", ToggleBottomDock),
+          MenuItem::action("Toggle Right Dock", ToggleRightDock),
+          MenuItem::separator(),
+          MenuItem::action("Expand All Docks", ExpandAllDocks),
+          MenuItem::action("Collapse All Docks", CollapseAllDocks),
+          MenuItem::submenu(Menu {
+            name: "Resize Presets".into(),
+            items: vec![
+              MenuItem::action("Reset to Default Sizes", ResetDockSizes),
+              MenuItem::submenu(Menu {
+                name: "Read Modes".into(),
+                items: vec![
+                  MenuItem::action("Focus Mode (Collapse All Docks)", CollapseAllDocks),
+                  MenuItem::action("Balanced Mode (Expand All Docks)", ExpandAllDocks),
+                ],
+              }),
+            ],
+          }),
+        ],
+      },
+      Menu {
+        name: "About".into(),
+        items: vec![
+          MenuItem::action("About Woocraft Dock Example", AboutWoocraft),
+          MenuItem::action("Version", AboutVersion),
+          MenuItem::action("License", AboutLicense),
+          MenuItem::separator(),
+          MenuItem::submenu(Menu {
+            name: "Changelog".into(),
+            items: vec![
+              MenuItem::action("v0.1 Highlights", AboutChangelogHighlights),
+              MenuItem::action("Roadmap", AboutChangelogRoadmap),
+            ],
+          }),
+          MenuItem::submenu(Menu {
+            name: "Credits".into(),
+            items: vec![
+              MenuItem::action("Core Team", AboutCreditsCore),
+              MenuItem::action("Community Contributors", AboutCreditsCommunity),
+            ],
+          }),
+        ],
+      },
+    ]);
 
     let bounds = Bounds::centered(None, GpuiSize::new(px(1200.), px(820.)), cx);
     let window = cx

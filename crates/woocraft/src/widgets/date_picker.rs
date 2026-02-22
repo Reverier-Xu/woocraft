@@ -7,13 +7,12 @@ use gpui::{
   ParentElement as _, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription,
   Window, div, prelude::FluentBuilder as _, px,
 };
-use rust_i18n::t;
 
 use crate::{
   ActiveTheme, Anchor, Button, ButtonVariants as _, Calendar, CalendarEvent, CalendarState, Date,
   Delete, Disableable, Icon, IconName, Matcher, Popover, Selectable, Sizable, Size, StyledExt as _,
   actions::{Cancel, Confirm},
-  h_flex, v_flex,
+  h_flex, translate, v_flex,
 };
 
 const CONTEXT: &str = "DatePicker";
@@ -358,7 +357,7 @@ impl RenderOnce for DatePicker {
     let placeholder = self
       .placeholder
       .clone()
-      .unwrap_or_else(|| SharedString::from(t!("date_picker.placeholder").to_string()));
+      .unwrap_or_else(|| SharedString::from(translate("date_picker.placeholder")));
     let display_title = state_view
       .date
       .format(&state_view.date_format)
@@ -380,7 +379,7 @@ impl RenderOnce for DatePicker {
       })
       .selected(open || is_focused)
       .disabled(self.disabled)
-      .full_width_content(true)
+      .expand(true)
       .child(
         h_flex()
           .w_full()

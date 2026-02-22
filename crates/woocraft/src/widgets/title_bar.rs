@@ -8,10 +8,14 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, IconLabel, IconName, Size, StyleSized, StyledExt, h_flex,
+  ActiveTheme, Button, ButtonVariants, DropdownMenu as _, IconLabel, IconName, PopupMenu,
+  PopupMenuItem, Sizable as _, Size, StyleSized, StyledExt, Theme, ThemeMode, available_locales,
+  h_flex, locale, locale_display_name, set_locale, translate,
 };
 
 type CloseWindowHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+type ToolbarButtonHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+type TitleMenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
 
 const TITLE_BAR_SIZE: Size = Size::Medium;
 
@@ -21,6 +25,12 @@ pub struct TitleBar {
   children: Vec<AnyElement>,
   title: Option<SharedString>,
   icon: Option<IconName>,
+  app_menu_bar_slot: Option<AnyElement>,
+  title_menu_builder: Option<TitleMenuBuilder>,
+  theme_button_enabled: bool,
+  language_button_enabled: bool,
+  on_theme_button_click: Option<ToolbarButtonHandler>,
+  on_language_button_click: Option<ToolbarButtonHandler>,
   on_close_window: Option<CloseWindowHandler>,
 }
 
@@ -31,6 +41,12 @@ impl TitleBar {
       children: Vec::new(),
       title: None,
       icon: None,
+      app_menu_bar_slot: None,
+      title_menu_builder: None,
+      theme_button_enabled: false,
+      language_button_enabled: false,
+      on_theme_button_click: None,
+      on_language_button_click: None,
       on_close_window: None,
     }
   }
@@ -42,6 +58,43 @@ impl TitleBar {
 
   pub fn icon(mut self, icon: IconName) -> Self {
     self.icon = Some(icon);
+    self
+  }
+
+  pub fn app_menu_bar(mut self, app_menu_bar: impl IntoElement) -> Self {
+    self.app_menu_bar_slot = Some(app_menu_bar.into_any_element());
+    self
+  }
+
+  pub fn title_menu(
+    mut self,
+    builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+  ) -> Self {
+    self.title_menu_builder = Some(Rc::new(builder));
+    self
+  }
+
+  pub fn theme_button(mut self, enabled: bool) -> Self {
+    self.theme_button_enabled = enabled;
+    self
+  }
+
+  pub fn language_button(mut self, enabled: bool) -> Self {
+    self.language_button_enabled = enabled;
+    self
+  }
+
+  pub fn on_theme_button_click(
+    mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+  ) -> Self {
+    self.on_theme_button_click = Some(Rc::new(f));
+    self
+  }
+
+  pub fn on_language_button_click(
+    mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+  ) -> Self {
+    self.on_language_button_click = Some(Rc::new(f));
     self
   }
 
@@ -205,20 +258,52 @@ impl Render for TitleBarState {
 
 impl RenderOnce for TitleBar {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let Self {
+      style,
+      children,
+      title,
+      icon,
+      app_menu_bar_slot,
+      title_menu_builder,
+      theme_button_enabled,
+      language_button_enabled,
+      on_theme_button_click,
+      on_language_button_click,
+      on_close_window,
+    } = self;
     let decorations = window.window_decorations();
     let is_client_decorated = matches!(decorations, Decorations::Client { .. });
     let is_linux = cfg!(target_os = "linux");
     let is_macos = cfg!(target_os = "macos");
     let window_radius = cx.theme().radius_container;
-    let title = self.title.unwrap_or_else(|| {
+    let title = title.unwrap_or_else(|| {
       let window_title = window.window_title();
       if window_title.is_empty() {
-        rust_i18n::t!("title_bar.untitled").into()
+        translate("title_bar.untitled").into()
       } else {
         window_title.into()
       }
     });
-    let icon = self.icon.unwrap_or(IconName::Apps);
+    let icon = icon.unwrap_or(IconName::Apps);
+    let theme_icon = if cx.theme().mode.is_dark() {
+      IconName::WeatherSunny
+    } else {
+      IconName::WeatherMoon
+    };
+    let title_display = if let Some(title_menu_builder) = title_menu_builder {
+      Button::new("title-bar-label-menu")
+        .flat()
+        .medium()
+        .icon(icon)
+        .label(title.clone())
+        .dropdown_menu(move |menu, window, cx| title_menu_builder(menu, window, cx))
+        .into_any_element()
+    } else {
+      IconLabel::new("title-bar-label")
+        .icon(icon)
+        .label(title.clone())
+        .into_any_element()
+    };
 
     let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
 
@@ -233,7 +318,7 @@ impl RenderOnce for TitleBar {
         .container_h(TITLE_BAR_SIZE)
         .border_color(cx.theme().border)
         .bg(cx.theme().card)
-        .refine_style(&self.style)
+        .refine_style(&style)
         .map(|this| match decorations {
           Decorations::Server => this.rounded_tl(window_radius).rounded_tr(window_radius),
           Decorations::Client { tiling, .. } => this
@@ -289,7 +374,17 @@ impl RenderOnce for TitleBar {
             .gap_2()
             .flex_shrink_0()
             .flex_1()
-            .child(IconLabel::new("title-bar-label").icon(icon).label(title))
+            .child(title_display)
+            .when_some(app_menu_bar_slot, |this, app_menu_bar| {
+              this.child(
+                div()
+                  .id("title-bar-app-menu-slot")
+                  .h_full()
+                  .min_w_0()
+                  .flex_1()
+                  .child(app_menu_bar),
+              )
+            })
             .when(is_linux && is_client_decorated, |this| {
               this.child(
                 div()
@@ -303,11 +398,67 @@ impl RenderOnce for TitleBar {
                   }),
               )
             })
-            .children(self.children),
+            .children(children),
         )
-        .child(WindowControls {
-          on_close_window: self.on_close_window,
-        }),
+        .child(
+          h_flex()
+            .id("title-bar-actions")
+            .items_center()
+            .gap_1()
+            .flex_shrink_0()
+            .when(language_button_enabled, |this| {
+              let current_locale = locale().to_string();
+              let on_language_button_click = on_language_button_click.clone();
+              this.child(
+                Button::new("title-bar-language")
+                  .flat()
+                  .medium()
+                  .icon(IconName::Translate)
+                  .dropdown_menu(move |menu, _, _| {
+                    let mut menu = menu;
+                    for locale_name in available_locales() {
+                      let is_selected = current_locale == locale_name
+                        || current_locale.starts_with(&(locale_name.clone() + "-"));
+                      let label = locale_display_name(&locale_name);
+                      let on_language_button_click = on_language_button_click.clone();
+                      menu = menu.item(PopupMenuItem::new(label).checked(is_selected).on_click(
+                        move |event, window, cx| {
+                          set_locale(&locale_name);
+                          if let Some(handler) = on_language_button_click.as_ref() {
+                            handler(event, window, cx);
+                          }
+                          window.refresh();
+                        },
+                      ));
+                    }
+                    menu
+                  }),
+              )
+            })
+            .when(theme_button_enabled, |this| {
+              this.child(
+                Button::new("title-bar-theme")
+                  .flat()
+                  .medium()
+                  .icon(theme_icon)
+                  .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    if let Some(handler) = on_theme_button_click.as_ref() {
+                      handler(event, window, cx);
+                    } else {
+                      let next = if cx.theme().mode.is_dark() {
+                        ThemeMode::Light
+                      } else {
+                        ThemeMode::Dark
+                      };
+                      Theme::set_mode(next, cx);
+                    }
+                    window.refresh();
+                  }),
+              )
+            })
+            .child(WindowControls { on_close_window }),
+        ),
     )
   }
 }
