@@ -731,6 +731,8 @@ impl PopupMenu {
   ) {
     if let Some(context) = self.action_context.as_ref() {
       context.focus(window);
+      context.dispatch_action(action, window, cx);
+      return;
     }
 
     window.dispatch_action(action.boxed_clone(), cx);

@@ -194,7 +194,6 @@ impl Render for EditorPanel {
           .justify_between()
           .border_b_1()
           .border_color(cx.theme().border)
-          .bg(cx.theme().title_bar)
           .text_xs()
           .text_color(cx.theme().muted_foreground)
           .child(format!("Language: {}", self.language))

@@ -14,8 +14,8 @@ use serde::Deserialize;
 
 use crate::{
   ActiveTheme as _, Button, ButtonVariants as _, CARET_STEADY_DURATION, ContextMenuExt,
-  Disableable, ElementExt, IconName, PopupMenu, Selectable, Selection, Sizable, Size, StyleSized,
-  StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret,
+  Disableable, ElementExt, IconName, PopupMenu, PopupMenuItem, Selectable, Selection, Sizable,
+  Size, StyleSized, StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret,
 };
 
 const CONTEXT: &str = "Input";
@@ -1948,30 +1948,54 @@ impl RenderOnce for Input {
 
         let mut menu = menu.small().action_context(focus_handle);
         if default_context_menu {
+          let cut_state = input_state.clone();
+          let copy_state = input_state.clone();
+          let paste_state = input_state.clone();
+          let select_all_state = input_state.clone();
           menu = menu
-            .menu_with_icon_and_disabled(
-              t!("input.context_menu.cut"),
-              IconName::Cut,
-              Box::new(Cut),
-              !(is_enabled && has_selection),
+            .item(
+              PopupMenuItem::new(t!("input.context_menu.cut"))
+                .icon(IconName::Cut)
+                .disabled(!(is_enabled && has_selection))
+                .action(Box::new(Cut))
+                .on_click(move |_, window, cx| {
+                  cut_state.update(cx, |state, cx| {
+                    state.cut(&Cut, window, cx);
+                  });
+                }),
             )
-            .menu_with_icon_and_disabled(
-              t!("input.context_menu.copy"),
-              IconName::Copy,
-              Box::new(Copy),
-              !has_selection,
+            .item(
+              PopupMenuItem::new(t!("input.context_menu.copy"))
+                .icon(IconName::Copy)
+                .disabled(!has_selection)
+                .action(Box::new(Copy))
+                .on_click(move |_, window, cx| {
+                  copy_state.update(cx, |state, cx| {
+                    state.copy(&Copy, window, cx);
+                  });
+                }),
             )
-            .menu_with_icon_and_disabled(
-              t!("input.context_menu.paste"),
-              IconName::ClipboardPaste,
-              Box::new(Paste),
-              !has_paste,
+            .item(
+              PopupMenuItem::new(t!("input.context_menu.paste"))
+                .icon(IconName::ClipboardPaste)
+                .disabled(!has_paste)
+                .action(Box::new(Paste))
+                .on_click(move |_, window, cx| {
+                  paste_state.update(cx, |state, cx| {
+                    state.paste(&Paste, window, cx);
+                  });
+                }),
             )
             .separator()
-            .menu_with_icon(
-              t!("input.context_menu.select_all"),
-              IconName::SelectAllOn,
-              Box::new(SelectAll),
+            .item(
+              PopupMenuItem::new(t!("input.context_menu.select_all"))
+                .icon(IconName::SelectAllOn)
+                .action(Box::new(SelectAll))
+                .on_click(move |_, window, cx| {
+                  select_all_state.update(cx, |state, cx| {
+                    state.select_all(&SelectAll, window, cx);
+                  });
+                }),
             );
         }
 

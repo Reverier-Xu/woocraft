@@ -41,7 +41,10 @@ pub use divider::*;
 pub use dock::*;
 pub use editor::highlighter::*;
 pub use editor::lsp::*;
-pub use editor::{CodeEditor, EditorEvent, EditorState, MaskPattern, Position, Rope, TabSize};
+pub use editor::{
+  CodeEditor, EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorEvent,
+  EditorPointerButton, EditorState, EditorUserAction, MaskPattern, Position, Rope, TabSize,
+};
 pub use history::*;
 pub use icon_label::*;
 pub use input::*;

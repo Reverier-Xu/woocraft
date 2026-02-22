@@ -23,9 +23,16 @@ pub struct Divider {
 }
 
 impl Divider {
+  fn render_base(axis: Axis) -> Div {
+    div().map(|this| match axis {
+      Axis::Vertical => this.w(px(1.0)).h_full(),
+      Axis::Horizontal => this.h(px(1.0)).w_full(),
+    })
+  }
+
   pub fn vertical() -> Self {
     Self {
-      base: div().h_full(),
+      base: Self::render_base(Axis::Vertical),
       axis: Axis::Vertical,
       label: None,
       color: None,
@@ -36,7 +43,7 @@ impl Divider {
 
   pub fn horizontal() -> Self {
     Self {
-      base: div(),
+      base: Self::render_base(Axis::Horizontal),
       axis: Axis::Horizontal,
       label: None,
       color: None,
@@ -68,19 +75,12 @@ impl Divider {
     self
   }
 
-  fn render_base(axis: Axis) -> Div {
-    div().absolute().map(|this| match axis {
-      Axis::Vertical => this.w(px(1.0)).h_full(),
-      Axis::Horizontal => this.h(px(1.0)).w_full(),
-    })
-  }
-
-  fn render_solid(axis: Axis, color: Hsla) -> impl IntoElement {
-    Self::render_base(axis).bg(color)
+  fn render_solid(color: Hsla) -> impl IntoElement {
+    div().size_full().bg(color)
   }
 
   fn render_dashed(axis: Axis, color: Hsla) -> impl IntoElement {
-    Self::render_base(axis).child(
+    div().size_full().child(
       canvas(
         move |_, _, _| {},
         move |bounds, _, window, _| {
@@ -122,13 +122,10 @@ impl RenderOnce for Divider {
 
     self
       .base
-      .flex()
       .flex_shrink_0()
-      .items_center()
-      .justify_center()
       .refine_style(&self.style)
       .child(match self.line_style {
-        DividerStyle::Solid => Self::render_solid(self.axis, color).into_any_element(),
+        DividerStyle::Solid => Self::render_solid(color).into_any_element(),
         DividerStyle::Dashed => Self::render_dashed(self.axis, color).into_any_element(),
       })
       .when_some(self.label, |this, label| {

@@ -4,11 +4,11 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-  Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
-  EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
-  KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-  Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
-  Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
+  actions, div, point, px, Action, App, AppContext, Bounds, ClipboardItem, Context, Entity,
+  EntityInputHandler, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+  KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+  ParentElement as _, Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine,
+  SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
 };
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
@@ -19,10 +19,9 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-  Position,
   blink_cursor::{BlinkCursor, CURSOR_WIDTH},
   change::Change,
-  element::{RIGHT_MARGIN, TextElement},
+  element::{TextElement, RIGHT_MARGIN},
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
   mask_pattern::MaskPattern,
@@ -31,12 +30,15 @@ use super::{
   popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
   search::{self, SearchPanel},
   text_wrapper::{LineItem, LineLayout, TextWrapper},
+  EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorPointerButton,
+  EditorUserAction, Position,
 };
-use crate::Selection;
-use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::widgets::editor::RopeExt as _;
 use crate::widgets::history::History;
+use crate::PixelsExt;
+use crate::Selection;
+use crate::Size;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = editor, no_json)]
@@ -291,6 +293,8 @@ pub struct InputState {
   pub(super) focus_handle: FocusHandle,
   pub(super) mode: InputMode,
   pub(super) text: Rope,
+  pub(super) data_backend: Option<Box<dyn EditorDataBackend>>,
+  pub(super) data_backend_revision: u64,
   pub(super) text_wrapper: TextWrapper,
   pub(super) history: History<Change>,
   pub(super) blink_cursor: Entity<BlinkCursor>,
@@ -369,9 +373,9 @@ pub struct InputState {
 impl EventEmitter<InputEvent> for InputState {}
 
 impl InputState {
-  /// Create a Input state with default [`InputMode::SingleLine`] mode.
+  /// Create an editor state with default plain-text multi-line mode.
   ///
-  /// See also: [`Self::multi_line`], [`Self::auto_grow`] to set other mode.
+  /// See also: [`Self::auto_grow`] and [`Self::code_editor`] to set other modes.
   pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
     let focus_handle = cx.focus_handle().tab_stop(true);
     let blink_cursor = cx.new(|_| BlinkCursor::new());
@@ -400,6 +404,8 @@ impl InputState {
     Self {
       focus_handle: focus_handle.clone(),
       text: "".into(),
+      data_backend: None,
+      data_backend_revision: 0,
       text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
       blink_cursor,
       history,
@@ -447,14 +453,6 @@ impl InputState {
     }
   }
 
-  /// Set Input to use multi line mode.
-  ///
-  /// Default rows is 2.
-  pub fn multi_line(mut self, multi_line: bool) -> Self {
-    self.mode = self.mode.multi_line(multi_line);
-    self
-  }
-
   /// Set Input to use [`InputMode::AutoGrow`] mode with min, max rows limit.
   pub fn auto_grow(mut self, min_rows: usize, max_rows: usize) -> Self {
     self.mode = InputMode::auto_grow(min_rows, max_rows);
@@ -469,7 +467,6 @@ impl InputState {
   /// - tab_size: 2
   /// - hard_tabs: false
   /// - height: 100%
-  /// - multi_line: true
   /// - indent_guides: true
   ///
   /// If `highlighter` is None, will use the default highlighter.
@@ -489,9 +486,159 @@ impl InputState {
     self
   }
 
+  /// Set a custom editor data backend.
+  pub fn data_backend(mut self, backend: impl EditorDataBackend + 'static) -> Self {
+    self.data_backend = Some(Box::new(backend));
+    self.data_backend_revision = 0;
+    if let Some(backend) = self.data_backend.as_ref() {
+      self.text = Rope::from(backend.snapshot().as_str());
+      self.data_backend_revision = backend.revision();
+      self.text_wrapper.set_default_text(&self.text);
+    }
+    self
+  }
+
+  /// Replace current custom data backend.
+  pub fn set_data_backend(
+    &mut self, backend: impl EditorDataBackend + 'static, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    self.data_backend = Some(Box::new(backend));
+    self.data_backend_revision = 0;
+    self.sync_text_with_data_backend(true, window, cx);
+    cx.notify();
+  }
+
+  /// Remove custom data backend and switch back to builtin rope backend.
+  pub fn clear_data_backend(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    self.data_backend = None;
+    self.data_backend_revision = 0;
+    cx.notify();
+  }
+
+  /// Whether current editor is driven by custom backend.
+  pub fn has_custom_data_backend(&self) -> bool {
+    self.data_backend.is_some()
+  }
+
+  /// Total line count as u64, for ultra-large data sources.
+  pub fn line_count_u64(&self) -> u64 {
+    self
+      .data_backend
+      .as_ref()
+      .map(|backend| backend.line_count())
+      .unwrap_or(self.text.lines_len() as u64)
+  }
+
+  /// Display line number text for row.
+  pub fn line_number_text_for_row(&self, row: u64) -> String {
+    self
+      .data_backend
+      .as_ref()
+      .and_then(|backend| backend.line_number_text(row))
+      .unwrap_or_else(|| row.saturating_add(1).to_string())
+  }
+
+  /// Largest line-number text sample used for gutter width measuring.
+  pub fn max_line_number_text(&self) -> String {
+    self
+      .data_backend
+      .as_ref()
+      .and_then(|backend| backend.max_line_number_text())
+      .unwrap_or_else(|| self.line_count_u64().max(1).to_string())
+  }
+
+  /// Range for row in utf-8 bytes.
+  pub fn row_range_u64(&self, row: u64) -> Option<Range<u64>> {
+    if let Some(backend) = self.data_backend.as_ref() {
+      return backend.row_range(row);
+    }
+
+    let row = (row as usize).min(self.text.lines_len().saturating_sub(1));
+    let start = self.text.line_start_offset(row) as u64;
+    let end = self.text.line_end_offset(row) as u64;
+    Some(start..end)
+  }
+
+  /// Read text by utf-8 byte range.
+  pub fn text_for_u64_range(&self, range: Range<u64>) -> Option<String> {
+    if let Some(backend) = self.data_backend.as_ref() {
+      return backend.text_for_range(range);
+    }
+
+    let start = (range.start as usize).min(self.text.len());
+    let end = (range.end as usize).min(self.text.len());
+    Some(self.text.slice(start..end).to_string())
+  }
+
+  pub(crate) fn extend_context_menu_from_backend(
+    &self, menu: crate::PopupMenu, state: &Entity<InputState>, window: &mut Window,
+  ) -> crate::PopupMenu {
+    if let Some(backend) = self.data_backend.as_ref() {
+      return backend.extend_context_menu(menu, state, window);
+    }
+
+    menu
+  }
+
+  pub(super) fn emit_backend_action(&mut self, action: EditorUserAction) {
+    if let Some(backend) = self.data_backend.as_mut() {
+      backend.on_user_action(&action);
+    }
+  }
+
+  fn sync_text_with_data_backend(
+    &mut self, force: bool, window: &mut Window, cx: &mut Context<Self>,
+  ) -> bool {
+    let Some(backend) = self.data_backend.as_ref() else {
+      return false;
+    };
+
+    let revision = backend.revision();
+    if !force && revision == self.data_backend_revision {
+      return false;
+    }
+
+    let snapshot = backend.snapshot();
+    self.text = Rope::from(snapshot.as_str());
+    self.data_backend_revision = revision;
+
+    if let Some(diagnostics) = self.mode.diagnostics_mut() {
+      diagnostics.reset(&self.text);
+    }
+
+    self.text_wrapper.set_default_text(&self.text);
+    self
+      .mode
+      .update_highlighter(&(0..0), &self.text, "", false, cx);
+    self.lsp.update(&self.text, window, cx);
+    self.update_search(cx);
+    self.mode.update_auto_grow(&self.text_wrapper);
+    true
+  }
+
+  fn apply_custom_backend_edit(
+    &mut self, range: &Range<usize>, new_text: &str, marked: bool, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Option<EditorBackendEditResult> {
+    let Some(backend) = self.data_backend.as_mut() else {
+      return None;
+    };
+
+    let request = EditorBackendEditRequest {
+      range: (range.start as u64)..(range.end as u64),
+      new_text: new_text.to_string(),
+      marked,
+    };
+    let response = backend.apply_edit(request);
+    if response.accepted {
+      self.sync_text_with_data_backend(true, window, cx);
+    }
+    Some(response)
+  }
+
   /// Set this input is searchable, default is false (Default true for Code Editor).
   pub fn searchable(mut self, searchable: bool) -> Self {
-    debug_assert!(self.mode.is_multi_line());
     self.searchable = searchable;
     self
   }
@@ -504,7 +651,7 @@ impl InputState {
 
   /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
   pub fn line_number(mut self, line_number: bool) -> Self {
-    debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
+    debug_assert!(self.mode.is_code_editor());
     if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
       *l = line_number;
     }
@@ -513,18 +660,14 @@ impl InputState {
 
   /// Set line number, only for [`InputMode::CodeEditor`] mode.
   pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
-    debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
+    debug_assert!(self.mode.is_code_editor());
     if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
       *l = line_number;
     }
     cx.notify();
   }
 
-  /// Set the number of rows for the multi-line Textarea.
-  ///
-  /// This is only used when `multi_line` is set to true.
-  ///
-  /// default: 2
+  /// Set the number of rows for the editor.
   pub fn rows(mut self, rows: usize) -> Self {
     match &mut self.mode {
       InputMode::PlainText { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => *r = rows,
@@ -625,12 +768,8 @@ impl InputState {
     self.replace_text(value, window, cx);
     self.history.ignore = false;
 
-    // Ensure cursor to start when set text
-    if self.mode.is_single_line() {
-      self.selected_range = (self.text.len()..self.text.len()).into();
-    } else {
-      self.selected_range.clear();
-    }
+    // Ensure cursor to start when set text.
+    self.selected_range.clear();
 
     if self.mode.is_code_editor() {
       self._pending_update = true;
@@ -694,19 +833,13 @@ impl InputState {
   }
 
   /// Set with password masked state.
-  ///
-  /// Only for [`InputMode::SingleLine`] mode.
   pub fn masked(mut self, masked: bool) -> Self {
-    debug_assert!(self.mode.is_single_line());
     self.masked = masked;
     self
   }
 
   /// Set the password masked state of the input field.
-  ///
-  /// Only for [`InputMode::SingleLine`] mode.
   pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
-    debug_assert!(self.mode.is_single_line());
     self.masked = masked;
     cx.notify();
   }
@@ -760,38 +893,26 @@ impl InputState {
   }
 
   /// Set the regular expression pattern of the input field.
-  ///
-  /// Only for [`InputMode::SingleLine`] mode.
   pub fn pattern(mut self, pattern: regex::Regex) -> Self {
-    debug_assert!(self.mode.is_single_line());
     self.pattern = Some(pattern);
     self
   }
 
   /// Set the regular expression pattern of the input field with reference.
-  ///
-  /// Only for [`InputMode::SingleLine`] mode.
   pub fn set_pattern(
     &mut self, pattern: regex::Regex, _window: &mut Window, _cx: &mut Context<Self>,
   ) {
-    debug_assert!(self.mode.is_single_line());
     self.pattern = Some(pattern);
   }
 
   /// Set the validation function of the input field.
-  ///
-  /// Only for [`InputMode::SingleLine`] mode.
   pub fn validate(mut self, f: impl Fn(&str, &mut Context<Self>) -> bool + 'static) -> Self {
-    debug_assert!(self.mode.is_single_line());
     self.validate = Some(Box::new(f));
     self
   }
 
   /// Set true to show spinner at the input right.
-  ///
-  /// Only for [`InputMode::SingleLine`] mode.
   pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
-    debug_assert!(self.mode.is_single_line());
     self.loading = loading;
     cx.notify();
   }
@@ -810,12 +931,16 @@ impl InputState {
 
   /// Return the value of the input field.
   pub fn value(&self) -> SharedString {
+    if let Some(backend) = self.data_backend.as_ref() {
+      return backend.snapshot().into();
+    }
+
     SharedString::new(self.text.to_string())
   }
 
   /// Return the value without mask.
   pub fn unmask_value(&self) -> SharedString {
-    self.mask_pattern.unmask(&self.text.to_string()).into()
+    self.mask_pattern.unmask(self.value().as_ref()).into()
   }
 
   /// Return the text [`Rope`] of the input field.
@@ -860,23 +985,21 @@ impl InputState {
   }
 
   pub(super) fn select_up(&mut self, _: &SelectUp, _: &mut Window, cx: &mut Context<Self>) {
-    if self.mode.is_single_line() {
-      return;
-    }
     let offset = self.start_of_line().saturating_sub(1);
     self.select_to(self.previous_boundary(offset), cx);
   }
 
   pub(super) fn select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
-    if self.mode.is_single_line() {
-      return;
-    }
     let offset = (self.end_of_line() + 1).min(self.text.len());
     self.select_to(self.next_boundary(offset), cx);
   }
 
   pub(super) fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
     self.selected_range = (0..self.text.len()).into();
+    self.emit_backend_action(EditorUserAction::Select {
+      range: (self.selected_range.start as u64)..(self.selected_range.end as u64),
+      reversed: self.selection_reversed,
+    });
     cx.notify();
   }
 
@@ -946,20 +1069,12 @@ impl InputState {
 
   /// Get start of line byte offset of cursor
   pub(super) fn start_of_line(&self) -> usize {
-    if self.mode.is_single_line() {
-      return 0;
-    }
-
     let row = self.text.offset_to_point(self.cursor()).row;
     self.text.line_start_offset(row)
   }
 
   /// Get end of line byte offset of cursor
   pub(super) fn end_of_line(&self) -> usize {
-    if self.mode.is_single_line() {
-      return self.text.len();
-    }
-
     let row = self.text.offset_to_point(self.cursor()).row;
     self.text.line_end_offset(row)
   }
@@ -970,10 +1085,6 @@ impl InputState {
   pub(super) fn start_of_line_of_selection(
     &mut self, window: &mut Window, cx: &mut Context<Self>,
   ) -> usize {
-    if self.mode.is_single_line() {
-      return 0;
-    }
-
     let mut offset = self.previous_boundary(self.selected_range.start.min(self.selected_range.end));
     if self.text.char_at(offset) == Some('\r') {
       offset += 1;
@@ -992,10 +1103,6 @@ impl InputState {
   ///
   /// To get current and next line indent, to return more depth one.
   pub(super) fn indent_of_next_line(&mut self) -> String {
-    if self.mode.is_single_line() {
-      return "".into();
-    }
-
     let mut current_indent = String::new();
     let mut next_indent = String::new();
     let current_line_start_pos = self.start_of_line();
@@ -1135,22 +1242,17 @@ impl InputState {
       self.clear_inline_completion(cx);
     }
 
-    if self.mode.is_multi_line() {
-      // Get current line indent
-      let indent = if self.mode.is_code_editor() {
-        self.indent_of_next_line()
-      } else {
-        "".to_string()
-      };
-
-      // Add newline and indent
-      let new_line_text = format!("\n{}", indent);
-      self.replace_text_in_range_silent(None, &new_line_text, window, cx);
-      self.pause_blink_cursor(cx);
+    // Get current line indent
+    let indent = if self.mode.is_code_editor() {
+      self.indent_of_next_line()
     } else {
-      // Single line input, just emit the event (e.g.: In a dialog to confirm).
-      cx.propagate();
-    }
+      "".to_string()
+    };
+
+    // Add newline and indent
+    let new_line_text = format!("\n{}", indent);
+    self.replace_text_in_range_silent(None, &new_line_text, window, cx);
+    self.pause_blink_cursor(cx);
 
     cx.emit(InputEvent::PressEnter {
       secondary: action.secondary,
@@ -1216,6 +1318,12 @@ impl InputState {
     self.focus(window, cx);
     self.selecting = true;
     let offset = self.index_for_mouse_position(event.position);
+    self.emit_backend_action(EditorUserAction::MouseDown {
+      offset: offset as u64,
+      button: EditorPointerButton::from(event.button),
+      click_count: event.click_count.min(u8::MAX as usize) as u8,
+      shift: event.modifiers.shift,
+    });
 
     if self.handle_click_hover_definition(event, offset, window, cx) {
       return;
@@ -1236,6 +1344,9 @@ impl InputState {
     // Right-click keeps cursor/selection synchronized before opening the
     // shared context menu component.
     if event.button == MouseButton::Right {
+      self.emit_backend_action(EditorUserAction::ContextMenuRequested {
+        offset: offset as u64,
+      });
       cx.stop_propagation();
       let selected = self.selected_range.normalized();
       let clicked_in_selection =
@@ -1258,8 +1369,14 @@ impl InputState {
   }
 
   pub(super) fn on_mouse_up(
-    &mut self, _: &MouseUpEvent, _window: &mut Window, _cx: &mut Context<Self>,
+    &mut self, event: &MouseUpEvent, _window: &mut Window, _cx: &mut Context<Self>,
   ) {
+    let offset = self.index_for_mouse_position(event.position);
+    self.emit_backend_action(EditorUserAction::MouseUp {
+      offset: offset as u64,
+      button: EditorPointerButton::from(event.button),
+    });
+
     if self.selected_range.is_empty() {
       self.selection_reversed = false;
     }
@@ -1272,6 +1389,9 @@ impl InputState {
   ) {
     // Show diagnostic popover on mouse move
     let offset = self.index_for_mouse_position(event.position);
+    self.emit_backend_action(EditorUserAction::MouseMove {
+      offset: offset as u64,
+    });
     self.handle_mouse_move(offset, event, window, cx);
 
     if self.mode.is_code_editor() {
@@ -1311,12 +1431,20 @@ impl InputState {
       .map(|layout| layout.line_height)
       .unwrap_or(window.line_height());
     let delta = event.delta.pixel_delta(line_height);
+    self.emit_backend_action(EditorUserAction::Scroll {
+      delta_x: delta.x.as_f64() as f32,
+      delta_y: delta.y.as_f64() as f32,
+    });
 
     let old_offset = self.scroll_handle.offset();
-    self.update_scroll_offset(Some(old_offset + delta), cx);
+    let target_offset = old_offset + delta;
+    self.update_scroll_offset(Some(target_offset), cx);
+    let new_offset = self.scroll_handle.offset();
 
-    // Only stop propagation if the offset actually changed
-    if self.scroll_handle.offset() != old_offset {
+    // Also consume wheel events when they hit scroll boundaries to avoid parent scroll jitter.
+    let hit_vertical_boundary =
+      delta.y != px(0.) && new_offset.y == old_offset.y && new_offset.y != target_offset.y;
+    if new_offset != old_offset || hit_vertical_boundary {
       cx.stop_propagation();
     }
 
@@ -1326,7 +1454,19 @@ impl InputState {
   pub(super) fn update_scroll_offset(
     &mut self, offset: Option<Point<Pixels>>, cx: &mut Context<Self>,
   ) {
-    let mut offset = offset.unwrap_or(self.scroll_handle.offset());
+    let offset = self.clamp_scroll_offset_for_viewport(
+      offset.unwrap_or(self.scroll_handle.offset()),
+      self.scroll_size,
+      self.input_bounds.size,
+    );
+    self.scroll_handle.set_offset(offset);
+    cx.notify();
+  }
+
+  pub(super) fn clamp_scroll_offset_for_viewport(
+    &self, mut offset: Point<Pixels>, scroll_size: gpui::Size<Pixels>,
+    viewport_size: gpui::Size<Pixels>,
+  ) -> Point<Pixels> {
     // In addition to left alignment, a cursor position will be reserved on the right side
     let safe_x_offset = if self.text_align == TextAlign::Left {
       px(0.)
@@ -1334,19 +1474,13 @@ impl InputState {
       -CURSOR_WIDTH
     };
 
-    let safe_y_range =
-      (-self.scroll_size.height + self.input_bounds.size.height).min(px(0.0))..px(0.);
-    let safe_x_range = (-self.scroll_size.width + self.input_bounds.size.width + safe_x_offset)
-      .min(safe_x_offset)..px(0.);
+    let safe_y_range = (-scroll_size.height + viewport_size.height).min(px(0.0))..px(0.);
+    let safe_x_range =
+      (-scroll_size.width + viewport_size.width + safe_x_offset).min(safe_x_offset)..px(0.);
 
-    offset.y = if self.mode.is_single_line() {
-      px(0.)
-    } else {
-      offset.y.clamp(safe_y_range.start, safe_y_range.end)
-    };
+    offset.y = offset.y.clamp(safe_y_range.start, safe_y_range.end);
     offset.x = offset.x.clamp(safe_x_range.start, safe_x_range.end);
-    self.scroll_handle.set_offset(offset);
-    cx.notify();
+    offset
   }
 
   /// Scroll to make the given offset visible.
@@ -1443,6 +1577,9 @@ impl InputState {
     }
 
     let selected_text = self.text.slice(self.selected_range).to_string();
+    self.emit_backend_action(EditorUserAction::Copy {
+      range: (self.selected_range.start as u64)..(self.selected_range.end as u64),
+    });
     cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
   }
 
@@ -1452,6 +1589,9 @@ impl InputState {
     }
 
     let selected_text = self.text.slice(self.selected_range).to_string();
+    self.emit_backend_action(EditorUserAction::Cut {
+      range: (self.selected_range.start as u64)..(self.selected_range.end as u64),
+    });
     cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
 
     self.replace_text_in_range_silent(None, "", window, cx);
@@ -1459,11 +1599,12 @@ impl InputState {
 
   pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(clipboard) = cx.read_from_clipboard() {
-      let mut new_text = clipboard.text().unwrap_or_default();
-      if !self.mode.is_multi_line() {
-        new_text = new_text.replace('\n', "");
-      }
+      let new_text = clipboard.text().unwrap_or_default();
 
+      self.emit_backend_action(EditorUserAction::Paste {
+        range: (self.selected_range.start as u64)..(self.selected_range.end as u64),
+        text: new_text.clone(),
+      });
       self.replace_text_in_range_silent(None, &new_text, window, cx);
       self.scroll_to(self.cursor(), None, cx);
     }
@@ -1484,6 +1625,8 @@ impl InputState {
   }
 
   pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
+    self.emit_backend_action(EditorUserAction::UndoRequested);
+
     self.history.ignore = true;
     if let Some(changes) = self.history.undo() {
       for change in changes {
@@ -1495,6 +1638,8 @@ impl InputState {
   }
 
   pub(super) fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
+    self.emit_backend_action(EditorUserAction::RedoRequested);
+
     self.history.ignore = true;
     if let Some(changes) = self.history.redo() {
       for change in changes {
@@ -1566,12 +1711,6 @@ impl InputState {
         continue;
       };
 
-      // Return offset by use closest_index_for_x if is single line mode.
-      if self.mode.is_single_line() {
-        index = line_layout.closest_index_for_x(pos.x, last_layout);
-        break;
-      }
-
       if let Some(v) = line_layout.closest_index_for_position(pos, last_layout) {
         index += v;
         break;
@@ -1605,13 +1744,9 @@ impl InputState {
     //
     // If only 1 line, the value is 0
     // If have 2 line, the value is 1
-    if self.mode.is_multi_line() {
-      let p = point(px(0.), *y_offset);
-      *y_offset += line.height(line_height);
-      p
-    } else {
-      point(px(0.), px(0.))
-    }
+    let p = point(px(0.), *y_offset);
+    *y_offset += line.height(line_height);
+    p
   }
 
   /// Select the text from the current cursor position to the given offset.
@@ -1646,6 +1781,10 @@ impl InputState {
     if self.selected_range.is_empty() {
       self.update_preferred_column();
     }
+    self.emit_backend_action(EditorUserAction::Select {
+      range: (self.selected_range.start as u64)..(self.selected_range.end as u64),
+      reversed: self.selection_reversed,
+    });
     cx.notify()
   }
 
@@ -1653,6 +1792,10 @@ impl InputState {
   pub fn unselect(&mut self, _: &mut Window, cx: &mut Context<Self>) {
     let offset = self.cursor();
     self.selected_range = (offset..offset).into();
+    self.emit_backend_action(EditorUserAction::Select {
+      range: (offset as u64)..(offset as u64),
+      reversed: false,
+    });
     cx.notify()
   }
 
@@ -1751,6 +1894,9 @@ impl InputState {
 
   pub(super) fn on_key_down(&mut self, _: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
     self.pause_blink_cursor(cx);
+    self.emit_backend_action(EditorUserAction::MoveCursor {
+      offset: self.cursor() as u64,
+    });
   }
 
   pub(super) fn on_drag_move(
@@ -1915,6 +2061,10 @@ impl EntityInputHandler for InputState {
   ) -> Option<String> {
     let range = self.range_from_utf16(&range_utf16);
     adjusted_range.replace(self.range_to_utf16(&range));
+    if self.data_backend.is_some() {
+      return self.text_for_u64_range((range.start as u64)..(range.end as u64));
+    }
+
     Some(self.text.slice(range).to_string())
   }
 
@@ -1962,12 +2112,55 @@ impl EntityInputHandler for InputState {
       }))
       .unwrap_or(self.selected_range.into());
 
+    self.emit_backend_action(EditorUserAction::Replace {
+      range: (range.start as u64)..(range.end as u64),
+      new_text: new_text.to_string(),
+      marked: false,
+      silent: self.silent_replace_text,
+    });
+
+    if let Some(response) = self.apply_custom_backend_edit(&range, new_text, false, window, cx) {
+      if !response.accepted {
+        return;
+      }
+
+      let text_len = self.text.len();
+      if let Some(selection) = response.selection {
+        let mut start = (selection.start as usize).min(text_len);
+        let mut end = (selection.end as usize).min(text_len);
+        self.selection_reversed = false;
+        if end < start {
+          std::mem::swap(&mut start, &mut end);
+          self.selection_reversed = true;
+        }
+        self.selected_range = (start..end).into();
+      } else {
+        let new_offset = response
+          .cursor
+          .map(|offset| (offset as usize).min(text_len))
+          .unwrap_or((range.start + new_text.len()).min(text_len));
+        self.selection_reversed = false;
+        self.selected_range = (new_offset..new_offset).into();
+      }
+
+      self.ime_marked_range.take();
+      self.update_preferred_column();
+      self.update_search(cx);
+      self.mode.update_auto_grow(&self.text_wrapper);
+      if !self.silent_replace_text {
+        self.handle_completion_trigger(&range, &new_text, window, cx);
+      }
+      cx.emit(InputEvent::Change);
+      cx.notify();
+      return;
+    }
+
     let old_text = self.text.clone();
     self.text.replace(range.clone(), new_text);
 
     let mut new_offset = (range.start + new_text.len()).min(self.text.len());
 
-    if self.mode.is_single_line() {
+    if !self.mode.is_code_editor() {
       let pending_text = self.text.to_string();
       // Check if the new text is valid
       if !self.is_valid_input(&pending_text, cx) {
@@ -2027,10 +2220,55 @@ impl EntityInputHandler for InputState {
       }))
       .unwrap_or(self.selected_range.into());
 
+    self.emit_backend_action(EditorUserAction::Replace {
+      range: (range.start as u64)..(range.end as u64),
+      new_text: new_text.to_string(),
+      marked: true,
+      silent: self.silent_replace_text,
+    });
+
+    if let Some(response) = self.apply_custom_backend_edit(&range, new_text, true, window, cx) {
+      if !response.accepted {
+        return;
+      }
+
+      let text_len = self.text.len();
+      if new_text.is_empty() {
+        self.selected_range = (range.start.min(text_len)..range.start.min(text_len)).into();
+        self.ime_marked_range = None;
+      } else if let Some(selection) = response.selection {
+        let mut start = (selection.start as usize).min(text_len);
+        let mut end = (selection.end as usize).min(text_len);
+        self.selection_reversed = false;
+        if end < start {
+          std::mem::swap(&mut start, &mut end);
+          self.selection_reversed = true;
+        }
+        self.selected_range = (start..end).into();
+        self.ime_marked_range = Some((start..end).into());
+      } else {
+        let fallback = response
+          .cursor
+          .map(|offset| (offset as usize).min(text_len))
+          .unwrap_or((range.start + new_text.len()).min(text_len));
+        let selected = new_selected_range_utf16
+          .as_ref()
+          .map(|range_utf16| self.range_from_utf16(range_utf16))
+          .unwrap_or(fallback..fallback);
+        self.selected_range = selected.into();
+        self.ime_marked_range = Some((fallback..fallback).into());
+      }
+
+      self.mode.update_auto_grow(&self.text_wrapper);
+      self.history.start_grouping();
+      cx.notify();
+      return;
+    }
+
     let old_text = self.text.clone();
     self.text.replace(range.clone(), new_text);
 
-    if self.mode.is_single_line() {
+    if !self.mode.is_code_editor() {
       let pending_text = self.text.to_string();
       if !self.is_valid_input(&pending_text, cx) {
         self.text = old_text;
@@ -2145,6 +2383,8 @@ impl Focusable for InputState {
 
 impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    self.sync_text_with_data_backend(false, window, cx);
+
     if self._pending_update {
       self
         .mode
@@ -2156,7 +2396,7 @@ impl Render for InputState {
     div()
       .id("input-state")
       .flex_1()
-      .when(self.mode.is_multi_line(), |this| this.h_full())
+      .h_full()
       .flex_grow()
       .overflow_x_hidden()
       .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))

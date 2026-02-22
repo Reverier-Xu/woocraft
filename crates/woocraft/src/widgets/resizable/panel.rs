@@ -220,6 +220,7 @@ impl RenderOnce for ResizablePanel {
       .get(self.panel_ix)
       .expect("BUG: The `index` of ResizablePanel should be one of in `state`.");
     let size_range = self.size_range.clone();
+    let content = div().flex_1().size_full().children(self.children);
 
     div()
       .id(("resizable-panel", self.panel_ix))
@@ -227,6 +228,7 @@ impl RenderOnce for ResizablePanel {
       .flex_grow()
       .size_full()
       .relative()
+      .when(matches!(self.axis, Axis::Vertical), |this| this.flex_col())
       .when(matches!(self.axis, Axis::Vertical), |this| {
         this.min_h(size_range.start).max_h(size_range.end)
       })
@@ -254,7 +256,6 @@ impl RenderOnce for ResizablePanel {
           })
         }
       })
-      .children(self.children)
       .when(self.panel_ix > 0, |this| {
         let ix = self.panel_ix - 1;
         this.child(resize_handle(("resizable-handle", ix), self.axis).on_drag(
@@ -268,6 +269,7 @@ impl RenderOnce for ResizablePanel {
           },
         ))
       })
+      .child(content)
   }
 }
 

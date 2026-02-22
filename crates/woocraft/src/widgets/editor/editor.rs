@@ -8,7 +8,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
-use crate::widgets::editor::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
+use crate::widgets::editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN};
 use crate::widgets::scroll::Scrollbar;
 use crate::{ActiveTheme, ContextMenuExt, IconName, PopupMenu, v_flex};
 use crate::{Selectable, StyledExt};
@@ -184,7 +184,7 @@ impl Editor {
             px(0.)
           } else {
             // Align left edge to the line number.
-            paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
+            paddings.left + last_layout.line_number_width - LINE_NUMBER_TEXT_GAP
           };
 
           let scroll_size = gpui::Size {
@@ -222,7 +222,7 @@ impl Styled for Editor {
 
 impl RenderOnce for Editor {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    const LINE_HEIGHT: Rems = Rems(1.25);
+    const LINE_HEIGHT: Rems = Rems(1.5);
 
     self.state.update(cx, |state, _| {
       state.disabled = self.disabled;
@@ -427,6 +427,11 @@ impl RenderOnce for Editor {
         if let Some(builder) = context_menu_builder.as_ref() {
           menu = builder(menu, &input_state, window, cx);
         }
+
+        menu = {
+          let state = input_state.read(cx);
+          state.extend_context_menu_from_backend(menu, &input_state, window)
+        };
 
         menu
       })

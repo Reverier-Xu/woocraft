@@ -468,10 +468,18 @@ impl Element for Scrollbar {
         continue;
       }
 
+      let safe_range = (-scroll_area_size + container_size).min(px(0.))..px(0.);
+      let scroll_position = scroll_position.clamp(safe_range.start, safe_range.end);
+      let scroll_span = (scroll_area_size - container_size).max(px(0.));
+
       let thumb_length =
         (container_size / scroll_area_size * container_size).max(px(MIN_THUMB_SIZE));
-      let thumb_start = -(scroll_position / (scroll_area_size - container_size)
-        * (container_size - margin_end - thumb_length));
+      let thumb_track = (container_size - margin_end - thumb_length).max(px(0.));
+      let thumb_start = if scroll_span.is_zero() {
+        px(0.)
+      } else {
+        -(scroll_position / scroll_span * thumb_track)
+      };
       let thumb_end = (thumb_start + thumb_length).min(container_size - margin_end);
 
       let bounds = Bounds {
@@ -649,7 +657,7 @@ impl Element for Scrollbar {
 
           window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
-          window.paint_layer(hitbox_bounds, |cx| {
+          window.paint_layer(bounds, |cx| {
             cx.paint_quad(fill(state.bounds, state.bg));
 
             cx.paint_quad(PaintQuad {
@@ -688,11 +696,12 @@ impl Element for Scrollbar {
                 }
               }
 
+              let safe_range = (-scroll_area_size + container_size).min(px(0.))..px(0.);
               let mut offset = scroll_handle.offset();
               if vertical {
-                offset.y += delta.y;
+                offset.y = (offset.y + delta.y).clamp(safe_range.start, safe_range.end);
               } else {
-                offset.x += delta.x;
+                offset.x = (offset.x + delta.x).clamp(safe_range.start, safe_range.end);
               }
 
               if offset != scroll_handle.offset() {
@@ -708,7 +717,8 @@ impl Element for Scrollbar {
             }
           });
 
-          let safe_range = (-scroll_area_size + container_size)..px(0.);
+          let safe_range = (-scroll_area_size + container_size).min(px(0.))..px(0.);
+          let scroll_span = (scroll_area_size - container_size).max(px(0.));
 
           if is_hover_to_show || is_visible {
             window.on_mouse_event({
@@ -732,18 +742,18 @@ impl Element for Scrollbar {
                         / (bounds.size.height - thumb_size)
                     } else {
                       (event.position.x - thumb_size / 2. - bounds.origin.x)
-                        / (bounds.size.width - thumb_size)
+                        / (bounds.size.width - thumb_size - margin_end)
                     }
-                    .min(1.);
+                    .clamp(0., 1.);
 
                     if vertical {
                       scroll_handle.set_offset(point(
                         offset.x,
-                        (-scroll_area_size * percentage).clamp(safe_range.start, safe_range.end),
+                        (-scroll_span * percentage).clamp(safe_range.start, safe_range.end),
                       ));
                     } else {
                       scroll_handle.set_offset(point(
-                        (-scroll_area_size * percentage).clamp(safe_range.start, safe_range.end),
+                        (-scroll_span * percentage).clamp(safe_range.start, safe_range.end),
                         offset.y,
                       ));
                     }

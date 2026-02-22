@@ -1,3 +1,4 @@
+mod backend;
 mod blink_cursor;
 mod change;
 mod cursor;
@@ -16,6 +17,7 @@ mod selection;
 mod state;
 mod text_wrapper;
 
+pub use backend::*;
 pub use editor::Editor as CodeEditor;
 #[allow(unused_imports)]
 pub use highlighter::*;

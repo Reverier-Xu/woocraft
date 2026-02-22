@@ -1,8 +1,8 @@
 use gpui::{Context, Point, Window};
 
 use crate::widgets::editor::{
-  InputState, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight,
-  MoveToEnd, MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveUp, RopeExt as _,
+  EditorUserAction, InputState, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp,
+  MoveRight, MoveToEnd, MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveUp, RopeExt as _,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -44,6 +44,9 @@ impl InputState {
   ) {
     let offset = offset.clamp(0, self.text.len());
     self.selected_range = (offset..offset).into();
+    self.emit_backend_action(EditorUserAction::MoveCursor {
+      offset: offset as u64,
+    });
     self.scroll_to(offset, direction, cx);
     self.pause_blink_cursor(cx);
     self.update_preferred_column();
@@ -58,9 +61,6 @@ impl InputState {
   pub(super) fn move_vertical(
     &mut self, move_lines: isize, _: &mut Window, cx: &mut Context<Self>,
   ) {
-    if self.mode.is_single_line() {
-      return;
-    }
     let Some(last_layout) = &self.last_layout else {
       return;
     };
@@ -133,10 +133,6 @@ impl InputState {
       return;
     }
 
-    if self.mode.is_single_line() {
-      return;
-    }
-
     if !self.selected_range.is_empty() {
       self.move_to(
         self.previous_boundary(self.selected_range.start.saturating_sub(1)),
@@ -153,10 +149,6 @@ impl InputState {
       return;
     }
 
-    if self.mode.is_single_line() {
-      return;
-    }
-
     if !self.selected_range.is_empty() {
       self.move_to(
         self.next_boundary(self.selected_range.end.saturating_sub(1)),
@@ -170,10 +162,6 @@ impl InputState {
   }
 
   pub(super) fn page_up(&mut self, _: &MovePageUp, window: &mut Window, cx: &mut Context<Self>) {
-    if self.mode.is_single_line() {
-      return;
-    }
-
     let Some(last_layout) = &self.last_layout else {
       return;
     };
@@ -185,10 +173,6 @@ impl InputState {
   pub(super) fn page_down(
     &mut self, _: &MovePageDown, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    if self.mode.is_single_line() {
-      return;
-    }
-
     let Some(last_layout) = &self.last_layout else {
       return;
     };

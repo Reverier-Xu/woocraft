@@ -8,7 +8,6 @@ use gpui::{
 
 use crate::{ActiveTheme as _, base::DockPlacement};
 
-pub(crate) const HANDLE_PADDING: Pixels = px(4.);
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);
 
 type DragHandler<E> = dyn Fn(&Point<Pixels>, &mut Window, &mut App) -> Entity<E>;
@@ -96,7 +95,6 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
     &mut self, id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
     window: &mut Window, cx: &mut App,
   ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-    let neg_offset = -HANDLE_PADDING;
     let axis = self.axis;
 
     window.with_element_state(id.unwrap(), |state, window| {
@@ -111,7 +109,7 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
       let mut el = div()
         .id(self.id.clone())
         .occlude()
-        .absolute()
+        .relative()
         .flex_shrink_0()
         .group("handle")
         .when_some(self.on_drag.clone(), |this, on_drag| {
@@ -123,41 +121,21 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
         .map(|this| match self.placement {
           Some(DockPlacement::Left) => this
             .cursor_col_resize()
-            .top_0()
-            .right(px(1.))
             .h_full()
-            .w(HANDLE_SIZE)
-            .pl(HANDLE_PADDING),
+            .w(HANDLE_SIZE),
           _ => this
             .when(matches!(axis, Axis::Horizontal), |this| {
-              this
-                .cursor_col_resize()
-                .top_0()
-                .left(neg_offset)
-                .h_full()
-                .w(HANDLE_SIZE)
-                .px(HANDLE_PADDING)
+              this.cursor_col_resize().h_full().w(HANDLE_SIZE)
             })
             .when(matches!(axis, Axis::Vertical), |this| {
-              this
-                .cursor_row_resize()
-                .top(neg_offset)
-                .left_0()
-                .w_full()
-                .h(HANDLE_SIZE)
-                .py(HANDLE_PADDING)
+              this.cursor_row_resize().w_full().h(HANDLE_SIZE)
             }),
         })
         .child(
           div()
             .bg(bg_color)
             .group_hover("handle", |this| this.bg(bg_color))
-            .when(matches!(axis, Axis::Horizontal), |this| {
-              this.h_full().w(HANDLE_SIZE)
-            })
-            .when(matches!(axis, Axis::Vertical), |this| {
-              this.w_full().h(HANDLE_SIZE)
-            }),
+            .size_full(),
         )
         .into_any_element();
 

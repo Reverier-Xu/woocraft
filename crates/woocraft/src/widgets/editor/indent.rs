@@ -1,6 +1,6 @@
 use gpui::{
-  Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString, TextRun,
-  TextStyle, Window, point, px,
+  point, px, Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels,
+  SharedString, TextRun, TextStyle, Window,
 };
 use ropey::RopeSlice;
 
@@ -10,6 +10,21 @@ use super::{
   state::{Indent, IndentInline, InputState, LastLayout, Outdent, OutdentInline},
 };
 use crate::widgets::editor::RopeExt;
+
+#[derive(Debug, Copy, Clone)]
+struct BracketScope {
+  open_row: usize,
+  close_row: usize,
+  open_indent_count: usize,
+}
+
+#[derive(Debug, Copy, Clone)]
+struct OpenBracket {
+  ch: char,
+  row: usize,
+  offset: usize,
+  indent_count: usize,
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct TabSize {
@@ -55,22 +70,16 @@ impl TabSize {
 impl InputMode {
   #[inline]
   pub(super) fn is_indentable(&self) -> bool {
-    match self {
-      InputMode::PlainText { multi_line, .. } | InputMode::CodeEditor { multi_line, .. } => {
-        *multi_line
-      }
-      _ => false,
-    }
+    matches!(
+      self,
+      InputMode::PlainText { .. } | InputMode::CodeEditor { .. }
+    )
   }
 
   #[inline]
   pub(super) fn has_indent_guides(&self) -> bool {
     match self {
-      InputMode::CodeEditor {
-        indent_guides,
-        multi_line,
-        ..
-      } => *indent_guides && *multi_line,
+      InputMode::CodeEditor { indent_guides, .. } => *indent_guides,
       _ => false,
     }
   }
@@ -86,6 +95,76 @@ impl InputMode {
 }
 
 impl TextElement {
+  #[inline]
+  fn is_open_bracket(ch: char) -> bool {
+    matches!(ch, '(' | '[' | '{')
+  }
+
+  #[inline]
+  fn is_matching_bracket(open: char, close: char) -> bool {
+    matches!((open, close), ('(', ')') | ('[', ']') | ('{', '}'))
+  }
+
+  fn pop_matching_open_bracket(stack: &mut Vec<OpenBracket>, close: char) -> Option<OpenBracket> {
+    while let Some(open) = stack.pop() {
+      if Self::is_matching_bracket(open.ch, close) {
+        return Some(open);
+      }
+    }
+    None
+  }
+
+  fn find_innermost_bracket_scope(
+    &self, state: &InputState, tab_size: TabSize,
+  ) -> Option<BracketScope> {
+    let mut stack = Vec::<OpenBracket>::new();
+    let mut best_scope: Option<(BracketScope, usize)> = None;
+    let cursor = state.cursor().min(state.text.len());
+
+    for row in 0..state.text.lines_len() {
+      let line = state.text.slice_line(row);
+      let indent_count = tab_size.indent_count(&line);
+      let line_start = state.text.line_start_offset(row);
+
+      let mut byte_ix = 0;
+      for ch in line.chars() {
+        let offset = line_start + byte_ix;
+        let ch_len = ch.len_utf8();
+
+        if Self::is_open_bracket(ch) {
+          stack.push(OpenBracket {
+            ch,
+            row,
+            offset,
+            indent_count,
+          });
+        } else if matches!(ch, ')' | ']' | '}') {
+          if let Some(open) = Self::pop_matching_open_bracket(&mut stack, ch) {
+            let close_offset = offset + ch_len;
+            if cursor >= open.offset && cursor <= close_offset {
+              let scope = BracketScope {
+                open_row: open.row,
+                close_row: row,
+                open_indent_count: open.indent_count,
+              };
+
+              if best_scope
+                .as_ref()
+                .is_none_or(|(_, best_open_offset)| open.offset > *best_open_offset)
+              {
+                best_scope = Some((scope, open.offset));
+              }
+            }
+          }
+        }
+
+        byte_ix += ch_len;
+      }
+    }
+
+    best_scope.map(|(scope, _)| scope)
+  }
+
   /// Measure the indent width in pixels for given column count.
   fn measure_indent_width(&self, style: &TextStyle, column: usize, window: &Window) -> Pixels {
     let font_size = style.font_size.to_pixels(window.rem_size());
@@ -109,26 +188,39 @@ impl TextElement {
   pub(super) fn layout_indent_guides(
     &self, state: &InputState, bounds: &Bounds<Pixels>, last_layout: &LastLayout,
     text_style: &TextStyle, window: &mut Window,
-  ) -> Option<Path<Pixels>> {
+  ) -> (Option<Path<Pixels>>, Option<Path<Pixels>>) {
     if !state.mode.has_indent_guides() {
-      return None;
+      return (None, None);
     }
 
-    let indent_width =
-      self.measure_indent_width(text_style, state.mode.tab_size().tab_size, window);
-
     let tab_size = state.mode.tab_size();
+    if tab_size.tab_size == 0 {
+      return (None, None);
+    }
+
+    let indent_width = self.measure_indent_width(text_style, tab_size.tab_size, window);
+
     let line_height = last_layout.line_height;
     let visible_range = last_layout.visible_range.clone();
     let mut builder = PathBuilder::stroke(px(1.));
+    let mut active_builder = PathBuilder::stroke(px(1.));
+    let active_scope = self.find_innermost_bracket_scope(state, tab_size);
+    let active_x = active_scope.map(|scope| {
+      indent_width * scope.open_indent_count as f32 / tab_size.tab_size as f32
+        + last_layout.line_number_width
+    });
+
     let mut offset_y = last_layout.visible_top;
     let mut last_indents = vec![];
+    let mut last_has_active = false;
     for ix in visible_range {
       let line = state.text.slice_line(ix);
       let Some(line_layout) = last_layout.line(ix) else {
         continue;
       };
 
+      let in_active_scope =
+        active_scope.is_some_and(|scope| ix > scope.open_row && ix <= scope.close_row);
       let mut current_indents = vec![];
       if line.len() > 0 {
         let indent_count = tab_size.indent_count(&line);
@@ -145,13 +237,35 @@ impl TextElement {
           builder.line_to(point(pos.x, pos.y + line_height));
           current_indents.push(pos.x);
         }
+
+        let has_active = in_active_scope
+          && active_scope
+            .as_ref()
+            .is_some_and(|scope| indent_count > scope.open_indent_count);
+        if has_active {
+          if let Some(x) = active_x {
+            let pos = point(x, offset_y);
+            active_builder.move_to(pos);
+            active_builder.line_to(point(pos.x, pos.y + line_height));
+          }
+        }
+        last_has_active = has_active;
       } else if last_indents.len() > 0 {
         for x in &last_indents {
           let pos = point(*x, offset_y);
           builder.move_to(pos);
           builder.line_to(point(pos.x, pos.y + line_height));
         }
+        if in_active_scope && last_has_active {
+          if let Some(x) = active_x {
+            let pos = point(x, offset_y);
+            active_builder.move_to(pos);
+            active_builder.line_to(point(pos.x, pos.y + line_height));
+          }
+        }
         current_indents = last_indents.clone();
+      } else {
+        last_has_active = false;
       }
 
       offset_y += line_layout.wrapped_lines.len() * line_height;
@@ -159,8 +273,8 @@ impl TextElement {
     }
 
     builder.translate(bounds.origin);
-    let path = builder.build().unwrap();
-    Some(path)
+    active_builder.translate(bounds.origin);
+    (builder.build().ok(), active_builder.build().ok())
   }
 }
 
@@ -169,7 +283,7 @@ impl InputState {
   ///
   /// Only for [`InputMode::CodeEditor`] mode.
   pub fn indent_guides(mut self, indent_guides: bool) -> Self {
-    debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
+    debug_assert!(self.mode.is_code_editor());
     if let InputMode::CodeEditor {
       indent_guides: l, ..
     } = &mut self.mode
@@ -195,9 +309,9 @@ impl InputState {
 
   /// Set the tab size for the input.
   ///
-  /// Only for [`InputMode::PlainText`] and [`InputMode::CodeEditor`] mode with multi_line.
+  /// Only for [`InputMode::PlainText`] and [`InputMode::CodeEditor`] mode.
   pub fn tab_size(mut self, tab: TabSize) -> Self {
-    debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
+    debug_assert!(self.mode.is_code_editor() || !self.mode.is_auto_grow());
     match &mut self.mode {
       InputMode::PlainText { tab: t, .. } => *t = tab,
       InputMode::CodeEditor { tab: t, .. } => *t = tab,

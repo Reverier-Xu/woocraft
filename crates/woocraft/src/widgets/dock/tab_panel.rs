@@ -722,7 +722,6 @@ impl TabPanel {
       && dock_area
         .read(cx)
         .is_dock_collapsed(DockPlacement::Bottom, cx);
-    let is_bottom_dock = bottom_dock_button.is_some();
 
     let panel_style = dock_area.read(cx).panel_style;
     let tab_bar_direction = self.get_tab_bar_direction(cx);
@@ -731,8 +730,7 @@ impl TabPanel {
     let show_single_title = tab_bar_direction.is_vertical()
       || (visible_panels.len() == 1 && panel_style == PanelStyle::default());
 
-    let show_bottom_divider =
-      !is_bottom_dock_collapsed || !is_bottom_dock || tab_bar_direction.is_bottom();
+    let show_bottom_divider = !is_bottom_dock_collapsed || tab_bar_direction.is_bottom();
 
     if show_single_title {
       let Some(panel) = self.active_panel(cx) else {
@@ -780,6 +778,9 @@ impl TabPanel {
         .child(self.render_toolbar(state, window, cx));
 
       return v_flex()
+        .when(!show_bottom_divider, |this| {
+          this.child(Divider::horizontal())
+        })
         .child(title_content)
         .when(show_bottom_divider, |this| {
           this.child(Divider::horizontal())
@@ -898,6 +899,9 @@ impl TabPanel {
       });
 
     v_flex()
+      .when(!show_bottom_divider, |this| {
+        this.child(Divider::horizontal())
+      })
       .child(tab_bar)
       .when(show_bottom_divider, |this| {
         this.child(Divider::horizontal())
@@ -944,13 +948,13 @@ impl TabPanel {
             )
           })
       }));
-    if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_left() {
+    if self.get_tab_bar_direction(cx).is_left() {
       h_flex()
         .h_full()
         .child(tab_bar)
         .child(Divider::vertical())
         .into_any_element()
-    } else if !is_dock_collapsed && self.get_tab_bar_direction(cx).is_right() {
+    } else if self.get_tab_bar_direction(cx).is_right() {
       h_flex()
         .h_full()
         .child(Divider::vertical())

@@ -12,7 +12,7 @@ use super::{
   super::resizable::{PANEL_MIN_SIZE, resize_handle},
   DockArea, DockItem, PanelView, TabPanel,
 };
-use crate::{ActiveTheme, DockPlacement, Size, StyledExt, TabBarDirection};
+use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 
 #[derive(Clone)]
 struct ResizePanel;
@@ -373,52 +373,43 @@ impl Render for Dock {
       .overflow_hidden()
       .map(|this| match self.placement {
         DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(self.size),
-        DockPlacement::Bottom => this.w_full().h(self.size),
+        DockPlacement::Bottom => this.v_flex().w_full().h(self.size),
         DockPlacement::Center => unreachable!(),
       })
       .when(self.collapsed, |this| match self.placement {
-        DockPlacement::Left | DockPlacement::Right => this.w(collapsed_width),
-        DockPlacement::Bottom => this.h(Size::Medium.container_height()),
+        DockPlacement::Left | DockPlacement::Right => this.w(collapsed_width + px(1.0)),
+        DockPlacement::Bottom => this.h(Size::Medium.container_height() + px(1.0)),
         DockPlacement::Center => this,
       })
-      .map(|this| match &self.panel {
-        DockItem::Split { view, .. } => this.child(view.clone()),
-        DockItem::Tabs { view, .. } => this.child(view.clone()),
-        DockItem::Panel { view, .. } => this.child(view.clone().view().cached(cache_style)),
-        DockItem::Tiles { .. } => this,
-      })
-      .when(!self.collapsed, |this| {
-        this.child(self.render_resize_handle(window, cx))
-      })
-      .when(self.collapsed, |this| match self.placement {
-        DockPlacement::Left => this.child(
-          div()
-            .absolute()
-            .top_0()
-            .bottom_0()
-            .right_0()
-            .w(px(1.0))
-            .bg(cx.theme().border),
-        ),
-        DockPlacement::Right => this.child(
-          div()
-            .absolute()
-            .top_0()
-            .bottom_0()
-            .left_0()
-            .w(px(1.0))
-            .bg(cx.theme().border),
-        ),
-        DockPlacement::Bottom => this.child(
-          div()
-            .absolute()
-            .left_0()
-            .right_0()
-            .top_0()
-            .h(px(1.0))
-            .bg(cx.theme().border),
-        ),
-        DockPlacement::Center => this,
+      .map(|this| {
+        let panel = div()
+          .flex_1()
+          .overflow_hidden()
+          .map(|this| match self.placement {
+            DockPlacement::Left | DockPlacement::Right => this.h_full(),
+            DockPlacement::Bottom => this.w_full(),
+            DockPlacement::Center => this,
+          })
+          .map(|this| match self.panel.clone() {
+            DockItem::Split { view, .. } => this.child(view),
+            DockItem::Tabs { view, .. } => this.child(view),
+            DockItem::Panel { view, .. } => this.child(view.view().cached(cache_style)),
+            DockItem::Tiles { .. } => this,
+          });
+
+        if self.collapsed {
+          this.child(panel)
+        } else {
+          match self.placement {
+            DockPlacement::Left => this
+              .child(panel)
+              .child(self.render_resize_handle(window, cx)),
+            DockPlacement::Right | DockPlacement::Bottom => this
+              .child(self.render_resize_handle(window, cx))
+              .child(panel),
+            DockPlacement::Center => this.child(panel),
+          }
+        }
       })
       .child(DockElement {
         view: cx.entity().clone(),

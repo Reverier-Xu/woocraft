@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-  App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
-  size,
+  point, px, size, App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign,
+  Window,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -433,30 +433,6 @@ impl LineLayout {
     None
   }
 
-  /// Get the closest index for the given x in this line layout.
-  pub(super) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
-    let mut acc_len = 0;
-    let x_offset = last_layout.alignment_offset(self.longest_width);
-    let x = x - x_offset;
-
-    for (i, line) in self.wrapped_lines.iter().enumerate() {
-      let is_last = i + 1 == self.wrapped_lines.len();
-      if x <= line.width {
-        let mut ix = line.closest_index_for_x(x);
-        if !is_last && ix == line.text.len() {
-          // For soft wrap line, we can't put the cursor at the end of the line.
-          let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
-          ix = ix.saturating_sub(c_len);
-        }
-
-        return acc_len + ix;
-      }
-      acc_len += line.text.len();
-    }
-
-    acc_len
-  }
-
   /// Get the index for the given position (x, y) in this line layout.
   ///
   /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
@@ -547,7 +523,7 @@ impl LineLayout {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use gpui::{Boundary, FontFeatures, FontStyle, FontWeight, px};
+  use gpui::{px, Boundary, FontFeatures, FontStyle, FontWeight};
 
   #[test]
   fn test_update() {
