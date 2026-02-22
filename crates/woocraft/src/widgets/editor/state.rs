@@ -38,6 +38,8 @@ use crate::{
   widgets::{editor::RopeExt as _, history::History},
 };
 
+type ValidateFn<T> = dyn Fn(&str, &mut Context<T>) -> bool + 'static;
+
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = editor, no_json)]
 pub struct Enter {
@@ -327,7 +329,7 @@ pub struct InputState {
   pub(super) soft_wrap: bool,
   pub(super) show_whitespaces: bool,
   pub(super) pattern: Option<regex::Regex>,
-  pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
+  pub(super) validate: Option<Box<ValidateFn<InputState>>>,
   pub(crate) scroll_handle: ScrollHandle,
   /// The deferred scroll offset to apply on next layout.
   pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
@@ -626,9 +628,7 @@ impl InputState {
     &mut self, range: &Range<usize>, new_text: &str, marked: bool, window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Option<EditorBackendEditResult> {
-    let Some(backend) = self.data_backend.as_mut() else {
-      return None;
-    };
+    let backend = self.data_backend.as_mut()?;
 
     let request = EditorBackendEditRequest {
       range: (range.start as u64)..(range.end as u64),
@@ -2006,23 +2006,14 @@ impl InputState {
   }
 
   pub(crate) fn range_to_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
-    let Some(last_layout) = self.last_layout.as_ref() else {
-      return None;
-    };
-
-    let Some(last_bounds) = self.last_bounds else {
-      return None;
-    };
+    let last_layout = self.last_layout.as_ref()?;
+    let last_bounds = self.last_bounds?;
 
     let (_, _, start_pos) = self.line_and_position_for_offset(range.start);
     let (_, _, end_pos) = self.line_and_position_for_offset(range.end);
 
-    let Some(start_pos) = start_pos else {
-      return None;
-    };
-    let Some(end_pos) = end_pos else {
-      return None;
-    };
+    let start_pos = start_pos?;
+    let end_pos = end_pos?;
 
     Some(Bounds::from_corners(
       last_bounds.origin + start_pos,

@@ -8,6 +8,8 @@ use gpui::{
 
 use crate::{ActiveTheme as _, AxisExt, Size, StyledExt, h_flex, v_flex};
 
+type FieldElementBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>;
+
 #[derive(Clone, Copy)]
 pub(super) struct FieldProps {
   pub(super) size: Size,
@@ -31,7 +33,7 @@ impl Default for FieldProps {
 
 pub enum FieldBuilder {
   String(SharedString),
-  Element(Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>),
+  Element(FieldElementBuilder),
   View(AnyView),
 }
 
@@ -128,7 +130,8 @@ impl Field {
   pub fn label_fn<F, E>(mut self, label: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static, {
+    F: Fn(&mut Window, &mut App) -> E + 'static,
+  {
     self.label = Some(FieldBuilder::Element(Rc::new(move |window, cx| {
       label(window, cx).into_any_element()
     })));
@@ -143,7 +146,8 @@ impl Field {
   pub fn description_fn<F, E>(mut self, description: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static, {
+    F: Fn(&mut Window, &mut App) -> E + 'static,
+  {
     self.description = Some(FieldBuilder::Element(Rc::new(move |window, cx| {
       description(window, cx).into_any_element()
     })));

@@ -57,6 +57,14 @@ impl From<Language> for SharedString {
   }
 }
 
+impl std::str::FromStr for Language {
+  type Err = std::convert::Infallible;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    Ok(Self::from_name(s))
+  }
+}
+
 impl Language {
   pub fn all() -> impl Iterator<Item = Self> {
     enum_iterator::all::<Language>()
@@ -109,8 +117,7 @@ impl Language {
     }
   }
 
-  #[allow(unused)]
-  pub fn from_str(s: &str) -> Self {
+  pub fn from_name(s: &str) -> Self {
     #[cfg(not(feature = "tree-sitter-languages"))]
     return Self::Json;
 

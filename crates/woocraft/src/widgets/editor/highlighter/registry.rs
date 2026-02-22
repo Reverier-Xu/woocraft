@@ -167,15 +167,15 @@ impl From<FontStyle> for gpui::FontStyle {
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize_repr, Deserialize_repr, JsonSchema)]
 #[repr(u16)]
 pub enum FontWeightContent {
-  Thin       = 100,
+  Thin = 100,
   ExtraLight = 200,
-  Light      = 300,
-  Normal     = 400,
-  Medium     = 500,
-  Semibold   = 600,
-  Bold       = 700,
-  ExtraBold  = 800,
-  Black      = 900,
+  Light = 300,
+  Normal = 400,
+  Medium = 500,
+  Semibold = 600,
+  Bold = 700,
+  ExtraBold = 800,
+  Black = 900,
 }
 
 impl From<FontWeightContent> for FontWeight {
@@ -627,7 +627,7 @@ impl LanguageRegistry {
     let languages = self.languages.lock().unwrap();
     languages
       .get(name)
-      .or_else(|| languages.get(Language::from_str(name).name()))
+      .or_else(|| languages.get(Language::from_name(name).name()))
       .cloned()
   }
 }

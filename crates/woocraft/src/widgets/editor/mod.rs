@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 mod backend;
 mod blink_cursor;
 mod change;

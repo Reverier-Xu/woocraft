@@ -39,11 +39,10 @@ impl From<char> for CharType {
 impl CharType {
   fn is_connectable(self, c: char) -> bool {
     let other = CharType::from(c);
-    match (self, other) {
-      (CharType::Word, CharType::Word) => true,
-      (CharType::Whitespace, CharType::Whitespace) => true,
-      _ => false,
-    }
+    matches!(
+      (self, other),
+      (CharType::Word, CharType::Word) | (CharType::Whitespace, CharType::Whitespace)
+    )
   }
 }
 
@@ -79,9 +78,7 @@ impl TextSelector {
 
   pub fn word_range(text: &Rope, offset: usize) -> Option<Range<usize>> {
     let offset = text.clip_offset(offset, Bias::Left);
-    let Some(char) = text.char_at(offset) else {
-      return None;
-    };
+    let char = text.char_at(offset)?;
 
     let char_type = CharType::from(char);
     let mut start = offset;

@@ -11,15 +11,19 @@ use crate::{
   shape::Line,
 };
 
+type XAccessor<T, X> = Rc<dyn Fn(&T) -> X>;
+type YAccessor<T, Y> = Rc<dyn Fn(&T) -> Y>;
+
 #[derive(IntoElement)]
 pub struct LineChart<T, X, Y>
 where
   T: 'static,
   X: PartialEq + Into<SharedString> + 'static,
-  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static, {
+  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+{
   data: Vec<T>,
-  x: Option<Rc<dyn Fn(&T) -> X>>,
-  y: Option<Rc<dyn Fn(&T) -> Y>>,
+  x: Option<XAccessor<T, X>>,
+  y: Option<YAccessor<T, Y>>,
   stroke: Option<gpui::Hsla>,
   stroke_style: StrokeStyle,
   dot: bool,
@@ -33,7 +37,8 @@ where
 {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>, {
+    I: IntoIterator<Item = T>,
+  {
     Self {
       data: data.into_iter().collect(),
       stroke: None,

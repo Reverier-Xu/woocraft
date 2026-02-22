@@ -1,7 +1,6 @@
 use std::{
   collections::{BTreeSet, HashMap},
   ops::Range,
-  usize,
 };
 
 use anyhow::{Context, Result, anyhow};

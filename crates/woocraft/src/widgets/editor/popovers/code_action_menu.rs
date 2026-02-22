@@ -271,12 +271,8 @@ impl CodeActionMenu {
 
   fn origin(&self, cx: &App) -> Option<Point<Pixels>> {
     let state = self.state.read(cx);
-    let Some(last_layout) = state.last_layout.as_ref() else {
-      return None;
-    };
-    let Some(cursor_origin) = last_layout.cursor_bounds.map(|b| b.origin) else {
-      return None;
-    };
+    let last_layout = state.last_layout.as_ref()?;
+    let cursor_origin = last_layout.cursor_bounds.map(|b| b.origin)?;
 
     let scroll_origin = self.state.read(cx).scroll_handle.offset();
 

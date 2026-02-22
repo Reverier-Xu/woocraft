@@ -11,18 +11,22 @@ use crate::{
   scale::{Scale, ScaleBand, ScaleLinear, Sealed},
 };
 
+type XAccessor<T, X> = Rc<dyn Fn(&T) -> X>;
+type YAccessor<T, Y> = Rc<dyn Fn(&T) -> Y>;
+
 #[derive(IntoElement)]
 pub struct CandlestickChart<T, X, Y>
 where
   T: 'static,
   X: PartialEq + Into<SharedString> + 'static,
-  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static, {
+  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+{
   data: Vec<T>,
-  x: Option<Rc<dyn Fn(&T) -> X>>,
-  open: Option<Rc<dyn Fn(&T) -> Y>>,
-  high: Option<Rc<dyn Fn(&T) -> Y>>,
-  low: Option<Rc<dyn Fn(&T) -> Y>>,
-  close: Option<Rc<dyn Fn(&T) -> Y>>,
+  x: Option<XAccessor<T, X>>,
+  open: Option<YAccessor<T, Y>>,
+  high: Option<YAccessor<T, Y>>,
+  low: Option<YAccessor<T, Y>>,
+  close: Option<YAccessor<T, Y>>,
   tick_margin: usize,
   body_width_ratio: f32,
 }
@@ -34,7 +38,8 @@ where
 {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>, {
+    I: IntoIterator<Item = T>,
+  {
     Self {
       data: data.into_iter().collect(),
       x: None,

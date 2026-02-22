@@ -44,7 +44,7 @@ impl Default for TabSize {
 }
 
 impl TabSize {
-  pub(super) fn to_string(&self) -> SharedString {
+  pub(super) fn indent_string(&self) -> SharedString {
     if self.hard_tabs {
       "\t".into()
     } else {
@@ -349,7 +349,7 @@ impl InputState {
       return;
     };
 
-    let tab_indent = self.mode.tab_size().to_string();
+    let tab_indent = self.mode.tab_size().indent_string();
     let selected_range = self.selected_range;
     let mut added_len = 0;
     let is_selected = !self.selected_range.is_empty();
@@ -407,7 +407,7 @@ impl InputState {
       return;
     };
 
-    let tab_indent = self.mode.tab_size().to_string();
+    let tab_indent = self.mode.tab_size().indent_string();
     let selected_range = self.selected_range;
     let mut removed_len = 0;
     let is_selected = !self.selected_range.is_empty();
@@ -487,23 +487,23 @@ mod tests {
       tab_size: 2,
       hard_tabs: false,
     };
-    assert_eq!(tab.to_string(), "  ");
+    assert_eq!(tab.indent_string(), "  ");
     let tab = TabSize {
       tab_size: 4,
       hard_tabs: false,
     };
-    assert_eq!(tab.to_string(), "    ");
+    assert_eq!(tab.indent_string(), "    ");
 
     let tab = TabSize {
       tab_size: 2,
       hard_tabs: true,
     };
-    assert_eq!(tab.to_string(), "\t");
+    assert_eq!(tab.indent_string(), "\t");
     let tab = TabSize {
       tab_size: 4,
       hard_tabs: true,
     };
-    assert_eq!(tab.to_string(), "\t");
+    assert_eq!(tab.indent_string(), "\t");
   }
 
   #[test]

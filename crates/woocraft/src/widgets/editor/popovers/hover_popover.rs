@@ -10,6 +10,8 @@ use gpui::{
 use super::render_markdown;
 use crate::{CardStyle as _, StyledExt, Theme, widgets::editor::InputState};
 
+type ContentBuilder = dyn Fn(&mut Window, &mut App) -> AnyElement;
+
 pub struct HoverPopover {
   editor: Entity<InputState>,
   /// The symbol range byte of the hover trigger.
@@ -69,7 +71,7 @@ pub(crate) struct Popover {
   editor: Entity<InputState>,
   range: Range<usize>,
   width_limit: Range<Pixels>,
-  content_builder: Box<dyn Fn(&mut Window, &mut App) -> AnyElement>,
+  content_builder: Box<ContentBuilder>,
 }
 
 impl Styled for Popover {
@@ -84,7 +86,8 @@ impl Popover {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     Self {
       id: id.into(),
       editor,
@@ -98,23 +101,14 @@ impl Popover {
   /// Get the bounds of the range in the editor, if it is visible.
   fn trigger_bounds(&self, cx: &App) -> Option<Bounds<Pixels>> {
     let editor = self.editor.read(cx);
-    let Some(last_layout) = editor.last_layout.as_ref() else {
-      return None;
-    };
-
-    let Some(last_bounds) = editor.last_bounds else {
-      return None;
-    };
+    let last_layout = editor.last_layout.as_ref()?;
+    let last_bounds = editor.last_bounds?;
 
     let (_, _, start_pos) = editor.line_and_position_for_offset(self.range.start);
     let (_, _, end_pos) = editor.line_and_position_for_offset(self.range.end);
 
-    let Some(start_pos) = start_pos else {
-      return None;
-    };
-    let Some(end_pos) = end_pos else {
-      return None;
-    };
+    let start_pos = start_pos?;
+    let end_pos = end_pos?;
 
     Some(Bounds::from_corners(
       last_bounds.origin + start_pos,

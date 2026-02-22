@@ -98,13 +98,12 @@ impl TextElement {
 
     // If the input has a fixed height (Otherwise is auto-grow), we need to add a
     // bottom margin to the input.
-    let top_bottom_margin = if state.mode.is_auto_grow() {
-      line_height
-    } else if visible_range.len() < BOTTOM_MARGIN_ROWS * 8 {
-      line_height
-    } else {
-      BOTTOM_MARGIN_ROWS * line_height
-    };
+    let top_bottom_margin =
+      if state.mode.is_auto_grow() || visible_range.len() < BOTTOM_MARGIN_ROWS * 8 {
+        line_height
+      } else {
+        BOTTOM_MARGIN_ROWS * line_height
+      };
 
     // The cursor corresponds to the current cursor position in the text no only the
     // line.
@@ -419,10 +418,7 @@ impl TextElement {
     &self, last_layout: &LastLayout, bounds: &Bounds<Pixels>, cx: &mut App,
   ) -> Option<Path<Pixels>> {
     let hover_popover = self.state.read(cx).hover_popover.clone();
-    let Some(symbol_range) = hover_popover.map(|popover| popover.read(cx).symbol_range.clone())
-    else {
-      return None;
-    };
+    let symbol_range = hover_popover.map(|popover| popover.read(cx).symbol_range.clone())?;
 
     Self::layout_match_range(symbol_range, last_layout, bounds)
   }
@@ -861,9 +857,7 @@ impl IntoElement for TextElement {
 
 /// A debug function to print points as SVG path.
 #[allow(unused)]
-fn print_points_as_svg_path(
-  line_corners: &Vec<Corners<Point<Pixels>>>, points: &Vec<Point<Pixels>>,
-) {
+fn print_points_as_svg_path(line_corners: &[Corners<Point<Pixels>>], points: &[Point<Pixels>]) {
   for corners in line_corners {
     println!(
       "tl: ({}, {}), tr: ({}, {}), bl: ({}, {}), br: ({}, {})",

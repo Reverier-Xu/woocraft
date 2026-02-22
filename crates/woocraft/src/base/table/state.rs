@@ -1175,9 +1175,7 @@ where
       return None;
     }
 
-    let Some(sort) = col_group.column.sort else {
-      return None;
-    };
+    let sort = col_group.column.sort?;
 
     let (icon, is_on) = match sort {
       ColumnSort::Ascending => (IconName::TextSortAscending, true),

@@ -7,6 +7,10 @@ use crate::{
   shape::{Arc, ArcData, Pie},
 };
 
+type ArcRadiusFn<T> = Rc<dyn Fn(&ArcData<T>) -> f32 + 'static>;
+type ValueFn<T> = Rc<dyn Fn(&T) -> f32>;
+type ColorFn<T> = Rc<dyn Fn(&T) -> gpui::Hsla>;
+
 #[inline]
 fn palette(index: usize, cx: &App) -> gpui::Hsla {
   let colors = [
@@ -28,18 +32,19 @@ fn palette(index: usize, cx: &App) -> gpui::Hsla {
 pub struct PieChart<T: 'static> {
   data: Vec<T>,
   inner_radius: f32,
-  inner_radius_fn: Option<Rc<dyn Fn(&ArcData<T>) -> f32 + 'static>>,
+  inner_radius_fn: Option<ArcRadiusFn<T>>,
   outer_radius: f32,
-  outer_radius_fn: Option<Rc<dyn Fn(&ArcData<T>) -> f32 + 'static>>,
+  outer_radius_fn: Option<ArcRadiusFn<T>>,
   pad_angle: f32,
-  value: Option<Rc<dyn Fn(&T) -> f32>>,
-  color: Option<Rc<dyn Fn(&T) -> gpui::Hsla>>,
+  value: Option<ValueFn<T>>,
+  color: Option<ColorFn<T>>,
 }
 
 impl<T> PieChart<T> {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>, {
+    I: IntoIterator<Item = T>,
+  {
     Self {
       data: data.into_iter().collect(),
       inner_radius: 0.,
@@ -104,7 +109,8 @@ impl<T> PieChart<T> {
 
   pub fn color<H>(mut self, color: impl Fn(&T) -> H + 'static) -> Self
   where
-    H: Into<gpui::Hsla> + 'static, {
+    H: Into<gpui::Hsla> + 'static,
+  {
     self.color = Some(Rc::new(move |t| color(t).into()));
     self
   }

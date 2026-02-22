@@ -203,9 +203,7 @@ impl TextElement {
       return None;
     };
 
-    let Some(bounds) = editor.range_to_bounds(&editor.hover_definition.symbol_range) else {
-      return None;
-    };
+    let bounds = editor.range_to_bounds(&editor.hover_definition.symbol_range)?;
 
     Some(window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal))
   }

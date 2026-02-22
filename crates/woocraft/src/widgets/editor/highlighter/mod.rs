@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 mod diagnostics;
 mod highlighter;
 mod languages;

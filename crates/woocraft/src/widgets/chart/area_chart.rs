@@ -12,6 +12,9 @@ use crate::{
   shape::Area,
 };
 
+type XAccessor<T, X> = Rc<dyn Fn(&T) -> X>;
+type YAccessor<T, Y> = Rc<dyn Fn(&T) -> Y>;
+
 #[inline]
 fn palette(index: usize, cx: &App) -> gpui::Hsla {
   let colors = [
@@ -32,10 +35,11 @@ pub struct AreaChart<T, X, Y>
 where
   T: 'static,
   X: Clone + PartialEq + Into<SharedString> + 'static,
-  Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static, {
+  Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+{
   data: Vec<T>,
-  x: Option<Rc<dyn Fn(&T) -> X>>,
-  y: Vec<Rc<dyn Fn(&T) -> Y>>,
+  x: Option<XAccessor<T, X>>,
+  y: Vec<YAccessor<T, Y>>,
   strokes: Vec<gpui::Hsla>,
   stroke_styles: Vec<StrokeStyle>,
   fills: Vec<Background>,
@@ -49,7 +53,8 @@ where
 {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>, {
+    I: IntoIterator<Item = T>,
+  {
     Self {
       data: data.into_iter().collect(),
       stroke_styles: vec![],
