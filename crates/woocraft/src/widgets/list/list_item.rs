@@ -1,11 +1,13 @@
 use gpui::{
-  AnyElement, App, ClickEvent, Div, ElementId, Hsla, InteractiveElement, IntoElement,
-  MouseMoveEvent, ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+  AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseMoveEvent,
+  ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
-use crate::{ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex};
+use crate::{
+  ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt, TableThemeExt, h_flex,
+};
 
 type ListItemClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 type ListItemMouseEnterHandler = Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>;
@@ -158,15 +160,14 @@ impl RenderOnce for ListItem {
     let is_active = self.confirmed || self.selected;
     let is_selectable = !(self.disabled || self.mode.is_separator());
     let base_fg = cx.theme().foreground;
-    let hover_bg = Hsla { a: 0.05, ..base_fg };
-    let active_bg = Hsla { a: 0.1, ..base_fg };
-    let selected_fg = cx.theme().primary;
+    let hover_bg = cx.theme().table_hover();
+    let active_bg = cx.theme().table_active();
 
     self
       .base
       .relative()
-      .gap_x(self.size.component_gap())
-      .component_padding(self.size)
+      .container_size(self.size)
+      .container_gap(self.size)
       .text_base()
       .text_color(base_fg)
       .relative()
@@ -210,9 +211,9 @@ impl RenderOnce for ListItem {
       .when_some(self.suffix, |this, suffix| this.child(suffix(window, cx)))
       .map(|this| {
         if is_selectable && self.selected {
-          this.text_color(selected_fg)
-        } else if is_selectable && self.secondary_selected {
           this.bg(active_bg)
+        } else if is_selectable && self.secondary_selected {
+          this.bg(hover_bg)
         } else {
           this
         }

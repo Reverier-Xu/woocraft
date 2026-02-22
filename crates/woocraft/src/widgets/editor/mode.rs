@@ -221,7 +221,7 @@ impl InputMode {
 
 #[cfg(test)]
 mod tests {
-  use crate::widgets::editor::{mode::InputMode, TabSize};
+  use crate::widgets::editor::{TabSize, mode::InputMode};
 
   #[test]
   fn test_code_editor() {

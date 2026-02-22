@@ -130,7 +130,7 @@ impl Panel for TabPanel {
     // 1. When is the final panel in the dock, it will not able to close.
     // 2. When is in the Tiles, it will always able to close (by active panel
     //    state).
-    if !self.draggable(cx) && !self.in_tiles {
+    if !self.in_tiles && !self.closable_by_layout(cx) {
       return false;
     }
 
@@ -423,6 +423,20 @@ impl TabPanel {
       _ = stack_panel.update(cx, |view, cx| {
         view.remove_panel(Arc::new(tab_view), window, cx);
       });
+      return;
+    }
+
+    if let Some(dock) = self.dock.as_ref().and_then(|dock| dock.upgrade()) {
+      let dock_area = self.dock_area.clone();
+      window.defer(cx, move |window, cx| {
+        _ = dock.update(cx, |dock, cx| {
+          dock.set_collapsed(true, window, cx);
+        });
+        _ = dock_area.update(cx, |dock_area, cx| {
+          dock_area.update_toggle_button_tab_panels(window, cx);
+          cx.notify();
+        });
+      });
     }
   }
 
@@ -448,7 +462,24 @@ impl TabPanel {
       return true;
     }
 
-    self.stack_panel.is_none()
+    if self.in_tiles {
+      return true;
+    }
+
+    self.stack_panel.is_none() && self.dock.is_none()
+  }
+
+  fn allows_split_drop(&self) -> bool {
+    self.dock.is_none()
+      && self
+        .stack_panel
+        .as_ref()
+        .and_then(|stack| stack.upgrade())
+        .is_some()
+  }
+
+  fn closable_by_layout(&self, cx: &App) -> bool {
+    !self.is_locked(cx) && !self.is_last_panel(cx)
   }
 
   /// Return true if self or parent only have last panel.
@@ -476,9 +507,17 @@ impl TabPanel {
 
   /// Return true if the tab panel is draggable.
   ///
-  /// E.g. if the parent and self only have one panel, it is not draggable.
+  /// E.g. center panels cannot drag the last panel, while side-dock panels can.
   fn draggable(&self, cx: &App) -> bool {
-    !self.is_locked(cx) && !self.is_last_panel(cx)
+    if self.is_locked(cx) {
+      return false;
+    }
+
+    if self.dock.is_some() {
+      return !self.panels.is_empty();
+    }
+
+    !self.is_last_panel(cx)
   }
 
   /// Return true if the tab panel is droppable.
@@ -545,19 +584,26 @@ impl TabPanel {
                 this
                   .dropdown_menu(menu, window, cx)
                   .separator()
-                  .menu_with_disabled(
+                  .menu_with_icon_and_disabled(
                     if zoomed {
                       t!("dock.zoom_out")
                     } else {
                       t!("dock.zoom_in")
                     },
+                    if zoomed {
+                      IconName::ArrowMinimize
+                    } else {
+                      IconName::Maximize
+                    },
                     Box::new(ToggleZoom),
                     !zoomable,
                   )
                   .when(closable, |this| {
-                    this
-                      .separator()
-                      .menu(t!("dock.close"), Box::new(ClosePanel))
+                    this.separator().menu_with_icon(
+                      t!("dock.close"),
+                      IconName::Dismiss,
+                      Box::new(ClosePanel),
+                    )
                   })
               })
             }
@@ -662,6 +708,10 @@ impl TabPanel {
 
   fn render_dock_collapse_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<Button> {
     if self.zoomed {
+      return None;
+    }
+
+    if self.panels.is_empty() {
       return None;
     }
 
@@ -913,7 +963,14 @@ impl TabPanel {
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
     let view = cx.entity().clone();
-    let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
+    let tabs_count = self.panels.len();
+    let fallback_drop_ix = if tabs_count > 0 {
+      Some(tabs_count.saturating_sub(1))
+    } else {
+      None
+    };
+    let view_for_tab_drops = view.clone();
+    let view_for_bar_drop = view.clone();
 
     let collapse_button = self.render_dock_collapse_button(window, cx);
 
@@ -923,31 +980,88 @@ impl TabPanel {
       .vertical(true)
       .h_full()
       .when_some(collapse_button, |this, btn| this.suffix(btn))
-      .children(visible_panels.iter().enumerate().map(|(ix, panel)| {
+      .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
+        if !panel.visible(cx) {
+          return None;
+        }
+
         let active = state.active_panel.as_ref() == Some(panel);
 
         let is_active = if is_dock_collapsed { false } else { active };
 
-        Tab::new()
-          .ix(ix)
-          .icon(panel.icon(cx))
-          .label(panel.tab_name(cx).unwrap_or_else(|| panel.title(cx)))
-          .selected(is_active)
-          .on_click(cx.listener({
-            move |view, _, window, cx| {
-              view.handle_tab_click(ix, window, cx);
-            }
+        Some(
+          Tab::new()
+            .ix(ix)
+            .icon(panel.icon(cx))
+            .label(panel.tab_name(cx).unwrap_or_else(|| panel.title(cx)))
+            .selected(is_active)
+            .on_click(cx.listener({
+              move |view, _, window, cx| {
+                view.handle_tab_click(ix, window, cx);
+              }
+            }))
+            .when(state.draggable, |this| {
+              this.on_drag(
+                DragPanel::new(panel.clone(), view.clone()),
+                |drag, _, _, cx| {
+                  cx.stop_propagation();
+                  cx.new(|_| drag.clone())
+                },
+              )
+            })
+            .when(state.droppable, |this| {
+              this
+                .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
+                .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+                  this.will_split_placement = None;
+                  this.on_drop(drag, Some(ix), true, window, cx);
+                }))
+            }),
+        )
+      }))
+      .last_empty_space(
+        div()
+          .id("vertical-tab-bar-empty-space")
+          .w_full()
+          .flex_grow()
+          .min_h_16()
+          .when(state.droppable, |this| {
+            this
+              .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
+              .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+                this.will_split_placement = None;
+
+                let ix = if drag.tab_panel == view_for_tab_drops {
+                  Some(tabs_count.saturating_sub(1))
+                } else {
+                  None
+                };
+
+                this.on_drop(drag, ix, false, window, cx);
+              }))
+          }),
+      );
+
+    let tab_bar = div()
+      .h_full()
+      .child(tab_bar)
+      .when(state.droppable, |this| {
+        this
+          .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
+          .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+            this.will_split_placement = None;
+
+            let ix = if drag.tab_panel == view_for_bar_drop {
+              fallback_drop_ix
+            } else {
+              None
+            };
+
+            this.on_drop(drag, ix, false, window, cx);
           }))
-          .when(state.draggable, |this| {
-            this.on_drag(
-              DragPanel::new(panel.clone(), view.clone()),
-              |drag, _, _, cx| {
-                cx.stop_propagation();
-                cx.new(|_| drag.clone())
-              },
-            )
-          })
-      }));
+      })
+      .into_any_element();
+
     if self.get_tab_bar_direction(cx).is_left() {
       h_flex()
         .h_full()
@@ -970,6 +1084,7 @@ impl TabPanel {
   ) -> AnyElement {
     let is_dock_collapsed = self.is_dock_collapsed(cx);
     let is_vertical = self.get_tab_bar_direction(cx).is_vertical();
+    let allows_split_drop = self.allows_split_drop();
 
     if is_dock_collapsed && is_vertical {
       return Empty {}.into_any_element();
@@ -1000,24 +1115,28 @@ impl TabPanel {
       )
       .when(state.droppable, |this| {
         this
-          .on_drag_move(cx.listener(Self::on_panel_drag_move))
+          .when(allows_split_drop, |this| {
+            this.on_drag_move(cx.listener(Self::on_panel_drag_move))
+          })
           .child(
             div()
               .invisible()
               .absolute()
               .bg(cx.theme().drop_target)
-              .map(|this| match self.will_split_placement {
-                Some(placement) => {
-                  let size = relative(0.5);
-                  match placement {
-                    Placement::Left => this.left_0().top_0().bottom_0().w(size),
-                    Placement::Right => this.right_0().top_0().bottom_0().w(size),
-                    Placement::Top => this.top_0().left_0().right_0().h(size),
-                    Placement::Bottom => this.bottom_0().left_0().right_0().h(size),
+              .map(
+                |this| match (allows_split_drop, self.will_split_placement) {
+                  (true, Some(placement)) => {
+                    let size = relative(0.5);
+                    match placement {
+                      Placement::Left => this.left_0().top_0().bottom_0().w(size),
+                      Placement::Right => this.right_0().top_0().bottom_0().w(size),
+                      Placement::Top => this.top_0().left_0().right_0().h(size),
+                      Placement::Bottom => this.bottom_0().left_0().right_0().h(size),
+                    }
                   }
-                }
-                None => this.top_0().left_0().size_full(),
-              })
+                  _ => this.top_0().left_0().size_full(),
+                },
+              )
               .group_drag_over::<DragPanel>("", |this| this.visible())
               .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
                 this.on_drop(drag, None, true, window, cx)
@@ -1031,6 +1150,12 @@ impl TabPanel {
   fn on_panel_drag_move(
     &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
   ) {
+    if !self.allows_split_drop() {
+      self.will_split_placement = None;
+      cx.notify();
+      return;
+    }
+
     let bounds = drag.bounds;
     let position = drag.event.position;
 
@@ -1059,12 +1184,15 @@ impl TabPanel {
   ) {
     let panel = drag.panel.clone();
     let is_same_tab = drag.tab_panel == cx.entity();
+    let split_placement = if self.allows_split_drop() {
+      self.will_split_placement
+    } else {
+      None
+    };
+    self.will_split_placement = None;
 
     // If target is same tab, and it is only one panel, do nothing.
-    if is_same_tab
-      && ix.is_none()
-      && (self.will_split_placement.is_none() || self.panels.len() == 1)
-    {
+    if is_same_tab && ix.is_none() && (split_placement.is_none() || self.panels.len() == 1) {
       return;
     }
 
@@ -1082,7 +1210,7 @@ impl TabPanel {
     }
 
     // Insert into new tabs
-    if let Some(placement) = self.will_split_placement {
+    if let Some(placement) = split_placement {
       self.split_panel(panel, placement, None, window, cx);
     } else if let Some(ix) = ix {
       self.insert_panel_at(panel, ix, window, cx)

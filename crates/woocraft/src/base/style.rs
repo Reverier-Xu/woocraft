@@ -292,15 +292,15 @@ impl Size {
 
   #[inline]
   pub fn table_row_height(&self) -> Pixels {
-    self.component_height()
+    self.container_height()
   }
 
   #[inline]
   pub fn table_cell_padding(&self) -> Edges<Pixels> {
-    let padding = self.component_px();
+    let padding = self.container_px();
     Edges {
-      top: self.component_py(),
-      bottom: self.component_py(),
+      top: self.container_py(),
+      bottom: self.container_py(),
       left: padding,
       right: padding,
     }
@@ -521,7 +521,6 @@ pub trait StyleSized<T: Styled> {
   fn list_px(self, size: Size) -> Self;
   fn list_py(self, size: Size) -> Self;
   fn size_with(self, size: Size) -> Self;
-  fn table_cell_size(self, size: Size) -> Self;
   fn component_padding(self, size: Size) -> Self;
   fn container_padding(self, size: Size) -> Self;
 }
@@ -646,17 +645,6 @@ impl<T: Styled> StyleSized<T> for T {
   #[inline]
   fn size_with(self, size: Size) -> Self {
     self.size(size.icon_size())
-  }
-
-  #[inline]
-  fn table_cell_size(self, size: Size) -> Self {
-    let padding = size.table_cell_padding();
-    self
-      .text_size(size.text_size())
-      .pl(padding.left)
-      .pr(padding.right)
-      .pt(padding.top)
-      .pb(padding.bottom)
   }
 
   #[inline]

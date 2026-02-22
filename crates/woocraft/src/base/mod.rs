@@ -8,7 +8,10 @@ mod interaction;
 mod layout;
 mod selection;
 mod style;
+mod table;
 mod theme;
+mod time;
+mod tree;
 
 pub use anchor::*;
 pub use animation::*;
@@ -20,4 +23,7 @@ pub use interaction::*;
 pub use layout::*;
 pub use selection::*;
 pub use style::*;
+pub use table::*;
 pub use theme::*;
+pub use time::*;
+pub use tree::*;

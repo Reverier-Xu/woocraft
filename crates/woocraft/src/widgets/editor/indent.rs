@@ -1,6 +1,6 @@
 use gpui::{
-  point, px, Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels,
-  SharedString, TextRun, TextStyle, Window,
+  Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString, TextRun,
+  TextStyle, Window, point, px,
 };
 use ropey::RopeSlice;
 

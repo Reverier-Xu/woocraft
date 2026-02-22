@@ -36,3 +36,37 @@ cut = "Cut"
 copy = "Copy"
 paste = "Paste"
 select_all = "Select All"
+
+[color_picker]
+hex_placeholder = "#RRGGBBAA"
+lightness = "Lightness"
+chroma = "Chroma"
+hue = "Hue"
+alpha = "Alpha"
+hue_unit = "deg"
+
+[calendar.week]
+sunday = "Su"
+monday = "Mo"
+tuesday = "Tu"
+wednesday = "We"
+thursday = "Th"
+friday = "Fr"
+saturday = "Sa"
+
+[calendar.month]
+january = "January"
+february = "February"
+march = "March"
+april = "April"
+may = "May"
+june = "June"
+july = "July"
+august = "August"
+september = "September"
+october = "October"
+november = "November"
+december = "December"
+
+[date_picker]
+placeholder = "Select date"

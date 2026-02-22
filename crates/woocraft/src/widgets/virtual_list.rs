@@ -230,6 +230,17 @@ impl VirtualList {
     self
   }
 
+  /// Specify for table-like scenarios.
+  ///
+  /// Table headers own the actual horizontal scroll container, while each row
+  /// virtual list only needs to read/write the same offset without tracking
+  /// another DOM scroll layer.
+  pub(crate) fn with_scroll_handle(mut self, scroll_handle: &VirtualListScrollHandle) -> Self {
+    self.base = div().id(self.id.clone()).size_full();
+    self.scroll_handle = scroll_handle.clone();
+    self
+  }
+
   /// Set the sizing behavior for the list.
   pub fn with_sizing_behavior(mut self, behavior: ListSizingBehavior) -> Self {
     self.sizing_behavior = behavior;

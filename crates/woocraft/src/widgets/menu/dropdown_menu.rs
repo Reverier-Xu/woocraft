@@ -1,8 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{
-  Context, Corner, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window,
-};
+use gpui::{Context, Corner, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window};
 
 use crate::{Button, Popover, PopupMenu, Selectable};
 

@@ -36,3 +36,37 @@ cut = "剪切"
 copy = "复制"
 paste = "粘贴"
 select_all = "全选"
+
+[color_picker]
+hex_placeholder = "#RRGGBBAA"
+lightness = "明度"
+chroma = "彩度"
+hue = "色相"
+alpha = "透明度"
+hue_unit = "度"
+
+[calendar.week]
+sunday = "日"
+monday = "一"
+tuesday = "二"
+wednesday = "三"
+thursday = "四"
+friday = "五"
+saturday = "六"
+
+[calendar.month]
+january = "一月"
+february = "二月"
+march = "三月"
+april = "四月"
+may = "五月"
+june = "六月"
+july = "七月"
+august = "八月"
+september = "九月"
+october = "十月"
+november = "十一月"
+december = "十二月"
+
+[date_picker]
+placeholder = "选择日期"

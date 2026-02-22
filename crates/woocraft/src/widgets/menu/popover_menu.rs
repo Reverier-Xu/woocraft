@@ -22,7 +22,9 @@ pub(crate) fn render_popup_menu(
     Some(menu) => menu,
     None => {
       let builder = builder.clone();
-      let menu = PopupMenu::build(window, cx, move |menu, window, cx| builder(menu, window, cx));
+      let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+        builder(menu, window, cx)
+      });
 
       menu_state.update(cx, |state, _| {
         state.menu = Some(menu.clone());

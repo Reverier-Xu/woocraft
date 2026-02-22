@@ -2,10 +2,14 @@ mod avatar;
 mod badge;
 mod breadcrumb;
 mod button;
+mod calendar;
 mod checkbox;
+mod color_picker;
+mod date_picker;
 mod divider;
 mod dock;
 mod editor;
+mod form;
 mod history;
 mod icon_label;
 mod input;
@@ -25,9 +29,11 @@ mod slider;
 mod spinner;
 mod switch;
 mod tab;
+mod table;
 mod tag;
 mod title_bar;
 mod tooltip;
+mod tree;
 mod virtual_list;
 mod widget_group;
 mod window_border;
@@ -36,7 +42,10 @@ pub use avatar::*;
 pub use badge::*;
 pub use breadcrumb::*;
 pub use button::*;
+pub use calendar::*;
 pub use checkbox::*;
+pub use color_picker::*;
+pub use date_picker::*;
 pub use divider::*;
 pub use dock::*;
 pub use editor::highlighter::*;
@@ -45,6 +54,7 @@ pub use editor::{
   CodeEditor, EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorEvent,
   EditorPointerButton, EditorState, EditorUserAction, MaskPattern, Position, Rope, TabSize,
 };
+pub use form::*;
 pub use history::*;
 pub use icon_label::*;
 pub use input::*;
@@ -64,17 +74,22 @@ pub use slider::*;
 pub use spinner::*;
 pub use switch::*;
 pub use tab::*;
+pub use table::*;
 pub use tag::*;
 pub use title_bar::*;
 pub use tooltip::*;
+pub use tree::*;
 pub use virtual_list::*;
 pub use widget_group::*;
 pub use window_border::*;
 
 pub fn init(cx: &mut gpui::App) {
   input::init(cx);
+  date_picker::init(cx);
   editor::init(cx);
   list::init(cx);
   menu::init(cx);
+  table::init(cx);
+  tree::init(cx);
   dock::init(cx);
 }

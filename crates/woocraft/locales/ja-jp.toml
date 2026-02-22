@@ -36,3 +36,37 @@ cut = "切り取り"
 copy = "コピー"
 paste = "貼り付け"
 select_all = "すべて選択"
+
+[color_picker]
+hex_placeholder = "#RRGGBBAA"
+lightness = "明度"
+chroma = "彩度"
+hue = "色相"
+alpha = "不透明度"
+hue_unit = "度"
+
+[calendar.week]
+sunday = "日"
+monday = "月"
+tuesday = "火"
+wednesday = "水"
+thursday = "木"
+friday = "金"
+saturday = "土"
+
+[calendar.month]
+january = "1月"
+february = "2月"
+march = "3月"
+april = "4月"
+may = "5月"
+june = "6月"
+july = "7月"
+august = "8月"
+september = "9月"
+october = "10月"
+november = "11月"
+december = "12月"
+
+[date_picker]
+placeholder = "日付を選択"

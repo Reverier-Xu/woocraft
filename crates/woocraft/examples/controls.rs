@@ -1,15 +1,18 @@
+use chrono::{Datelike, Duration, Local, NaiveDate};
 use gpui::{
   App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
-  ScrollStrategy, Size as GpuiSize, Styled, Task, Window, WindowBounds, WindowOptions, div, px,
+  ScrollStrategy, Size as GpuiSize, Styled, Subscription, Task, Window, WindowBounds,
+  WindowOptions, div, px,
 };
 use woocraft::{
   ActiveTheme, Avatar, AvatarGroup, Badge, Breadcrumb, BreadcrumbItem, Button, ButtonVariants,
-  Checkbox, Divider, Icon, IconLabel, IndexPath, Input, InputState, Kbd, Label, Link, List,
-  ListDelegate, ListItem, ListState, Notification, NotificationCenter, NotificationPlacement,
-  NotificationState, NotificationType, NumberInput, OtpInput, OtpState, Pagination, Popover,
-  Progress, ProgressCircle, ScrollableElement, Selectable, Sizable, Slider, SliderState, Spinner,
-  StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex,
-  window_border,
+  Calendar, CalendarEvent, CalendarState, Checkbox, DatePicker, DatePickerEvent, DatePickerState,
+  DateRangePreset, Disableable, Divider, Icon, IconLabel, IndexPath, Input, InputState, Kbd, Label,
+  Link, List, ListDelegate, ListItem, ListState, Matcher, Notification, NotificationCenter,
+  NotificationPlacement, NotificationState, NotificationType, NumberInput, OtpInput, OtpState,
+  Pagination, Popover, Progress, ProgressCircle, ScrollableElement, Selectable, Sizable, Slider,
+  SliderState, Spinner, StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup,
+  h_flex, init, v_flex, window_border,
 };
 
 #[derive(Clone)]
@@ -354,9 +357,36 @@ struct ControlsWindow {
   input_state2: Entity<InputState>,
   number_input_state: Entity<InputState>,
   otp_state: Entity<OtpState>,
+  calendar_single_state: Entity<CalendarState>,
+  calendar_range_state: Entity<CalendarState>,
+  calendar_limited_state: Entity<CalendarState>,
+  date_picker_single_state: Entity<DatePickerState>,
+  date_picker_range_state: Entity<DatePickerState>,
+  date_picker_minimal_state: Entity<DatePickerState>,
+  date_picker_disabled_state: Entity<DatePickerState>,
+  _time_subscriptions: Vec<Subscription>,
   list_state: Entity<ListState<DemoListDelegate>>,
   list_searchable: bool,
   list_selectable: bool,
+}
+
+fn nearest_weekday(mut date: NaiveDate) -> NaiveDate {
+  loop {
+    let weekday = date.weekday().num_days_from_sunday();
+    if weekday != 0 && weekday != 6 {
+      return date;
+    }
+    date += Duration::days(1);
+  }
+}
+
+fn month_end(date: NaiveDate) -> NaiveDate {
+  let (next_year, next_month) = if date.month() == 12 {
+    (date.year() + 1, 1)
+  } else {
+    (date.year(), date.month() + 1)
+  };
+  NaiveDate::from_ymd_opt(next_year, next_month, 1).expect("valid month") - Duration::days(1)
 }
 
 impl ControlsWindow {
@@ -378,25 +408,126 @@ impl ControlsWindow {
         .searchable(true)
         .selectable(true)
     });
+    let today = Local::now().date_naive();
+    let single_date = nearest_weekday(today);
+    let range_start = nearest_weekday(today + Duration::days(1));
+    let range_end = nearest_weekday(range_start + Duration::days(6));
+    let bounded_start = nearest_weekday(today + Duration::days(2));
+    let bounded_end = nearest_weekday(today + Duration::days(10));
+    let limit_min = today - Duration::days(30);
+    let limit_max = today + Duration::days(120);
 
-    cx.new(|_| Self {
-      checked: false,
-      switched: true,
-      slider_state,
-      notification_state,
-      link_clicks: 0,
-      breadcrumb_last: "Home",
-      popover_open: false,
-      button_group_selected: vec![0],
-      toggle_checked: false,
-      toggle_group_checks: vec![false, true, false],
-      input_state1,
-      input_state2,
-      number_input_state,
-      otp_state,
-      list_state,
-      list_searchable: true,
-      list_selectable: true,
+    let calendar_single_state = cx.new(|cx| {
+      let mut state = CalendarState::new(window, cx);
+      state.set_date(single_date, window, cx);
+      state
+    });
+    let calendar_range_state = cx.new(|cx| {
+      let mut state = CalendarState::new(window, cx);
+      state.set_date((range_start, range_end), window, cx);
+      state
+    });
+    let calendar_limited_state = cx.new(|cx| {
+      let mut state = CalendarState::new(window, cx).disabled_matcher(Matcher::custom({
+        move |date| {
+          let weekday = date.weekday().num_days_from_sunday();
+          let weekend = weekday == 0 || weekday == 6;
+          let outside_window = *date < limit_min || *date > limit_max;
+          weekend || outside_window || date.day() == 13
+        }
+      }));
+      state.set_date((bounded_start, bounded_end), window, cx);
+      state
+    });
+
+    let date_picker_single_state = cx.new(|cx| {
+      let mut state = DatePickerState::new(window, cx)
+        .date_format("%Y-%m-%d")
+        .disabled_matcher(vec![0, 6]);
+      state.set_date(single_date, window, cx);
+      state
+    });
+    let date_picker_range_state = cx.new(|cx| {
+      let mut state = DatePickerState::range(window, cx)
+        .date_format("%Y/%m/%d")
+        .number_of_months(2)
+        .disabled_matcher(Matcher::custom(move |date| {
+          let weekday = date.weekday().num_days_from_sunday();
+          weekday == 0 || weekday == 6
+        }));
+      state.set_date((range_start, range_end), window, cx);
+      state
+    });
+    let date_picker_minimal_state = cx.new(|cx| {
+      let mut state = DatePickerState::new(window, cx).date_format("%b %d, %Y");
+      state.set_date(today, window, cx);
+      state
+    });
+    let date_picker_disabled_state = cx.new(|cx| {
+      let mut state = DatePickerState::new(window, cx).date_format("%Y-%m-%d");
+      state.set_date(today + Duration::days(15), window, cx);
+      state
+    });
+
+    cx.new(|cx| {
+      let time_subscriptions = vec![
+        cx.subscribe(
+          &calendar_single_state,
+          |_: &mut Self, _, _: &CalendarEvent, cx| cx.notify(),
+        ),
+        cx.subscribe(
+          &calendar_range_state,
+          |_: &mut Self, _, _: &CalendarEvent, cx| cx.notify(),
+        ),
+        cx.subscribe(
+          &calendar_limited_state,
+          |_: &mut Self, _, _: &CalendarEvent, cx| cx.notify(),
+        ),
+        cx.subscribe(
+          &date_picker_single_state,
+          |_: &mut Self, _, _: &DatePickerEvent, cx| cx.notify(),
+        ),
+        cx.subscribe(
+          &date_picker_range_state,
+          |_: &mut Self, _, _: &DatePickerEvent, cx| cx.notify(),
+        ),
+        cx.subscribe(
+          &date_picker_minimal_state,
+          |_: &mut Self, _, _: &DatePickerEvent, cx| cx.notify(),
+        ),
+        cx.subscribe(
+          &date_picker_disabled_state,
+          |_: &mut Self, _, _: &DatePickerEvent, cx| cx.notify(),
+        ),
+      ];
+
+      Self {
+        checked: false,
+        switched: true,
+        slider_state,
+        notification_state,
+        link_clicks: 0,
+        breadcrumb_last: "Home",
+        popover_open: false,
+        button_group_selected: vec![0],
+        toggle_checked: false,
+        toggle_group_checks: vec![false, true, false],
+        input_state1,
+        input_state2,
+        number_input_state,
+        otp_state,
+        calendar_single_state,
+        calendar_range_state,
+        calendar_limited_state,
+        date_picker_single_state,
+        date_picker_range_state,
+        date_picker_minimal_state,
+        date_picker_disabled_state,
+        _time_subscriptions: time_subscriptions,
+        list_state,
+        list_searchable: true,
+        list_selectable: true,
+      }
     })
   }
 }
@@ -424,6 +555,21 @@ impl Render for ControlsWindow {
         delegate.total_pages(),
       )
     };
+    let calendar_single_value = self.calendar_single_state.read(cx).date();
+    let calendar_range_value = self.calendar_range_state.read(cx).date();
+    let calendar_limited_value = self.calendar_limited_state.read(cx).date();
+    let date_picker_single_value = self.date_picker_single_state.read(cx).date();
+    let date_picker_range_value = self.date_picker_range_state.read(cx).date();
+    let date_picker_minimal_value = self.date_picker_minimal_state.read(cx).date();
+    let date_picker_disabled_value = self.date_picker_disabled_state.read(cx).date();
+    let today = Local::now().date_naive();
+    let month_start =
+      NaiveDate::from_ymd_opt(today.year(), today.month(), 1).expect("valid month start");
+    let range_presets = vec![
+      DateRangePreset::single("Today", today),
+      DateRangePreset::range("Next 7 Days", today, today + Duration::days(7)),
+      DateRangePreset::range("This Month", month_start, month_end(today)),
+    ];
 
     window_border().child(
       v_flex()
@@ -1049,6 +1195,113 @@ impl Render for ControlsWindow {
                     list_total_pages
                   )),
                 )
+            )
+            .child(Divider::horizontal_dashed().label("time components"))
+            .child(
+              v_flex()
+                .gap_3()
+                .child(
+                  div()
+                    .text_sm()
+                    .font_semibold()
+                    .child("Calendar (single, range, multi-month, matcher constraints)"),
+                )
+                .child(
+                  h_flex()
+                    .items_start()
+                    .gap_4()
+                    .child(
+                      v_flex()
+                        .gap_2()
+                        .child(div().text_sm().child("Single Date"))
+                        .child(Calendar::new(&self.calendar_single_state))
+                        .child(
+                          Label::new("selected").secondary(calendar_single_value.to_string()),
+                        ),
+                    )
+                    .child(
+                      v_flex()
+                        .gap_2()
+                        .child(div().text_sm().child("Range + 2 Months"))
+                        .child(
+                          Calendar::new(&self.calendar_range_state)
+                            .number_of_months(2),
+                        )
+                        .child(
+                          Label::new("selected").secondary(calendar_range_value.to_string()),
+                        ),
+                    ),
+                )
+                .child(
+                  v_flex()
+                    .gap_2().items_start()
+                    .child(div().text_sm().child("Disabled Weekend + Day 13 + Out of 120-Day Window"))
+                    .child(
+                      Calendar::new(&self.calendar_limited_state)
+                        .number_of_months(2),
+                    )
+                    .child(
+                      Label::new("selected").secondary(calendar_limited_value.to_string()),
+                    ),
+                )
+                .child(
+                  div()
+                    .text_sm()
+                    .font_semibold()
+                    .child("DatePicker (cleanable, range presets, appearance, disabled)"),
+                )
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      div().w(px(230.)).child(
+                        DatePicker::new(&self.date_picker_single_state)
+                          .small()
+                          .cleanable(true)
+                          .placeholder("Pick a weekday"),
+                      ),
+                    )
+                    .child(
+                      div()
+                        .w(px(380.))
+                        .child(
+                          DatePicker::new(&self.date_picker_range_state)
+                            .cleanable(true)
+                            .number_of_months(2)
+                            .presets(range_presets.clone()),
+                        ),
+                    ),
+                )
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      div().w(px(260.)).child(
+                        DatePicker::new(&self.date_picker_minimal_state)
+                          .appearance(false)
+                          .cleanable(true)
+                          .placeholder("Minimal picker"),
+                      ),
+                    )
+                    .child(
+                      div().w(px(260.)).child(
+                        DatePicker::new(&self.date_picker_disabled_state)
+                          .disabled(true)
+                          .placeholder("Disabled picker"),
+                      ),
+                    ),
+                )
+                .child(
+                  Label::new("DatePicker state").secondary(format!(
+                    "single={}, range={}, minimal={}, disabled={}",
+                    date_picker_single_value,
+                    date_picker_range_value,
+                    date_picker_minimal_value,
+                    date_picker_disabled_value
+                  )),
+                ),
             )
             .child(
               div()

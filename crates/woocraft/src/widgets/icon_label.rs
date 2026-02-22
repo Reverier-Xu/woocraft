@@ -24,6 +24,8 @@ pub struct IconLabel {
   size: Size,
   disabled: bool,
   selected: bool,
+  expanded: bool,
+  label_expanded: bool,
   loading: bool,
   loading_icon: Option<IconName>,
   on_click: Option<IconLabelClickHandler>,
@@ -40,6 +42,8 @@ impl IconLabel {
       size: Size::Medium,
       disabled: false,
       selected: false,
+      expanded: false,
+      label_expanded: false,
       loading: false,
       loading_icon: None,
       on_click: None,
@@ -70,6 +74,18 @@ impl IconLabel {
 
   pub fn loading_icon(mut self, icon: IconName) -> Self {
     self.loading_icon = Some(icon);
+    self
+  }
+
+  /// Expand IconLabel as a flex item and let its internal row stretch to full width.
+  pub fn flex_1(mut self) -> Self {
+    self.expanded = true;
+    self
+  }
+
+  /// Make the label text container flexible so trailing children can align to the far edge.
+  pub fn label_flex_1(mut self) -> Self {
+    self.label_expanded = true;
     self
   }
 
@@ -119,6 +135,9 @@ impl RenderOnce for IconLabel {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let theme = cx.theme();
     let clickable = self.clickable();
+    let expanded = self.expanded;
+    let label_expanded = self.label_expanded;
+    let has_children = !self.children.is_empty();
     let icon = if self.loading {
       self.loading_icon.or(Some(IconName::SpinnerIos))
     } else {
@@ -141,6 +160,7 @@ impl RenderOnce for IconLabel {
     let content = h_flex()
       .items_center()
       .component_gap(self.size)
+      .when(expanded, |this| this.w_full().flex_1())
       .when_some(icon, |this, icon| {
         let icon = Icon::new(icon).with_size(self.size);
         if self.loading {
@@ -157,15 +177,27 @@ impl RenderOnce for IconLabel {
           this.child(icon)
         }
       })
-      .when_some(self.label, |this, label| this.child(label))
+      .when_some(self.label, |this, label| {
+        if label_expanded {
+          this.child(div().flex_1().child(label))
+        } else {
+          this.child(label)
+        }
+      })
       .children(self.children)
       .text_size(self.size.text_size());
 
     div()
       .id(self.id)
       .h_flex()
-      .px(self.size.component_px())
+      .pl(self.size.component_px())
+      .pr(if has_children {
+        self.size.container_px()
+      } else {
+        self.size.component_px()
+      })
       .items_center()
+      .when(expanded, |this| this.w_full().flex_1())
       .text_color(text_color)
       .when(clickable, |this| this.cursor_pointer())
       .child(content)

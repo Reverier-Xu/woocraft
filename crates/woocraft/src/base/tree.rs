@@ -1,0 +1,379 @@
+use std::{cell::RefCell, rc::Rc};
+
+use gpui::SharedString;
+
+use crate::IconName;
+
+#[derive(Debug, Default)]
+struct TreeItemState {
+  expanded: bool,
+  disabled: bool,
+}
+
+/// A tree item with an id, label and nested children.
+#[derive(Clone)]
+pub struct TreeItem {
+  pub id: SharedString,
+  pub label: SharedString,
+  pub icon: Option<IconName>,
+  pub children: Vec<TreeItem>,
+  state: Rc<RefCell<TreeItemState>>,
+}
+
+/// A flattened entry used by tree-like renderers.
+#[derive(Clone)]
+pub struct TreeEntry {
+  item: TreeItem,
+  depth: usize,
+}
+
+impl TreeEntry {
+  #[inline]
+  pub fn item(&self) -> &TreeItem {
+    &self.item
+  }
+
+  #[inline]
+  pub fn depth(&self) -> usize {
+    self.depth
+  }
+
+  #[inline]
+  pub fn is_root(&self) -> bool {
+    self.depth == 0
+  }
+
+  #[inline]
+  pub fn is_folder(&self) -> bool {
+    self.item.is_folder()
+  }
+
+  #[inline]
+  pub fn is_expanded(&self) -> bool {
+    self.item.is_expanded()
+  }
+
+  #[inline]
+  pub fn is_disabled(&self) -> bool {
+    self.item.is_disabled()
+  }
+
+  #[inline]
+  pub fn icon(&self) -> Option<IconName> {
+    self.item.icon
+  }
+
+  #[inline]
+  pub fn icon_or_default(&self) -> IconName {
+    self.item.icon.unwrap_or_else(|| {
+      if self.is_folder() {
+        if self.is_expanded() {
+          IconName::FolderOpen
+        } else {
+          IconName::Folder
+        }
+      } else {
+        IconName::Document
+      }
+    })
+  }
+}
+
+impl TreeItem {
+  /// Create a tree item.
+  ///
+  /// `id` should be globally unique in the tree. `label` is display text.
+  pub fn new(id: impl Into<SharedString>, label: impl Into<SharedString>) -> Self {
+    Self {
+      id: id.into(),
+      label: label.into(),
+      icon: None,
+      children: Vec::new(),
+      state: Rc::new(RefCell::new(TreeItemState::default())),
+    }
+  }
+
+  pub fn icon(mut self, icon: impl Into<IconName>) -> Self {
+    self.icon = Some(icon.into());
+    self
+  }
+
+  pub fn child(mut self, child: TreeItem) -> Self {
+    self.children.push(child);
+    self
+  }
+
+  pub fn children(mut self, children: impl IntoIterator<Item = TreeItem>) -> Self {
+    self.children.extend(children);
+    self
+  }
+
+  pub fn expanded(self, expanded: bool) -> Self {
+    self.state.borrow_mut().expanded = expanded;
+    self
+  }
+
+  pub fn disabled(self, disabled: bool) -> Self {
+    self.state.borrow_mut().disabled = disabled;
+    self
+  }
+
+  #[inline]
+  pub fn is_folder(&self) -> bool {
+    !self.children.is_empty()
+  }
+
+  #[inline]
+  pub fn is_disabled(&self) -> bool {
+    self.state.borrow().disabled
+  }
+
+  #[inline]
+  pub fn is_expanded(&self) -> bool {
+    self.state.borrow().expanded
+  }
+
+  fn find_ancestors(&self, target_id: &SharedString) -> Option<Vec<TreeItem>> {
+    if self.id == *target_id {
+      return Some(vec![]);
+    }
+
+    for child in &self.children {
+      if let Some(mut path) = child.find_ancestors(target_id) {
+        path.push(self.clone());
+        return Some(path);
+      }
+    }
+
+    None
+  }
+}
+
+/// Tree model for flattening, expansion and selection state.
+#[derive(Clone, Default)]
+pub struct TreeModel {
+  roots: Vec<TreeItem>,
+  entries: Vec<TreeEntry>,
+  selected_ix: Option<usize>,
+}
+
+impl TreeModel {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn items(mut self, items: impl Into<Vec<TreeItem>>) -> Self {
+    self.set_items(items);
+    self
+  }
+
+  pub fn set_items(&mut self, items: impl Into<Vec<TreeItem>>) {
+    self.roots = items.into();
+    self.rebuild_entries();
+    self.selected_ix = None;
+  }
+
+  pub fn entries(&self) -> &[TreeEntry] {
+    &self.entries
+  }
+
+  pub fn len(&self) -> usize {
+    self.entries.len()
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.entries.is_empty()
+  }
+
+  pub fn entry(&self, ix: usize) -> Option<&TreeEntry> {
+    self.entries.get(ix)
+  }
+
+  pub fn selected_index(&self) -> Option<usize> {
+    self.selected_ix
+  }
+
+  pub fn set_selected_index(&mut self, ix: Option<usize>) {
+    self.selected_ix = ix;
+  }
+
+  pub fn set_selected_item(&mut self, item: Option<&TreeItem>) {
+    let Some(item) = item else {
+      self.selected_ix = None;
+      return;
+    };
+
+    let id = item.id.clone();
+    self.selected_ix = self.entries.iter().position(|entry| entry.item.id == id);
+    if self.selected_ix.is_none() {
+      self.expand_ancestors(id.clone());
+      self.selected_ix = self.entries.iter().position(|entry| entry.item.id == id);
+    }
+  }
+
+  pub fn selected_item(&self) -> Option<&TreeItem> {
+    self
+      .selected_ix
+      .and_then(|ix| self.entries.get(ix).map(|entry| &entry.item))
+  }
+
+  pub fn selected_entry(&self) -> Option<&TreeEntry> {
+    self.selected_ix.and_then(|ix| self.entries.get(ix))
+  }
+
+  pub fn toggle_expand(&mut self, ix: usize) {
+    let Some(entry) = self.entries.get_mut(ix) else {
+      return;
+    };
+    if !entry.is_folder() {
+      return;
+    }
+
+    let expanded = entry.item.is_expanded();
+    entry.item.state.borrow_mut().expanded = !expanded;
+    self.rebuild_entries();
+  }
+
+  fn expand_ancestors(&mut self, target_id: SharedString) {
+    let mut ancestors = Vec::new();
+    for item in &self.roots {
+      if let Some(found_ancestors) = item.find_ancestors(&target_id) {
+        ancestors = found_ancestors;
+        break;
+      }
+    }
+
+    if ancestors.is_empty() {
+      return;
+    }
+
+    for ancestor in ancestors {
+      ancestor.state.borrow_mut().expanded = true;
+    }
+    self.rebuild_entries();
+  }
+
+  fn rebuild_entries(&mut self) {
+    self.entries.clear();
+    let roots = self.roots.clone();
+    for root in roots {
+      self.add_entry(root, 0);
+    }
+
+    if let Some(ix) = self.selected_ix
+      && ix >= self.entries.len()
+    {
+      self.selected_ix = None;
+    }
+  }
+
+  fn add_entry(&mut self, item: TreeItem, depth: usize) {
+    self.entries.push(TreeEntry {
+      item: item.clone(),
+      depth,
+    });
+
+    if item.is_expanded() {
+      for child in item.children {
+        self.add_entry(child, depth + 1);
+      }
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{TreeItem, TreeModel};
+
+  fn sample_items() -> Vec<TreeItem> {
+    vec![
+      TreeItem::new("src", "src")
+        .expanded(true)
+        .child(
+          TreeItem::new("src/ui", "ui")
+            .expanded(true)
+            .child(TreeItem::new("src/ui/button.rs", "button.rs"))
+            .child(TreeItem::new("src/ui/icon.rs", "icon.rs"))
+            .child(TreeItem::new("src/ui/mod.rs", "mod.rs")),
+        )
+        .child(TreeItem::new("src/lib.rs", "lib.rs")),
+      TreeItem::new("Cargo.toml", "Cargo.toml"),
+      TreeItem::new("Cargo.lock", "Cargo.lock").disabled(true),
+      TreeItem::new("README.md", "README.md"),
+    ]
+  }
+
+  fn flatten_labels(model: &TreeModel) -> Vec<String> {
+    model
+      .entries()
+      .iter()
+      .map(|entry| {
+        format!(
+          "{}{}",
+          "    ".repeat(entry.depth()),
+          entry.item().label.as_ref()
+        )
+      })
+      .collect()
+  }
+
+  #[test]
+  fn flattens_and_toggles() {
+    let mut model = TreeModel::new().items(sample_items());
+    assert_eq!(
+      flatten_labels(&model),
+      vec![
+        "src",
+        "    ui",
+        "        button.rs",
+        "        icon.rs",
+        "        mod.rs",
+        "    lib.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+        "README.md",
+      ]
+    );
+
+    assert!(model.entries()[0].is_root());
+    assert!(model.entries()[1].is_folder());
+    assert!(model.entries()[1].is_expanded());
+    assert!(model.entries()[7].is_disabled());
+
+    model.toggle_expand(1);
+    assert_eq!(
+      flatten_labels(&model),
+      vec![
+        "src",
+        "    ui",
+        "    lib.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+        "README.md",
+      ]
+    );
+    assert!(!model.entries()[1].is_expanded());
+  }
+
+  #[test]
+  fn selecting_hidden_item_expands_ancestors() {
+    let mut model = TreeModel::new().items(vec![
+      TreeItem::new("root", "root").child(
+        TreeItem::new("a", "a")
+          .child(TreeItem::new("b", "b").child(TreeItem::new("target", "target"))),
+      ),
+    ]);
+
+    let target = TreeItem::new("target", "target");
+    model.set_selected_item(Some(&target));
+
+    assert_eq!(
+      flatten_labels(&model),
+      vec!["root", "    a", "        b", "            target"]
+    );
+    assert_eq!(
+      model.selected_item().map(|item| item.id.as_ref()),
+      Some("target")
+    );
+  }
+}

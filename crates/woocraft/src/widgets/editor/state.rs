@@ -4,11 +4,11 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-  actions, div, point, px, Action, App, AppContext, Bounds, ClipboardItem, Context, Entity,
-  EntityInputHandler, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-  KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-  ParentElement as _, Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine,
-  SharedString, Styled as _, Subscription, Task, UTF16Selection, Window,
+  Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+  EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
+  KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+  Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
+  Subscription, Task, UTF16Selection, Window, actions, div, point, px,
 };
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
@@ -19,9 +19,11 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
+  EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorPointerButton,
+  EditorUserAction, Position,
   blink_cursor::{BlinkCursor, CURSOR_WIDTH},
   change::Change,
-  element::{TextElement, RIGHT_MARGIN},
+  element::{RIGHT_MARGIN, TextElement},
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
   mask_pattern::MaskPattern,
@@ -30,15 +32,13 @@ use super::{
   popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
   search::{self, SearchPanel},
   text_wrapper::{LineItem, LineLayout, TextWrapper},
-  EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorPointerButton,
-  EditorUserAction, Position,
 };
-use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
-use crate::widgets::editor::RopeExt as _;
-use crate::widgets::history::History;
 use crate::PixelsExt;
 use crate::Selection;
 use crate::Size;
+use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::widgets::editor::RopeExt as _;
+use crate::widgets::history::History;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = editor, no_json)]

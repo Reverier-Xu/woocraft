@@ -16,6 +16,7 @@ version      = { workspace = true }
 [dependencies]
 aho-corasick                  = { workspace = true }
 anyhow                        = { workspace = true }
+chrono                        = { workspace = true }
 enum-iterator                 = { workspace = true }
 gpui                          = { workspace = true }
 gpui-macros                   = { workspace = true }
