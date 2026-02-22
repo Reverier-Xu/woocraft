@@ -1,5 +1,14 @@
 use std::{ops::Range, rc::Rc, time::Duration};
 
+use gpui::{
+  App, AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter,
+  FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
+  MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
+  StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
+  prelude::FluentBuilder, px, uniform_list,
+};
+
+use super::*;
 use crate::{
   ActiveTheme, Button, ButtonVariants as _, ContextMenuExt, ElementExt, IconName, PopupMenu,
   ScrollableMask, Scrollbar, Selectable, Sizable, StyleSized as _, StyledExt, TableThemeExt,
@@ -10,15 +19,6 @@ use crate::{
   },
   h_flex, v_flex,
 };
-use gpui::{
-  App, AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter,
-  FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
-  MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
-  StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
-  prelude::FluentBuilder, px, uniform_list,
-};
-
-use super::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SelectionMode {
@@ -56,16 +56,20 @@ pub enum TableEvent {
   /// A cell has been selected (clicked or navigated to via keyboard).
   ///
   /// Emitted when a cell is selected in cell selection mode.
-  /// The first `usize` is the row index, and the second `usize` is the column index.
+  /// The first `usize` is the row index, and the second `usize` is the column
+  /// index.
   ///
-  /// This event is also emitted when navigating between cells using keyboard shortcuts.
+  /// This event is also emitted when navigating between cells using keyboard
+  /// shortcuts.
   SelectCell(usize, usize),
   /// A cell has been double-clicked.
   ///
   /// Emitted when a cell is double-clicked in cell selection mode.
-  /// The first `usize` is the row index, and the second `usize` is the column index.
+  /// The first `usize` is the row index, and the second `usize` is the column
+  /// index.
   ///
-  /// Use this event to trigger actions like opening a detail view or editing the cell content.
+  /// Use this event to trigger actions like opening a detail view or editing
+  /// the cell content.
   DoubleClickedCell(usize, usize),
   /// The column widths have changed.
   ///
@@ -84,10 +88,12 @@ pub enum TableEvent {
   /// A cell has been right-clicked.
   ///
   /// Emitted when a cell is right-clicked in cell selection mode.
-  /// The first `usize` is the row index, and the second `usize` is the column index.
+  /// The first `usize` is the row index, and the second `usize` is the column
+  /// index.
   ///
   /// Use this event to show context menus specific to the cell content.
-  /// The right-clicked cell is highlighted with a subtle border until another cell is clicked.
+  /// The right-clicked cell is highlighted with a subtle border until another
+  /// cell is clicked.
   RightClickedCell(usize, usize),
   /// The selection has been cleared.
   ///
@@ -131,7 +137,8 @@ impl TableVisibleRange {
 /// - Click on cells to select them
 /// - Right-click on cells to mark them for context menus
 /// - Double-click on cells to trigger actions
-/// - Navigate between cells using keyboard (arrow keys, Home, End, PageUp, PageDown, Tab)
+/// - Navigate between cells using keyboard (arrow keys, Home, End, PageUp,
+///   PageDown, Tab)
 ///
 /// When in cell selection mode, a row selector column appears on the left side,
 /// allowing users to select entire rows by clicking on it.
@@ -178,7 +185,8 @@ pub struct TableState<D: TableDelegate> {
 
   /// Whether the table can loop selection, default is true.
   ///
-  /// When the prev/next selection is out of the table bounds, the selection will loop to the other side.
+  /// When the prev/next selection is out of the table bounds, the selection
+  /// will loop to the other side.
   pub loop_selection: bool,
   /// Whether the table can select column.
   pub col_selectable: bool,
@@ -189,7 +197,8 @@ pub struct TableState<D: TableDelegate> {
   /// When enabled:
   /// - Users can click on individual cells to select them
   /// - A row selector column appears on the left for selecting entire rows
-  /// - Keyboard navigation works at the cell level (arrow keys move between cells)
+  /// - Keyboard navigation works at the cell level (arrow keys move between
+  ///   cells)
   /// - Right-click and double-click events are supported for cells
   pub cell_selectable: bool,
   /// Whether the table can sort.
@@ -312,7 +321,8 @@ where
   /// - Individual cells become selectable by clicking
   /// - A row selector column appears on the left side
   /// - Keyboard navigation operates at the cell level
-  /// - Cell-specific events (SelectCell, DoubleClickedCell, RightClickedCell) are emitted
+  /// - Cell-specific events (SelectCell, DoubleClickedCell, RightClickedCell)
+  ///   are emitted
   ///
   /// # Example
   ///
@@ -405,7 +415,8 @@ where
 
   /// Returns the selected cell as `(row_ix, col_ix)`.
   ///
-  /// Returns `None` if no cell is currently selected or if the table is in row/column selection mode.
+  /// Returns `None` if no cell is currently selected or if the table is in
+  /// row/column selection mode.
   ///
   /// # Example
   ///
@@ -466,7 +477,8 @@ where
 
   /// Dump table data.
   ///
-  /// Returns a tuple of (headers, rows) where each row is a vector of cell values.
+  /// Returns a tuple of (headers, rows) where each row is a vector of cell
+  /// values.
   pub fn dump(&self, cx: &App) -> (Vec<String>, Vec<Vec<String>>) {
     // Get header row
     let columns_count = self.delegate.columns_count(cx);
@@ -632,10 +644,8 @@ where
     let mut selected_row = self.selected_row.unwrap_or(0);
     if selected_row > 0 {
       selected_row = selected_row.saturating_sub(1);
-    } else {
-      if self.loop_selection {
-        selected_row = rows_count.saturating_sub(1);
-      }
+    } else if self.loop_selection {
+      selected_row = rows_count.saturating_sub(1);
     }
 
     self.set_selected_row(selected_row, cx);
@@ -801,10 +811,8 @@ where
     let mut selected_col = self.selected_col.unwrap_or(0);
     if selected_col > 0 {
       selected_col = selected_col.saturating_sub(1);
-    } else {
-      if self.loop_selection {
-        selected_col = columns_count.saturating_sub(1);
-      }
+    } else if self.loop_selection {
+      selected_col = columns_count.saturating_sub(1);
     }
     self.set_selected_col(selected_col, cx);
   }
@@ -836,10 +844,8 @@ where
     let mut selected_col = self.selected_col.unwrap_or(0);
     if selected_col < columns_count.saturating_sub(1) {
       selected_col += 1;
-    } else {
-      if self.loop_selection {
-        selected_col = 0;
-      }
+    } else if self.loop_selection {
+      selected_col = 0;
     }
 
     self.set_selected_col(selected_col, cx);
@@ -847,7 +853,8 @@ where
 
   /// Scroll table when mouse position is near the edge of the table bounds.
   fn scroll_table_by_col_resizing(&mut self, mouse_position: Point<Pixels>, col_group: &ColGroup) {
-    // Do nothing if pos out of the table bounds right for avoid scroll to the right.
+    // Do nothing if pos out of the table bounds right for avoid scroll to the
+    // right.
     if mouse_position.x > self.bounds.right() {
       return;
     }
@@ -910,10 +917,8 @@ where
     for (ix, col_group) in self.col_groups.iter_mut().enumerate() {
       if ix == col_ix {
         col_group.column.sort = Some(sort);
-      } else {
-        if col_group.column.sort.is_some() {
-          col_group.column.sort = Some(ColumnSort::Default);
-        }
+      } else if col_group.column.sort.is_some() {
+        col_group.column.sort = Some(ColumnSort::Default);
       }
     }
 
@@ -937,7 +942,8 @@ where
     cx.notify();
   }
 
-  /// Dispatch delegate's `load_more` method when the visible range is near the end.
+  /// Dispatch delegate's `load_more` method when the visible range is near the
+  /// end.
   fn load_more_if_need(
     &mut self, rows_count: usize, visible_end: usize, window: &mut Window, cx: &mut Context<Self>,
   ) {
@@ -1017,8 +1023,9 @@ where
       })
   }
 
-  /// Show Column selection style, when the column is selected and the selection state is Column.
-  /// Note: When a cell is selected, column selection style is not shown.
+  /// Show Column selection style, when the column is selected and the selection
+  /// state is Column. Note: When a cell is selected, column selection style
+  /// is not shown.
   fn render_col_wrap(
     &self, _row_ix: Option<usize>, col_ix: usize, _: &mut Window, cx: &mut Context<Self>,
   ) -> Div {
@@ -1207,7 +1214,7 @@ where
       .flex_1()
       .label_flex_1()
       .when(has_sort_icon, |this| {
-        this.children(self.render_sort_icon(col_ix, &col_group, window, cx))
+        this.children(self.render_sort_icon(col_ix, col_group, window, cx))
       });
 
     h_flex()
@@ -1363,7 +1370,7 @@ where
     window: &mut Window, cx: &mut Context<Self>,
   ) -> Stateful<Div> {
     let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
-    let is_stripe_row = self.options.stripe && row_ix % 2 != 0;
+    let is_stripe_row = self.options.stripe && !row_ix.is_multiple_of(2);
     let is_selected = self.selected_row == Some(row_ix);
     let view = cx.entity().clone();
     let row_height = self.options.size.table_row_height();
@@ -1559,7 +1566,8 @@ where
     }
   }
 
-  /// Calculate the extra rows needed to fill the table empty space when `stripe` is true.
+  /// Calculate the extra rows needed to fill the table empty space when
+  /// `stripe` is true.
   fn calculate_extra_rows_needed(
     &self, total_height: Pixels, actual_height: Pixels, row_height: Pixels,
   ) -> usize {

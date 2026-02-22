@@ -48,8 +48,9 @@ pub struct Diagnostic {
   /// Additional metadata about the diagnostic.
   pub tags: Option<Vec<DiagnosticTag>>,
 
-  /// A data entry field that is preserved between a `textDocument/publishDiagnostics`
-  /// notification and `textDocument/codeAction` request.
+  /// A data entry field that is preserved between a
+  /// `textDocument/publishDiagnostics` notification and
+  /// `textDocument/codeAction` request.
   ///
   /// @since 3.16.0
   pub data: Option<serde_json::Value>,
@@ -140,7 +141,7 @@ impl DiagnosticSeverity {
 
     let mut style = HighlightStyle::default();
     style.underline = Some(UnderlineStyle {
-      color: color,
+      color,
       thickness: px(1.),
       wavy: true,
     });
@@ -273,8 +274,7 @@ impl DiagnosticSet {
   pub fn extend<D, I>(&mut self, diagnostics: D)
   where
     D: IntoIterator<Item = I>,
-    I: Into<Diagnostic>,
-  {
+    I: Into<Diagnostic>, {
     for diagnostic in diagnostics {
       self.push(diagnostic.into());
     }
@@ -296,11 +296,11 @@ impl DiagnosticSet {
     let mut cursor = self.diagnostics.cursor::<DiagnosticSummary>(&());
     cursor.seek(&range.start, Bias::Left);
     std::iter::from_fn(move || {
-      if let Some(entry) = cursor.item() {
-        if entry.range.start < range.end {
-          cursor.next();
-          return Some(entry);
-        }
+      if let Some(entry) = cursor.item()
+        && entry.range.start < range.end
+      {
+        cursor.next();
+        return Some(entry);
       }
       None
     })

@@ -138,22 +138,22 @@ impl TextElement {
             offset,
             indent_count,
           });
-        } else if matches!(ch, ')' | ']' | '}') {
-          if let Some(open) = Self::pop_matching_open_bracket(&mut stack, ch) {
-            let close_offset = offset + ch_len;
-            if cursor >= open.offset && cursor <= close_offset {
-              let scope = BracketScope {
-                open_row: open.row,
-                close_row: row,
-                open_indent_count: open.indent_count,
-              };
+        } else if matches!(ch, ')' | ']' | '}')
+          && let Some(open) = Self::pop_matching_open_bracket(&mut stack, ch)
+        {
+          let close_offset = offset + ch_len;
+          if cursor >= open.offset && cursor <= close_offset {
+            let scope = BracketScope {
+              open_row: open.row,
+              close_row: row,
+              open_indent_count: open.indent_count,
+            };
 
-              if best_scope
-                .as_ref()
-                .is_none_or(|(_, best_open_offset)| open.offset > *best_open_offset)
-              {
-                best_scope = Some((scope, open.offset));
-              }
+            if best_scope
+              .as_ref()
+              .is_none_or(|(_, best_open_offset)| open.offset > *best_open_offset)
+            {
+              best_scope = Some((scope, open.offset));
             }
           }
         }
@@ -242,26 +242,25 @@ impl TextElement {
           && active_scope
             .as_ref()
             .is_some_and(|scope| indent_count > scope.open_indent_count);
-        if has_active {
-          if let Some(x) = active_x {
-            let pos = point(x, offset_y);
-            active_builder.move_to(pos);
-            active_builder.line_to(point(pos.x, pos.y + line_height));
-          }
+        if has_active && let Some(x) = active_x {
+          let pos = point(x, offset_y);
+          active_builder.move_to(pos);
+          active_builder.line_to(point(pos.x, pos.y + line_height));
         }
         last_has_active = has_active;
-      } else if last_indents.len() > 0 {
+      } else if !last_indents.is_empty() {
         for x in &last_indents {
           let pos = point(*x, offset_y);
           builder.move_to(pos);
           builder.line_to(point(pos.x, pos.y + line_height));
         }
-        if in_active_scope && last_has_active {
-          if let Some(x) = active_x {
-            let pos = point(x, offset_y);
-            active_builder.move_to(pos);
-            active_builder.line_to(point(pos.x, pos.y + line_height));
-          }
+        if in_active_scope
+          && last_has_active
+          && let Some(x) = active_x
+        {
+          let pos = point(x, offset_y);
+          active_builder.move_to(pos);
+          active_builder.line_to(point(pos.x, pos.y + line_height));
         }
         current_indents = last_indents.clone();
       } else {

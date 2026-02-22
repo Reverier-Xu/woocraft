@@ -428,7 +428,7 @@ impl TabPanel {
     if let Some(dock) = self.dock.as_ref().and_then(|dock| dock.upgrade()) {
       let dock_area = self.dock_area.clone();
       window.defer(cx, move |window, cx| {
-        _ = dock.update(cx, |dock, cx| {
+        dock.update(cx, |dock, cx| {
           dock.set_collapsed(true, window, cx);
         });
         _ = dock_area.update(cx, |dock_area, cx| {

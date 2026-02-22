@@ -1,9 +1,10 @@
+use std::{ops::Range, rc::Rc};
+
 use anyhow::Result;
 use gpui::{
   App, Context, HighlightStyle, Hitbox, MouseDownEvent, Task, UnderlineStyle, Window, px,
 };
 use ropey::Rope;
-use std::{ops::Range, rc::Rc};
 
 use super::super::{
   element::TextElement,
@@ -83,12 +84,12 @@ impl InputState {
         if locations.is_empty() {
           editor.hover_definition.clear();
         } else {
-          if let Some(location) = locations.first() {
-            if let Some(range) = location.origin_selection_range {
-              let start = editor.text.position_to_offset(&range.start);
-              let end = editor.text.position_to_offset(&range.end);
-              symbol_range = start..end;
-            }
+          if let Some(location) = locations.first()
+            && let Some(range) = location.origin_selection_range
+          {
+            let start = editor.text.position_to_offset(&range.start);
+            let end = editor.text.position_to_offset(&range.end);
+            symbol_range = start..end;
           }
 
           editor

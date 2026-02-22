@@ -1,12 +1,13 @@
-use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{
   collections::HashMap,
   ops::Deref,
   sync::{Arc, LazyLock, Mutex},
 };
+
+use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::{
   ActiveTheme, ThemeColors, ThemeMode, ThemeTokens,
@@ -166,15 +167,15 @@ impl From<FontStyle> for gpui::FontStyle {
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize_repr, Deserialize_repr, JsonSchema)]
 #[repr(u16)]
 pub enum FontWeightContent {
-  Thin = 100,
+  Thin       = 100,
   ExtraLight = 200,
-  Light = 300,
-  Normal = 400,
-  Medium = 500,
-  Semibold = 600,
-  Bold = 700,
-  ExtraBold = 800,
-  Black = 900,
+  Light      = 300,
+  Normal     = 400,
+  Medium     = 500,
+  Semibold   = 600,
+  Bold       = 700,
+  ExtraBold  = 800,
+  Black      = 900,
 }
 
 impl From<FontWeightContent> for FontWeight {
@@ -586,7 +587,8 @@ pub struct LanguageRegistry {
 }
 
 impl LanguageRegistry {
-  /// Returns the singleton instance of the `LanguageRegistry` with default languages and themes.
+  /// Returns the singleton instance of the `LanguageRegistry` with default
+  /// languages and themes.
   pub fn singleton() -> &'static LazyLock<LanguageRegistry> {
     static INSTANCE: LazyLock<LanguageRegistry> = LazyLock::new(|| LanguageRegistry {
       languages: Mutex::new(
@@ -620,7 +622,8 @@ impl LanguageRegistry {
   /// Returns the language configuration for the given language name.
   pub fn language(&self, name: &str) -> Option<LanguageConfig> {
     // Try to get by name first, there may have a custom language registered
-    // Then try to get built-in language to support short language names, e.g. "js" for "javascript"
+    // Then try to get built-in language to support short language names, e.g. "js"
+    // for "javascript"
     let languages = self.languages.lock().unwrap();
     languages
       .get(name)

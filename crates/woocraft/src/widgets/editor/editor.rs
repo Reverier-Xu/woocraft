@@ -1,19 +1,20 @@
 use std::rc::Rc;
 
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
   AnyElement, App, Context, DefiniteLength, Edges, EdgesRefinement, Entity, Focusable,
   InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce,
-  StyleRefinement, Styled, Window, div, px, relative,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
-use crate::widgets::editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN};
-use crate::widgets::scroll::Scrollbar;
-use crate::{ActiveTheme, ContextMenuExt, IconName, PopupMenu, translate, v_flex};
-use crate::{Selectable, StyledExt};
-use crate::{Sizable, Size, StyleSized as _};
-
 use super::state::{CONTEXT, Copy, Cut, InputState, Paste, SelectAll};
+use crate::{
+  ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Sizable, Size, StyleSized as _,
+  StyledExt, translate, v_flex,
+  widgets::{
+    editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN},
+    scroll::Scrollbar,
+  },
+};
 
 type ContextMenuBuilder =
   Rc<dyn Fn(PopupMenu, &Entity<InputState>, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
@@ -93,7 +94,8 @@ impl Editor {
     self
   }
 
-  /// Set the appearance of the editor, if false the editor will no border, background.
+  /// Set the appearance of the editor, if false the editor will no border,
+  /// background.
   pub fn appearance(mut self, appearance: bool) -> Self {
     self.appearance = appearance;
     self
@@ -354,7 +356,7 @@ impl RenderOnce for Editor {
         this.child(Self::render_editor(
           paddings,
           &self.state,
-          &state,
+          state,
           window,
           cx,
         ))

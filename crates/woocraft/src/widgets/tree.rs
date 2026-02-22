@@ -8,8 +8,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Icon, IconName, ListItem, ScrollableElement, StyledExt, TreeEntry,
-  TreeItem, TreeModel,
+  ActiveTheme, Icon, IconName, ListItem, ScrollableElement, StyledExt, TreeEntry, TreeItem,
+  TreeModel,
   actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
   h_flex,
 };
@@ -37,12 +37,12 @@ pub fn tree(state: &Entity<TreeState>) -> Tree {
   Tree::new(state)
 }
 
-/// Create a tree and override center content rendering while keeping built-in affordances.
+/// Create a tree and override center content rendering while keeping built-in
+/// affordances.
 pub fn tree_with<R, E>(state: &Entity<TreeState>, render_item: R) -> Tree
 where
   R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-  E: IntoElement,
-{
+  E: IntoElement, {
   Tree::new(state).render_item(render_item)
 }
 
@@ -147,10 +147,7 @@ impl TreeState {
         .items_center()
         .gap_x(px(6.))
         .child(div().flex_none().w(px(14.) * entry.depth()))
-        .child(
-          Icon::new(entry.icon_or_default())
-            .text_color(cx.theme().muted_foreground),
-        )
+        .child(Icon::new(entry.icon_or_default()).text_color(cx.theme().muted_foreground))
         .child(div().flex_1().min_w_0().child(content))
         .child(
           div()
@@ -158,10 +155,7 @@ impl TreeState {
             .items_center()
             .justify_center()
             .when(entry.is_folder(), |this| {
-              this.child(
-                Icon::new(expand_icon)
-                  .text_color(cx.theme().muted_foreground),
-              )
+              this.child(Icon::new(expand_icon).text_color(cx.theme().muted_foreground))
             }),
         ),
     )
@@ -266,15 +260,9 @@ impl TreeState {
     }
 
     let target_depth = depth - 1;
-    for candidate_ix in (0..ix).rev() {
-      if entries[candidate_ix].depth() == target_depth
-        && Self::subtree_end(entries, candidate_ix) > ix
-      {
-        return Some(candidate_ix);
-      }
-    }
-
-    None
+    (0..ix).rev().find(|&candidate_ix| {
+      entries[candidate_ix].depth() == target_depth && Self::subtree_end(entries, candidate_ix) > ix
+    })
   }
 
   fn has_next_sibling(entries: &[TreeEntry], ix: usize) -> bool {
@@ -458,8 +446,7 @@ impl Tree {
   pub fn render_item<R, E>(mut self, render_item: R) -> Self
   where
     R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.render_item = Rc::new(move |ix, entry, selected, window, cx| {
       render_item(ix, entry, selected, window, cx).into_any_element()
     });

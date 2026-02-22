@@ -2,9 +2,8 @@ use gpui::{
   App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled, Window,
 };
 
-use crate::{Sizable, Size, StyledExt, v_flex};
-
 use super::{Field, FieldProps};
+use crate::{Sizable, Size, StyledExt, v_flex};
 
 #[derive(IntoElement)]
 pub struct Form {

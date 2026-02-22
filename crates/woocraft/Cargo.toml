@@ -23,6 +23,7 @@ gpui-macros                   = { workspace = true }
 lsp-types                     = { workspace = true }
 palette                       = { workspace = true }
 regex                         = { workspace = true }
+num-traits                    = { workspace = true }
 ropey                         = { workspace = true }
 schemars                      = { workspace = true }
 serde                         = { workspace = true }

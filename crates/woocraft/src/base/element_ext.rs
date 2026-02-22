@@ -5,8 +5,7 @@ pub trait ElementExt: ParentElement + Sized {
   /// Add a prepaint callback to the element.
   fn on_prepaint<F>(self, f: F) -> Self
   where
-    F: FnOnce(Bounds<Pixels>, &mut Window, &mut App) + 'static,
-  {
+    F: FnOnce(Bounds<Pixels>, &mut Window, &mut App) + 'static, {
     self.child(
       canvas(
         move |bounds, window, cx| f(bounds, window, cx),

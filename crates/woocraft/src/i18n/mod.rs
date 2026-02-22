@@ -120,8 +120,7 @@ pub fn extend_locale<I, K, V>(locale: impl AsRef<str>, translations: I)
 where
   I: IntoIterator<Item = (K, V)>,
   K: Into<String>,
-  V: Into<String>,
-{
+  V: Into<String>, {
   let locale = normalize_locale(locale.as_ref());
   let mut custom_locales = CUSTOM_LOCALES
     .write()

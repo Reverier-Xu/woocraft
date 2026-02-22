@@ -66,8 +66,7 @@ impl ResizablePanelGroup {
 
   pub fn children<I>(mut self, panels: impl IntoIterator<Item = I>) -> Self
   where
-    I: Into<ResizablePanel>,
-  {
+    I: Into<ResizablePanel>, {
     self.children = panels.into_iter().map(Into::into).collect();
     self
   }

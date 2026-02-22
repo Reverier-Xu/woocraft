@@ -31,10 +31,10 @@ impl InputState {
       return;
     };
 
-    if let Some(hover_popover) = self.hover_popover.as_ref() {
-      if hover_popover.read(cx).is_same(offset) {
-        return;
-      }
+    if let Some(hover_popover) = self.hover_popover.as_ref()
+      && hover_popover.read(cx).is_same(offset)
+    {
+      return;
     }
 
     // Currently not implemented.

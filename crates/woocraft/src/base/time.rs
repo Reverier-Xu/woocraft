@@ -167,8 +167,7 @@ impl Matcher {
 
   pub fn custom<F>(f: F) -> Self
   where
-    F: Fn(&NaiveDate) -> bool + Send + Sync + 'static,
-  {
+    F: Fn(&NaiveDate) -> bool + Send + Sync + 'static, {
     Self::Custom(Box::new(f))
   }
 
@@ -226,7 +225,7 @@ pub fn month_days(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
   for week in 0..5 {
     let mut week_days = Vec::with_capacity(7);
     for weekday in 0..7 {
-      let day = week * 7 + weekday as i32 - start_weekday as i32;
+      let day = week * 7 + weekday - start_weekday as i32;
       let current = date
         .checked_add_signed(Duration::days(day as i64))
         .expect("invalid shifted day in calendar grid");

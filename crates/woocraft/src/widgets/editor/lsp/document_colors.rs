@@ -1,5 +1,4 @@
-use std::ops::Range;
-use std::time::Duration;
+use std::{ops::Range, time::Duration};
 
 use anyhow::Result;
 use gpui::{App, Context, Hsla, Task, Window};
@@ -65,31 +64,31 @@ impl Lsp {
         .update(|window, cx| provider.document_colors(&text, window, cx))
         .ok();
 
-      if let Some(task) = task_result {
-        if let Ok(colors) = task.await {
-          let _ = input_state.update(cx, |input_state, cx| {
-            let mut document_colors: Vec<(lsp_types::Range, Hsla)> = colors
-              .iter()
-              .map(|info| {
-                let color = gpui::Rgba {
-                  r: info.color.red,
-                  g: info.color.green,
-                  b: info.color.blue,
-                  a: info.color.alpha,
-                }
-                .into();
+      if let Some(task) = task_result
+        && let Ok(colors) = task.await
+      {
+        let _ = input_state.update(cx, |input_state, cx| {
+          let mut document_colors: Vec<(lsp_types::Range, Hsla)> = colors
+            .iter()
+            .map(|info| {
+              let color = gpui::Rgba {
+                r: info.color.red,
+                g: info.color.green,
+                b: info.color.blue,
+                a: info.color.alpha,
+              }
+              .into();
 
-                (info.range, color)
-              })
-              .collect();
-            document_colors.sort_by_key(|(range, _)| range.start);
+              (info.range, color)
+            })
+            .collect();
+          document_colors.sort_by_key(|(range, _)| range.start);
 
-            if document_colors != input_state.lsp.document_colors {
-              input_state.lsp.document_colors = document_colors;
-              cx.notify();
-            }
-          });
-        }
+          if document_colors != input_state.lsp.document_colors {
+            input_state.lsp.document_colors = document_colors;
+            cx.notify();
+          }
+        });
       }
     });
   }

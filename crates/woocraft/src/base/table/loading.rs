@@ -1,7 +1,8 @@
-use crate::{ActiveTheme, Size, TableThemeExt, h_flex, v_flex};
 use gpui::{
   IntoElement, ParentElement as _, RenderOnce, Styled, div, prelude::FluentBuilder as _, px,
 };
+
+use crate::{ActiveTheme, Size, TableThemeExt, h_flex, v_flex};
 
 #[derive(IntoElement)]
 pub(super) struct Loading {

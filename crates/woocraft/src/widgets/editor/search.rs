@@ -1,6 +1,6 @@
-use aho_corasick::AhoCorasick;
 use std::{ops::Range, rc::Rc};
 
+use aho_corasick::AhoCorasick;
 use gpui::{
   App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
   InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, ParentElement as _, Pixels,
@@ -27,7 +27,7 @@ use crate::{
   },
 };
 
-const CONTEXT: &'static str = "SearchPanel";
+const CONTEXT: &str = "SearchPanel";
 
 pub(super) fn init(cx: &mut App) {
   cx.bind_keys(vec![KeyBinding::new(
@@ -44,7 +44,8 @@ pub struct SearchMatcher {
 
   pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
   pub(super) current_match_ix: usize,
-  /// Is in replacing mode, if true, the next update will not reset the current match index.
+  /// Is in replacing mode, if true, the next update will not reset the current
+  /// match index.
   replacing: bool,
 }
 
@@ -90,7 +91,7 @@ impl SearchMatcher {
 
   /// Update the search query and reset the current match index.
   pub fn update_query(&mut self, query: &str, case_insensitive: bool) {
-    if query.len() > 0 {
+    if !query.is_empty() {
       self.query = Some(
         AhoCorasick::builder()
           .ascii_case_insensitive(case_insensitive)

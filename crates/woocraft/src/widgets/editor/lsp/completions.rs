@@ -1,3 +1,5 @@
+use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
+
 use anyhow::Result;
 use gpui::{Context, EntityInputHandler, Task, Window};
 use lsp_types::{
@@ -5,7 +7,6 @@ use lsp_types::{
   InlineCompletionItem, InlineCompletionResponse, InlineCompletionTriggerKind, request::Completion,
 };
 use ropey::Rope;
-use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use crate::widgets::editor::{
   InputState,
@@ -15,7 +16,8 @@ use crate::widgets::editor::{
 /// Default debounce duration for inline completions.
 const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
 
-/// A trait for providing code completions based on the current input state and context.
+/// A trait for providing code completions based on the current input state and
+/// context.
 pub trait CompletionProvider {
   /// Fetches completions based on the given byte offset.
   ///
@@ -65,7 +67,8 @@ pub trait CompletionProvider {
     Task::ready(Ok(false))
   }
 
-  /// Determines if the completion should be triggered based on the given byte offset.
+  /// Determines if the completion should be triggered based on the given byte
+  /// offset.
   ///
   /// This is called on the main thread.
   fn is_completion_trigger(
@@ -141,7 +144,7 @@ impl InputState {
       )
       .map(|s| s.trim().to_string())
       .unwrap_or_default();
-    _ = menu.update(cx, |menu, _| {
+    menu.update(cx, |menu, _| {
       menu.update_query(start_offset, query.clone());
     });
 
@@ -154,7 +157,7 @@ impl InputState {
       provider.completions(&self.text, new_offset, completion_context, window, cx);
     self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
       let mut completions: Vec<CompletionItem> = vec![];
-      if let Some(provider_responses) = provider_responses.await.ok() {
+      if let Ok(provider_responses) = provider_responses.await {
         match provider_responses {
           CompletionResponse::Array(items) => completions.extend(items),
           CompletionResponse::List(list) => completions.extend(list.items),
@@ -176,7 +179,7 @@ impl InputState {
             return;
           }
 
-          _ = menu.update(cx, |menu, cx| {
+          menu.update(cx, |menu, cx| {
             menu.show(new_offset, completions, window, cx);
           });
 

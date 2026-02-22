@@ -227,13 +227,12 @@ impl MaskPattern {
         }
 
         // check if the fraction part is valid
-        if let Some(frac) = frac_part {
-          if !frac
+        if let Some(frac) = frac_part
+          && !frac
             .chars()
             .all(|ch| ch.is_ascii_digit() || Some(ch) == *separator)
-          {
-            return false;
-          }
+        {
+          return false;
         }
 
         true
@@ -257,10 +256,10 @@ impl MaskPattern {
 
           if token.is_sep() {
             // If next token is match, it's valid
-            if let Some(next_token) = tokens.get(pos + 1) {
-              if next_token.is_match(ch) {
-                return true;
-              }
+            if let Some(next_token) = tokens.get(pos + 1)
+              && next_token.is_match(ch)
+            {
+              return true;
             }
           }
         }
@@ -308,11 +307,7 @@ impl MaskPattern {
           let mut chars: Vec<char> = int_part.chars().rev().collect();
 
           // Removing the sign from formatting to avoid cases such as: -,123
-          let maybe_signed = if let Some(pos) = chars.iter().position(is_sign) {
-            Some(chars.remove(pos))
-          } else {
-            None
-          };
+          let maybe_signed = chars.iter().position(is_sign).map(|pos| chars.remove(pos));
 
           let mut result = String::new();
           for (i, ch) in chars.iter().enumerate() {
@@ -389,7 +384,7 @@ impl MaskPattern {
           return result;
         }
 
-        return mask_text.to_owned();
+        mask_text.to_owned()
       }
       Self::Pattern { tokens, .. } => {
         let mut result = String::new();

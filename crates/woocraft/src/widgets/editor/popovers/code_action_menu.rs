@@ -12,11 +12,13 @@ const MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(480.);
 
 use super::editor_popover;
-use crate::widgets::editor as input;
 use crate::{
   ActiveTheme, IndexPath, Selectable, actions, h_flex,
-  widgets::editor::InputState,
-  widgets::list::{List, ListDelegate, ListEvent, ListState},
+  widgets::{
+    editor as input,
+    editor::InputState,
+    list::{List, ListDelegate, ListEvent, ListState},
+  },
 };
 
 #[derive(Debug, Clone)]
@@ -130,7 +132,7 @@ impl ListDelegate for MenuDelegate {
     };
 
     self.menu.update(cx, |this, cx| {
-      this.select_item(&item, window, cx);
+      this.select_item(item, window, cx);
     });
   }
 }
@@ -148,7 +150,8 @@ pub struct CodeActionMenu {
 impl CodeActionMenu {
   /// Creates a new `CompletionMenu` with the given offset and completion items.
   ///
-  /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
+  /// NOTE: This element should not call from InputState::new, unless that will
+  /// stack overflow.
   pub(crate) fn new(state: Entity<InputState>, window: &mut Window, cx: &mut App) -> Entity<Self> {
     cx.new(|cx| {
       let view = cx.entity();
@@ -162,11 +165,8 @@ impl CodeActionMenu {
 
       let _subscriptions = vec![
         cx.subscribe(&list, |this: &mut Self, _, ev: &ListEvent, cx| {
-          match ev {
-            ListEvent::Confirm(_) => {
-              this.hide(cx);
-            }
-            _ => {}
+          if let ListEvent::Confirm(_) = ev {
+            this.hide(cx);
           }
           cx.notify();
         }),

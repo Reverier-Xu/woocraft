@@ -1,7 +1,8 @@
+use std::ops::Range;
+
 use anyhow::Result;
 use gpui::{App, Context, Entity, SharedString, Task, Window};
 use lsp_types::CodeAction;
-use std::ops::Range;
 
 use crate::widgets::editor::{
   InputState, ToggleCodeActions,
@@ -66,7 +67,7 @@ impl InputState {
 
       let mut code_actions: Vec<CodeActionItem> = vec![];
       for (provider_id, provider_responses) in provider_responses {
-        if let Some(responses) = provider_responses.await.ok() {
+        if let Ok(responses) = provider_responses.await {
           code_actions.extend(responses.into_iter().map(|action| CodeActionItem {
             provider_id: provider_id.clone(),
             action,
@@ -88,7 +89,7 @@ impl InputState {
             return;
           }
 
-          _ = menu.update(cx, |menu, cx| {
+          menu.update(cx, |menu, cx| {
             menu.show(editor.cursor(), code_actions, window, cx);
           });
 

@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use std::{cell::RefCell, ops::Range};
+use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use gpui::{App, SharedString};
 use ropey::Rope;
@@ -153,53 +152,52 @@ impl InputMode {
     &mut self, selected_range: &Range<usize>, text: &Rope, new_text: &str, force: bool,
     cx: &mut App,
   ) {
-    match &self {
-      InputMode::CodeEditor {
-        language,
-        highlighter,
-        ..
-      } => {
-        if !force && highlighter.borrow().is_some() {
-          return;
-        }
-
-        let mut highlighter = highlighter.borrow_mut();
-        if highlighter.is_none() {
-          let new_highlighter = SyntaxHighlighter::new(language);
-          highlighter.replace(new_highlighter);
-        }
-
-        let Some(highlighter) = highlighter.as_mut() else {
-          return;
-        };
-
-        // When full text changed, the selected_range may be out of bound (The before version).
-        let mut selected_range = selected_range.clone();
-        selected_range.end = selected_range.end.min(text.len());
-
-        // If insert a chart, this is 1.
-        // If backspace or delete, this is -1.
-        // If selected to delete, this is the length of the selected text.
-        // let changed_len = new_text.len() as isize - selected_range.len() as isize;
-        let changed_len = new_text.len() as isize - selected_range.len() as isize;
-        let new_end = (selected_range.end as isize + changed_len) as usize;
-
-        let start_pos = text.offset_to_point(selected_range.start);
-        let old_end_pos = text.offset_to_point(selected_range.end);
-        let new_end_pos = text.offset_to_point(new_end);
-
-        let edit = InputEdit {
-          start_byte: selected_range.start,
-          old_end_byte: selected_range.end,
-          new_end_byte: new_end,
-          start_position: start_pos,
-          old_end_position: old_end_pos,
-          new_end_position: new_end_pos,
-        };
-
-        highlighter.update(Some(edit), text);
+    if let InputMode::CodeEditor {
+      language,
+      highlighter,
+      ..
+    } = &self
+    {
+      if !force && highlighter.borrow().is_some() {
+        return;
       }
-      _ => {}
+
+      let mut highlighter = highlighter.borrow_mut();
+      if highlighter.is_none() {
+        let new_highlighter = SyntaxHighlighter::new(language);
+        highlighter.replace(new_highlighter);
+      }
+
+      let Some(highlighter) = highlighter.as_mut() else {
+        return;
+      };
+
+      // When full text changed, the selected_range may be out of bound (The before
+      // version).
+      let mut selected_range = selected_range.clone();
+      selected_range.end = selected_range.end.min(text.len());
+
+      // If insert a chart, this is 1.
+      // If backspace or delete, this is -1.
+      // If selected to delete, this is the length of the selected text.
+      // let changed_len = new_text.len() as isize - selected_range.len() as isize;
+      let changed_len = new_text.len() as isize - selected_range.len() as isize;
+      let new_end = (selected_range.end as isize + changed_len) as usize;
+
+      let start_pos = text.offset_to_point(selected_range.start);
+      let old_end_pos = text.offset_to_point(selected_range.end);
+      let new_end_pos = text.offset_to_point(new_end);
+
+      let edit = InputEdit {
+        start_byte: selected_range.start,
+        old_end_byte: selected_range.end,
+        new_end_byte: new_end,
+        start_position: start_pos,
+        old_end_position: old_end_pos,
+        new_end_position: new_end_pos,
+      };
+
+      highlighter.update(Some(edit), text);
     }
   }
 

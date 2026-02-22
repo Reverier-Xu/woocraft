@@ -1,15 +1,15 @@
-use crate::widgets::editor::highlighter::{HighlightTheme, LanguageRegistry};
-
-use anyhow::{Context, Result, anyhow};
-use gpui::{HighlightStyle, SharedString};
-
-use ropey::{ChunkCursor, Rope};
 use std::{
   collections::{BTreeSet, HashMap},
   ops::Range,
   usize,
 };
+
+use anyhow::{Context, Result, anyhow};
+use gpui::{HighlightStyle, SharedString};
+use ropey::{ChunkCursor, Rope};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
+
+use crate::widgets::editor::highlighter::{HighlightTheme, LanguageRegistry};
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
@@ -17,7 +17,8 @@ use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterato
 pub struct SyntaxHighlighter {
   language: SharedString,
   query: Option<Query>,
-  /// A separate query for injection patterns that have `#set! injection.combined`.
+  /// A separate query for injection patterns that have `#set!
+  /// injection.combined`.
   combined_injections_query: Option<Query>,
   injection_queries: HashMap<SharedString, Query>,
 
@@ -40,7 +41,8 @@ pub struct SyntaxHighlighter {
   tree: Option<Tree>,
 
   /// Parsed injection trees (language → tree with ranges).
-  /// These are built once in update() and queried multiple times in match_styles().
+  /// These are built once in update() and queried multiple times in
+  /// match_styles().
   injection_layers: HashMap<SharedString, InjectionLayer>,
 }
 
@@ -77,10 +79,8 @@ impl<'a> Iterator for ByteChunks<'a> {
   type Item = &'a [u8];
 
   fn next(&mut self) -> Option<Self::Item> {
-    if !self.at_first {
-      if !self.cursor.next() {
-        return None;
-      }
+    if !self.at_first && !self.cursor.next() {
+      return None;
     }
     self.at_first = false;
 
@@ -186,7 +186,7 @@ impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
 impl SyntaxHighlighter {
   /// Create a new SyntaxHighlighter for HTML.
   pub fn new(lang: &str) -> Self {
-    match Self::build_combined_injections_query(&lang) {
+    match Self::build_combined_injections_query(lang) {
       Ok(result) => result,
       Err(err) => {
         tracing::warn!(
@@ -202,7 +202,7 @@ impl SyntaxHighlighter {
   ///
   /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
   fn build_combined_injections_query(lang: &str) -> Result<Self> {
-    let Some(config) = LanguageRegistry::singleton().language(&lang) else {
+    let Some(config) = LanguageRegistry::singleton().language(lang) else {
       return Err(anyhow!(
         "language {:?} is not registered in `LanguageRegistry`",
         lang
@@ -214,7 +214,8 @@ impl SyntaxHighlighter {
       .set_language(&config.language)
       .context("parse set_language")?;
 
-    // Concatenate the query strings, keeping track of the start offset of each section.
+    // Concatenate the query strings, keeping track of the start offset of each
+    // section.
     let mut query_source = String::new();
     query_source.push_str(&config.injections);
     let locals_query_offset = query_source.len();
@@ -222,8 +223,8 @@ impl SyntaxHighlighter {
     let highlights_query_offset = query_source.len();
     query_source.push_str(&config.highlights);
 
-    // Construct a single query by concatenating the three query strings, but record the
-    // range of pattern indices that belong to each individual string.
+    // Construct a single query by concatenating the three query strings, but record
+    // the range of pattern indices that belong to each individual string.
     let mut query = Query::new(&config.language, &query_source).context("new query")?;
 
     let mut locals_pattern_index = 0;
@@ -305,7 +306,7 @@ impl SyntaxHighlighter {
 
     let mut injection_queries = HashMap::new();
     for inj_language in config.injection_languages.iter() {
-      if let Some(inj_config) = LanguageRegistry::singleton().language(&inj_language) {
+      if let Some(inj_config) = LanguageRegistry::singleton().language(inj_language) {
         match Query::new(&inj_config.language, &inj_config.highlights) {
           Ok(q) => {
             injection_queries.insert(inj_config.name.clone(), q);
@@ -350,9 +351,11 @@ impl SyntaxHighlighter {
     self.text.len() == 0
   }
 
-  /// Highlight the given text, returning a map from byte ranges to highlight captures.
+  /// Highlight the given text, returning a map from byte ranges to highlight
+  /// captures.
   ///
-  /// Uses incremental parsing by `edit` to efficiently update the highlighter's state.
+  /// Uses incremental parsing by `edit` to efficiently update the highlighter's
+  /// state.
   pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope) {
     if self.text.eq(text) {
       return;
@@ -402,7 +405,8 @@ impl SyntaxHighlighter {
       return;
     };
 
-    // Note: Tree edit history is handled in update() via parser.parse_with_options(old_tree)
+    // Note: Tree edit history is handled in update() via
+    // parser.parse_with_options(old_tree)
 
     let root_node = tree.root_node();
     let mut cursor = QueryCursor::new();
@@ -534,7 +538,7 @@ impl SyntaxHighlighter {
 
     let mut cursor = QueryCursor::new();
     cursor.set_byte_range(range);
-    let mut matches = cursor.matches(&query, root_node, TextProvider(&source));
+    let mut matches = cursor.matches(query, root_node, TextProvider(source));
 
     while let Some(query_match) = matches.next() {
       for cap in query_match.captures {
@@ -621,11 +625,9 @@ impl SyntaxHighlighter {
     }
 
     // If the matched styles is empty, return a default range.
-    if styles.len() == 0 {
+    if styles.is_empty() {
       return vec![(start_offset..range.end, HighlightStyle::default())];
     }
-
-    let styles = unique_styles(&range, styles);
 
     // NOTE: DO NOT remove this comment, it is used for debugging.
     // for style in &styles {
@@ -633,7 +635,7 @@ impl SyntaxHighlighter {
     // }
     // println!("--------------------------------");
 
-    styles
+    unique_styles(range, styles)
   }
 }
 
@@ -680,7 +682,8 @@ pub(crate) fn unique_styles(
   //
   // Result e.g.:
   //
-  // [(6..11, red), (11..16, green), (16..17, blue), (17..19, red), (19..25, clean), (25..59, blue)]
+  // [(6..11, red), (11..16, green), (16..17, blue), (17..19, red), (19..25,
+  // clean), (25..59, blue)]
   for i in 0..intervals.len().saturating_sub(1) {
     let interval = intervals[i]..intervals[i + 1];
     if interval.start >= interval.end {
@@ -706,18 +709,18 @@ pub(crate) fn unique_styles(
     }
   }
 
-  // Merge adjacent ranges with the same style, but not across significant boundaries
+  // Merge adjacent ranges with the same style, but not across significant
+  // boundaries
   let mut merged: Vec<(Range<usize>, HighlightStyle)> = Vec::with_capacity(result.len());
   for (range, style) in result {
-    if let Some((last_range, last_style)) = merged.last_mut() {
-      if last_range.end == range.start
-        && *last_style == style
-        && !significant_intervals.contains(&range.start)
-      {
-        // Merge adjacent ranges with same style, but not across significant boundaries
-        last_range.end = range.end;
-        continue;
-      }
+    if let Some((last_range, last_style)) = merged.last_mut()
+      && last_range.end == range.start
+      && *last_style == style
+      && !significant_intervals.contains(&range.start)
+    {
+      // Merge adjacent ranges with same style, but not across significant boundaries
+      last_range.end = range.end;
+      continue;
     }
     merged.push((range, style));
   }

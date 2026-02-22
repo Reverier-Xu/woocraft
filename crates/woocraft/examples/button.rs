@@ -62,11 +62,7 @@ impl Render for ButtonWindow {
         h_flex()
           .gap_3()
           .child(Button::new("btn-default").label("Default").default())
-          .child(
-            Button::new("btn-down")
-              .label("Down")
-              .default(),
-          )
+          .child(Button::new("btn-down").label("Down").default())
           .child(Button::new("btn-link").label("Link").link())
           .child(Button::new("btn-flat").label("Flat").flat())
           .child(

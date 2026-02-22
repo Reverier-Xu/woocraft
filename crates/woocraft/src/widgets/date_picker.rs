@@ -223,7 +223,7 @@ impl DatePickerState {
     cx.stop_propagation();
     match self.date {
       Date::Single(_) => self.update_date(Date::Single(None), true, window, cx),
-      Date::Range(_, _) => self.update_date(Date::Range(None, None), true, window, cx),
+      Date::Range(..) => self.update_date(Date::Range(None, None), true, window, cx),
     }
   }
 

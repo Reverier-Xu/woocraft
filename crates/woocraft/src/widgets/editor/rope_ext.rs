@@ -68,7 +68,8 @@ pub trait RopeExt {
   /// ```
   fn line_start_offset(&self, row: usize) -> usize;
 
-  /// Line the end offset (including `\n`) of the line at the given row (0-based) index.
+  /// Line the end offset (including `\n`) of the line at the given row
+  /// (0-based) index.
   ///
   /// Return the end of the rope if the row is out of bounds.
   ///
@@ -80,7 +81,8 @@ pub trait RopeExt {
   /// ```
   fn line_end_offset(&self, row: usize) -> usize;
 
-  /// Return a line slice at the given row (0-based) index. including `\r` if present, but not `\n`.
+  /// Return a line slice at the given row (0-based) index. including `\r` if
+  /// present, but not `\n`.
   ///
   /// ```
   /// use gpui_component::{Rope, RopeExt};
@@ -128,7 +130,8 @@ pub trait RopeExt {
   /// ```
   fn lines_len(&self) -> usize;
 
-  /// Return the length of the row (0-based) in characters, including `\r` if present, but not `\n`.
+  /// Return the length of the row (0-based) in characters, including `\r` if
+  /// present, but not `\n`.
   ///
   /// If the row is out of bounds, return 0.
   ///
@@ -276,7 +279,7 @@ impl RopeExt for Rope {
   }
 
   fn iter_lines(&self) -> RopeLines<'_> {
-    RopeLines::new(&self)
+    RopeLines::new(self)
   }
 
   fn line_len(&self, row: usize) -> usize {
@@ -433,7 +436,7 @@ mod tests {
   use sum_tree::Bias;
   use tree_sitter::Point;
 
-  use crate::{widgets::editor::Position, widgets::editor::RopeExt};
+  use crate::widgets::editor::{Position, RopeExt};
 
   #[test]
   fn test_slice_line() {

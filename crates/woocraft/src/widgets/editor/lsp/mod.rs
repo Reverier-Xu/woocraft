@@ -1,7 +1,8 @@
+use std::rc::Rc;
+
 use anyhow::Result;
 use gpui::{App, Context, Hsla, MouseMoveEvent, Task, Window};
 use ropey::Rope;
-use std::rc::Rc;
 
 use crate::widgets::editor::{InputState, RopeExt, popovers::ContextMenu};
 
@@ -95,12 +96,12 @@ impl InputState {
 
     match menu {
       ContextMenu::Completion(menu) => {
-        _ = menu.update(cx, |menu, cx| {
+        menu.update(cx, |menu, cx| {
           handled = menu.handle_action(action, window, cx)
         });
       }
       ContextMenu::CodeAction(menu) => {
-        _ = menu.update(cx, |menu, cx| {
+        menu.update(cx, |menu, cx| {
           handled = menu.handle_action(action, window, cx)
         });
       }

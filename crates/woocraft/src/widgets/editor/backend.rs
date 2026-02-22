@@ -2,9 +2,8 @@ use std::ops::Range;
 
 use gpui::{Entity, MouseButton, Window};
 
-use crate::PopupMenu;
-
 use super::state::InputState;
+use crate::PopupMenu;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditorPointerButton {
@@ -112,7 +111,8 @@ pub trait EditorDataBackend {
     Some((row.saturating_add(1)).to_string())
   }
 
-  /// Return an upper-bound sample text used to measure line-number gutter width.
+  /// Return an upper-bound sample text used to measure line-number gutter
+  /// width.
   fn max_line_number_text(&self) -> Option<String> {
     let line_count = self.line_count().max(1);
     self.line_number_text(line_count.saturating_sub(1))

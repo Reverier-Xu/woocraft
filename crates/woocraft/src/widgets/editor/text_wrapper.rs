@@ -17,7 +17,8 @@ use super::{
 pub(super) struct LineItem {
   /// The original line text, without end `\n`.
   line: Rope,
-  /// The soft wrapped lines relative byte range (0..line.len) of this line (Include first line).
+  /// The soft wrapped lines relative byte range (0..line.len) of this line
+  /// (Include first line).
   ///
   /// Not contains the line end `\n`.
   pub(super) wrapped_lines: Vec<Range<usize>>,
@@ -50,18 +51,21 @@ pub(super) struct LongestRow {
   pub len: usize,
 }
 
-/// Used to prepare the text with soft wrap to be get lines to displayed in the Editor.
+/// Used to prepare the text with soft wrap to be get lines to displayed in the
+/// Editor.
 ///
 /// After use lines to calculate the scroll size of the Editor.
 pub(super) struct TextWrapper {
   text: Rope,
-  /// Total wrapped lines (Inlucde the first line), value is start and end index of the line.
+  /// Total wrapped lines (Inlucde the first line), value is start and end index
+  /// of the line.
   soft_lines: usize,
   font: Font,
   font_size: Pixels,
   /// If is none, it means the text is not wrapped
   wrap_width: Option<Pixels>,
-  /// The longest (row, bytes len) in characters, used to calculate the horizontal scroll width.
+  /// The longest (row, bytes len) in characters, used to calculate the
+  /// horizontal scroll width.
   pub(super) longest_row: LongestRow,
   /// The lines by split \n
   pub(super) lines: Vec<LineItem>,
@@ -98,7 +102,7 @@ impl TextWrapper {
   /// Get the line item by row index.
   #[inline]
   pub(super) fn line(&self, row: usize) -> Option<&LineItem> {
-    self.lines.iter().skip(row).next()
+    self.lines.get(row)
   }
 
   pub(super) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
@@ -135,7 +139,8 @@ impl TextWrapper {
   /// - `changed_text`: The text [`Rope`] that has changed.
   /// - `range`: The `selected_range` before change.
   /// - `new_text`: The inserted text.
-  /// - `force`: Whether to force the update, if false, the update will be skipped if the text is the same.
+  /// - `force`: Whether to force the update, if false, the update will be
+  ///   skipped if the text is the same.
   /// - `cx`: The application context.
   pub(super) fn update(
     &mut self, changed_text: &Rope, range: &Range<usize>, new_text: &Rope, cx: &mut App,
@@ -158,8 +163,7 @@ impl TextWrapper {
   fn _update<F>(
     &mut self, changed_text: &Rope, range: &Range<usize>, new_text: &Rope, wrap_line: &mut F,
   ) where
-    F: FnMut(&str, Pixels) -> Vec<gpui::Boundary>,
-  {
+    F: FnMut(&str, Pixels) -> Vec<gpui::Boundary>, {
     // Remove the old changed lines.
     let start_row = self.text.offset_to_point(range.start).row;
     let start_row = start_row.min(self.lines.len().saturating_sub(1));
@@ -202,7 +206,8 @@ impl TextWrapper {
 
       // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
       if let Some(wrap_width) = wrap_width {
-        // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
+        // Here only have wrapped line, if there is no wrap meet, the `line_wraps`
+        // result will empty.
         for boundary in wrap_line(&line_str, wrap_width) {
           wrapped_lines.push(prev_boundary_ix..boundary.ix);
           prev_boundary_ix = boundary.ix;
@@ -220,7 +225,7 @@ impl TextWrapper {
       });
     }
 
-    if self.lines.len() == 0 {
+    if self.lines.is_empty() {
       self.lines = new_lines;
     } else {
       self.lines.splice(rows_range, new_lines);
@@ -238,10 +243,11 @@ impl TextWrapper {
   ///
   /// If the `text` is the same as the current text, do nothing.
   fn update_all(&mut self, text: &Rope, cx: &mut App) {
-    self.update(text, &(0..text.len()), &text, cx);
+    self.update(text, &(0..text.len()), text, cx);
   }
 
-  /// Return display point (with soft wrap) from the given byte offset in the text.
+  /// Return display point (with soft wrap) from the given byte offset in the
+  /// text.
   ///
   /// Panics if the `offset` is out of bounds.
   pub(crate) fn offset_to_display_point(&self, offset: usize) -> DisplayPoint {
@@ -270,10 +276,11 @@ impl TextWrapper {
     // Otherwise return the eof of the line.
     let last_range = line.wrapped_lines.last().unwrap_or(&(0..0));
     let ix = line.lines_len().saturating_sub(1);
-    return DisplayPoint::new(wrapped_row + ix, ix, last_range.len());
+    DisplayPoint::new(wrapped_row + ix, ix, last_range.len())
   }
 
-  /// Return byte offset in the text from the given display point (with soft wrap).
+  /// Return byte offset in the text from the given display point (with soft
+  /// wrap).
   ///
   /// Panics if the `point.row` is out of bounds.
   pub(crate) fn display_point_to_offset(&self, point: DisplayPoint) -> usize {
@@ -293,7 +300,7 @@ impl TextWrapper {
       wrapped_row += line.lines_len();
     }
 
-    return self.text.len();
+    self.text.len()
   }
 
   pub(crate) fn display_point_to_point(&self, point: DisplayPoint) -> tree_sitter::Point {
@@ -317,7 +324,8 @@ pub struct DisplayPoint {
   pub row: usize,
   /// The 0-based row index in local line (include first line).
   ///
-  /// This value only valid when return from [`TextWrapper::offset_to_display_point`], otherwise it will be ignored.
+  /// This value only valid when return from
+  /// [`TextWrapper::offset_to_display_point`], otherwise it will be ignored.
   pub local_row: usize,
   /// The 0-based column byte index in the display line (with soft wrap).
   pub column: usize,
@@ -408,7 +416,8 @@ impl LineLayout {
   /// Get the position (x, y) for the given index in this line layout.
   ///
   /// - The `offset` is a local byte index in this line layout.
-  /// - The return value is relative to the top-left corner of this line layout, start from (0, 0)
+  /// - The return value is relative to the top-left corner of this line layout,
+  ///   start from (0, 0)
   pub(crate) fn position_for_index(
     &self, offset: usize, last_layout: &LastLayout,
   ) -> Option<Point<Pixels>> {
@@ -435,8 +444,9 @@ impl LineLayout {
 
   /// Get the index for the given position (x, y) in this line layout.
   ///
-  /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
-  /// The return value is a local byte index in this line layout, start from 0.
+  /// The `pos` is relative to the top-left corner of this line layout, start
+  /// from (0, 0) The return value is a local byte index in this line layout,
+  /// start from 0.
   pub(super) fn closest_index_for_position(
     &self, pos: Point<Pixels>, last_layout: &LastLayout,
   ) -> Option<usize> {
@@ -522,8 +532,9 @@ impl LineLayout {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
   use gpui::{Boundary, FontFeatures, FontStyle, FontWeight, px};
+
+  use super::*;
 
   #[test]
   fn test_update() {

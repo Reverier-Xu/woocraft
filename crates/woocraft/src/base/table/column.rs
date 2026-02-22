@@ -28,7 +28,8 @@ pub struct Column {
   pub paddings: Option<Edges<Pixels>>,
   /// The width of the column.
   pub width: Pixels,
-  /// Whether the column is fixed, the fixed column will pin at the left side when scrolling horizontally.
+  /// Whether the column is fixed, the fixed column will pin at the left side
+  /// when scrolling horizontally.
   pub fixed: Option<ColumnFixed>,
   /// Whether the column is resizable.
   pub resizable: bool,
@@ -42,7 +43,8 @@ pub struct Column {
   ///
   /// When `false`:
   /// - The column and its cells cannot be selected
-  /// - Useful for action columns (e.g., buttons, checkboxes) that shouldn't participate in selection
+  /// - Useful for action columns (e.g., buttons, checkboxes) that shouldn't
+  ///   participate in selection
   pub selectable: bool,
   /// The minimum width of the column.
   pub min_width: Pixels,
@@ -79,7 +81,8 @@ impl Column {
     }
   }
 
-  /// Set the column to be sortable with custom sort function, default is None (not sortable).
+  /// Set the column to be sortable with custom sort function, default is None
+  /// (not sortable).
   ///
   /// See also [`Column::sortable`] to enable sorting with default.
   pub fn sort(mut self, sort: ColumnSort) -> Self {
@@ -222,7 +225,8 @@ pub enum ColumnFixed {
 #[derive(Debug, Clone)]
 pub(crate) struct ColGroup {
   pub(crate) column: Column,
-  /// This is the runtime width of the column, we may update it when the column is resized.
+  /// This is the runtime width of the column, we may update it when the column
+  /// is resized.
   ///
   /// Including the width with next columns by col_span.
   pub(crate) width: Pixels,

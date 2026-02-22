@@ -12,7 +12,8 @@ pub(crate) enum MoveDirection {
 }
 
 impl InputState {
-  /// Called after moving the cursor. Updates preferred_column if we know where the cursor now is.
+  /// Called after moving the cursor. Updates preferred_column if we know where
+  /// the cursor now is.
   pub(super) fn update_preferred_column(&mut self) {
     let Some(last_layout) = &self.last_layout else {
       self.preferred_column = None;
@@ -38,7 +39,8 @@ impl InputState {
   ///
   /// The offset is the UTF-8 offset.
   ///
-  /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
+  /// Ensure the offset use self.next_boundary or self.previous_boundary to get
+  /// the correct offset.
   pub(crate) fn move_to(
     &mut self, offset: usize, direction: Option<MoveDirection>, cx: &mut Context<Self>,
   ) {
@@ -55,9 +57,11 @@ impl InputState {
     cx.notify()
   }
 
-  /// Move the cursor vertically by one line (up or down) while preserving the column if possible.
+  /// Move the cursor vertically by one line (up or down) while preserving the
+  /// column if possible.
   ///
-  /// move_lines: Number of lines to move vertically (positive for down, negative for up).
+  /// move_lines: Number of lines to move vertically (positive for down,
+  /// negative for up).
   pub(super) fn move_vertical(
     &mut self, move_lines: isize, _: &mut Window, cx: &mut Context<Self>,
   ) {

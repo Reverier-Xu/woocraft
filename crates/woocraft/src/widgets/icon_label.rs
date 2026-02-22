@@ -77,13 +77,15 @@ impl IconLabel {
     self
   }
 
-  /// Expand IconLabel as a flex item and let its internal row stretch to full width.
+  /// Expand IconLabel as a flex item and let its internal row stretch to full
+  /// width.
   pub fn flex_1(mut self) -> Self {
     self.expanded = true;
     self
   }
 
-  /// Make the label text container flexible so trailing children can align to the far edge.
+  /// Make the label text container flexible so trailing children can align to
+  /// the far edge.
   pub fn label_flex_1(mut self) -> Self {
     self.label_expanded = true;
     self

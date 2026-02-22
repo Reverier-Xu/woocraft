@@ -6,12 +6,11 @@ mod hover_popover;
 pub(crate) use code_action_menu::*;
 pub(crate) use completion_menu::*;
 pub(crate) use diagnostic_popover::*;
-pub(crate) use hover_popover::*;
-
 use gpui::{
   AnyElement, App, Div, ElementId, Entity, InteractiveElement as _, IntoElement,
   ParentElement as _, SharedString, Stateful, Styled as _, Window, div,
 };
+pub(crate) use hover_popover::*;
 
 use crate::{ActiveTheme, CardStyle as _, widgets::label::Label};
 

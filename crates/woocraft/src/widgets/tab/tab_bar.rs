@@ -117,8 +117,7 @@ impl TabBar {
   /// When this is set, the children's on_click will be ignored.
   pub fn on_click<F>(mut self, on_click: F) -> Self
   where
-    F: Fn(&usize, &mut Window, &mut App) + 'static,
-  {
+    F: Fn(&usize, &mut Window, &mut App) + 'static, {
     self.on_click = Some(Rc::new(on_click));
     self
   }

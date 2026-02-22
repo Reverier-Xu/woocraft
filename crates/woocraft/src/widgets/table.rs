@@ -34,7 +34,8 @@ pub(crate) fn init(cx: &mut App) {
 /// # Features
 ///
 /// - **Multiple Selection Modes**: Support for row, column, and cell selection
-/// - **Cell Selection**: Click to select individual cells, with keyboard navigation
+/// - **Cell Selection**: Click to select individual cells, with keyboard
+///   navigation
 /// - **Virtual Scrolling**: Efficient rendering of large datasets
 /// - **Resizable Columns**: Drag column borders to resize
 /// - **Movable Columns**: Drag column headers to reorder
@@ -47,7 +48,8 @@ pub(crate) fn init(cx: &mut App) {
 /// When cell selection is enabled via [`TableState::cell_selectable()`]:
 /// - Click on cells to select them
 /// - A row selector column appears on the left for selecting entire rows
-/// - Keyboard navigation (arrow keys, Tab, Home, End, PageUp, PageDown) works at cell level
+/// - Keyboard navigation (arrow keys, Tab, Home, End, PageUp, PageDown) works
+///   at cell level
 /// - Right-click and double-click events are supported
 ///
 /// See [`TableState`] for more details on cell selection.

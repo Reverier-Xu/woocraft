@@ -5,10 +5,8 @@ use gpui::{
   Styled as _, Window, div,
 };
 
+use super::{Column, ColumnSort, TableState, loading::Loading};
 use crate::{ActiveTheme as _, Icon, IconLabel, IconName, PopupMenu, Size, h_flex};
-
-use super::loading::Loading;
-use super::{Column, ColumnSort, TableState};
 
 /// A delegate trait for providing data and rendering for a table.
 #[allow(unused)]
@@ -38,7 +36,8 @@ pub trait TableDelegate: Sized + 'static {
     div().id("header")
   }
 
-  /// Render the header cell at the given column index, default to the column name.
+  /// Render the header cell at the given column index, default to the column
+  /// name.
   fn render_th(
     &mut self, col_ix: usize, window: &mut Window, cx: &mut Context<TableState<Self>>,
   ) -> IconLabel {
@@ -68,7 +67,8 @@ pub trait TableDelegate: Sized + 'static {
     cx: &mut Context<TableState<Self>>,
   ) -> impl IntoElement;
 
-  /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
+  /// Move the column at the given `col_ix` to insert before the column at the
+  /// given `to_ix`.
   fn move_column(
     &mut self, col_ix: usize, to_ix: usize, window: &mut Window, cx: &mut Context<TableState<Self>>,
   ) {
@@ -91,7 +91,8 @@ pub trait TableDelegate: Sized + 'static {
     false
   }
 
-  /// Return a Element to show when table is loading, default is built-in Skeleton loading view.
+  /// Return a Element to show when table is loading, default is built-in
+  /// Skeleton loading view.
   ///
   /// The size is the size of the Table.
   fn render_loading(
@@ -107,8 +108,8 @@ pub trait TableDelegate: Sized + 'static {
     false
   }
 
-  /// Returns a threshold value (n rows), of course, when scrolling to the bottom,
-  /// the remaining number of rows triggers `load_more`.
+  /// Returns a threshold value (n rows), of course, when scrolling to the
+  /// bottom, the remaining number of rows triggers `load_more`.
   /// This should smaller than the total number of first load rows.
   ///
   /// Default: 20 rows
@@ -153,10 +154,12 @@ pub trait TableDelegate: Sized + 'static {
   ) {
   }
 
-  /// Get the text representation of a cell for export purposes (e.g., CSV export).
+  /// Get the text representation of a cell for export purposes (e.g., CSV
+  /// export).
   ///
-  /// Returns an empty string by default. Implement this method to support export.
-  /// The text should be formatted as it should appear in the exported data.
+  /// Returns an empty string by default. Implement this method to support
+  /// export. The text should be formatted as it should appear in the exported
+  /// data.
   fn cell_text(&self, row_ix: usize, col_ix: usize, cx: &App) -> String {
     String::new()
   }

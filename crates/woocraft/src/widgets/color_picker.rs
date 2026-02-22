@@ -629,10 +629,8 @@ fn convert_oklch(value: ColorPickerOklch) -> (Srgb, bool) {
   let hsl_out_of_range = hue_out_of_range
     || !saturation.is_finite()
     || !lightness.is_finite()
-    || saturation < 0.0
-    || saturation > 1.0
-    || lightness < 0.0
-    || lightness > 1.0;
+    || !(0.0..=1.0).contains(&saturation)
+    || !(0.0..=1.0).contains(&lightness);
 
   (raw_rgb, rgb_out_of_range || hsl_out_of_range)
 }

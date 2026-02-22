@@ -2,9 +2,8 @@ use std::rc::Rc;
 
 use gpui::{Context, Corner, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window};
 
-use crate::{Button, Popover, PopupMenu, Selectable};
-
 use super::popover_menu::{MenuBuilderFn, render_popup_menu};
+use crate::{Button, Popover, PopupMenu, Selectable};
 
 pub trait DropdownMenuTriggerId {
   fn dropdown_menu_trigger_id(&self) -> ElementId;
@@ -18,8 +17,7 @@ impl DropdownMenuTriggerId for Button {
 
 /// A dropdown menu trait for buttons and other interactive elements
 pub trait DropdownMenu:
-  Styled + Selectable + DropdownMenuTriggerId + IntoElement + 'static
-{
+  Styled + Selectable + DropdownMenuTriggerId + IntoElement + 'static {
   /// Create a dropdown menu with the given items, anchored to the TopLeft
   /// corner
   fn dropdown_menu(

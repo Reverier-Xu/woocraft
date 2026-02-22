@@ -3,6 +3,7 @@ mod badge;
 mod breadcrumb;
 mod button;
 mod calendar;
+mod chart;
 mod checkbox;
 mod color_picker;
 mod date_picker;
@@ -43,16 +44,16 @@ pub use badge::*;
 pub use breadcrumb::*;
 pub use button::*;
 pub use calendar::*;
+pub use chart::*;
 pub use checkbox::*;
 pub use color_picker::*;
 pub use date_picker::*;
 pub use divider::*;
 pub use dock::*;
-pub use editor::highlighter::*;
-pub use editor::lsp::*;
 pub use editor::{
   CodeEditor, EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorEvent,
   EditorPointerButton, EditorState, EditorUserAction, MaskPattern, Position, Rope, TabSize,
+  highlighter::*, lsp::*,
 };
 pub use form::*;
 pub use history::*;

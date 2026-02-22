@@ -3,8 +3,8 @@ use std::rc::Rc;
 use gpui::{
   AnimationExt as _, AnyElement, AnyView, App, ClickEvent, Corners, ElementId, Hsla,
   InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window,
-  percentage, prelude::FluentBuilder, px,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, percentage,
+  prelude::FluentBuilder, px,
 };
 
 use crate::{

@@ -92,7 +92,8 @@ impl CalendarState {
 
   /// Set the disabled matcher of the calendar.
   ///
-  /// The disabled matcher will be used to disable the days that match the matcher.
+  /// The disabled matcher will be used to disable the days that match the
+  /// matcher.
   pub fn set_disabled_matcher(
     &mut self, disabled: impl Into<Matcher>, _: &mut Window, _: &mut Context<Self>,
   ) {
@@ -101,7 +102,8 @@ impl CalendarState {
 
   /// Set the date of the calendar.
   ///
-  /// When you set a range date, the mode will be automatically set to range mode.
+  /// When you set a range date, the mode will be automatically set to range
+  /// mode.
   pub fn set_date(&mut self, date: impl Into<Date>, _: &mut Window, cx: &mut Context<Self>) {
     let date = date.into();
     let invalid = self
