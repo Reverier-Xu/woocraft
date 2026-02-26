@@ -8,7 +8,7 @@ use gpui::{
 
 use super::state::{CONTEXT, Copy, Cut, InputState, Paste, SelectAll};
 use crate::{
-  ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Sizable, Size, StyleSized as _,
+  ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Size, StyleSized as _,
   StyledExt, translate, v_flex,
   widgets::{
     editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN},
@@ -38,12 +38,7 @@ pub struct Editor {
   context_menu_builder: Option<ContextMenuBuilder>,
 }
 
-impl Sizable for Editor {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(Editor);
 
 impl Selectable for Editor {
   fn selected(mut self, selected: bool) -> Self {
@@ -215,11 +210,7 @@ impl Editor {
   }
 }
 
-impl Styled for Editor {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Editor);
 
 impl RenderOnce for Editor {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

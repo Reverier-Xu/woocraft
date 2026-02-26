@@ -669,18 +669,8 @@ impl Calendar {
   }
 }
 
-impl Sizable for Calendar {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Calendar {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_sizable!(Calendar);
+impl_styled!(Calendar);
 
 impl EventEmitter<CalendarEvent> for CalendarState {}
 

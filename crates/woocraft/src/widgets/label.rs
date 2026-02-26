@@ -166,11 +166,7 @@ impl Label {
   }
 }
 
-impl Styled for Label {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Label);
 
 impl RenderOnce for Label {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

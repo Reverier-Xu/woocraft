@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
+  ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
   h_flex,
 };
 
@@ -69,41 +69,11 @@ impl Checkbox {
   }
 }
 
-impl Disableable for Checkbox {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Selectable for Checkbox {
-  fn selected(self, selected: bool) -> Self {
-    self.checked(selected)
-  }
-
-  fn is_selected(&self) -> bool {
-    self.checked
-  }
-}
-
-impl Sizable for Checkbox {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Checkbox {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl ParentElement for Checkbox {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_disableable!(Checkbox);
+impl_selectable!(Checkbox, checked);
+impl_sizable!(Checkbox);
+impl_styled!(Checkbox);
+impl_parent_element!(Checkbox);
 
 impl RenderOnce for Checkbox {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

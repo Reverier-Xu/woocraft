@@ -256,12 +256,7 @@ pub struct DatePicker {
   disabled: bool,
 }
 
-impl Sizable for DatePicker {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(DatePicker);
 
 impl Focusable for DatePicker {
   fn focus_handle(&self, cx: &App) -> FocusHandle {
@@ -269,18 +264,8 @@ impl Focusable for DatePicker {
   }
 }
 
-impl Styled for DatePicker {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl Disableable for DatePicker {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
+impl_styled!(DatePicker);
+impl_disableable!(DatePicker);
 
 impl Render for DatePickerState {
   fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {

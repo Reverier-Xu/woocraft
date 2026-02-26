@@ -69,24 +69,9 @@ impl Badge {
   }
 }
 
-impl ParentElement for Badge {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
-
-impl Sizable for Badge {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Badge {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_parent_element!(Badge);
+impl_sizable!(Badge);
+impl_styled!(Badge);
 
 impl RenderOnce for Badge {
   fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {

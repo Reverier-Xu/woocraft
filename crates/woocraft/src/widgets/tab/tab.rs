@@ -193,12 +193,7 @@ impl Styled for Tab {
   }
 }
 
-impl Sizable for Tab {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(Tab);
 
 impl RenderOnce for Tab {
   fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {

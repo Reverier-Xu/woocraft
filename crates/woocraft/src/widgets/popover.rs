@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Anchor, CardStyle, ElementExt, Selectable, Sizable, Size, StyleSized, StyledExt,
+  ActiveTheme, Anchor, CardStyle, ElementExt, Selectable, Size, StyleSized, StyledExt,
   actions::{Cancel, POPOVER_CONTEXT},
   h_flex,
 };
@@ -174,24 +174,9 @@ impl Popover {
   }
 }
 
-impl ParentElement for Popover {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
-
-impl Sizable for Popover {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Popover {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_parent_element!(Popover);
+impl_sizable!(Popover);
+impl_styled!(Popover);
 
 pub struct PopoverState {
   focus_handle: FocusHandle,

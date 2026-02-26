@@ -261,12 +261,7 @@ impl WidgetGroup {
   }
 }
 
-impl Disableable for WidgetGroup {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
+impl_disableable!(WidgetGroup);
 
 impl Sizable for WidgetGroup {
   fn with_size(mut self, size: impl Into<Size>) -> Self {
@@ -275,11 +270,7 @@ impl Sizable for WidgetGroup {
   }
 }
 
-impl Styled for WidgetGroup {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(WidgetGroup);
 
 impl crate::ButtonVariants for WidgetGroup {
   fn with_variant(mut self, variant: ButtonVariant) -> Self {

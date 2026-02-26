@@ -5,7 +5,7 @@ use gpui::{
   Transformation, Window, div, linear, percentage, prelude::FluentBuilder as _,
 };
 
-use crate::{Icon, IconName, Sizable, Size};
+use crate::{Icon, IconName, Sizable, Size, duration};
 
 #[derive(IntoElement)]
 pub struct Spinner {
@@ -25,7 +25,7 @@ impl Spinner {
   pub fn new() -> Self {
     Self {
       size: Size::Medium,
-      speed: Duration::from_secs_f64(0.8),
+      speed: duration::SPINNER,
       icon: Icon::new(IconName::SpinnerIos),
       color: None,
     }
@@ -47,12 +47,7 @@ impl Spinner {
   }
 }
 
-impl Sizable for Spinner {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(Spinner);
 
 impl RenderOnce for Spinner {
   fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {

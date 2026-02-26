@@ -3,7 +3,7 @@ use gpui::{
   SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
 
-use crate::{ActiveTheme, CardStyle, Kbd, Sizable, Size, StyleSized, StyledExt, h_flex};
+use crate::{ActiveTheme, CardStyle, Kbd, Size, StyleSized, StyledExt, h_flex};
 
 type TooltipElementBuilder = Box<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
@@ -63,18 +63,8 @@ impl Tooltip {
 
 impl FluentBuilder for Tooltip {}
 
-impl Sizable for Tooltip {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Tooltip {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_sizable!(Tooltip);
+impl_styled!(Tooltip);
 
 impl Render for Tooltip {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

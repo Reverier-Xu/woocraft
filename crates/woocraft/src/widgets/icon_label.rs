@@ -1,15 +1,15 @@
-use std::{rc::Rc, time::Duration};
+use std::rc::Rc;
 
 use gpui::{
-  Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,
+  AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,
   InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div, linear,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div,
   percentage, prelude::FluentBuilder as _,
 };
 
 use crate::{
-  ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt,
-  h_flex,
+  ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
+  h_flex, opacity, spinner_animation,
 };
 
 type IconLabelClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -96,42 +96,11 @@ impl IconLabel {
   }
 }
 
-impl Disableable for IconLabel {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Selectable for IconLabel {
-  fn selected(mut self, selected: bool) -> Self {
-    self.selected = selected;
-    self
-  }
-
-  fn is_selected(&self) -> bool {
-    self.selected
-  }
-}
-
-impl Sizable for IconLabel {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for IconLabel {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl ParentElement for IconLabel {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_disableable!(IconLabel);
+impl_selectable!(IconLabel);
+impl_sizable!(IconLabel);
+impl_styled!(IconLabel);
+impl_parent_element!(IconLabel);
 
 impl RenderOnce for IconLabel {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -154,7 +123,7 @@ impl RenderOnce for IconLabel {
 
     if self.disabled {
       text_color = Hsla {
-        a: 0.6,
+        a: opacity::DISABLED,
         ..text_color
       };
     }
@@ -169,9 +138,7 @@ impl RenderOnce for IconLabel {
           this.child(
             icon.with_animation(
               "loading-spin",
-              Animation::new(Duration::from_secs_f64(0.8))
-                .repeat()
-                .with_easing(linear),
+              spinner_animation(),
               |this, delta| this.transform(Transformation::rotate(percentage(delta))),
             ),
           )

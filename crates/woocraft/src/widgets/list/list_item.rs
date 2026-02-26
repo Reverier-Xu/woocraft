@@ -119,12 +119,7 @@ impl ListItem {
   }
 }
 
-impl Sizable for ListItem {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(ListItem);
 
 impl Selectable for ListItem {
   fn selected(mut self, selected: bool) -> Self {
@@ -142,11 +137,7 @@ impl Selectable for ListItem {
   }
 }
 
-impl Styled for ListItem {
-  fn style(&mut self) -> &mut gpui::StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(ListItem);
 
 impl ParentElement for ListItem {
   fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {

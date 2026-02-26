@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, ColorExt, Disableable, Icon, IconName, InteractionColors, Selectable, Sizable, Size,
+  ActiveTheme, ColorExt, Icon, IconName, InteractionColors, Sizable, Size,
   StyleSized, StyledExt, h_flex, opacity, spinner_animation,
 };
 
@@ -218,42 +218,11 @@ impl ButtonVariants for Button {
   }
 }
 
-impl Disableable for Button {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Selectable for Button {
-  fn selected(mut self, selected: bool) -> Self {
-    self.selected = selected;
-    self
-  }
-
-  fn is_selected(&self) -> bool {
-    self.selected
-  }
-}
-
-impl Sizable for Button {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Button {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl ParentElement for Button {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_disableable!(Button);
+impl_selectable!(Button);
+impl_sizable!(Button);
+impl_styled!(Button);
+impl_parent_element!(Button);
 
 impl RenderOnce for Button {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

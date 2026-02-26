@@ -318,19 +318,8 @@ impl ColorPicker {
   }
 }
 
-impl Disableable for ColorPicker {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Sizable for ColorPicker {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_disableable!(ColorPicker);
+impl_sizable!(ColorPicker);
 
 impl ButtonVariants for ColorPicker {
   fn with_variant(mut self, variant: ButtonVariant) -> Self {
@@ -339,11 +328,7 @@ impl ButtonVariants for ColorPicker {
   }
 }
 
-impl Styled for ColorPicker {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(ColorPicker);
 
 impl RenderOnce for ColorPicker {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

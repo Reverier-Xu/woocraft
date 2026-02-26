@@ -53,18 +53,8 @@ impl Breadcrumb {
   }
 }
 
-impl Styled for Breadcrumb {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl Sizable for Breadcrumb {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_styled!(Breadcrumb);
+impl_sizable!(Breadcrumb);
 
 impl RenderOnce for Breadcrumb {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -124,11 +114,7 @@ impl BreadcrumbItem {
   }
 }
 
-impl Styled for BreadcrumbItem {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(BreadcrumbItem);
 
 impl RenderOnce for BreadcrumbItem {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

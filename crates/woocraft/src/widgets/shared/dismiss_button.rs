@@ -37,12 +37,7 @@ impl DismissButton {
   }
 }
 
-impl Sizable for DismissButton {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(DismissButton);
 
 impl RenderOnce for DismissButton {
   fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {

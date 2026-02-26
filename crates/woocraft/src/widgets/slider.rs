@@ -5,7 +5,7 @@ use gpui::{
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
-use crate::{ActiveTheme, Disableable, ElementExt, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, ElementExt, Size, StyledExt, opacity};
 
 #[derive(Clone)]
 struct DragThumb((EntityId, bool));
@@ -338,25 +338,9 @@ impl Slider {
   }
 }
 
-impl Disableable for Slider {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Sizable for Slider {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Slider {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_disableable!(Slider);
+impl_sizable!(Slider);
+impl_styled!(Slider);
 
 impl RenderOnce for Slider {
   fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -527,7 +511,7 @@ impl RenderOnce for Slider {
               }),
           ),
       )
-      .opacity(if self.disabled { 0.6 } else { 1.0 })
+      .opacity(if self.disabled { opacity::DISABLED } else { 1.0 })
       .refine_style(&self.style)
   }
 }

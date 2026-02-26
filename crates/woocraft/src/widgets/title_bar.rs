@@ -234,11 +234,7 @@ impl RenderOnce for WindowControls {
   }
 }
 
-impl Styled for TitleBar {
-  fn style(&mut self) -> &mut gpui::StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(TitleBar);
 
 impl ParentElement for TitleBar {
   fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {

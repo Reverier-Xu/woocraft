@@ -187,11 +187,7 @@ impl Kbd {
   }
 }
 
-impl Styled for Kbd {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Kbd);
 
 impl RenderOnce for Kbd {
   fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {

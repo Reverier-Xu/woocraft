@@ -1,3 +1,6 @@
+#[macro_use]
+mod macros;
+
 mod anchor;
 mod animation;
 mod caret;

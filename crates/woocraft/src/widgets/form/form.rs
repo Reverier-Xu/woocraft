@@ -60,11 +60,7 @@ impl Form {
   }
 }
 
-impl Styled for Form {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Form);
 
 impl Sizable for Form {
   fn with_size(mut self, size: impl Into<Size>) -> Self {

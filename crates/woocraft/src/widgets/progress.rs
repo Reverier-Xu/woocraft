@@ -5,7 +5,7 @@ use gpui::{
   StyleRefinement, Styled, Window, canvas, div, point, px, relative,
 };
 
-use crate::{ActiveTheme, Sizable, Size, StyledExt, h_flex, translate};
+use crate::{ActiveTheme, Size, StyledExt, h_flex, translate};
 
 #[derive(IntoElement)]
 pub struct Progress {
@@ -63,18 +63,8 @@ impl Progress {
   }
 }
 
-impl Styled for Progress {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl Sizable for Progress {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_styled!(Progress);
+impl_sizable!(Progress);
 
 impl RenderOnce for Progress {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -180,24 +170,9 @@ impl ProgressCircle {
   }
 }
 
-impl ParentElement for ProgressCircle {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
-
-impl Styled for ProgressCircle {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl Sizable for ProgressCircle {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_parent_element!(ProgressCircle);
+impl_styled!(ProgressCircle);
+impl_sizable!(ProgressCircle);
 
 impl RenderOnce for ProgressCircle {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

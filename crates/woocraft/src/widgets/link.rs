@@ -6,7 +6,7 @@ use gpui::{
   Styled, Window, div, prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme, Disableable, StyledExt};
+use crate::{ActiveTheme, StyledExt};
 
 type LinkClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
@@ -45,24 +45,9 @@ impl Link {
   }
 }
 
-impl Disableable for Link {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Styled for Link {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl ParentElement for Link {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements)
-  }
-}
+impl_disableable!(Link);
+impl_styled!(Link);
+impl_parent_element!(Link);
 
 impl RenderOnce for Link {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

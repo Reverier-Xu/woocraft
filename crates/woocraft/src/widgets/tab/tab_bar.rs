@@ -123,18 +123,8 @@ impl TabBar {
   }
 }
 
-impl Styled for TabBar {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl Sizable for TabBar {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_styled!(TabBar);
+impl_sizable!(TabBar);
 
 impl RenderOnce for TabBar {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

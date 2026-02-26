@@ -11,8 +11,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, CardStyle, Icon, IconName, Sizable, Size, StyleSized,
-  StyledExt, h_flex, v_flex,
+  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconName, Size,
+  StyleSized, StyledExt, duration, h_flex, v_flex,
 };
 
 type NotificationClickHandler = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -95,7 +95,7 @@ impl Notification {
       message: None,
       icon: None,
       autohide: true,
-      duration: Duration::from_secs(5),
+      duration: duration::NOTIFICATION_DEFAULT,
       on_click: None,
       action_label: None,
       action_on_click: None,
@@ -276,7 +276,7 @@ impl NotificationState {
     cx.spawn_in(window, async move |_, cx| {
       loop {
         cx.background_executor()
-          .timer(Duration::from_millis(33))
+          .timer(duration::ANIMATION_FRAME)
           .await;
 
         let keep_running = if let Some(state) = state.upgrade() {
@@ -428,18 +428,8 @@ impl NotificationCenter {
   }
 }
 
-impl Sizable for NotificationCenter {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for NotificationCenter {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_sizable!(NotificationCenter);
+impl_styled!(NotificationCenter);
 
 impl RenderOnce for NotificationCenter {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

@@ -1,4 +1,5 @@
 pub mod actions;
+#[macro_use]
 pub mod base;
 mod examples;
 pub mod i18n;

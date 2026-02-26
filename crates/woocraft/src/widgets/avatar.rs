@@ -71,22 +71,12 @@ impl Avatar {
   }
 }
 
-impl Sizable for Avatar {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(Avatar);
+impl_styled!(Avatar);
 
 impl Default for Avatar {
   fn default() -> Self {
     Self::new()
-  }
-}
-
-impl Styled for Avatar {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
   }
 }
 
@@ -231,18 +221,8 @@ impl Default for AvatarGroup {
   }
 }
 
-impl Sizable for AvatarGroup {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for AvatarGroup {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_sizable!(AvatarGroup);
+impl_styled!(AvatarGroup);
 
 impl InteractiveElement for AvatarGroup {
   fn interactivity(&mut self) -> &mut Interactivity {

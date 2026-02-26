@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{
   ActiveTheme, AxisExt, Divider, DockPlacement, IconLabel, IconName, Placement, Selectable,
-  Sizable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate, v_flex,
+  Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate, v_flex,
 };
 
 #[derive(Clone)]
@@ -47,12 +47,7 @@ impl DragPanel {
   }
 }
 
-impl Sizable for DragPanel {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(DragPanel);
 
 impl Render for DragPanel {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

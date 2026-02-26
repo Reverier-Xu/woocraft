@@ -3,7 +3,7 @@ use gpui::{
   StyleRefinement, Styled, Window, div, px,
 };
 
-use crate::{ActiveTheme, Sizable, Size, StyleSized, StyledExt};
+use crate::{ActiveTheme, Size, StyleSized, StyledExt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TagVariant {
@@ -119,12 +119,7 @@ impl Tag {
   }
 }
 
-impl Sizable for Tag {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(Tag);
 
 impl ParentElement for Tag {
   fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
@@ -132,11 +127,7 @@ impl ParentElement for Tag {
   }
 }
 
-impl Styled for Tag {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Tag);
 
 impl RenderOnce for Tag {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

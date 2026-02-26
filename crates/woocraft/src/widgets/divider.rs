@@ -110,11 +110,7 @@ impl Divider {
   }
 }
 
-impl Styled for Divider {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Divider);
 
 impl RenderOnce for Divider {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

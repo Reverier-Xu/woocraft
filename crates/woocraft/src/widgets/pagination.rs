@@ -121,25 +121,9 @@ impl Pagination {
   }
 }
 
-impl Disableable for Pagination {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Sizable for Pagination {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for Pagination {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_disableable!(Pagination);
+impl_sizable!(Pagination);
+impl_styled!(Pagination);
 
 impl RenderOnce for Pagination {
   fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {

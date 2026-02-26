@@ -1,4 +1,4 @@
-use std::{rc::Rc, time::Duration};
+use std::rc::Rc;
 
 use gpui::{
   Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement as _,
@@ -6,7 +6,10 @@ use gpui::{
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme, Disableable, Sizable, Size, StyleSized, StyledExt, h_flex};
+use crate::{
+  ActiveTheme, ColorExt, Size, StyleSized, StyledExt, duration, h_flex,
+  opacity,
+};
 
 type SwitchClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
@@ -90,25 +93,9 @@ impl SwitchVariants for Switch {
   }
 }
 
-impl Styled for Switch {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
-
-impl Sizable for Switch {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Disableable for Switch {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
+impl_styled!(Switch);
+impl_sizable!(Switch);
+impl_disableable!(Switch);
 
 impl RenderOnce for Switch {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -116,7 +103,7 @@ impl RenderOnce for Switch {
     let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
     let prev_checked = *toggle_state.read(cx);
     let should_animate = !self.disabled && prev_checked != checked;
-    let animation_duration = Duration::from_secs_f64(0.15);
+    let animation_duration = duration::SWITCH_TOGGLE;
 
     if should_animate {
       cx.spawn({
@@ -171,7 +158,7 @@ impl RenderOnce for Switch {
       .h(track_thickness)
       .rounded_full()
       .bg(if self.disabled {
-        active_color.opacity(0.6)
+        active_color.opacity(opacity::DISABLED)
       } else {
         active_color
       })
@@ -252,7 +239,7 @@ impl RenderOnce for Switch {
               .h(track_thickness)
               .rounded_full()
               .bg(if self.disabled {
-                track_bg.opacity(0.6)
+                track_bg.opacity(opacity::DISABLED)
               } else {
                 track_bg
               }),

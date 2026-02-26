@@ -971,19 +971,8 @@ impl OtpInput {
   }
 }
 
-impl Disableable for OtpInput {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Sizable for OtpInput {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_disableable!(OtpInput);
+impl_sizable!(OtpInput);
 
 impl RenderOnce for OtpInput {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -1186,25 +1175,9 @@ impl NumberInput {
   }
 }
 
-impl Disableable for NumberInput {
-  fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-}
-
-impl Sizable for NumberInput {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
-
-impl Styled for NumberInput {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_disableable!(NumberInput);
+impl_sizable!(NumberInput);
+impl_styled!(NumberInput);
 
 impl RenderOnce for NumberInput {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -1606,12 +1579,7 @@ impl Input {
   }
 }
 
-impl Sizable for Input {
-  fn with_size(mut self, size: impl Into<Size>) -> Self {
-    self.size = size.into();
-    self
-  }
-}
+impl_sizable!(Input);
 
 impl Selectable for Input {
   fn selected(mut self, selected: bool) -> Self {
@@ -1624,11 +1592,7 @@ impl Selectable for Input {
   }
 }
 
-impl Styled for Input {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Input);
 
 #[inline]
 fn clear_button(cx: &App) -> Button {

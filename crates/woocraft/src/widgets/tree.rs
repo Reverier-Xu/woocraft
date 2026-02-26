@@ -454,11 +454,7 @@ impl Tree {
   }
 }
 
-impl Styled for Tree {
-  fn style(&mut self) -> &mut StyleRefinement {
-    &mut self.style
-  }
-}
+impl_styled!(Tree);
 
 impl RenderOnce for Tree {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
