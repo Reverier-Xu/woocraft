@@ -30,13 +30,17 @@ actions!(
 );
 
 struct ExamplePanel {
+  id: SharedString,
   title: SharedString,
   focus_handle: FocusHandle,
 }
 
 impl ExamplePanel {
-  fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
+  fn new(
+    id: impl Into<SharedString>, title: impl Into<SharedString>, cx: &mut Context<Self>,
+  ) -> Self {
     Self {
+      id: id.into(),
       title: title.into(),
       focus_handle: cx.focus_handle(),
     }
@@ -46,6 +50,10 @@ impl ExamplePanel {
 impl Panel for ExamplePanel {
   fn panel_name(&self) -> &'static str {
     "ExamplePanel"
+  }
+
+  fn panel_id(&self, _cx: &App) -> SharedString {
+    self.id.clone()
   }
 
   fn tab_name(&self, _cx: &App) -> Option<SharedString> {
@@ -102,10 +110,12 @@ struct DockExample {
 
 impl DockExample {
   fn panel(
-    title: impl Into<SharedString>, _window: &mut Window, cx: &mut App,
+    id: impl Into<SharedString>, title: impl Into<SharedString>, _window: &mut Window,
+    cx: &mut App,
   ) -> Entity<ExamplePanel> {
+    let id: SharedString = id.into();
     let title: SharedString = title.into();
-    cx.new(move |cx| ExamplePanel::new(title.clone(), cx))
+    cx.new(move |cx| ExamplePanel::new(id.clone(), title.clone(), cx))
   }
 
   fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -113,14 +123,14 @@ impl DockExample {
     let app_menu_bar = AppMenuBar::new(cx);
     let weak = dock_area.downgrade();
 
-    let editor = Self::panel("Editor", window, cx);
-    let preview = Self::panel("Preview", window, cx);
-    let inspector = Self::panel("Inspector", window, cx);
-    let explorer = Self::panel("Explorer", window, cx);
-    let outline = Self::panel("Outline", window, cx);
-    let terminal = Self::panel("Terminal", window, cx);
-    let problems = Self::panel("Problems", window, cx);
-    let references = Self::panel("References", window, cx);
+    let editor = Self::panel("editor:/workspace/main.rs", "Editor", window, cx);
+    let preview = Self::panel("preview:/workspace/main.rs", "Preview", window, cx);
+    let inspector = Self::panel("inspector:/workspace/main.rs", "Inspector", window, cx);
+    let explorer = Self::panel("explorer:/workspace", "Explorer", window, cx);
+    let outline = Self::panel("outline:/workspace/main.rs", "Outline", window, cx);
+    let terminal = Self::panel("terminal:default", "Terminal", window, cx);
+    let problems = Self::panel("problems:default", "Problems", window, cx);
+    let references = Self::panel("references:/workspace/main.rs", "References", window, cx);
 
     let center = DockItem::h_split(
       vec![

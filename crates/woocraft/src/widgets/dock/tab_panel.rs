@@ -254,6 +254,53 @@ impl TabPanel {
     self.active_ix
   }
 
+  fn panel_index_by_id(&self, panel_id: &str, cx: &App) -> Option<usize> {
+    self
+      .panels
+      .iter()
+      .position(|panel| panel.panel_id(cx).to_string() == panel_id)
+  }
+
+  pub(crate) fn panel_by_id(&self, panel_id: &str, cx: &App) -> Option<Arc<dyn PanelView>> {
+    self
+      .panel_index_by_id(panel_id, cx)
+      .and_then(|ix| self.panels.get(ix).cloned())
+  }
+
+  pub(crate) fn activate_panel_by_id(
+    &mut self, panel_id: &str, window: &mut Window, cx: &mut Context<Self>,
+  ) -> bool {
+    let Some(ix) = self.panel_index_by_id(panel_id, cx) else {
+      return false;
+    };
+
+    self.handle_tab_click(ix, window, cx);
+    true
+  }
+
+  pub(crate) fn close_panel_by_id(
+    &mut self, panel_id: &str, window: &mut Window, cx: &mut Context<Self>,
+  ) -> bool {
+    let Some(ix) = self.panel_index_by_id(panel_id, cx) else {
+      return false;
+    };
+
+    if !self.closable_by_layout(cx) {
+      return false;
+    }
+
+    let Some(panel) = self.panels.get(ix).cloned() else {
+      return false;
+    };
+
+    if !panel.closable(cx) {
+      return false;
+    }
+
+    self.remove_panel(panel, window, cx);
+    true
+  }
+
   fn set_active_ix(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
     if ix == self.active_ix {
       return;

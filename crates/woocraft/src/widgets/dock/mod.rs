@@ -480,6 +480,32 @@ impl DockItem {
       DockItem::Panel { .. } => None,
     }
   }
+
+  fn collect_tab_panels(&self, out: &mut Vec<Entity<TabPanel>>, cx: &App) {
+    match self {
+      DockItem::Tabs { view, .. } => out.push(view.clone()),
+      DockItem::Split { items, .. } => {
+        for item in items {
+          item.collect_tab_panels(out, cx);
+        }
+      }
+      DockItem::Tiles { view, .. } => {
+        let panels = view.read(cx).panels().to_vec();
+        for tile_item in panels {
+          if tile_item.panel.panel_name(cx) == "TabPanel" {
+            let tab_panel: Entity<TabPanel> = tile_item.panel.as_ref().into();
+            out.push(tab_panel);
+          }
+        }
+      }
+      DockItem::Panel { view, .. } => {
+        if view.panel_name(cx) == "TabPanel" {
+          let tab_panel: Entity<TabPanel> = view.as_ref().into();
+          out.push(tab_panel);
+        }
+      }
+    }
+  }
 }
 
 impl DockArea {
@@ -869,6 +895,100 @@ impl DockArea {
     self.remove_panel(panel.clone(), DockPlacement::Left, window, cx);
     self.remove_panel(panel.clone(), DockPlacement::Right, window, cx);
     self.remove_panel(panel.clone(), DockPlacement::Bottom, window, cx);
+  }
+
+  fn all_tab_panels(&self, cx: &App) -> Vec<Entity<TabPanel>> {
+    let mut panels = Vec::new();
+
+    self.center.collect_tab_panels(&mut panels, cx);
+
+    if let Some(dock) = self.left_dock.as_ref() {
+      dock.read(cx).panel.collect_tab_panels(&mut panels, cx);
+    }
+
+    if let Some(dock) = self.right_dock.as_ref() {
+      dock.read(cx).panel.collect_tab_panels(&mut panels, cx);
+    }
+
+    if let Some(dock) = self.bottom_dock.as_ref() {
+      dock.read(cx).panel.collect_tab_panels(&mut panels, cx);
+    }
+
+    panels
+  }
+
+  /// Find a panel by user-defined panel id.
+  pub fn panel_by_id(&self, panel_id: &str, cx: &App) -> Option<Arc<dyn PanelView>> {
+    for tab_panel in self.all_tab_panels(cx) {
+      if let Some(panel) = tab_panel.read(cx).panel_by_id(panel_id, cx) {
+        return Some(panel);
+      }
+    }
+
+    None
+  }
+
+  /// Alias of [`DockArea::panel_by_id`].
+  pub fn get_panel_by_id(&self, panel_id: &str, cx: &App) -> Option<Arc<dyn PanelView>> {
+    self.panel_by_id(panel_id, cx)
+  }
+
+  /// Activate a panel by user-defined panel id.
+  ///
+  /// Returns `true` if a panel is found and activated.
+  pub fn activate_panel_by_id(
+    &mut self, panel_id: &str, window: &mut Window, cx: &mut Context<Self>,
+  ) -> bool {
+    for tab_panel in self.all_tab_panels(cx) {
+      let mut activated = false;
+      tab_panel.update(cx, |tab_panel, cx| {
+        activated = tab_panel.activate_panel_by_id(panel_id, window, cx);
+      });
+
+      if activated {
+        return true;
+      }
+    }
+
+    false
+  }
+
+  /// Highlight a panel by user-defined panel id.
+  ///
+  /// This currently activates and focuses the panel.
+  pub fn highlight_panel_by_id(
+    &mut self, panel_id: &str, window: &mut Window, cx: &mut Context<Self>,
+  ) -> bool {
+    if !self.activate_panel_by_id(panel_id, window, cx) {
+      return false;
+    }
+
+    if let Some(panel) = self.panel_by_id(panel_id, cx) {
+      panel.focus_handle(cx).focus(window);
+      return true;
+    }
+
+    false
+  }
+
+  /// Close a panel by user-defined panel id.
+  ///
+  /// Returns `true` if a panel is found and closed.
+  pub fn close_panel_by_id(
+    &mut self, panel_id: &str, window: &mut Window, cx: &mut Context<Self>,
+  ) -> bool {
+    for tab_panel in self.all_tab_panels(cx) {
+      let mut closed = false;
+      tab_panel.update(cx, |tab_panel, cx| {
+        closed = tab_panel.close_panel_by_id(panel_id, window, cx);
+      });
+
+      if closed {
+        return true;
+      }
+    }
+
+    false
   }
 
   /// Load the state of the DockArea from the DockAreaState.

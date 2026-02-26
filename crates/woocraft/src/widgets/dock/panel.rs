@@ -68,6 +68,15 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
   /// Once you have defined a panel name, this must not be changed.
   fn panel_name(&self) -> &'static str;
 
+  /// The stable panel id of this panel instance.
+  ///
+  /// This id is user-defined and should be constructed by a stable strategy
+  /// so that users can identify, activate, highlight, close, or deduplicate
+  /// panels across sessions.
+  fn panel_id(&self, cx: &App) -> SharedString {
+    self.panel_name().into()
+  }
+
   /// The name of the tab of the panel, default is `None`.
   ///
   /// Used to display in the already collapsed tab panel.
@@ -176,7 +185,8 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 #[allow(unused_variables)]
 pub trait PanelView: 'static + Send + Sync {
   fn panel_name(&self, cx: &App) -> &'static str;
-  fn panel_id(&self, cx: &App) -> EntityId;
+  fn panel_id(&self, cx: &App) -> SharedString;
+  fn entity_id(&self, cx: &App) -> EntityId;
   fn tab_name(&self, cx: &App) -> Option<SharedString>;
   fn title(&self, cx: &App) -> SharedString;
   fn icon(&self, cx: &App) -> IconName;
@@ -202,8 +212,12 @@ impl<T: Panel> PanelView for Entity<T> {
     self.read(cx).panel_name()
   }
 
-  fn panel_id(&self, _: &App) -> EntityId {
-    self.entity_id()
+  fn panel_id(&self, cx: &App) -> SharedString {
+    self.read(cx).panel_id(cx)
+  }
+
+  fn entity_id(&self, _: &App) -> EntityId {
+    Entity::entity_id(self)
   }
 
   fn tab_name(&self, cx: &App) -> Option<SharedString> {

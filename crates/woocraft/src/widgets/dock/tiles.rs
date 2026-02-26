@@ -235,7 +235,7 @@ impl Tiles {
 
   /// Remove panel from the children.
   pub fn remove(&mut self, panel: Arc<dyn PanelView>, _: &mut Window, cx: &mut Context<Self>) {
-    if let Some(ix) = self.index_of(&panel.panel_id(cx)) {
+    if let Some(ix) = self.index_of(&panel.entity_id(cx)) {
       self.panels.remove(ix);
 
       cx.emit(PanelEvent::LayoutChanged);
