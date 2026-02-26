@@ -9,10 +9,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, ContextMenuExt as _, Icon, IconName, ListItem, PopupMenu, ScrollableElement,
-  StyledExt, TreeEntry, TreeItem, TreeModel,
-  actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
-  h_flex,
+  ActiveTheme, ContextMenuExt as _, Icon, IconName, ListItem, PopupMenu, ScrollableElement, Size, StyleSized, StyledExt, TreeEntry, TreeItem, TreeModel, actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp}, h_flex
 };
 
 const CONTEXT: &str = "Tree";
@@ -59,6 +56,7 @@ impl Render for DragTreeItem {
       .border_1()
       .border_color(cx.theme().border)
       .shadow_md()
+      .rounded_md()
       .max_w(px(300.))
       .overflow_hidden()
       .text_ellipsis()
@@ -231,7 +229,7 @@ impl TreeState {
   }
 
   fn render_list_item(
-    &self, ix: usize, entry: &TreeEntry, content: AnyElement, cx: &mut Context<Self>,
+    &self, ix: usize, entry: &TreeEntry, content: AnyElement, _cx: &mut Context<Self>,
   ) -> ListItem {
     let expand_icon = if entry.is_expanded() {
       IconName::ChevronDown
@@ -246,17 +244,17 @@ impl TreeState {
         .min_w_0()
         .relative()
         .items_center()
-        .gap_x(px(6.))
-        .child(div().flex_none().w(px(14.) * entry.depth()))
-        .child(Icon::new(entry.icon_or_default()).text_color(cx.theme().muted_foreground))
-        .child(div().flex_1().min_w_0().child(content))
+        .component_gap(Size::Medium)
+        .child(div().flex_none().w(px(16.) * entry.depth()))
+        .child(Icon::new(entry.icon_or_default()))
+        .child(div().flex_1().truncate().min_w_0().child(content))
         .child(
           div()
             .w_4()
             .items_center()
             .justify_center()
             .when(entry.is_folder(), |this| {
-              this.child(Icon::new(expand_icon).text_color(cx.theme().muted_foreground))
+              this.child(Icon::new(expand_icon))
             }),
         ),
     )
@@ -265,8 +263,8 @@ impl TreeState {
   fn render_guide_layers(
     &self, ix: usize, entry: &TreeEntry, cx: &mut Context<Self>,
   ) -> Vec<AnyElement> {
-    const ROW_CENTER_Y: f32 = 12.0;
-    const BRANCH_LEN: f32 = 10.0;
+    const ROW_CENTER_Y: f32 = 20.0;
+    const BRANCH_LEN: f32 = 12.0;
 
     let mut layers = Vec::new();
     let entries = self.model.entries();
@@ -284,7 +282,7 @@ impl TreeState {
         layers.push(
           div()
             .absolute()
-            .left(Self::guide_x(parent_depth))
+            .left(Self::guide_x(parent_depth) + px(8.))
             .top_0()
             .bottom_0()
             .w(px(1.))
@@ -300,10 +298,10 @@ impl TreeState {
       && let Some(parent_ix) = immediate_parent_ix
     {
       let branch_depth = entries[parent_ix].depth();
-      let x = Self::guide_x(branch_depth);
+      let x = Self::guide_x(branch_depth) + px(8.);
       let current_has_next_sibling = Self::has_next_sibling(entries, ix);
-      let parent_has_next_sibling = Self::has_next_sibling(entries, parent_ix);
-      let should_full_height = current_has_next_sibling || parent_has_next_sibling;
+      // let parent_has_next_sibling = Self::has_next_sibling(entries, parent_ix);
+      // let should_full_height = current_has_next_sibling || parent_has_next_sibling;
 
       layers.push(
         div()
@@ -311,8 +309,8 @@ impl TreeState {
           .left(x)
           .top_0()
           .w(px(1.))
-          .when(!should_full_height, |this| this.h(px(ROW_CENTER_Y)))
-          .when(should_full_height, |this| this.bottom_0())
+          .when(!current_has_next_sibling, |this| this.h(px(ROW_CENTER_Y)))
+          .when(current_has_next_sibling, |this| this.bottom_0())
           .bg(color)
           .into_any_element(),
       );
@@ -333,8 +331,8 @@ impl TreeState {
       layers.push(
         div()
           .absolute()
-          .left(Self::guide_x(depth))
-          .top(px(ROW_CENTER_Y))
+          .left(Self::guide_x(depth) + px(8.))
+          .top(px(ROW_CENTER_Y * 2.))
           .bottom_0()
           .w(px(1.))
           .bg(color)
