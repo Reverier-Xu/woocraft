@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use gpui::{
   App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Stateful,
-  Styled as _, Window, div,
+  Styled as _, Window,
 };
 
 use super::{Column, ColumnSort, TableState, loading::Loading};
@@ -33,7 +33,7 @@ pub trait TableDelegate: Sized + 'static {
   fn render_header(
     &mut self, window: &mut Window, cx: &mut Context<TableState<Self>>,
   ) -> Stateful<Div> {
-    div().id("header")
+    h_flex().id("header")
   }
 
   /// Render the header cell at the given column index, default to the column
@@ -50,7 +50,7 @@ pub trait TableDelegate: Sized + 'static {
   fn render_tr(
     &mut self, row_ix: usize, window: &mut Window, cx: &mut Context<TableState<Self>>,
   ) -> Stateful<Div> {
-    div().id(("row", row_ix))
+    h_flex().id(("row", row_ix))
   }
 
   /// Render the context menu for the row at the given row index.

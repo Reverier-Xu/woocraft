@@ -97,7 +97,8 @@ impl ListItem {
   pub fn suffix<F, E>(mut self, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.suffix = Some(Box::new(move |window, cx| {
       builder(window, cx).into_any_element()
     }));
@@ -158,6 +159,8 @@ impl RenderOnce for ListItem {
       .relative()
       .container_size(self.size)
       .container_gap(self.size)
+      .component_min_h(self.size)
+      .component_rounded(self.size)
       .text_base()
       .text_color(base_fg)
       .relative()

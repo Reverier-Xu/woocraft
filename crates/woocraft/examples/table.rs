@@ -265,7 +265,6 @@ impl TableDelegate for TableDemoDelegate {
       TableCol::Id => h_flex()
         .w_full()
         .justify_end()
-        .font_medium()
         .child(format!("{:03}", row.id))
         .into_any_element(),
       TableCol::Name => h_flex()

@@ -6,10 +6,12 @@ mod column;
 mod delegate;
 mod loading;
 mod state;
+mod table;
 
 pub use column::*;
 pub use delegate::*;
 pub use state::*;
+pub use table::*;
 
 pub(crate) struct TableOptions {
   pub(crate) scrollbar_visible: Edges<bool>,

@@ -994,7 +994,7 @@ where
     &self, _row_ix: Option<usize>, col_ix: usize, _window: &mut Window, _cx: &mut Context<Self>,
   ) -> Div {
     let Some(col_group) = self.col_groups.get(col_ix) else {
-      return div();
+      return h_flex();
     };
 
     let col_width = col_group.width;
@@ -1012,7 +1012,7 @@ where
         gpui::TextAlign::Center => this.justify_center(),
         gpui::TextAlign::Left => this.justify_start(),
       })
-      .container_size(self.options.size)
+      .component_size(self.options.size)
       .map(|this| match col_padding {
         Some(padding) => this
           .pl(padding.left)
@@ -1158,7 +1158,7 @@ where
       .h_full()
       .bg(cx.theme().table_head())
       .flex_shrink_0()
-      .container_size(self.options.size)
+      .component_size(self.options.size)
       .when(!is_head, |this| {
         this.when(self.row_selectable, |this| {
           this.on_click(cx.listener(move |table, _, _window, cx| {
@@ -1290,7 +1290,6 @@ where
     let style = header.style().clone();
 
     header
-      .h_flex()
       .w_full()
       .h(self.options.size.table_row_height())
       .flex_shrink_0()
@@ -1377,8 +1376,7 @@ where
       let mut tr = self.delegate.render_tr(row_ix, window, cx);
       let style = tr.style().clone();
 
-      tr.h_flex()
-        .w_full()
+      tr.w_full()
         .h(row_height)
         .when(is_stripe_row, |this| this.bg(cx.theme().table_even()))
         .refine_style(&style)
@@ -1436,7 +1434,6 @@ where
                       ),
                   );
                 });
-
                 items
               })
               .child(
@@ -1552,7 +1549,7 @@ where
               .w(px(40.))
               .h_full()
               .flex_shrink_0()
-              .container_size(self.options.size),
+              .component_size(self.options.size),
           )
         })
         .children((0..columns_count).map(|col_ix| {

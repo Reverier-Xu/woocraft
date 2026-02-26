@@ -290,7 +290,7 @@ impl Size {
 
   #[inline]
   pub fn table_row_height(&self) -> Pixels {
-    self.container_height()
+    self.component_height()
   }
 
   #[inline]
@@ -503,6 +503,7 @@ pub trait StyleSized<T: Styled> {
   fn component_px(self, size: Size) -> Self;
   fn component_py(self, size: Size) -> Self;
   fn component_h(self, size: Size) -> Self;
+  fn component_min_h(self, size: Size) -> Self;
   fn component_rounded(self, size: Size) -> Self;
   fn container_h(self, size: Size) -> Self;
   fn container_min_h(self, size: Size) -> Self;
@@ -556,6 +557,11 @@ impl<T: Styled> StyleSized<T> for T {
   #[inline]
   fn component_h(self, size: Size) -> Self {
     self.h(size.component_height())
+  }
+
+  #[inline]
+  fn component_min_h(self, size: Size) -> Self {
+    self.min_h(size.component_height())
   }
 
   #[inline]
