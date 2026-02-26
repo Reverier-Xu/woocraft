@@ -3,8 +3,7 @@ use gpui::{
   Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ColorPicker, ColorPickerEvent, ColorPickerState, Selectable, Sizable,
-  StyledExt, Theme, ThemeMode, TitleBar, v_flex, window_border,
+  ActiveTheme, Button, ColorPicker, ColorPickerEvent, ColorPickerState, Selectable, Sizable, StyledExt, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border
 };
 
 struct ColorPickerWindow {
@@ -41,8 +40,7 @@ impl Render for ColorPickerWindow {
         .min_h_0()
         .child(TitleBar::new().title("Woocraft Color Picker Example"))
         .child(
-          div()
-            .v_flex()
+          v_flex()
             .p_6()
             .gap_4()
             .child(div().text_xl().font_semibold().child("OKLCH Color Picker"))
@@ -53,8 +51,7 @@ impl Render for ColorPickerWindow {
                 .child("Supports drag and manual hex input."),
             )
             .child(
-              div()
-                .h_flex()
+              h_flex()
                 .gap_3()
                 .child(
                   Button::new("theme-light")

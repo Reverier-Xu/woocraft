@@ -57,8 +57,7 @@ impl Render for FormWindow {
         .min_h_0()
         .child(TitleBar::new().title("Woocraft Form Example"))
         .child(
-          div()
-            .v_flex()
+          v_flex()
             .p_6()
             .gap_5()
             .overflow_y_scrollbar()

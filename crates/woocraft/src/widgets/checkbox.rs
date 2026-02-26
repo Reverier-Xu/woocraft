@@ -111,7 +111,7 @@ impl RenderOnce for Checkbox {
           .border_color(border_color)
           .bg(indicator_color)
           .child(
-            div().size_full().items_center().justify_center().child(
+            h_flex().size_full().items_center().justify_center().child(
               Icon::new(IconName::Checkmark)
                 .with_size(self.size.smaller())
                 .text_color(cx.theme().primary_foreground)

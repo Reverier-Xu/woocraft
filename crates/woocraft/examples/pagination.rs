@@ -3,8 +3,7 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, Label, Pagination, Selectable, Sizable as _, StyledExt,
-  Theme, ThemeMode, TitleBar, v_flex, window_border,
+  ActiveTheme, Button, ButtonVariants as _, Label, Pagination, Selectable, Sizable as _, StyledExt, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border
 };
 
 #[derive(Default)]
@@ -32,8 +31,7 @@ impl Render for PaginationWindow {
         .min_h_0()
         .child(TitleBar::new().title("Woocraft Pagination Example"))
         .child(
-          div()
-            .v_flex()
+          v_flex()
             .p_6()
             .gap_4()
             .child(
@@ -72,8 +70,7 @@ impl Render for PaginationWindow {
             )
             .child(div().text_sm().child("State"))
             .child(
-              div()
-                .h_flex()
+              h_flex()
                 .gap_3()
                 .child(
                   Button::new("page-prev")

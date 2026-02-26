@@ -3,7 +3,7 @@ use gpui::{
   RenderOnce, SharedString, StyleRefinement, Styled, Window, div, img, prelude::FluentBuilder,
 };
 
-use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyledExt, h_flex};
 
 fn extract_text_initials(text: &str) -> String {
   let mut result = text
@@ -35,7 +35,7 @@ pub struct Avatar {
 impl Avatar {
   pub fn new() -> Self {
     Self {
-      base: div(),
+      base: h_flex(),
       style: StyleRefinement::default(),
       src: None,
       name: None,
@@ -116,7 +116,6 @@ impl RenderOnce for Avatar {
     self
       .base
       .size(self.size.component_height())
-      .flex()
       .items_center()
       .justify_center()
       .flex_shrink_0()
@@ -160,7 +159,7 @@ impl RenderOnce for Avatar {
 impl Clone for Avatar {
   fn clone(&self) -> Self {
     Self {
-      base: div(),
+      base: h_flex(),
       style: self.style.clone(),
       src: self.src.clone(),
       name: self.name.clone(),
@@ -185,7 +184,7 @@ pub struct AvatarGroup {
 impl AvatarGroup {
   pub fn new() -> Self {
     Self {
-      base: div(),
+      base: h_flex(),
       style: StyleRefinement::default(),
       avatars: Vec::new(),
       size: Size::default(),
@@ -251,7 +250,6 @@ impl RenderOnce for AvatarGroup {
 
     self
       .base
-      .h_flex()
       .items_center()
       .w(total_width)
       .refine_style(&self.style)

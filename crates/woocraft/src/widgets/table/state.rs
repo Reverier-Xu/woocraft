@@ -1538,7 +1538,6 @@ where
       self
         .delegate
         .render_tr(row_ix, window, cx)
-        .h_flex()
         .w_full()
         .h(row_height)
         .when(is_stripe_row, |this| this.bg(cx.theme().table_even()))
