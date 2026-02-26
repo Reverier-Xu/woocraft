@@ -111,6 +111,9 @@ struct ContextMenuSharedState {
 pub struct ContextMenuState {
   element: Option<AnyElement>,
   shared_state: Rc<RefCell<ContextMenuSharedState>>,
+  /// Whether the context menu is currently open. Used in prepaint to insert an
+  /// opaque hitbox that prevents hover on underlying elements.
+  open: bool,
 }
 
 impl Default for ContextMenuState {
@@ -123,6 +126,7 @@ impl Default for ContextMenuState {
         position: Default::default(),
         _subscription: None,
       })),
+      open: false,
     }
   }
 }
@@ -213,6 +217,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
           layout_id,
           ContextMenuState {
             element: Some(element),
+            open,
             ..Default::default()
           },
         )
@@ -228,7 +233,14 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
     if let Some(element) = &mut request_layout.element {
       element.prepaint(window, cx);
     }
-    window.insert_hitbox(bounds, HitboxBehavior::Normal)
+    // When the context menu is open, use an opaque hitbox to prevent hover
+    // states on underlying elements (e.g. tree items, table rows).
+    let behavior = if request_layout.open {
+      HitboxBehavior::BlockMouse
+    } else {
+      HitboxBehavior::Normal
+    };
+    window.insert_hitbox(bounds, behavior)
   }
 
   fn paint(

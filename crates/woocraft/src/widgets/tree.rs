@@ -1,15 +1,16 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-  AnyElement, App, ClickEvent, Context, ElementId, Entity, FocusHandle, Focusable,
-  InteractiveElement as _, IntoElement, KeyBinding, ListSizingBehavior, ParentElement, Render,
-  RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, UniformListScrollHandle,
-  Window, div, prelude::FluentBuilder as _, px, uniform_list,
+  AnyElement, App, AppContext, ClickEvent, Context, ElementId, Entity, EntityId, EventEmitter,
+  FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, ListSizingBehavior,
+  MouseButton, MouseDownEvent, ParentElement, Render, RenderOnce, SharedString,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, UniformListScrollHandle, Window, div,
+  prelude::FluentBuilder as _, px, uniform_list,
 };
 
 use crate::{
-  ActiveTheme, Icon, IconName, ListItem, ScrollableElement, StyledExt, TreeEntry, TreeItem,
-  TreeModel,
+  ActiveTheme, ContextMenuExt as _, Icon, IconName, ListItem, PopupMenu, ScrollableElement,
+  StyledExt, TreeEntry, TreeItem, TreeModel,
   actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
   h_flex,
 };
@@ -17,6 +18,53 @@ use crate::{
 const CONTEXT: &str = "Tree";
 
 type TreeRenderItem = Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> AnyElement>;
+type TreeContextMenuBuilder =
+  Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+
+/// Events emitted by the tree component.
+#[derive(Clone, Debug)]
+pub enum TreeEvent {
+  /// A row was selected (single click).
+  Select(usize),
+  /// A row was double-clicked.
+  DoubleClicked(usize),
+  /// A row was right-clicked.
+  RightClicked(usize),
+  /// Selection was cleared.
+  ClearSelection,
+  /// A row was toggled in multi-select (via Ctrl/Cmd+Click).
+  ToggleSelect(usize),
+  /// A range selection was made (via Shift+Click).
+  RangeSelect(usize),
+  /// An item was dragged from one index to another.
+  MoveItem(usize, usize),
+}
+
+/// Drag payload for tree item reordering.
+#[derive(Clone)]
+pub(crate) struct DragTreeItem {
+  pub(crate) entity_id: EntityId,
+  pub(crate) ix: usize,
+  pub(crate) label: SharedString,
+}
+
+impl Render for DragTreeItem {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    div()
+      .px_4()
+      .py_1()
+      .bg(cx.theme().card)
+      .text_color(cx.theme().foreground)
+      .opacity(0.9)
+      .border_1()
+      .border_color(cx.theme().border)
+      .shadow_md()
+      .max_w(px(300.))
+      .overflow_hidden()
+      .text_ellipsis()
+      .child(self.label.clone())
+  }
+}
 
 pub(crate) fn init(cx: &mut App) {
   cx.bind_keys([
@@ -51,6 +99,13 @@ pub struct TreeState {
   model: TreeModel,
   scroll_handle: UniformListScrollHandle,
   render_item: TreeRenderItem,
+  context_menu_builder: Option<TreeContextMenuBuilder>,
+  /// The index of the row that was right-clicked (used by context menu).
+  right_clicked_ix: Option<usize>,
+  /// Whether multi-selection is enabled.
+  pub multi_selectable: bool,
+  /// Whether drag-to-reorder is enabled.
+  pub draggable: bool,
 }
 
 impl Focusable for TreeState {
@@ -58,6 +113,8 @@ impl Focusable for TreeState {
     self.focus_handle.clone()
   }
 }
+
+impl EventEmitter<TreeEvent> for TreeState {}
 
 impl TreeState {
   pub fn new(cx: &mut App) -> Self {
@@ -74,7 +131,24 @@ impl TreeState {
           .child(entry.item().label.clone())
           .into_any_element()
       }),
+      context_menu_builder: None,
+      right_clicked_ix: None,
+      multi_selectable: false,
+      draggable: false,
     }
+  }
+
+  /// Enable or disable multi-selection mode (builder pattern).
+  pub fn multi_selectable(mut self, enabled: bool) -> Self {
+    self.multi_selectable = enabled;
+    self.model.set_multi_selectable(enabled);
+    self
+  }
+
+  /// Enable or disable drag-to-reorder (builder pattern).
+  pub fn draggable(mut self, enabled: bool) -> Self {
+    self.draggable = enabled;
+    self
   }
 
   pub fn items(mut self, items: impl Into<Vec<TreeItem>>) -> Self {
@@ -119,6 +193,33 @@ impl TreeState {
 
   pub fn focus(&mut self, window: &mut Window, _: &mut App) {
     self.focus_handle.focus(window);
+  }
+
+  /// Returns the underlying tree model.
+  pub fn model(&self) -> &TreeModel {
+    &self.model
+  }
+
+  /// Returns a mutable reference to the underlying tree model.
+  pub fn model_mut(&mut self) -> &mut TreeModel {
+    &mut self.model
+  }
+
+  /// Whether the given index is selected (works for both single and multi mode).
+  pub fn is_selected(&self, ix: usize) -> bool {
+    self.model.is_selected(ix)
+  }
+
+  /// Clear all selections and emit [`TreeEvent::ClearSelection`].
+  pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
+    self.model.clear_selection();
+    cx.emit(TreeEvent::ClearSelection);
+    cx.notify();
+  }
+
+  /// Returns all selected items in multi-select mode.
+  pub fn selected_items(&self) -> Vec<&TreeItem> {
+    self.model.selected_items()
   }
 
   fn row_id(entry: &TreeEntry) -> ElementId {
@@ -358,9 +459,57 @@ impl TreeState {
     cx.notify();
   }
 
-  fn on_entry_click(&mut self, ix: usize, _: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
+  fn on_entry_click(
+    &mut self, ix: usize, ev: &ClickEvent, _: &mut Window, cx: &mut Context<Self>,
+  ) {
+    // Double-click: emit event
+    if ev.click_count() == 2 {
+      cx.emit(TreeEvent::DoubleClicked(ix));
+      return;
+    }
+
+    // Multi-selection modifiers
+    if self.multi_selectable {
+      if ev.modifiers().secondary() {
+        // Ctrl/Cmd+Click: toggle individual item
+        self.model.toggle_selected(ix);
+        cx.emit(TreeEvent::ToggleSelect(ix));
+        cx.notify();
+        return;
+      }
+      if ev.modifiers().shift {
+        // Shift+Click: range select
+        self.model.select_range_to(ix);
+        cx.emit(TreeEvent::RangeSelect(ix));
+        cx.notify();
+        return;
+      }
+      // Plain click in multi-mode: clear multi-selection, select single
+      self.model.clear_selection();
+    }
+
     self.model.set_selected_index(Some(ix));
+    if self.multi_selectable {
+      self.model.toggle_selected(ix);
+    }
     self.model.toggle_expand(ix);
+    cx.emit(TreeEvent::Select(ix));
+    cx.notify();
+  }
+
+  fn on_entry_right_click(
+    &mut self, ix: usize, _: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.right_clicked_ix = Some(ix);
+    cx.emit(TreeEvent::RightClicked(ix));
+    cx.notify();
+  }
+
+  fn on_drop_item(&mut self, from_ix: usize, to_ix: usize, _: &mut Window, cx: &mut Context<Self>) {
+    if from_ix == to_ix {
+      return;
+    }
+    cx.emit(TreeEvent::MoveItem(from_ix, to_ix));
     cx.notify();
   }
 }
@@ -369,6 +518,9 @@ impl Render for TreeState {
   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let render_item = self.render_item.clone();
     let entries_len = self.model.len();
+    let _multi_selectable = self.multi_selectable;
+    let draggable = self.draggable;
+    let entity_id = cx.entity_id();
 
     div().id("tree-state").size_full().relative().child(
       uniform_list("entries", entries_len, {
@@ -379,22 +531,59 @@ impl Render for TreeState {
               continue;
             };
 
-            let selected = Some(ix) == state.model.selected_index();
+            let selected = state.model.is_selected(ix);
             let disabled = entry.is_disabled();
             let content = (render_item)(ix, entry, selected, window, cx);
             let list_item = state.render_list_item(ix, entry, content, cx);
             let guides = state.render_guide_layers(ix, entry, cx);
+            let label = entry.item().label.clone();
 
-            let row = div()
+            let mut row = div()
               .id(Self::row_id(entry))
               .relative()
               .children(guides)
-              .child(list_item.disabled(disabled).selected(selected))
-              .when(!disabled, |this| {
-                this.on_click(cx.listener(move |this, ev, window, cx| {
+              .child(list_item.disabled(disabled).selected(selected));
+
+            if !disabled {
+              row = row
+                .on_click(cx.listener(move |this, ev, window, cx| {
                   this.on_entry_click(ix, ev, window, cx);
                 }))
-              });
+                .on_mouse_down(
+                  MouseButton::Right,
+                  cx.listener(move |this, ev, window, cx| {
+                    this.on_entry_right_click(ix, ev, window, cx);
+                  }),
+                );
+            }
+
+            // Drag-to-reorder support
+            if draggable && !disabled {
+              let drag_label = label.clone();
+              row = row
+                .on_drag(
+                  DragTreeItem {
+                    entity_id,
+                    ix,
+                    label: drag_label,
+                  },
+                  |drag, _, _, cx| {
+                    cx.stop_propagation();
+                    cx.new(|_| drag.clone())
+                  },
+                )
+                .drag_over::<DragTreeItem>(|this, _, _, cx| {
+                  this
+                    .border_t_2()
+                    .border_color(cx.theme().drag_border)
+                })
+                .on_drop(cx.listener(move |this, drag: &DragTreeItem, window, cx| {
+                  if drag.entity_id != cx.entity_id() {
+                    return;
+                  }
+                  this.on_drop_item(drag.ix, ix, window, cx);
+                }));
+            }
 
             items.push(row);
           }
@@ -417,6 +606,7 @@ pub struct Tree {
   state: Entity<TreeState>,
   style: StyleRefinement,
   render_item: TreeRenderItem,
+  context_menu_builder: Option<TreeContextMenuBuilder>,
 }
 
 impl Focusable for Tree {
@@ -440,6 +630,7 @@ impl Tree {
           .child(entry.item().label.clone())
           .into_any_element()
       }),
+      context_menu_builder: None,
     }
   }
 
@@ -452,6 +643,19 @@ impl Tree {
     });
     self
   }
+
+  /// Set a context menu builder for right-click menus.
+  ///
+  /// The callback receives `(ix, entry, menu, window, cx)` and should return
+  /// a configured `PopupMenu`.
+  pub fn context_menu<F>(mut self, builder: F) -> Self
+  where
+    F: Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu
+      + 'static,
+  {
+    self.context_menu_builder = Some(Rc::new(builder));
+    self
+  }
 }
 
 impl_styled!(Tree);
@@ -461,9 +665,12 @@ impl RenderOnce for Tree {
     let focus_handle = self.state.read(cx).focus_handle.clone();
     let scroll_handle = self.state.read(cx).scroll_handle.clone();
 
-    self
-      .state
-      .update(cx, |state, _| state.render_item = self.render_item);
+    self.state.update(cx, |state, _| {
+      state.render_item = self.render_item;
+      state.context_menu_builder = self.context_menu_builder;
+    });
+
+    let tree_view = self.state.clone();
 
     div()
       .id(self.id)
@@ -478,5 +685,23 @@ impl RenderOnce for Tree {
       .child(self.state)
       .refine_style(&self.style)
       .vertical_scrollbar(&scroll_handle)
+      .context_menu(move |menu, window, cx| {
+        let state = tree_view.read(cx);
+        let Some(ix) = state.right_clicked_ix else {
+          return menu;
+        };
+        let Some(entry) = state.model.entry(ix) else {
+          return menu;
+        };
+        let entry = entry.clone();
+        let builder = state.context_menu_builder.clone();
+        let _ = state;
+
+        if let Some(builder) = builder {
+          builder(ix, &entry, menu, window, cx)
+        } else {
+          menu
+        }
+      })
   }
 }

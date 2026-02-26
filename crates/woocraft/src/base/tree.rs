@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 
 use gpui::SharedString;
 
@@ -155,6 +155,10 @@ pub struct TreeModel {
   roots: Vec<TreeItem>,
   entries: Vec<TreeEntry>,
   selected_ix: Option<usize>,
+  /// Indices of all selected items (used in multi-select mode).
+  selected_indices: BTreeSet<usize>,
+  /// Whether multi-selection is enabled.
+  multi_selectable: bool,
 }
 
 impl TreeModel {
@@ -171,6 +175,7 @@ impl TreeModel {
     self.roots = items.into();
     self.rebuild_entries();
     self.selected_ix = None;
+    self.selected_indices.clear();
   }
 
   pub fn entries(&self) -> &[TreeEntry] {
@@ -221,6 +226,75 @@ impl TreeModel {
     self.selected_ix.and_then(|ix| self.entries.get(ix))
   }
 
+  // -- Multi-selection -------------------------------------------------------
+
+  /// Whether multi-selection mode is enabled.
+  pub fn multi_selectable(&self) -> bool {
+    self.multi_selectable
+  }
+
+  /// Set multi-selection mode.
+  pub fn set_multi_selectable(&mut self, enabled: bool) {
+    self.multi_selectable = enabled;
+    if !enabled {
+      self.selected_indices.clear();
+    }
+  }
+
+  /// Returns all selected indices (sorted).
+  pub fn selected_indices(&self) -> &BTreeSet<usize> {
+    &self.selected_indices
+  }
+
+  /// Returns whether the given index is selected (multi-select).
+  pub fn is_selected(&self, ix: usize) -> bool {
+    if self.multi_selectable {
+      self.selected_indices.contains(&ix)
+    } else {
+      self.selected_ix == Some(ix)
+    }
+  }
+
+  /// Toggle an index in the multi-selection set.
+  pub fn toggle_selected(&mut self, ix: usize) {
+    if !self.selected_indices.remove(&ix) {
+      self.selected_indices.insert(ix);
+    }
+    // Keep primary selection in sync with the last toggled item.
+    self.selected_ix = Some(ix);
+  }
+
+  /// Select a contiguous range from the current primary selection to `ix`.
+  pub fn select_range_to(&mut self, ix: usize) {
+    let anchor = self.selected_ix.unwrap_or(0);
+    let (start, end) = if anchor <= ix {
+      (anchor, ix)
+    } else {
+      (ix, anchor)
+    };
+    for i in start..=end {
+      self.selected_indices.insert(i);
+    }
+    self.selected_ix = Some(ix);
+  }
+
+  /// Clear all selections (both single and multi).
+  pub fn clear_selection(&mut self) {
+    self.selected_ix = None;
+    self.selected_indices.clear();
+  }
+
+  /// Return selected items in multi-select mode.
+  pub fn selected_items(&self) -> Vec<&TreeItem> {
+    self
+      .selected_indices
+      .iter()
+      .filter_map(|&ix| self.entries.get(ix).map(|e| &e.item))
+      .collect()
+  }
+
+  // -- Expand / Collapse ----------------------------------------------------
+
   pub fn toggle_expand(&mut self, ix: usize) {
     let Some(entry) = self.entries.get_mut(ix) else {
       return;
@@ -265,6 +339,9 @@ impl TreeModel {
     {
       self.selected_ix = None;
     }
+    // Prune out-of-range multi-selection indices.
+    let len = self.entries.len();
+    self.selected_indices.retain(|&ix| ix < len);
   }
 
   fn add_entry(&mut self, item: TreeItem, depth: usize) {

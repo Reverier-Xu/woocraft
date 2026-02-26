@@ -1003,7 +1003,7 @@ impl PopupMenu {
     let left_icon = Self::render_icon(has_left_icon, is_left_check, Self::item_icon(item));
 
     match item {
-      PopupMenuItem::Separator => Divider::horizontal().my_1().mx_neg_1().into_any_element(),
+      PopupMenuItem::Separator => Divider::horizontal().my_1().into_any_element(),
       PopupMenuItem::Label(label) => {
         let label = label.clone();
         IconLabel::new(("label", ix))

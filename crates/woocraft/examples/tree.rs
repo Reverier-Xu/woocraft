@@ -1,10 +1,12 @@
 use gpui::{
   App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
-  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
+  Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, div,
+  prelude::FluentBuilder as _, px,
 };
 use woocraft::{
-  ActiveTheme, Button, IconName, Selectable, Sizable, StyledExt, Theme, ThemeMode, TitleBar,
-  TreeItem, TreeState, h_flex, init, tree, v_flex, window_border,
+  ActiveTheme, Button, ButtonVariants as _, IconName, PopupMenuItem, Selectable, Sizable,
+  StyledExt, Theme, ThemeMode, TitleBar, TreeEvent, TreeItem, TreeState, h_flex, init, tree,
+  v_flex, window_border,
 };
 
 fn demo_tree(expanded: bool) -> Vec<TreeItem> {
@@ -48,18 +50,69 @@ fn demo_tree(expanded: bool) -> Vec<TreeItem> {
 
 struct TreeWindow {
   tree_state: Entity<TreeState>,
+  last_event: String,
+  multi_select: bool,
+  drag_enabled: bool,
+  _subscriptions: Vec<Subscription>,
 }
 
 impl TreeWindow {
   fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
-    let tree_state = cx.new(|cx| TreeState::new(cx).items(demo_tree(true)));
-    cx.new(|_| Self { tree_state })
+    let tree_state = cx.new(|cx| {
+      TreeState::new(cx)
+        .items(demo_tree(true))
+        .multi_selectable(false)
+        .draggable(false)
+    });
+
+    cx.new(|cx| {
+      let subscriptions = vec![cx.subscribe(
+        &tree_state,
+        |this: &mut Self, _, event: &TreeEvent, cx| {
+          this.last_event = match event {
+            TreeEvent::Select(ix) => format!("Select({ix})"),
+            TreeEvent::DoubleClicked(ix) => format!("DoubleClicked({ix})"),
+            TreeEvent::RightClicked(ix) => format!("RightClicked({ix})"),
+            TreeEvent::ClearSelection => "ClearSelection".to_string(),
+            TreeEvent::ToggleSelect(ix) => format!("ToggleSelect({ix})"),
+            TreeEvent::RangeSelect(ix) => format!("RangeSelect({ix})"),
+            TreeEvent::MoveItem(from, to) => format!("MoveItem({from} -> {to})"),
+          };
+          cx.notify();
+        },
+      )];
+
+      Self {
+        tree_state,
+        last_event: "Ready".to_string(),
+        multi_select: false,
+        drag_enabled: false,
+        _subscriptions: subscriptions,
+      }
+    })
   }
 }
 
 impl Render for TreeWindow {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
+    let selected_info = {
+      let state = self.tree_state.read(cx);
+      if self.multi_select {
+        let indices = state.model().selected_indices();
+        if indices.is_empty() {
+          "none".to_string()
+        } else {
+          format!("{} items", indices.len())
+        }
+      } else if let Some(item) = state.selected_item() {
+        format!("{}", item.label)
+      } else {
+        "none".to_string()
+      }
+    };
+
+    let tree_state_for_menu = self.tree_state.clone();
 
     window_border().child(
       v_flex()
@@ -77,7 +130,7 @@ impl Render for TreeWindow {
               div()
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child("Click row or use keyboard (Up/Down/Left/Right/Enter) to navigate."),
+                .child("Click row or use keyboard (Up/Down/Left/Right/Enter) to navigate. Right-click for context menu."),
             )
             .child(
               h_flex()
@@ -115,7 +168,54 @@ impl Render for TreeWindow {
                         state.set_items(demo_tree(false), cx);
                       });
                     })),
+                )
+                .child(
+                  Button::new("tree-toggle-multi")
+                    .label(if self.multi_select {
+                      "Multi-Select: ON"
+                    } else {
+                      "Multi-Select: OFF"
+                    })
+                    .small()
+                    .when(self.multi_select, |this| this.primary())
+                    .on_click(cx.listener(|this, _, _, cx| {
+                      this.multi_select = !this.multi_select;
+                      let enabled = this.multi_select;
+                      this.tree_state.update(cx, |state, cx| {
+                        state.multi_selectable = enabled;
+                        state.model_mut().set_multi_selectable(enabled);
+                        state.clear_selection(cx);
+                      });
+                      cx.notify();
+                    })),
+                )
+                .child(
+                  Button::new("tree-toggle-drag")
+                    .label(if self.drag_enabled {
+                      "Drag: ON"
+                    } else {
+                      "Drag: OFF"
+                    })
+                    .small()
+                    .when(self.drag_enabled, |this| this.primary())
+                    .on_click(cx.listener(|this, _, _, cx| {
+                      this.drag_enabled = !this.drag_enabled;
+                      let enabled = this.drag_enabled;
+                      this.tree_state.update(cx, |state, _| {
+                        state.draggable = enabled;
+                      });
+                      cx.notify();
+                    })),
                 ),
+            )
+            .child(
+              div()
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child(format!(
+                  "Selected: {} | Last Event: {}",
+                  selected_info, self.last_event
+                )),
             )
             .child(
               div()
@@ -126,7 +226,46 @@ impl Render for TreeWindow {
                 .rounded(cx.theme().radius_container)
                 .bg(cx.theme().card)
                 .p_2()
-                .child(tree(&self.tree_state)),
+                .child(
+                  tree(&self.tree_state).context_menu(move |ix, entry, menu, _window, _cx| {
+                    let label = entry.item().label.clone();
+                    let is_folder = entry.is_folder();
+                    let item_id = entry.item().id.clone();
+                    let tree_entity = tree_state_for_menu.clone();
+
+                    menu
+                      .item(PopupMenuItem::label(format!("{}", label)))
+                      .separator()
+                      .item(
+                        PopupMenuItem::new(if is_folder {
+                          "Toggle Expand"
+                        } else {
+                          "Open File"
+                        })
+                        .on_click(move |_, _, _cx| {
+                          println!(
+                            "tree example: action on {} ({})",
+                            label,
+                            if is_folder { "folder" } else { "file" }
+                          );
+                        }),
+                      )
+                      .item(
+                        PopupMenuItem::new("Select This Item").on_click(
+                          move |_, _, cx| {
+                            tree_entity.update(cx, |state, cx| {
+                              state.set_selected_index(Some(ix), cx);
+                            });
+                          },
+                        ),
+                      )
+                      .item(PopupMenuItem::new("Print Info").on_click(
+                        move |_, _, _| {
+                          println!("tree example: item id={}", item_id);
+                        },
+                      ))
+                  }),
+                ),
             ),
         ),
     )
