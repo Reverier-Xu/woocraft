@@ -1,6 +1,6 @@
 //! Dock is a fixed container that places at left, bottom, right of the Windows.
 
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use gpui::{
   App, AppContext, Context, Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent,
@@ -9,13 +9,13 @@ use gpui::{
 };
 
 use super::{
-  super::resizable::{PANEL_MIN_SIZE, resize_handle},
+  super::resizable::PANEL_MIN_SIZE,
   DockArea, DockItem, PanelView, TabPanel,
 };
 use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 
 #[derive(Clone)]
-struct ResizePanel;
+pub(super) struct ResizePanel;
 
 impl Render for ResizePanel {
   fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
@@ -285,20 +285,10 @@ impl Dock {
     cx.notify();
   }
 
-  fn render_resize_handle(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let axis = self.placement.axis();
-    let view = cx.entity().clone();
-
-    resize_handle("resize-handle", axis)
-      .placement(self.placement)
-      .on_drag(ResizePanel {}, move |info, _, _, cx| {
-        cx.stop_propagation();
-        view.update(cx, |view, _| {
-          view.resizing = true;
-        });
-        cx.new(|_| info.deref().clone())
-      })
+  pub(super) fn set_resizing(&mut self, resizing: bool) {
+    self.resizing = resizing;
   }
+
   fn resize(&mut self, mouse_position: Point<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
     if !self.resizing {
       return;
@@ -363,14 +353,13 @@ impl Dock {
 }
 
 impl Render for Dock {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
     let cache_style = StyleRefinement::default().absolute().size_full();
 
     let collapsed_width = px(40.0);
 
     div()
       .relative()
-      .overflow_hidden()
       .map(|this| match self.placement {
         DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(self.size),
         DockPlacement::Bottom => this.v_flex().w_full().h(self.size),
@@ -397,19 +386,9 @@ impl Render for Dock {
             DockItem::Tiles { .. } => this,
           });
 
-        if self.collapsed {
-          this.child(panel)
-        } else {
-          match self.placement {
-            DockPlacement::Left => this
-              .child(panel)
-              .child(self.render_resize_handle(window, cx)),
-            DockPlacement::Right | DockPlacement::Bottom => this
-              .child(self.render_resize_handle(window, cx))
-              .child(panel),
-            DockPlacement::Center => this.child(panel),
-          }
-        }
+        // Resize handles are rendered at the DockArea level as overlays
+        // to ensure correct paint order across sibling dock containers.
+        this.child(panel)
       })
       .child(DockElement {
         view: cx.entity().clone(),

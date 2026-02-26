@@ -324,6 +324,7 @@ pub struct InputState {
   pub(super) selecting: bool,
   pub(super) size: Size,
   pub(super) disabled: bool,
+  pub(super) read_only: bool,
   pub(super) masked: bool,
   pub(super) clean_on_escape: bool,
   pub(super) soft_wrap: bool,
@@ -424,6 +425,7 @@ impl InputState {
       input_bounds: Bounds::default(),
       selecting: false,
       disabled: false,
+      read_only: false,
       masked: false,
       clean_on_escape: false,
       soft_wrap: true,
@@ -833,6 +835,26 @@ impl InputState {
   pub(crate) fn disabled(mut self, disabled: bool) -> Self {
     self.disabled = disabled;
     self
+  }
+
+  /// Set with read-only mode.
+  ///
+  /// When read-only, write actions are disabled but navigation, selection,
+  /// copy and select-all still work. The cursor is hidden.
+  pub fn read_only(mut self, read_only: bool) -> Self {
+    self.read_only = read_only;
+    self
+  }
+
+  /// Set the read-only state of the input field.
+  pub fn set_read_only(&mut self, read_only: bool, _: &mut Window, cx: &mut Context<Self>) {
+    self.read_only = read_only;
+    cx.notify();
+  }
+
+  /// Return whether the input field is read-only.
+  pub fn is_read_only(&self) -> bool {
+    self.read_only
   }
 
   /// Set with password masked state.
@@ -1853,6 +1875,7 @@ impl InputState {
       || self.is_context_menu_open(cx)
       || self.shared_context_menu_open)
       && !self.disabled
+      && !self.read_only
       && self.blink_cursor.read(cx).is_active()
       && window.is_window_active()
   }
@@ -2096,7 +2119,7 @@ impl EntityInputHandler for InputState {
     &mut self, range_utf16: Option<Range<usize>>, new_text: &str, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
-    if self.disabled {
+    if self.disabled || self.read_only {
       return;
     }
 

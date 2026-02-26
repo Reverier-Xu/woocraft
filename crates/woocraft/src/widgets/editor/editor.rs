@@ -247,6 +247,10 @@ impl RenderOnce for Editor {
       .tab_index(self.tab_index)
       .when(!state.disabled, |this| {
         this
+          .on_action(window.listener_for(&self.state, InputState::escape))
+      })
+      .when(!state.disabled && !state.read_only, |this| {
+        this
           .on_action(window.listener_for(&self.state, InputState::backspace))
           .on_action(window.listener_for(&self.state, InputState::delete))
           .on_action(window.listener_for(&self.state, InputState::delete_to_beginning_of_line))
@@ -254,7 +258,6 @@ impl RenderOnce for Editor {
           .on_action(window.listener_for(&self.state, InputState::delete_previous_word))
           .on_action(window.listener_for(&self.state, InputState::delete_next_word))
           .on_action(window.listener_for(&self.state, InputState::enter))
-          .on_action(window.listener_for(&self.state, InputState::escape))
           .on_action(window.listener_for(&self.state, InputState::paste))
           .on_action(window.listener_for(&self.state, InputState::cut))
           .on_action(window.listener_for(&self.state, InputState::undo))
@@ -363,16 +366,16 @@ impl RenderOnce for Editor {
 
     input
       .context_menu(move |menu, window, cx| {
-        let (is_enabled, has_selection, has_paste, focus_handle, suppress_editor_menu) = {
+        let (is_writable, has_selection, has_paste, focus_handle, suppress_editor_menu) = {
           let state = input_state.read(cx);
           let suppress_editor_menu = state
             .search_panel
             .as_ref()
             .is_some_and(|panel| panel.focus_handle(cx).contains_focused(window, cx));
           (
-            !state.disabled,
+            !state.disabled && !state.read_only,
             !state.selected_range.is_empty(),
-            !state.disabled && cx.read_from_clipboard().is_some(),
+            !state.disabled && !state.read_only && cx.read_from_clipboard().is_some(),
             state.focus_handle.clone(),
             suppress_editor_menu,
           )
@@ -394,7 +397,7 @@ impl RenderOnce for Editor {
               translate("editor.context_menu.cut"),
               IconName::Cut,
               Box::new(Cut),
-              !(is_enabled && has_selection),
+              !(is_writable && has_selection),
             )
             .menu_with_icon_and_disabled(
               translate("editor.context_menu.copy"),

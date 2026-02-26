@@ -7,14 +7,16 @@ mod state;
 mod tab_panel;
 mod tiles;
 
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
 pub use dock::*;
+use dock::ResizePanel;
 use gpui::{
   AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
   EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
-  SharedString, Styled, Subscription, WeakEntity, Window, actions, div, prelude::FluentBuilder,
+  SharedString, Styled, Subscription, WeakEntity, Window,
+  actions, div, prelude::FluentBuilder, px,
 };
 pub use panel::*;
 pub use stack_panel::*;
@@ -23,6 +25,8 @@ pub use tab_panel::*;
 pub use tiles::{AnyDrag, DragDrop, DragMoving, DragResizing, TileItem, Tiles};
 
 use crate::{DockPlacement, ElementExt, TabBarDirection};
+
+use super::resizable::resize_handle;
 
 pub(crate) fn init(cx: &mut App) {
   PanelRegistry::init(cx);
@@ -1179,37 +1183,146 @@ impl Render for DockArea {
             }
             _ => {
               // render dock
-              this.child(
-                div()
-                  .flex()
-                  .flex_row()
-                  .h_full()
-                  // Left dock
-                  .when_some(self.left_dock.clone(), |this, dock| {
-                    this.child(div().flex().flex_none().child(dock))
-                  })
-                  // Center
-                  .child(
+              this
+                .child(
+                  div()
+                    .flex()
+                    .flex_row()
+                    .h_full()
+                    // Left dock
+                    .when_some(self.left_dock.clone(), |this, dock| {
+                      this.child(div().flex().flex_none().child(dock))
+                    })
+                    // Center
+                    .child(
+                      div()
+                        .flex()
+                        .flex_1()
+                        .flex_col()
+                        .overflow_hidden()
+                        // Top center
+                        .child(
+                          div()
+                            .flex_1()
+                            .overflow_hidden()
+                            .child(self.render_items(window, cx)),
+                        )
+                        // Bottom Dock
+                        .when_some(self.bottom_dock.clone(), |this, dock| this.child(dock)),
+                    )
+                    // Right Dock
+                    .when_some(self.right_dock.clone(), |this, dock| {
+                      this.child(div().flex().flex_none().child(dock))
+                    }),
+                )
+                // Dock resize handle overlays — rendered last so they paint on
+                // top of all dock content and center area, ensuring the
+                // symmetric hit areas are not obscured by siblings.
+                .when_some(self.left_dock.clone(), |this, dock| {
+                  let dock_read = dock.read(cx);
+                  if dock_read.collapsed {
+                    return this;
+                  }
+                  let size = dock_read.size;
+                  let dock_clone = dock.clone();
+                  this.child(
                     div()
-                      .flex()
-                      .flex_1()
-                      .flex_col()
-                      .overflow_hidden()
-                      // Top center
+                      .absolute()
+                      .left(size)
+                      .top_0()
+                      .bottom_0()
+                      .w(px(0.))
                       .child(
-                        div()
-                          .flex_1()
-                          .overflow_hidden()
-                          .child(self.render_items(window, cx)),
-                      )
-                      // Bottom Dock
-                      .when_some(self.bottom_dock.clone(), |this, dock| this.child(dock)),
+                        resize_handle::<ResizePanel, ResizePanel>(
+                          "left-dock-resize",
+                          Axis::Horizontal,
+                        )
+                        .on_drag(ResizePanel, move |info, _, _, cx| {
+                          cx.stop_propagation();
+                          dock_clone.update(cx, |dock, _| dock.set_resizing(true));
+                          cx.new(|_| info.deref().clone())
+                        }),
+                      ),
                   )
-                  // Right Dock
-                  .when_some(self.right_dock.clone(), |this, dock| {
-                    this.child(div().flex().flex_none().child(dock))
-                  }),
-              )
+                })
+                .when_some(self.right_dock.clone(), |this, dock| {
+                  let dock_read = dock.read(cx);
+                  if dock_read.collapsed {
+                    return this;
+                  }
+                  let size = dock_read.size;
+                  let dock_clone = dock.clone();
+                  this.child(
+                    div()
+                      .absolute()
+                      .right(size)
+                      .top_0()
+                      .bottom_0()
+                      .w(px(0.))
+                      .child(
+                        resize_handle::<ResizePanel, ResizePanel>(
+                          "right-dock-resize",
+                          Axis::Horizontal,
+                        )
+                        .on_drag(ResizePanel, move |info, _, _, cx| {
+                          cx.stop_propagation();
+                          dock_clone.update(cx, |dock, _| dock.set_resizing(true));
+                          cx.new(|_| info.deref().clone())
+                        }),
+                      ),
+                  )
+                })
+                .when_some(self.bottom_dock.clone(), |this, dock| {
+                  let dock_read = dock.read(cx);
+                  if dock_read.collapsed {
+                    return this;
+                  }
+                  let size = dock_read.size;
+                  let dock_clone = dock.clone();
+                  let left_size = self
+                    .left_dock
+                    .as_ref()
+                    .map(|d| {
+                      let d = d.read(cx);
+                      if d.collapsed {
+                        px(41.)
+                      } else {
+                        d.size
+                      }
+                    })
+                    .unwrap_or(px(0.));
+                  let right_size = self
+                    .right_dock
+                    .as_ref()
+                    .map(|d| {
+                      let d = d.read(cx);
+                      if d.collapsed {
+                        px(41.)
+                      } else {
+                        d.size
+                      }
+                    })
+                    .unwrap_or(px(0.));
+                  this.child(
+                    div()
+                      .absolute()
+                      .bottom(size)
+                      .left(left_size)
+                      .right(right_size)
+                      .h(px(0.))
+                      .child(
+                        resize_handle::<ResizePanel, ResizePanel>(
+                          "bottom-dock-resize",
+                          Axis::Vertical,
+                        )
+                        .on_drag(ResizePanel, move |info, _, _, cx| {
+                          cx.stop_propagation();
+                          dock_clone.update(cx, |dock, _| dock.set_resizing(true));
+                          cx.new(|_| info.deref().clone())
+                        }),
+                      ),
+                  )
+                })
             }
           }
         }

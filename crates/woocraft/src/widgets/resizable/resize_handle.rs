@@ -6,10 +6,10 @@ use gpui::{
   StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{ActiveTheme as _, base::DockPlacement};
+use crate::ActiveTheme as _;
 
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);
-const HANDLE_HIT_PADDING: Pixels = px(3.);
+pub(crate) const HANDLE_HIT_PADDING: Pixels = px(3.);
 
 type DragHandler<E> = dyn Fn(&Point<Pixels>, &mut Window, &mut App) -> Entity<E>;
 
@@ -23,7 +23,6 @@ pub(crate) struct ResizeHandle<T: 'static, E: 'static + Render> {
   id: ElementId,
   axis: Axis,
   drag_value: Option<Rc<T>>,
-  placement: Option<DockPlacement>,
   on_drag: Option<Rc<DragHandler<E>>>,
 }
 
@@ -33,7 +32,6 @@ impl<T: 'static, E: 'static + Render> ResizeHandle<T, E> {
       id: id.into(),
       on_drag: None,
       drag_value: None,
-      placement: None,
       axis,
     }
   }
@@ -47,12 +45,6 @@ impl<T: 'static, E: 'static + Render> ResizeHandle<T, E> {
     self.on_drag = Some(Rc::new(move |p, window, cx| {
       f(value.clone(), p, window, cx)
     }));
-    self
-  }
-
-  #[allow(dead_code)]
-  pub(crate) fn placement(mut self, placement: DockPlacement) -> Self {
-    self.placement = Some(placement);
     self
   }
 }
@@ -70,21 +62,6 @@ impl ResizeHandleState {
   fn is_active(&self) -> bool {
     self.active.get()
   }
-}
-
-fn expanded_hit_bounds(bounds: gpui::Bounds<Pixels>, axis: Axis) -> gpui::Bounds<Pixels> {
-  let mut hit_bounds = bounds;
-  match axis {
-    Axis::Horizontal => {
-      hit_bounds.origin.x -= HANDLE_HIT_PADDING;
-      hit_bounds.size.width += HANDLE_HIT_PADDING * 2.;
-    }
-    Axis::Vertical => {
-      hit_bounds.origin.y -= HANDLE_HIT_PADDING;
-      hit_bounds.size.height += HANDLE_HIT_PADDING * 2.;
-    }
-  }
-  hit_bounds
 }
 
 impl<T: 'static, E: 'static + Render> IntoElement for ResizeHandle<T, E> {
@@ -122,31 +99,29 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
         cx.theme().border
       };
 
-      let hit_area = div().absolute().map(|this| match self.placement {
-        Some(DockPlacement::Left) => this
-          .cursor_col_resize()
-          .top_0()
-          .bottom_0()
-          .left(-HANDLE_HIT_PADDING)
-          .right(-HANDLE_HIT_PADDING),
-        _ => this
-          .when(matches!(axis, Axis::Horizontal), |this| {
-            this
-              .cursor_col_resize()
-              .top_0()
-              .bottom_0()
-              .left(-HANDLE_HIT_PADDING)
-              .right(-HANDLE_HIT_PADDING)
-          })
-          .when(matches!(axis, Axis::Vertical), |this| {
-            this
-              .cursor_row_resize()
-              .left_0()
-              .right_0()
-              .top(-HANDLE_HIT_PADDING)
-              .bottom(-HANDLE_HIT_PADDING)
-          }),
-      });
+      let handle_total = HANDLE_SIZE + HANDLE_HIT_PADDING * 2.;
+
+      // The visual 1px line is centered inside the expanded hit area.
+      let visual_line = div()
+        .absolute()
+        .when(matches!(axis, Axis::Horizontal), |this| {
+          this
+            .top_0()
+            .bottom_0()
+            .left(HANDLE_HIT_PADDING)
+            .w(HANDLE_SIZE)
+            .bg(bg_color)
+            .group_hover("handle", |e| e.bg(bg_color))
+        })
+        .when(matches!(axis, Axis::Vertical), |this| {
+          this
+            .left_0()
+            .right_0()
+            .top(HANDLE_HIT_PADDING)
+            .h(HANDLE_SIZE)
+            .bg(bg_color)
+            .group_hover("handle", |e| e.bg(bg_color))
+        });
 
       let mut el = div()
         .id(self.id.clone())
@@ -160,23 +135,23 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
             move |_, position, window, cx| on_drag(&position, window, cx),
           )
         })
-        .map(|this| match self.placement {
-          Some(DockPlacement::Left) => this.cursor_col_resize().h_full().w(HANDLE_SIZE),
-          _ => this
-            .when(matches!(axis, Axis::Horizontal), |this| {
-              this.cursor_col_resize().h_full().w(HANDLE_SIZE)
-            })
-            .when(matches!(axis, Axis::Vertical), |this| {
-              this.cursor_row_resize().w_full().h(HANDLE_SIZE)
-            }),
+        .when(matches!(axis, Axis::Horizontal), |this| {
+          this
+            .cursor_col_resize()
+            .h_full()
+            .w(handle_total)
+            .ml(-HANDLE_HIT_PADDING)
+            .mr(-HANDLE_HIT_PADDING)
         })
-        .child(
-          div()
-            .bg(bg_color)
-            .group_hover("handle", |this| this.bg(bg_color))
-            .size_full(),
-        )
-        .child(hit_area.into_any_element())
+        .when(matches!(axis, Axis::Vertical), |this| {
+          this
+            .cursor_row_resize()
+            .w_full()
+            .h(handle_total)
+            .mt(-HANDLE_HIT_PADDING)
+            .mb(-HANDLE_HIT_PADDING)
+        })
+        .child(visual_line)
         .into_any_element();
 
       let layout_id = el.request_layout(window, cx);
@@ -204,14 +179,8 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
 
       window.on_mouse_event({
         let state = state.clone();
-        let hit_axis = if matches!(self.placement, Some(DockPlacement::Left)) {
-          Axis::Horizontal
-        } else {
-          self.axis
-        };
         move |ev: &MouseDownEvent, phase, window, _| {
-          let hit_bounds = expanded_hit_bounds(bounds, hit_axis);
-          if hit_bounds.contains(&ev.position) && phase.bubble() {
+          if bounds.contains(&ev.position) && phase.bubble() {
             state.set_active(true);
             window.refresh();
           }
