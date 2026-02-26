@@ -139,6 +139,10 @@ impl Panel for TabPanel {
   }
 
   fn visible(&self, cx: &App) -> bool {
+    // Always visible when this is an empty center placeholder
+    if self.is_center_placeholder() {
+      return true;
+    }
     self.visible_panels(cx).next().is_some()
   }
 
@@ -461,6 +465,16 @@ impl TabPanel {
 
     let tab_view = cx.entity().clone();
     if let Some(stack_panel) = self.stack_panel.as_ref() {
+      // Don't remove the last TabPanel from the root (center) StackPanel.
+      // This keeps an empty drop target placeholder in the center area.
+      if let Some(stack) = stack_panel.upgrade() {
+        let stack_ref = stack.read(cx);
+        if stack_ref.parent.is_none() && stack_ref.panels_len() <= 1 {
+          cx.notify();
+          return;
+        }
+      }
+
       _ = stack_panel.update(cx, |view, cx| {
         view.remove_panel(Arc::new(tab_view), window, cx);
       });
@@ -512,6 +526,7 @@ impl TabPanel {
 
   fn allows_split_drop(&self) -> bool {
     self.dock.is_none()
+      && !self.panels.is_empty()
       && self
         .stack_panel
         .as_ref()
@@ -519,8 +534,28 @@ impl TabPanel {
         .is_some()
   }
 
+  /// Returns true if this TabPanel is an empty center area placeholder
+  /// (no panels, not in a side dock, has a parent StackPanel).
+  ///
+  /// Note: This must NOT read the parent StackPanel because it can be called
+  /// from within `StackPanel::render` (via `panel.visible(cx)`), which would
+  /// cause a re-entrant read panic.
+  fn is_center_placeholder(&self) -> bool {
+    self.panels.is_empty() && self.dock.is_none() && self.stack_panel.is_some()
+  }
+
   fn closable_by_layout(&self, cx: &App) -> bool {
-    !self.is_locked(cx) && !self.is_last_panel(cx)
+    if self.is_locked(cx) {
+      return false;
+    }
+
+    // For center panels (not in dock), always allow closing.
+    // The center area will show an empty placeholder when empty.
+    if self.dock.is_none() && self.stack_panel.is_some() {
+      return true;
+    }
+
+    !self.is_last_panel(cx)
   }
 
   /// Return true if self or parent only have last panel.
@@ -548,7 +583,8 @@ impl TabPanel {
 
   /// Return true if the tab panel is draggable.
   ///
-  /// E.g. center panels cannot drag the last panel, while side-dock panels can.
+  /// Center panels can now drag even the last panel; the center area
+  /// will show an empty placeholder afterwards.
   fn draggable(&self, cx: &App) -> bool {
     if self.is_locked(cx) {
       return false;
@@ -558,7 +594,8 @@ impl TabPanel {
       return !self.panels.is_empty();
     }
 
-    !self.is_last_panel(cx)
+    // For center panels: allow dragging as long as there's something to drag.
+    !self.panels.is_empty()
   }
 
   /// Return true if the tab panel is droppable.
@@ -823,13 +860,51 @@ impl TabPanel {
     let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
 
     let show_single_title = tab_bar_direction.is_vertical()
-      || (visible_panels.len() == 1 && panel_style == PanelStyle::default());
+      || (visible_panels.len() <= 1 && panel_style == PanelStyle::default());
 
     let show_bottom_divider = !is_bottom_dock_collapsed || tab_bar_direction.is_bottom();
 
     if show_single_title {
       let Some(panel) = self.active_panel(cx) else {
-        return div().into_any_element();
+        if !self.is_center_placeholder() {
+          return div().into_any_element();
+        }
+
+        // Render empty title bar as a drop target for the center placeholder
+        let title_content = h_flex()
+          .items_center()
+          .justify_between()
+          .gap_1()
+          .container_size(Size::Medium)
+          .container_h(Size::Medium)
+          .when_some(bottom_dock_button, |this, btn| this.child(btn))
+          .child(
+            div()
+              .id("tab")
+              .flex_1()
+              .min_w_16()
+              .overflow_hidden()
+              .when(state.droppable, |this| {
+                this
+                  .drag_over::<DragPanel>(|this, _, _, cx| {
+                    this
+                      .rounded_l_none()
+                      .border_l_2()
+                      .border_r_0()
+                      .border_color(cx.theme().drag_border)
+                  })
+                  .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
+                    this.will_split_placement = None;
+                    this.on_drop(drag, Some(0), true, window, cx)
+                  }))
+              }),
+          );
+
+        return v_flex()
+          .when(!show_bottom_divider, |this| this.child(Divider::horizontal()))
+          .child(title_content)
+          .when(show_bottom_divider, |this| this.child(Divider::horizontal()))
+          .into_any_element();
       };
 
       if !panel.visible(cx) {
@@ -1146,7 +1221,28 @@ impl TabPanel {
     }
 
     let Some(active_panel) = state.active_panel.as_ref() else {
-      return Empty {}.into_any_element();
+      // Render an empty placeholder with a drop zone for the center placeholder
+      return v_flex()
+        .id("active-panel")
+        .group("")
+        .flex_1()
+        .when(state.droppable, |this| {
+          this.child(
+            div()
+              .invisible()
+              .absolute()
+              .top_0()
+              .left_0()
+              .size_full()
+              .bg(cx.theme().drop_target)
+              .group_drag_over::<DragPanel>("", |this| this.visible())
+              .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
+                this.will_split_placement = None;
+                this.on_drop(drag, None, true, window, cx)
+              })),
+          )
+        })
+        .into_any_element();
     };
 
     let is_render_in_tabs = self.panels.len() > 1 && self.inner_padding(cx);
@@ -1344,6 +1440,7 @@ impl TabPanel {
         cx.new(|cx| {
           let mut panel = StackPanel::new(placement.axis(), window, cx);
           panel.parent = Some(stack_panel.downgrade());
+          panel.set_dock_area(dock_area.clone());
           panel
         })
       };

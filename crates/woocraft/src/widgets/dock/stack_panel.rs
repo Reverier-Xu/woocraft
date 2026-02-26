@@ -19,6 +19,7 @@ use crate::{ActiveTheme, IconName, Placement, h_flex};
 pub struct StackPanel {
   pub(super) parent: Option<WeakEntity<StackPanel>>,
   pub(super) axis: Axis,
+  pub(super) dock_area: Option<WeakEntity<DockArea>>,
   focus_handle: FocusHandle,
   pub(crate) panels: SmallVec<[Arc<dyn PanelView>; 2]>,
   state: Entity<ResizableState>,
@@ -69,11 +70,18 @@ impl StackPanel {
     Self {
       axis,
       parent: None,
+      dock_area: None,
       focus_handle: cx.focus_handle(),
       panels: SmallVec::new(),
       state,
       _subscriptions,
     }
+  }
+
+  /// Set the dock_area reference. Used so root StackPanel can create
+  /// placeholder TabPanels when it becomes empty.
+  pub(super) fn set_dock_area(&mut self, dock_area: WeakEntity<DockArea>) {
+    self.dock_area = Some(dock_area);
   }
 
   /// The first level of the stack panel is root, will not have a parent.
@@ -254,6 +262,31 @@ impl StackPanel {
     self.state.update(cx, |state, cx| {
       state.remove_panel(ix, cx);
     });
+
+    // When the root StackPanel becomes empty, insert an empty TabPanel
+    // as a placeholder so the center area keeps a visible drop target.
+    if self.is_root() && self.panels.is_empty() {
+      if let Some(dock_area) = self.dock_area.clone() {
+        let stack_weak = cx.entity().downgrade();
+        let tab_panel = cx.new(|cx| {
+          TabPanel::new(Some(stack_weak), dock_area.clone(), window, cx)
+        });
+        let tab_view: Arc<dyn PanelView> = Arc::new(tab_panel.clone());
+        self.panels.push(tab_view);
+        self.state.update(cx, |state, cx| {
+          state.insert_panel(None, None, cx);
+        });
+        // Subscribe the new TabPanel in DockArea
+        window.defer(cx, {
+          let tab_panel = tab_panel.clone();
+          move |window, cx| {
+            _ = dock_area.update(cx, |this, cx| {
+              this.subscribe_panel(&tab_panel, window, cx);
+            });
+          }
+        });
+      }
+    }
 
     cx.emit(PanelEvent::LayoutChanged);
     self.remove_self_if_empty(window, cx);

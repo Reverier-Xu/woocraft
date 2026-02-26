@@ -222,6 +222,7 @@ impl DockItem {
     let mut items = items;
     let stack_panel = cx.new(|cx| {
       let mut stack_panel = StackPanel::new(axis, window, cx);
+      stack_panel.set_dock_area(dock_area.clone());
       for (i, item) in items.iter_mut().enumerate() {
         let view = item.view();
         let size = sizes.get(i).copied().flatten();
@@ -527,6 +528,9 @@ impl DockArea {
       view: stack_panel.clone(),
     };
 
+    let weak_self = cx.entity().downgrade();
+    stack_panel.update(cx, |sp, _| sp.set_dock_area(weak_self));
+
     let mut this = Self {
       id: id.into(),
       version,
@@ -632,6 +636,14 @@ impl DockArea {
   /// This is used to render at the Center of the DockArea.
   pub fn set_center(&mut self, center: DockItem, window: &mut Window, cx: &mut Context<Self>) {
     self.subscribe_item(&center, window, cx);
+
+    // Ensure the root StackPanel of the center knows about the dock_area
+    // so it can create placeholder TabPanels when it becomes empty.
+    if let DockItem::Split { view, .. } = &center {
+      let weak_self = cx.entity().downgrade();
+      view.update(cx, |sp, _| sp.set_dock_area(weak_self));
+    }
+
     self.center = center;
     self.update_toggle_button_tab_panels(window, cx);
     cx.notify();
@@ -1016,7 +1028,13 @@ impl DockArea {
       self.bottom_dock = Some(bottom_dock_state.to_dock(weak_self.clone(), window, cx));
     }
 
-    self.center = state.center.to_item(weak_self, window, cx);
+    self.center = state.center.to_item(weak_self.clone(), window, cx);
+
+    // Ensure the root StackPanel of the center knows about the dock_area
+    if let DockItem::Split { view, .. } = &self.center {
+      view.update(cx, |sp, _| sp.set_dock_area(weak_self));
+    }
+
     self.update_toggle_button_tab_panels(window, cx);
     Ok(())
   }

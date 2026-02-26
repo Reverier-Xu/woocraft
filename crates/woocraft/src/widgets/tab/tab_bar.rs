@@ -209,9 +209,7 @@ impl RenderOnce for TabBar {
               this.track_scroll(&scroll_handle)
             })
             .children(tabs_children)
-            .when(self.suffix.is_some() || self.menu, |this| {
-              this.child(last_empty_space)
-            }),
+            .child(last_empty_space),
         )
         .when(self.menu, |this| {
           this.child(
