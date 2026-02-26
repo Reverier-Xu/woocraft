@@ -1,15 +1,14 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla,
-  InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, div,
-  percentage, prelude::FluentBuilder as _,
+  AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla, InteractiveElement as _,
+  IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
+  StyleRefinement, Styled, Transformation, Window, div, percentage, prelude::FluentBuilder as _,
 };
 
 use crate::{
-  ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
-  h_flex, opacity, spinner_animation,
+  ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt, h_flex, opacity,
+  spinner_animation,
 };
 
 type IconLabelClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -128,19 +127,27 @@ impl RenderOnce for IconLabel {
       };
     }
 
-    let content = h_flex()
+    h_flex()
+      .id(self.id)
       .items_center()
       .component_gap(self.size)
+      .pl(self.size.component_px())
+      .pr(if has_children {
+        self.size.container_px()
+      } else {
+        self.size.component_px()
+      })
       .when(expanded, |this| this.w_full().flex_1())
+      .text_color(text_color)
+      .text_size(self.size.text_size())
+      .when(clickable, |this| this.cursor_pointer())
       .when_some(icon, |this, icon| {
         let icon = Icon::new(icon).with_size(self.size);
         if self.loading {
           this.child(
-            icon.with_animation(
-              "loading-spin",
-              spinner_animation(),
-              |this, delta| this.transform(Transformation::rotate(percentage(delta))),
-            ),
+            icon.with_animation("loading-spin", spinner_animation(), |this, delta| {
+              this.transform(Transformation::rotate(percentage(delta)))
+            }),
           )
         } else {
           this.child(icon)
@@ -154,22 +161,6 @@ impl RenderOnce for IconLabel {
         }
       })
       .children(self.children)
-      .text_size(self.size.text_size());
-
-    div()
-      .id(self.id)
-      .h_flex()
-      .pl(self.size.component_px())
-      .pr(if has_children {
-        self.size.container_px()
-      } else {
-        self.size.component_px()
-      })
-      .items_center()
-      .when(expanded, |this| this.w_full().flex_1())
-      .text_color(text_color)
-      .when(clickable, |this| this.cursor_pointer())
-      .child(content)
       .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
         this.on_click(move |event, window, cx| on_click(event, window, cx))
       })

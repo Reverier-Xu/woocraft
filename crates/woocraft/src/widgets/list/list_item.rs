@@ -184,14 +184,22 @@ impl RenderOnce for ListItem {
       })
       .child(
         h_flex()
-          .w_full()
+          .flex_1()
+          .min_w_0()
           .items_center()
-          .justify_between()
           .gap_x(self.size.component_gap())
-          .child(div().w_full().children(self.children))
+          .child(
+            div()
+              .flex_1()
+              .min_w_0()
+              .overflow_hidden()
+              .text_ellipsis()
+              .children(self.children),
+          )
           .when_some(self.check_icon, |this, icon| {
             this.child(
               div()
+                .flex_none()
                 .w_5()
                 .items_center()
                 .justify_center()

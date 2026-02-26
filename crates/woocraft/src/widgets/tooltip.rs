@@ -80,29 +80,25 @@ impl Render for Tooltip {
       None
     };
 
-    div().child(
-      h_flex()
-        .m_3()
-        .tooltip_style(cx.theme())
-        .justify_between()
-        .component_padding(self.size)
-        .component_gap(self.size)
-        .refine_style(&self.style)
-        .map(|this| {
-          this.child(div().map(|this| match self.content {
-            TooltipContent::Text(ref text) => this.child(text.clone()),
-            TooltipContent::Element(ref builder) => this.child(builder(window, cx)),
-          }))
-        })
-        .when_some(key_binding, |this, kbd| {
-          this.child(
-            div()
-              .text_sm()
-              .flex_shrink_0()
-              .text_color(cx.theme().muted_foreground)
-              .child(kbd.outline()),
-          )
-        }),
-    )
+    h_flex()
+      .m_3()
+      .tooltip_style(cx.theme())
+      .justify_between()
+      .component_padding(self.size)
+      .component_gap(self.size)
+      .refine_style(&self.style)
+      .map(|this| match self.content {
+        TooltipContent::Text(ref text) => this.child(text.clone()),
+        TooltipContent::Element(ref builder) => this.child(builder(window, cx)),
+      })
+      .when_some(key_binding, |this, kbd| {
+        this.child(
+          div()
+            .text_sm()
+            .flex_shrink_0()
+            .text_color(cx.theme().muted_foreground)
+            .child(kbd.outline()),
+        )
+      })
   }
 }

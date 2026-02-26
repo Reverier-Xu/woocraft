@@ -692,17 +692,14 @@ impl RenderOnce for Calendar {
       .gap_0p5()
       .refine_style(&self.style)
       .child(self.render_header(window, cx))
-      .child(
-        v_flex()
-          .when(view_mode.is_day(), |this| {
-            this.child(self.render_days(window, cx))
-          })
-          .when(view_mode.is_month(), |this| {
-            this.child(self.render_months(window, cx))
-          })
-          .when(view_mode.is_year(), |this| {
-            this.child(self.render_years(window, cx))
-          }),
-      )
+      .when(view_mode.is_day(), |this| {
+        this.child(self.render_days(window, cx))
+      })
+      .when(view_mode.is_month(), |this| {
+        this.child(self.render_months(window, cx))
+      })
+      .when(view_mode.is_year(), |this| {
+        this.child(self.render_years(window, cx))
+      })
   }
 }
