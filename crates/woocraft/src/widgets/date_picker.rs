@@ -323,7 +323,7 @@ impl DatePicker {
 
 fn clear_button(id: impl Into<ElementId>, cx: &App) -> Button {
   Button::new(id)
-    .icon(IconName::DismissCircle)
+    .icon(Icon::new(IconName::DismissCircle))
     .flat()
     .small()
     .tab_stop(false)

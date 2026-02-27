@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, DropdownMenu as _, IconLabel, IconName, PopupMenu,
+  ActiveTheme, Button, ButtonVariants, DropdownMenu as _, Icon, IconLabel, IconName, PopupMenu,
   PopupMenuItem, Sizable as _, Size, StyleSized, StyledExt, Theme, ThemeMode, available_locales,
   h_flex, locale, locale_display_name, set_locale, translate,
 };
@@ -24,7 +24,7 @@ pub struct TitleBar {
   style: StyleRefinement,
   children: Vec<AnyElement>,
   title: Option<SharedString>,
-  icon: Option<IconName>,
+  icon: Option<Icon>,
   app_menu_bar_slot: Option<AnyElement>,
   title_menu_builder: Option<TitleMenuBuilder>,
   theme_button_enabled: bool,
@@ -56,7 +56,7 @@ impl TitleBar {
     self
   }
 
-  pub fn icon(mut self, icon: IconName) -> Self {
+  pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
   }
@@ -155,7 +155,7 @@ impl RenderOnce for WindowControls {
       .child(
         Button::new("window-control-minimize")
           .flat()
-          .icon(IconName::Subtract)
+          .icon(Icon::new(IconName::Subtract))
           .on_click(|_, window, cx| {
             cx.stop_propagation();
             window.minimize_window();
@@ -181,11 +181,11 @@ impl RenderOnce for WindowControls {
       .child(
         Button::new("window-control-maximize")
           .flat()
-          .icon(if window.is_maximized() {
+          .icon(Icon::new(if window.is_maximized() {
             IconName::SquareMultiple
           } else {
             IconName::Maximize
-          })
+          }))
           .on_click(|_, window, cx| {
             cx.stop_propagation();
             window.zoom_window();
@@ -212,7 +212,7 @@ impl RenderOnce for WindowControls {
       .child(
         Button::new("window-control-close")
           .flat()
-          .icon(IconName::Dismiss)
+          .icon(Icon::new(IconName::Dismiss))
           .on_click(move |event, window, cx| {
             cx.stop_propagation();
             if let Some(f) = on_close_window.as_ref() {
@@ -280,7 +280,7 @@ impl RenderOnce for TitleBar {
         window_title.into()
       }
     });
-    let icon = icon.unwrap_or(IconName::Apps);
+    let icon = icon.unwrap_or_else(|| Icon::new(IconName::Apps));
     let theme_icon = if cx.theme().mode.is_dark() {
       IconName::WeatherSunny
     } else {
@@ -409,7 +409,7 @@ impl RenderOnce for TitleBar {
                 Button::new("title-bar-language")
                   .flat()
                   .medium()
-                  .icon(IconName::Translate)
+                  .icon(Icon::new(IconName::Translate))
                   .dropdown_menu(move |menu, _, _| {
                     let mut menu = menu;
                     for locale_name in available_locales() {
@@ -436,7 +436,7 @@ impl RenderOnce for TitleBar {
                 Button::new("title-bar-theme")
                   .flat()
                   .medium()
-                  .icon(theme_icon)
+                  .icon(Icon::new(theme_icon))
                   .on_click(move |event, window, cx| {
                     cx.stop_propagation();
                     if let Some(handler) = on_theme_button_click.as_ref() {

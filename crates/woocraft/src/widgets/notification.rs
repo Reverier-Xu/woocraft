@@ -47,12 +47,12 @@ pub enum NotificationType {
 }
 
 impl NotificationType {
-  fn icon(&self) -> IconName {
+  fn icon(&self) -> Icon {
     match self {
-      Self::Info => IconName::Alert,
-      Self::Success => IconName::CheckmarkCircle,
-      Self::Warning => IconName::AlertUrgent,
-      Self::Error => IconName::DismissCircle,
+      Self::Info => Icon::new(IconName::Alert),
+      Self::Success => Icon::new(IconName::CheckmarkCircle),
+      Self::Warning => Icon::new(IconName::AlertUrgent),
+      Self::Error => Icon::new(IconName::DismissCircle),
     }
   }
 
@@ -72,7 +72,7 @@ pub struct Notification {
   type_: NotificationType,
   title: Option<SharedString>,
   message: Option<SharedString>,
-  icon: Option<IconName>,
+  icon: Option<Icon>,
   autohide: bool,
   duration: Duration,
   on_click: Option<NotificationClickHandler>,
@@ -151,7 +151,7 @@ impl Notification {
     self
   }
 
-  pub fn icon(mut self, icon: IconName) -> Self {
+  pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
   }
@@ -507,7 +507,7 @@ impl NotificationCard {
 impl RenderOnce for NotificationCard {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let icon_color = self.data.type_.color(cx);
-    let icon_name = self.data.icon.unwrap_or_else(|| self.data.type_.icon());
+    let icon = self.data.icon.unwrap_or_else(|| self.data.type_.icon());
     let progress_ratio = self.state.read(cx).progress_ratio(self.id);
 
     v_flex()
@@ -538,7 +538,7 @@ impl RenderOnce for NotificationCard {
           .pl_2()
           .container_gap(self.size)
           .rounded(cx.theme().radius)
-          .child(Icon::new(icon_name).text_color(icon_color))
+          .child(icon.text_color(icon_color))
           .child(
             v_flex()
               .flex_1()
@@ -549,7 +549,7 @@ impl RenderOnce for NotificationCard {
           .child(
             Button::new(("notification-close", self.id as u64))
               .flat()
-              .icon(IconName::Dismiss)
+              .icon(Icon::new(IconName::Dismiss))
               .on_click({
                 let state = self.state.clone();
                 let id = self.id;

@@ -14,7 +14,7 @@ use super::{
   state::{InputState, Search},
 };
 use crate::{
-  ActiveTheme, Disableable, ElementExt, IconName, Selectable, Sizable, Size, StyleSized as _,
+  ActiveTheme, Disableable, ElementExt, Icon, IconName, Selectable, Sizable, Size, StyleSized as _,
   actions::SelectUp,
   h_flex, translate, v_flex,
   widgets::{
@@ -465,7 +465,7 @@ impl Render for SearchPanel {
                 Button::new("case-insensitive")
                   .selected(!self.case_insensitive)
                   .flat()
-                  .icon(IconName::TextChangeCase)
+                  .icon(Icon::new(IconName::TextChangeCase))
                   .on_click(cx.listener(|this, _, _, cx| {
                     this.case_insensitive = !this.case_insensitive;
                     this.update_search_query(cx);
@@ -476,7 +476,7 @@ impl Render for SearchPanel {
           .child(
             Button::new("replace-mode")
               .flat()
-              .icon(IconName::ArrowRepeatAll)
+              .icon(Icon::new(IconName::ArrowRepeatAll))
               .selected(self.replace_mode)
               .on_click(cx.listener(|this, _, window, cx| {
                 this.replace_mode = !this.replace_mode;
@@ -495,7 +495,7 @@ impl Render for SearchPanel {
           .child(
             Button::new("prev")
               .flat()
-              .icon(IconName::ChevronLeft)
+              .icon(Icon::new(IconName::ChevronLeft))
               .disabled(!has_matches)
               .on_click(cx.listener(|this, _, window, cx| {
                 let _ = window;
@@ -505,7 +505,7 @@ impl Render for SearchPanel {
           .child(
             Button::new("next")
               .flat()
-              .icon(IconName::ChevronRight)
+              .icon(Icon::new(IconName::ChevronRight))
               .disabled(!has_matches)
               .on_click(cx.listener(|this, _, window, cx| {
                 let _ = window;
@@ -525,7 +525,7 @@ impl Render for SearchPanel {
           .child(
             Button::new("close")
               .flat()
-              .icon(IconName::Dismiss)
+              .icon(Icon::new(IconName::Dismiss))
               .on_click(cx.listener(|this, _, window, cx| {
                 this.hide(window, cx);
               })),

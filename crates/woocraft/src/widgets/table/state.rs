@@ -10,7 +10,7 @@ use gpui::{
 
 use super::*;
 use crate::{
-  ActiveTheme, Button, ButtonVariants as _, ContextMenuExt, ElementExt, IconName, PopupMenu,
+  ActiveTheme, Button, ButtonVariants as _, ContextMenuExt, ElementExt, Icon, IconName, PopupMenu,
   ScrollableMask, Scrollbar, Selectable, Sizable, StyleSized as _, StyledExt, TableThemeExt,
   VirtualListScrollHandle,
   actions::{
@@ -1189,7 +1189,7 @@ where
         .small()
         .tab_stop(false)
         .selected(is_on)
-        .icon(icon)
+        .icon(Icon::new(icon))
         .on_click(cx.listener(move |table, _, window, cx| table.perform_sort(col_ix, window, cx))),
     )
   }

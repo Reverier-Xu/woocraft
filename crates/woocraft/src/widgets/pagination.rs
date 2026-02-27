@@ -105,7 +105,7 @@ impl Pagination {
         let tooltip_label = label.clone();
         move |window, cx| Tooltip::new(tooltip_label.clone()).build(window, cx)
       })
-      .when(self.compact, |this| this.icon(icon))
+      .when(self.compact, |this| this.icon(Icon::new(icon)))
       .when(!self.compact, |this| {
         if is_prev {
           this.child(Icon::new(icon)).child(label.clone())
@@ -180,7 +180,7 @@ impl RenderOnce for Pagination {
               .flat()
               .with_size(size)
               .disabled(is_disabled)
-              .icon(IconName::MoreHorizontal)
+              .icon(Icon::new(IconName::MoreHorizontal))
               .dropdown_menu(move |mut menu, _, _| {
                 let on_click_for_page = on_click_for_popover.clone();
 

@@ -3,7 +3,7 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, Disableable, IconName, Selectable, Sizable as _,
+  ActiveTheme, Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable as _,
   StyledExt, Theme, ThemeMode, h_flex, init, v_flex,
 };
 
@@ -120,17 +120,17 @@ impl Render for ButtonWindow {
               .label("Loading Custom")
               .default()
               .loading(true)
-              .icon(IconName::Search),
+              .icon(Icon::new(IconName::Search)),
           ),
       )
       .child(div().text_sm().child("Icon"))
       .child(
         h_flex()
           .gap_3()
-          .child(Button::new("btn-icon").icon(IconName::Settings))
+          .child(Button::new("btn-icon").icon(Icon::new(IconName::Settings)))
           .child(
             Button::new("btn-label-icon")
-              .icon(IconName::SpinnerIos)
+              .icon(Icon::new(IconName::SpinnerIos))
               .label("Search"),
           ),
       )

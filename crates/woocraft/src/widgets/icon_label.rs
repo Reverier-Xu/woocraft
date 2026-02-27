@@ -17,7 +17,7 @@ type IconLabelClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 pub struct IconLabel {
   id: ElementId,
   label: Option<SharedString>,
-  icon: Option<IconName>,
+  icon: Option<Icon>,
   children: Vec<AnyElement>,
   style: StyleRefinement,
   size: Size,
@@ -26,7 +26,7 @@ pub struct IconLabel {
   expanded: bool,
   label_expanded: bool,
   loading: bool,
-  loading_icon: Option<IconName>,
+  loading_icon: Option<Icon>,
   on_click: Option<IconLabelClickHandler>,
 }
 
@@ -54,7 +54,7 @@ impl IconLabel {
     self
   }
 
-  pub fn icon(mut self, icon: IconName) -> Self {
+  pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
   }
@@ -71,7 +71,7 @@ impl IconLabel {
     self
   }
 
-  pub fn loading_icon(mut self, icon: IconName) -> Self {
+  pub fn loading_icon(mut self, icon: Icon) -> Self {
     self.loading_icon = Some(icon);
     self
   }
@@ -109,7 +109,7 @@ impl RenderOnce for IconLabel {
     let label_expanded = self.label_expanded;
     let has_children = !self.children.is_empty();
     let icon = if self.loading {
-      self.loading_icon.or(Some(IconName::SpinnerIos))
+      self.loading_icon.or(Some(Icon::new(IconName::SpinnerIos)))
     } else {
       self.icon
     };
@@ -142,7 +142,7 @@ impl RenderOnce for IconLabel {
       .text_size(self.size.text_size())
       .when(clickable, |this| this.cursor_pointer())
       .when_some(icon, |this, icon| {
-        let icon = Icon::new(icon).with_size(self.size);
+        let icon = icon.with_size(self.size);
         if self.loading {
           this.child(
             icon.with_animation("loading-spin", spinner_animation(), |this, delta| {

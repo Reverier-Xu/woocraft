@@ -17,7 +17,7 @@ use super::{
   PanelView, StackPanel, ToggleZoom,
 };
 use crate::{
-  ActiveTheme, AxisExt, Disableable, Divider, DockPlacement, IconLabel, IconName, Placement,
+  ActiveTheme, AxisExt, Disableable, Divider, DockPlacement, Icon, IconLabel, IconName, Placement,
   Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate, v_flex,
 };
 
@@ -66,7 +66,7 @@ impl Render for DragPanel {
       .opacity(0.75)
       .child(
         IconLabel::new("drag-panel-label")
-          .icon(self.panel.icon(cx))
+          .icon(Icon::new(self.panel.icon(cx)))
           .label(self.panel.title(cx)),
       )
   }
@@ -643,7 +643,7 @@ impl TabPanel {
           let tooltip = SharedString::from(tooltip.to_string());
           this.child(
             Button::new(id)
-              .icon(icon)
+              .icon(Icon::new(icon))
               .flat()
               .tab_stop(false)
               .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
@@ -658,7 +658,7 @@ impl TabPanel {
       })
       .child(
         Button::new("menu")
-          .icon(IconName::MoreHorizontal)
+          .icon(Icon::new(IconName::MoreHorizontal))
           .flat()
           .tab_stop(false)
           .dropdown_menu({
@@ -763,7 +763,7 @@ impl TabPanel {
 
     Some(
       Button::new(SharedString::from(format!("toggle-dock:{:?}", placement)))
-        .icon(icon)
+        .icon(Icon::new(icon))
         .flat()
         .tab_stop(false)
         .disabled(!dock_has_panels)
@@ -816,7 +816,7 @@ impl TabPanel {
 
     Some(
       Button::new(SharedString::from("collapse-dock-content"))
-        .icon(icon)
+        .icon(Icon::new(icon))
         .flat()
         .tab_stop(false)
         .disabled(!has_panels)
@@ -939,7 +939,7 @@ impl TabPanel {
             .overflow_hidden()
             .text_ellipsis()
             .whitespace_nowrap()
-            .child(IconLabel::new("panel-title").icon(icon).label(title))
+            .child(IconLabel::new("panel-title").icon(Icon::new(icon)).label(title))
             .when(state.draggable, |this| {
               this.on_drag(
                 DragPanel {

@@ -238,7 +238,7 @@ impl RenderOnce for Tab {
       let mut close_btn = Button::new(close_button_id)
         .small()
         .flat()
-        .icon(IconName::Dismiss)
+        .icon(Icon::new(IconName::Dismiss))
         .tab_stop(false);
 
       if let Some(on_close) = self.on_close {

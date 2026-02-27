@@ -9,7 +9,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants as _, Date, Disableable as _, IconName, Matcher, Selectable,
+  ActiveTheme, Button, ButtonVariants as _, Date, Disableable as _, Icon, IconName, Matcher, Selectable,
   Sizable, Size, StyledExt as _, h_flex, local_today, month_days, translate, v_flex,
 };
 
@@ -394,7 +394,7 @@ impl Calendar {
       .items_center()
       .child(
         Button::new("prev")
-          .icon(IconName::ChevronLeft)
+          .icon(Icon::new(IconName::ChevronLeft))
           .tab_stop(false)
           .flat()
           .disabled(disable_month_nav)
@@ -469,7 +469,7 @@ impl Calendar {
       })
       .child(
         Button::new("next")
-          .icon(IconName::ChevronRight)
+          .icon(Icon::new(IconName::ChevronRight))
           .flat()
           .tab_stop(false)
           .disabled(disable_month_nav)

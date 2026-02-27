@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::{
   ActiveTheme as _, Button, ButtonVariants as _, CARET_STEADY_DURATION, ContextMenuExt,
-  Disableable, ElementExt, IconName, PopupMenu, PopupMenuItem, Selectable, Selection, Sizable,
+  Disableable, ElementExt, Icon, IconName, PopupMenu, PopupMenuItem, Selectable, Selection, Sizable,
   Size, StyleSized, StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret, translate,
 };
 
@@ -1196,7 +1196,7 @@ impl RenderOnce for NumberInput {
           Button::new(("minus", self.state.entity_id()))
             .with_size(self.size)
             .default()
-            .icon(IconName::Subtract)
+            .icon(Icon::new(IconName::Subtract))
             .tab_stop(false)
             .disabled(self.disabled)
             .on_click({
@@ -1219,7 +1219,7 @@ impl RenderOnce for NumberInput {
           Button::new(("plus", self.state.entity_id()))
             .with_size(self.size)
             .default()
-            .icon(IconName::Add)
+            .icon(Icon::new(IconName::Add))
             .tab_stop(false)
             .disabled(self.disabled)
             .on_click({
@@ -1563,7 +1563,7 @@ impl Input {
 
   fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
     Button::new("toggle-mask")
-      .icon(IconName::Eye)
+      .icon(Icon::new(IconName::Eye))
       .small()
       .flat()
       .tab_stop(false)
@@ -1597,7 +1597,7 @@ impl_styled!(Input);
 #[inline]
 fn clear_button(cx: &App) -> Button {
   Button::new("clean")
-    .icon(IconName::DismissCircle)
+    .icon(Icon::new(IconName::DismissCircle))
     .flat()
     .small()
     .tab_stop(false)

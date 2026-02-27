@@ -85,7 +85,7 @@ pub trait ButtonVariants: Sized {
 pub struct Button {
   id: ElementId,
   label: Option<SharedString>,
-  icon: Option<IconName>,
+  icon: Option<Icon>,
   children: Vec<AnyElement>,
   style: StyleRefinement,
   variant: ButtonVariant,
@@ -99,7 +99,7 @@ pub struct Button {
   tab_index: isize,
   outline: bool,
   loading: bool,
-  loading_icon: Option<IconName>,
+  loading_icon: Option<Icon>,
   on_click: Option<ButtonClickHandler>,
   on_hover: Option<ButtonHoverHandler>,
   tooltip_builder: Option<TooltipBuilder>,
@@ -136,7 +136,7 @@ impl Button {
     self
   }
 
-  pub fn icon(mut self, icon: IconName) -> Self {
+  pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
   }
@@ -188,7 +188,7 @@ impl Button {
     self
   }
 
-  pub fn loading_icon(mut self, icon: IconName) -> Self {
+  pub fn loading_icon(mut self, icon: Icon) -> Self {
     self.loading_icon = Some(icon);
     self
   }
@@ -354,7 +354,7 @@ impl RenderOnce for Button {
     let clickable = self.clickable();
     let hoverable = self.hoverable();
     let icon = if self.loading {
-      self.loading_icon.or(Some(IconName::SpinnerIos))
+      self.loading_icon.or(Some(Icon::new(IconName::SpinnerIos)))
     } else {
       self.icon
     };
@@ -365,7 +365,7 @@ impl RenderOnce for Button {
       .component_gap(self.size)
       .when(self.expanded, |this| this.flex_1().w_full().justify_start())
       .when_some(icon, |this, icon| {
-        let icon = Icon::new(icon).with_size(self.size);
+        let icon = icon.with_size(self.size);
         if self.loading {
           this.child(icon.with_animation(
             "loading-spin",

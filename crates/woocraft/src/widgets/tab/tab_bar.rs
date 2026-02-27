@@ -15,7 +15,7 @@ use super::{
   Tab,
 };
 use crate::{
-  ActiveTheme, IconName, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex, v_flex,
+  ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyleSized, StyledExt, h_flex, v_flex,
 };
 
 type TabBarClickHandler = dyn Fn(&usize, &mut Window, &mut App);
@@ -215,7 +215,7 @@ impl RenderOnce for TabBar {
           this.child(
             Button::new("more")
               .flat()
-              .icon(IconName::ChevronDown)
+              .icon(Icon::new(IconName::ChevronDown))
               .dropdown_menu(move |mut this: crate::PopupMenu, _, _| {
                 this = this.scrollable(true);
                 for (ix, (label, disabled)) in item_labels.iter().enumerate() {

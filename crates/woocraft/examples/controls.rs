@@ -1072,10 +1072,10 @@ impl Render for ControlsWindow {
                           .child(Input::new(&self.input_state2).cleanable(true))
                           .child(
                             Button::new("wg-run")
-                              .icon(woocraft::IconName::Play))
+                              .icon(Icon::new(woocraft::IconName::Play)))
                           .child(
                             IconLabel::new("wg-status")
-                              .icon(woocraft::IconName::Checkmark)
+                              .icon(Icon::new(woocraft::IconName::Checkmark))
                               .label("Ready"),
                           ),
                       ),

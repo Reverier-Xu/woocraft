@@ -1,6 +1,6 @@
 use gpui::{App, ClickEvent, IntoElement, RenderOnce, Window};
 
-use crate::{Button, ButtonVariants, IconName, Sizable, Size};
+use crate::{Button, ButtonVariants, Icon, IconName, Sizable, Size};
 
 pub type DismissHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
@@ -42,7 +42,7 @@ impl_sizable!(DismissButton);
 impl RenderOnce for DismissButton {
   fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
     let mut btn = Button::new("dismiss")
-      .icon(IconName::Dismiss)
+      .icon(Icon::new(IconName::Dismiss))
       .flat()
       .with_size(self.size);
 
