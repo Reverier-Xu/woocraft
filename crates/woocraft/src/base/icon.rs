@@ -1,3 +1,5 @@
+use std::{collections::HashMap, sync::{OnceLock, RwLock}};
+
 use gpui::{
   AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
   SharedString, StyleRefinement, Styled, Svg, Transformation, Window, prelude::FluentBuilder as _,
@@ -9,6 +11,65 @@ use crate::base::{Sizable, Size};
 /// Types implementing this trait can automatically be converted to [`Icon`].
 pub trait IconNamed {
   fn path(self) -> SharedString;
+}
+
+static CUSTOM_ICON_REGISTRY: OnceLock<RwLock<HashMap<String, SharedString>>> = OnceLock::new();
+
+fn custom_icon_registry() -> &'static RwLock<HashMap<String, SharedString>> {
+  CUSTOM_ICON_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn resolve_icon_path(name_or_path: &str) -> SharedString {
+  custom_icon_path(name_or_path)
+    .unwrap_or_else(|| SharedString::from(name_or_path.to_owned()))
+}
+
+pub fn register_icon(name: impl Into<SharedString>, path: impl Into<SharedString>) {
+  let name = name.into().to_string();
+  let path = path.into();
+  let mut registry = custom_icon_registry()
+    .write()
+    .expect("custom icon registry poisoned");
+  registry.insert(name, path);
+}
+
+pub fn unregister_icon(name: &str) -> Option<SharedString> {
+  let mut registry = custom_icon_registry()
+    .write()
+    .expect("custom icon registry poisoned");
+  registry.remove(name)
+}
+
+pub fn clear_custom_icons() {
+  let mut registry = custom_icon_registry()
+    .write()
+    .expect("custom icon registry poisoned");
+  registry.clear();
+}
+
+pub fn custom_icon_path(name: &str) -> Option<SharedString> {
+  let registry = custom_icon_registry()
+    .read()
+    .expect("custom icon registry poisoned");
+  registry.get(name).cloned()
+}
+
+impl IconNamed for &str {
+  fn path(self) -> SharedString {
+    resolve_icon_path(self)
+  }
+}
+
+impl IconNamed for String {
+  fn path(self) -> SharedString {
+    resolve_icon_path(&self)
+  }
+}
+
+impl IconNamed for SharedString {
+  fn path(self) -> SharedString {
+    resolve_icon_path(self.as_ref())
+  }
 }
 
 impl<T: IconNamed> From<T> for Icon {

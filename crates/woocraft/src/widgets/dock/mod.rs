@@ -603,6 +603,7 @@ impl DockArea {
     };
 
     this.subscribe_panel(&stack_panel, window, cx);
+    this.update_toggle_button_tab_panels(window, cx);
 
     this
   }
