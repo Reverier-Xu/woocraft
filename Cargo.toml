@@ -10,8 +10,8 @@ license      = "Apache-2.0"
 publish      = true
 readme       = "README.md"
 repository   = "https://github.com/Reverier-Xu/woocraft"
-rust-version = "1.93.0"
-version      = "0.2.6"
+rust-version = "1.93.1"
+version      = "0.2.7"
 
 [profile.release]
 codegen-units = 1
@@ -28,9 +28,9 @@ enum-iterator                 = "2.1"
 gpui                          = "0.2"
 gpui-macros                   = "0.2"
 lsp-types                     = { version = "0.97", features = ["proposed"] }
+num-traits                    = "0.2"
 palette                       = "0.7"
 regex                         = "1.12"
-num-traits                    = "0.2"
 schemars                      = "1.2"
 serde                         = { version = "1.0", features = ["derive"] }
 serde_json                    = "1.0"
@@ -60,7 +60,7 @@ tree-sitter-javascript        = "0.25"
 tree-sitter-jsdoc             = "0.25"
 tree-sitter-json              = "0.24"
 tree-sitter-kotlin-sg         = "0.4"
-tree-sitter-lua               = "0.4"
+tree-sitter-lua               = "0.5"
 tree-sitter-make              = "1.1"
 tree-sitter-md                = "0.5"
 tree-sitter-php               = "0.24"
