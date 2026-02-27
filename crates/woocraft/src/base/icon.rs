@@ -106,6 +106,7 @@ pub struct Icon {
   text_color: Option<Hsla>,
   size: Option<Size>,
   rotation: Option<Radians>,
+  colorized: bool,
 }
 
 impl Default for Icon {
@@ -117,6 +118,7 @@ impl Default for Icon {
       text_color: None,
       size: None,
       rotation: None,
+      colorized: true,
     }
   }
 }
@@ -205,7 +207,7 @@ impl RenderOnce for Icon {
 
     base
       .flex_shrink_0()
-      .text_color(text_color)
+      .when(self.colorized, |this| this.text_color(text_color))
       .when(!has_base_size, |this| this.size(text_size))
       .when_some(self.size, |this, size| this.size(size.icon_size()))
       .path(self.path)
