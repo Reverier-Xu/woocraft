@@ -176,6 +176,11 @@ impl Icon {
       .with_transformation(Transformation::rotate(radians));
     self
   }
+
+  pub fn colorized(mut self, colorized: bool) -> Self {
+    self.colorized = colorized;
+    self
+  }
 }
 
 impl Styled for Icon {
