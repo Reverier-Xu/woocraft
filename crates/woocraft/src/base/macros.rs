@@ -86,7 +86,8 @@ macro_rules! impl_selectable {
   };
 }
 
-/// Implements `gpui::ParentElement` for a type with a `children: Vec<AnyElement>` field.
+/// Implements `gpui::ParentElement` for a type with a `children:
+/// Vec<AnyElement>` field.
 ///
 /// ```ignore
 /// impl_parent_element!(MyWidget);

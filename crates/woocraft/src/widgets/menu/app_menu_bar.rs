@@ -36,7 +36,9 @@ impl Render for AppMenuBar {
       .h_full()
       .min_w_0()
       .gap_x_1()
+      .opacity(0.6)
       .overflow_x_scroll()
+      .hover(|this| this.opacity(1.))
       .children(self.menus.iter().enumerate().map(|(ix, menu)| {
         let menu_name = menu.name.clone();
         let menu_items = menu.items.clone();

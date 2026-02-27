@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use gpui::{
-  App, AppContext, Application, Bounds, Context, Edges, Entity, FocusHandle, Focusable,
+  App, AppContext, Application, Bounds, Context, Entity, FocusHandle, Focusable,
   InteractiveElement as _, IntoElement, Menu, MenuItem, ParentElement, Render, SharedString,
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, actions, div, px,
 };
 use woocraft::{
-  ActiveTheme, AppMenuBar, DockArea, DockItem, DockPlacement, IconName, Panel, PanelEvent,
-  PopupMenuItem, StyledExt as _, TitleBar, v_flex, window_border,
+  ActiveTheme, AppMenuBar, DockArea, DockPlacement, IconName, Panel, PanelEvent, PopupMenuItem,
+  StyledExt as _, TitleBar, v_flex, window_border,
 };
 
 actions!(
@@ -110,8 +110,7 @@ struct DockExample {
 
 impl DockExample {
   fn panel(
-    id: impl Into<SharedString>, title: impl Into<SharedString>, _window: &mut Window,
-    cx: &mut App,
+    id: impl Into<SharedString>, title: impl Into<SharedString>, _window: &mut Window, cx: &mut App,
   ) -> Entity<ExamplePanel> {
     let id: SharedString = id.into();
     let title: SharedString = title.into();
@@ -121,7 +120,6 @@ impl DockExample {
   fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
     let dock_area = cx.new(|cx| DockArea::new("dock-example", Some(1), window, cx));
     let app_menu_bar = AppMenuBar::new(cx);
-    let weak = dock_area.downgrade();
 
     let editor = Self::panel("editor:/workspace/main.rs", "Editor", window, cx);
     let preview = Self::panel("preview:/workspace/main.rs", "Preview", window, cx);
@@ -132,56 +130,23 @@ impl DockExample {
     let problems = Self::panel("problems:default", "Problems", window, cx);
     let references = Self::panel("references:/workspace/main.rs", "References", window, cx);
 
-    let center = DockItem::h_split(
-      vec![
-        DockItem::tab(editor, &weak, window, cx).size(px(540.)),
-        DockItem::v_split(
-          vec![
-            DockItem::tab(preview, &weak, window, cx),
-            DockItem::tab(inspector, &weak, window, cx).size(px(220.)),
-          ],
-          &weak,
-          window,
-          cx,
-        )
-        .size(px(360.)),
-      ],
-      &weak,
-      window,
-      cx,
-    );
-
-    let left = DockItem::tabs(
-      vec![Arc::new(explorer.clone()), Arc::new(outline.clone())],
-      &weak,
-      window,
-      cx,
-    );
-
-    let bottom = DockItem::tabs(
-      vec![Arc::new(terminal.clone()), Arc::new(problems.clone())],
-      &weak,
-      window,
-      cx,
-    );
-
-    let right = DockItem::tabs(vec![Arc::new(references.clone())], &weak, window, cx);
-
     dock_area.update(cx, |dock, cx| {
-      dock.set_center(center, window, cx);
-      dock.set_left_dock(left, Some(px(260.)), true, window, cx);
-      dock.set_bottom_dock(bottom, Some(px(220.)), true, window, cx);
-      dock.set_right_dock(right, Some(px(280.)), true, window, cx);
-      dock.set_dock_collapsible(
-        Edges {
-          left: true,
-          bottom: true,
-          right: true,
-          ..Default::default()
-        },
-        window,
-        cx,
-      );
+      // Add panels to center area
+      dock.add_to_center(Arc::new(editor.clone()), window, cx);
+      dock.add_to_center(Arc::new(preview.clone()), window, cx);
+      dock.add_to_center(Arc::new(inspector.clone()), window, cx);
+
+      // Add panels to side docks
+      dock.add_to_left_dock(Arc::new(explorer.clone()), window, cx);
+      dock.add_to_left_dock(Arc::new(outline.clone()), window, cx);
+      dock.add_to_bottom_dock(Arc::new(terminal.clone()), window, cx);
+      dock.add_to_bottom_dock(Arc::new(problems.clone()), window, cx);
+      dock.add_to_right_dock(Arc::new(references.clone()), window, cx);
+
+      // Configure dock sizes
+      dock.set_dock_size(DockPlacement::Left, px(260.), window, cx);
+      dock.set_dock_size(DockPlacement::Bottom, px(220.), window, cx);
+      dock.set_dock_size(DockPlacement::Right, px(280.), window, cx);
     });
 
     cx.new(|_| Self {
@@ -218,15 +183,9 @@ impl DockExample {
     &mut self, _: &ExpandAllDocks, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.dock_area.update(cx, |dock, cx| {
-      let left = dock.left_dock().cloned();
-      let bottom = dock.bottom_dock().cloned();
-      let right = dock.right_dock().cloned();
-
-      for dock in [left, bottom, right].into_iter().flatten() {
-        dock.update(cx, |dock, cx| {
-          dock.set_collapsed(false, window, cx);
-        });
-      }
+      dock.set_dock_collapsed(DockPlacement::Left, false, window, cx);
+      dock.set_dock_collapsed(DockPlacement::Bottom, false, window, cx);
+      dock.set_dock_collapsed(DockPlacement::Right, false, window, cx);
     });
   }
 
@@ -234,15 +193,9 @@ impl DockExample {
     &mut self, _: &CollapseAllDocks, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.dock_area.update(cx, |dock, cx| {
-      let left = dock.left_dock().cloned();
-      let bottom = dock.bottom_dock().cloned();
-      let right = dock.right_dock().cloned();
-
-      for dock in [left, bottom, right].into_iter().flatten() {
-        dock.update(cx, |dock, cx| {
-          dock.set_collapsed(true, window, cx);
-        });
-      }
+      dock.set_dock_collapsed(DockPlacement::Left, true, window, cx);
+      dock.set_dock_collapsed(DockPlacement::Bottom, true, window, cx);
+      dock.set_dock_collapsed(DockPlacement::Right, true, window, cx);
     });
   }
 
@@ -250,24 +203,12 @@ impl DockExample {
     &mut self, _: &ResetDockSizes, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.dock_area.update(cx, |dock, cx| {
-      if let Some(left) = dock.left_dock().cloned() {
-        left.update(cx, |dock, cx| {
-          dock.set_size(px(260.), window, cx);
-          dock.set_collapsed(false, window, cx);
-        });
-      }
-      if let Some(bottom) = dock.bottom_dock().cloned() {
-        bottom.update(cx, |dock, cx| {
-          dock.set_size(px(220.), window, cx);
-          dock.set_collapsed(false, window, cx);
-        });
-      }
-      if let Some(right) = dock.right_dock().cloned() {
-        right.update(cx, |dock, cx| {
-          dock.set_size(px(280.), window, cx);
-          dock.set_collapsed(false, window, cx);
-        });
-      }
+      dock.set_dock_size(DockPlacement::Left, px(260.), window, cx);
+      dock.set_dock_collapsed(DockPlacement::Left, false, window, cx);
+      dock.set_dock_size(DockPlacement::Bottom, px(220.), window, cx);
+      dock.set_dock_collapsed(DockPlacement::Bottom, false, window, cx);
+      dock.set_dock_size(DockPlacement::Right, px(280.), window, cx);
+      dock.set_dock_collapsed(DockPlacement::Right, false, window, cx);
     });
   }
 

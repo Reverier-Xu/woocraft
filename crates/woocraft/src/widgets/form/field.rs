@@ -130,8 +130,7 @@ impl Field {
   pub fn label_fn<F, E>(mut self, label: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static,
-  {
+    F: Fn(&mut Window, &mut App) -> E + 'static, {
     self.label = Some(FieldBuilder::Element(Rc::new(move |window, cx| {
       label(window, cx).into_any_element()
     })));
@@ -146,8 +145,7 @@ impl Field {
   pub fn description_fn<F, E>(mut self, description: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut Window, &mut App) -> E + 'static,
-  {
+    F: Fn(&mut Window, &mut App) -> E + 'static, {
     self.description = Some(FieldBuilder::Element(Rc::new(move |window, cx| {
       description(window, cx).into_any_element()
     })));

@@ -511,7 +511,11 @@ impl RenderOnce for Slider {
               }),
           ),
       )
-      .opacity(if self.disabled { opacity::DISABLED } else { 1.0 })
+      .opacity(if self.disabled {
+        opacity::DISABLED
+      } else {
+        1.0
+      })
       .refine_style(&self.style)
   }
 }

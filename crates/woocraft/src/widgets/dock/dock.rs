@@ -8,10 +8,7 @@ use gpui::{
   Window, div, prelude::FluentBuilder as _, px,
 };
 
-use super::{
-  super::resizable::PANEL_MIN_SIZE,
-  DockArea, DockItem, PanelView, TabPanel,
-};
+use super::{super::resizable::PANEL_MIN_SIZE, DockArea, DockItem, PanelView, TabPanel};
 use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 
 #[derive(Clone)]
@@ -35,8 +32,6 @@ pub struct Dock {
   /// left or right, the size is width, otherwise the size is height.
   pub(super) size: Pixels,
   pub(super) collapsed: bool,
-  /// Whether the Dock is collapsible, default: true
-  pub(super) collapsible: bool,
   /// The tab bar direction for this dock
   pub(super) tab_bar_direction: TabBarDirection,
 
@@ -77,7 +72,6 @@ impl Dock {
       dock_area,
       panel,
       collapsed: false,
-      collapsible: true,
       size: px(200.0),
       tab_bar_direction,
       resizing: false,
@@ -109,15 +103,9 @@ impl Dock {
     Self::new(dock_area, DockPlacement::Right, window, cx)
   }
 
-  /// Update the Dock to be collapsible or not.
-  ///
-  /// And if the Dock is not collapsible, it will be expanded.
-  pub fn set_collapsible(&mut self, collapsible: bool, _: &mut Window, cx: &mut Context<Self>) {
-    self.collapsible = collapsible;
-    if !collapsible {
-      self.collapsed = false
-    }
-    cx.notify();
+  /// Return true if the dock has any real panels (not just empty placeholders).
+  pub fn has_panels(&self, cx: &App) -> bool {
+    self.panel.has_real_panels(cx)
   }
 
   pub(super) fn from_state(
@@ -155,7 +143,6 @@ impl Dock {
       panel,
       collapsed,
       size,
-      collapsible: true,
       tab_bar_direction,
       resizing: false,
     };
@@ -304,21 +291,23 @@ impl Dock {
     let mut right_dock_size = px(0.0);
 
     // Get the size of the left dock if it's expanded and not the current dock
-    if let Some(left_dock) = &dock_area.left_dock
-      && left_dock.entity_id() != cx.entity().entity_id()
     {
-      let left_dock_read = left_dock.read(cx);
-      if !left_dock_read.is_collapsed() {
-        left_dock_size = left_dock_read.size;
+      let left_dock = &dock_area.left_dock;
+      if left_dock.entity_id() != cx.entity().entity_id() {
+        let left_dock_read = left_dock.read(cx);
+        if !left_dock_read.is_collapsed() {
+          left_dock_size = left_dock_read.size;
+        }
       }
     }
 
-    if let Some(right_dock) = &dock_area.right_dock
-      && right_dock.entity_id() != cx.entity().entity_id()
     {
-      let right_dock_read = right_dock.read(cx);
-      if !right_dock_read.is_collapsed() {
-        right_dock_size = right_dock_read.size;
+      let right_dock = &dock_area.right_dock;
+      if right_dock.entity_id() != cx.entity().entity_id() {
+        let right_dock_read = right_dock.read(cx);
+        if !right_dock_read.is_collapsed() {
+          right_dock_size = right_dock_read.size;
+        }
       }
     }
 

@@ -11,8 +11,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconName, Size,
-  StyleSized, StyledExt, duration, h_flex, v_flex,
+  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconName, Size, StyleSized,
+  StyledExt, duration, h_flex, v_flex,
 };
 
 type NotificationClickHandler = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -568,7 +568,9 @@ impl RenderOnce for NotificationCard {
           .container_padding(self.size)
           .flex_1()
           .text_color(cx.theme().muted_foreground)
-          .when_some(self.data.message.clone(), |this, message| this.child(message)),
+          .when_some(self.data.message.clone(), |this, message| {
+            this.child(message)
+          }),
       )
       .child(h_flex().w_full().justify_end().when_some(
         self.data.action_label.clone(),

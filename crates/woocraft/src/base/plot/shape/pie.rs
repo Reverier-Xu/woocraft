@@ -61,10 +61,11 @@ impl<T> Pie<T> {
 
     for (idx, v) in data.iter().enumerate() {
       if let Some(value) = (self.value)(v)
-        && value > 0. {
-          sum += value;
-          values.push((idx, v, value));
-        }
+        && value > 0.
+      {
+        sum += value;
+        values.push((idx, v, value));
+      }
     }
 
     let mut arcs = Vec::with_capacity(values.len());

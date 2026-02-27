@@ -9,7 +9,10 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, ContextMenuExt as _, Icon, IconName, ListItem, PopupMenu, ScrollableElement, Size, StyleSized, StyledExt, TreeEntry, TreeItem, TreeModel, actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp}, h_flex
+  ActiveTheme, ContextMenuExt as _, Icon, IconName, ListItem, PopupMenu, ScrollableElement, Size,
+  StyleSized, StyledExt, TreeEntry, TreeItem, TreeModel,
+  actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
+  h_flex,
 };
 
 const CONTEXT: &str = "Tree";
@@ -203,7 +206,8 @@ impl TreeState {
     &mut self.model
   }
 
-  /// Whether the given index is selected (works for both single and multi mode).
+  /// Whether the given index is selected (works for both single and multi
+  /// mode).
   pub fn is_selected(&self, ix: usize) -> bool {
     self.model.is_selected(ix)
   }
@@ -253,9 +257,7 @@ impl TreeState {
             .w_4()
             .items_center()
             .justify_center()
-            .when(entry.is_folder(), |this| {
-              this.child(Icon::new(expand_icon))
-            }),
+            .when(entry.is_folder(), |this| this.child(Icon::new(expand_icon))),
         ),
     )
   }
@@ -457,9 +459,7 @@ impl TreeState {
     cx.notify();
   }
 
-  fn on_entry_click(
-    &mut self, ix: usize, ev: &ClickEvent, _: &mut Window, cx: &mut Context<Self>,
-  ) {
+  fn on_entry_click(&mut self, ix: usize, ev: &ClickEvent, _: &mut Window, cx: &mut Context<Self>) {
     // Double-click: emit event
     if ev.click_count() == 2 {
       cx.emit(TreeEvent::DoubleClicked(ix));
@@ -571,9 +571,7 @@ impl Render for TreeState {
                   },
                 )
                 .drag_over::<DragTreeItem>(|this, _, _, cx| {
-                  this
-                    .border_t_2()
-                    .border_color(cx.theme().drag_border)
+                  this.border_t_2().border_color(cx.theme().drag_border)
                 })
                 .on_drop(cx.listener(move |this, drag: &DragTreeItem, window, cx| {
                   if drag.entity_id != cx.entity_id() {
@@ -648,8 +646,8 @@ impl Tree {
   /// a configured `PopupMenu`.
   pub fn context_menu<F>(mut self, builder: F) -> Self
   where
-    F: Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu
-      + 'static,
+    F:
+      Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
   {
     self.context_menu_builder = Some(Rc::new(builder));
     self

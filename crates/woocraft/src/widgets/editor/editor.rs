@@ -8,8 +8,8 @@ use gpui::{
 
 use super::state::{CONTEXT, Copy, Cut, InputState, Paste, SelectAll};
 use crate::{
-  ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Size, StyleSized as _,
-  StyledExt, translate, v_flex,
+  ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Size, StyleSized as _, StyledExt,
+  translate, v_flex,
   widgets::{
     editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN},
     scroll::Scrollbar,
@@ -246,8 +246,7 @@ impl RenderOnce for Editor {
       .track_focus(&state.focus_handle.clone())
       .tab_index(self.tab_index)
       .when(!state.disabled, |this| {
-        this
-          .on_action(window.listener_for(&self.state, InputState::escape))
+        this.on_action(window.listener_for(&self.state, InputState::escape))
       })
       .when(!state.disabled && !state.read_only, |this| {
         this

@@ -14,12 +14,19 @@ pub struct DockAreaState {
   #[serde(default)]
   pub version: Option<usize>,
   pub center: PanelState,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  /// Whether the center area is enabled, default is true.
+  #[serde(default = "default_center_enabled")]
+  pub center_enabled: bool,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
   pub left_dock: Option<DockState>,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  #[serde(default, skip_serializing_if = "Option::is_none")]
   pub right_dock: Option<DockState>,
-  #[serde(skip_serializing_if = "Option::is_none")]
+  #[serde(default, skip_serializing_if = "Option::is_none")]
   pub bottom_dock: Option<DockState>,
+}
+
+fn default_center_enabled() -> bool {
+  true
 }
 
 /// Used to serialize and deserialize the Dock

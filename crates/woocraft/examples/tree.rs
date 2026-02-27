@@ -66,21 +66,21 @@ impl TreeWindow {
     });
 
     cx.new(|cx| {
-      let subscriptions = vec![cx.subscribe(
-        &tree_state,
-        |this: &mut Self, _, event: &TreeEvent, cx| {
-          this.last_event = match event {
-            TreeEvent::Select(ix) => format!("Select({ix})"),
-            TreeEvent::DoubleClicked(ix) => format!("DoubleClicked({ix})"),
-            TreeEvent::RightClicked(ix) => format!("RightClicked({ix})"),
-            TreeEvent::ClearSelection => "ClearSelection".to_string(),
-            TreeEvent::ToggleSelect(ix) => format!("ToggleSelect({ix})"),
-            TreeEvent::RangeSelect(ix) => format!("RangeSelect({ix})"),
-            TreeEvent::MoveItem(from, to) => format!("MoveItem({from} -> {to})"),
-          };
-          cx.notify();
-        },
-      )];
+      let subscriptions =
+        vec![
+          cx.subscribe(&tree_state, |this: &mut Self, _, event: &TreeEvent, cx| {
+            this.last_event = match event {
+              TreeEvent::Select(ix) => format!("Select({ix})"),
+              TreeEvent::DoubleClicked(ix) => format!("DoubleClicked({ix})"),
+              TreeEvent::RightClicked(ix) => format!("RightClicked({ix})"),
+              TreeEvent::ClearSelection => "ClearSelection".to_string(),
+              TreeEvent::ToggleSelect(ix) => format!("ToggleSelect({ix})"),
+              TreeEvent::RangeSelect(ix) => format!("RangeSelect({ix})"),
+              TreeEvent::MoveItem(from, to) => format!("MoveItem({from} -> {to})"),
+            };
+            cx.notify();
+          }),
+        ];
 
       Self {
         tree_state,

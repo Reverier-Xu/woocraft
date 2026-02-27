@@ -6,10 +6,7 @@ use gpui::{
   prelude::FluentBuilder as _,
 };
 
-use crate::{
-  ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt,
-  h_flex,
-};
+use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt, h_flex};
 
 type CheckboxClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
 

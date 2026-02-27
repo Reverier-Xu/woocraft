@@ -268,9 +268,7 @@ impl StackPanel {
     if self.is_root() && self.panels.is_empty() {
       if let Some(dock_area) = self.dock_area.clone() {
         let stack_weak = cx.entity().downgrade();
-        let tab_panel = cx.new(|cx| {
-          TabPanel::new(Some(stack_weak), dock_area.clone(), window, cx)
-        });
+        let tab_panel = cx.new(|cx| TabPanel::new(Some(stack_weak), dock_area.clone(), window, cx));
         let tab_view: Arc<dyn PanelView> = Arc::new(tab_panel.clone());
         self.panels.push(tab_view);
         self.state.update(cx, |state, cx| {

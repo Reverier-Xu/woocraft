@@ -19,8 +19,7 @@ pub struct LineChart<T, X, Y>
 where
   T: 'static,
   X: PartialEq + Into<SharedString> + 'static,
-  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
-{
+  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static, {
   data: Vec<T>,
   x: Option<XAccessor<T, X>>,
   y: Option<YAccessor<T, Y>>,
@@ -37,8 +36,7 @@ where
 {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>,
-  {
+    I: IntoIterator<Item = T>, {
     Self {
       data: data.into_iter().collect(),
       stroke: None,

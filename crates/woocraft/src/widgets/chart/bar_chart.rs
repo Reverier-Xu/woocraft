@@ -22,8 +22,7 @@ pub struct BarChart<T, X, Y>
 where
   T: 'static,
   X: PartialEq + Into<SharedString> + 'static,
-  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
-{
+  Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static, {
   data: Vec<T>,
   x: Option<XAccessor<T, X>>,
   y: Option<YAccessor<T, Y>>,
@@ -39,8 +38,7 @@ where
 {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>,
-  {
+    I: IntoIterator<Item = T>, {
     Self {
       data: data.into_iter().collect(),
       x: None,
@@ -63,8 +61,7 @@ where
 
   pub fn fill<H>(mut self, fill: impl Fn(&T) -> H + 'static) -> Self
   where
-    H: Into<gpui::Hsla> + 'static,
-  {
+    H: Into<gpui::Hsla> + 'static, {
     self.fill = Some(Rc::new(move |t| fill(t).into()));
     self
   }
@@ -76,8 +73,7 @@ where
 
   pub fn label<S>(mut self, label: impl Fn(&T) -> S + 'static) -> Self
   where
-    S: Into<SharedString> + 'static,
-  {
+    S: Into<SharedString> + 'static, {
     self.label = Some(Rc::new(move |t| label(t).into()));
     self
   }

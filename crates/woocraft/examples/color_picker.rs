@@ -3,7 +3,8 @@ use gpui::{
   Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ColorPicker, ColorPickerEvent, ColorPickerState, Selectable, Sizable, StyledExt, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border
+  ActiveTheme, Button, ColorPicker, ColorPickerEvent, ColorPickerState, Selectable, Sizable,
+  StyledExt, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
 struct ColorPickerWindow {

@@ -17,8 +17,8 @@ use super::{
   PanelView, StackPanel, ToggleZoom,
 };
 use crate::{
-  ActiveTheme, AxisExt, Divider, DockPlacement, IconLabel, IconName, Placement, Selectable,
-  Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate, v_flex,
+  ActiveTheme, AxisExt, Disableable, Divider, DockPlacement, IconLabel, IconName, Placement,
+  Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate, v_flex,
 };
 
 #[derive(Clone)]
@@ -139,8 +139,8 @@ impl Panel for TabPanel {
   }
 
   fn visible(&self, cx: &App) -> bool {
-    // Always visible when this is an empty center placeholder
-    if self.is_center_placeholder() {
+    // Empty TabPanels are always visible as drop targets
+    if self.panels.is_empty() {
       return true;
     }
     self.visible_panels(cx).next().is_some()
@@ -442,6 +442,18 @@ impl TabPanel {
   ) {
     self.detach_panel(panel, window, cx);
     self.remove_self_if_empty(window, cx);
+
+    // Force collapse dock when no panels remaining.
+    // We check self.panels directly instead of dock.has_panels(cx) to avoid
+    // re-entrant read of this TabPanel while it is being updated.
+    if self.panels.is_empty() {
+      if let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(true, window, cx);
+        });
+      }
+    }
+
     cx.emit(PanelEvent::ZoomOut);
     cx.emit(PanelEvent::LayoutChanged);
   }
@@ -457,7 +469,12 @@ impl TabPanel {
     }
   }
 
-  /// Check to remove self from the parent StackPanel, if there is no panel left
+  /// Check to remove self from the parent StackPanel, if there is no panel
+  /// left.
+  ///
+  /// Empty TabPanels remain as drop targets:
+  /// - In the root StackPanel (center area): the last TabPanel stays.
+  /// - In a side dock: the TabPanel stays (dock remains visible).
   fn remove_self_if_empty(&self, window: &mut Window, cx: &mut Context<Self>) {
     if !self.panels.is_empty() {
       return;
@@ -466,7 +483,7 @@ impl TabPanel {
     let tab_view = cx.entity().clone();
     if let Some(stack_panel) = self.stack_panel.as_ref() {
       // Don't remove the last TabPanel from the root (center) StackPanel.
-      // This keeps an empty drop target placeholder in the center area.
+      // This keeps an empty drop target in the center area.
       if let Some(stack) = stack_panel.upgrade() {
         let stack_ref = stack.read(cx);
         if stack_ref.parent.is_none() && stack_ref.panels_len() <= 1 {
@@ -481,17 +498,9 @@ impl TabPanel {
       return;
     }
 
-    if let Some(dock) = self.dock.as_ref().and_then(|dock| dock.upgrade()) {
-      let dock_area = self.dock_area.clone();
-      window.defer(cx, move |window, cx| {
-        dock.update(cx, |dock, cx| {
-          dock.set_collapsed(true, window, cx);
-        });
-        _ = dock_area.update(cx, |dock_area, cx| {
-          dock_area.update_toggle_button_tab_panels(window, cx);
-          cx.notify();
-        });
-      });
+    // For dock TabPanels: just stay empty as a drop target, notify to re-render
+    if self.dock.is_some() {
+      cx.notify();
     }
   }
 
@@ -534,14 +543,9 @@ impl TabPanel {
         .is_some()
   }
 
-  /// Returns true if this TabPanel is an empty center area placeholder
-  /// (no panels, not in a side dock, has a parent StackPanel).
-  ///
-  /// Note: This must NOT read the parent StackPanel because it can be called
-  /// from within `StackPanel::render` (via `panel.visible(cx)`), which would
-  /// cause a re-entrant read panic.
-  fn is_center_placeholder(&self) -> bool {
-    self.panels.is_empty() && self.dock.is_none() && self.stack_panel.is_some()
+  /// Returns true if this TabPanel is empty (no panels).
+  fn is_empty_tab_panel(&self) -> bool {
+    self.panels.is_empty()
   }
 
   fn closable_by_layout(&self, cx: &App) -> bool {
@@ -710,9 +714,6 @@ impl TabPanel {
     if !dock_area.toggle_button_visible {
       return None;
     }
-    if !dock_area.is_dock_collapsible(placement, cx) {
-      return None;
-    }
 
     let view_entity_id = cx.entity().entity_id();
     let toggle_button_panels = dock_area.toggle_button_panels;
@@ -720,21 +721,20 @@ impl TabPanel {
     // Check if current TabPanel's entity_id matches the one stored in DockArea for
     // this placement
     if !match placement {
-      DockPlacement::Left => {
-        dock_area.left_dock.is_some() && toggle_button_panels.left == Some(view_entity_id)
-      }
-      DockPlacement::Right => {
-        dock_area.right_dock.is_some() && toggle_button_panels.right == Some(view_entity_id)
-      }
-      DockPlacement::Bottom => {
-        dock_area.bottom_dock.is_some() && toggle_button_panels.bottom == Some(view_entity_id)
-      }
+      DockPlacement::Left => toggle_button_panels.left == Some(view_entity_id),
+      DockPlacement::Right => toggle_button_panels.right == Some(view_entity_id),
+      DockPlacement::Bottom => toggle_button_panels.bottom == Some(view_entity_id),
       DockPlacement::Center => unreachable!(),
     } {
       return None;
     }
 
     let is_collapsed = dock_area.is_dock_collapsed(placement, cx);
+
+    // The entity_id check above confirmed that `self` IS the dock's TabPanel
+    // for this placement, so we use self.panels directly instead of
+    // dock.has_panels(cx) which would re-entrantly read this same entity.
+    let dock_has_panels = !self.panels.is_empty();
 
     let icon = match placement {
       DockPlacement::Left => {
@@ -766,6 +766,7 @@ impl TabPanel {
         .icon(icon)
         .flat()
         .tab_stop(false)
+        .disabled(!dock_has_panels)
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
@@ -777,23 +778,21 @@ impl TabPanel {
           );
           move |window, cx| Tooltip::new(label.clone()).build(window, cx)
         })
-        .on_click(cx.listener({
-          let dock_area = self.dock_area.clone();
-          move |_, _, window, cx| {
-            _ = dock_area.update(cx, |dock_area, cx| {
-              dock_area.toggle_dock(placement, window, cx);
-            });
-          }
-        })),
+        .when(dock_has_panels, |this: Button| {
+          this.on_click(cx.listener({
+            let dock_area = self.dock_area.clone();
+            move |_, _, window, cx| {
+              _ = dock_area.update(cx, |dock_area, cx| {
+                dock_area.toggle_dock(placement, window, cx);
+              });
+            }
+          }))
+        }),
     )
   }
 
   fn render_dock_collapse_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Option<Button> {
     if self.zoomed {
-      return None;
-    }
-
-    if self.panels.is_empty() {
       return None;
     }
 
@@ -805,6 +804,9 @@ impl TabPanel {
     }
 
     let is_collapsed = dock_ref.collapsed;
+    // Use self.panels directly instead of dock_ref.has_panels(cx) to avoid
+    // re-entrant read of this TabPanel (self == dock's TabPanel) during render.
+    let has_panels = !self.panels.is_empty();
 
     let icon = if is_collapsed {
       IconName::ArrowMaximize
@@ -817,6 +819,7 @@ impl TabPanel {
         .icon(icon)
         .flat()
         .tab_stop(false)
+        .disabled(!has_panels)
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
@@ -828,15 +831,17 @@ impl TabPanel {
           );
           move |window, cx| Tooltip::new(label.clone()).build(window, cx)
         })
-        .on_click(cx.listener({
-          move |this, _, window, cx| {
-            if let Some(dock) = this.dock.as_ref().and_then(|d| d.upgrade()) {
-              dock.update(cx, |dock, cx| {
-                dock.toggle_collapsed(window, cx);
-              });
+        .when(has_panels, |this: Button| {
+          this.on_click(cx.listener({
+            move |this, _, window, cx| {
+              if let Some(dock) = this.dock.as_ref().and_then(|d| d.upgrade()) {
+                dock.update(cx, |dock, cx| {
+                  dock.toggle_collapsed(window, cx);
+                });
+              }
             }
-          }
-        })),
+          }))
+        }),
     )
   }
 
@@ -866,11 +871,11 @@ impl TabPanel {
 
     if show_single_title {
       let Some(panel) = self.active_panel(cx) else {
-        if !self.is_center_placeholder() {
+        if !self.is_empty_tab_panel() {
           return div().into_any_element();
         }
 
-        // Render empty title bar as a drop target for the center placeholder
+        // Render empty title bar as a drop target
         let title_content = h_flex()
           .items_center()
           .justify_between()
@@ -882,6 +887,7 @@ impl TabPanel {
             div()
               .id("tab")
               .flex_1()
+              .h_full()
               .min_w_16()
               .overflow_hidden()
               .when(state.droppable, |this| {
@@ -901,9 +907,13 @@ impl TabPanel {
           );
 
         return v_flex()
-          .when(!show_bottom_divider, |this| this.child(Divider::horizontal()))
+          .when(!show_bottom_divider, |this| {
+            this.child(Divider::horizontal())
+          })
           .child(title_content)
-          .when(show_bottom_divider, |this| this.child(Divider::horizontal()))
+          .when(show_bottom_divider, |this| {
+            this.child(Divider::horizontal())
+          })
           .into_any_element();
       };
 
@@ -1221,11 +1231,25 @@ impl TabPanel {
     }
 
     let Some(active_panel) = state.active_panel.as_ref() else {
+      // Get custom center placeholder from DockArea (only for center panels, not dock
+      // panels)
+      let center_placeholder = if self.dock.is_none() {
+        self
+          .dock_area
+          .upgrade()
+          .and_then(|area| area.read(cx).center_placeholder.clone())
+      } else {
+        None
+      };
+
       // Render an empty placeholder with a drop zone for the center placeholder
       return v_flex()
         .id("active-panel")
         .group("")
         .flex_1()
+        .when_some(center_placeholder, |this, view| {
+          this.child(div().size_full().overflow_hidden().child(view))
+        })
         .when(state.droppable, |this| {
           this.child(
             div()
@@ -1347,6 +1371,18 @@ impl TabPanel {
       return;
     }
 
+    // Save source dock reference before detach for auto-collapse check later.
+    let source_dock = if !is_same_tab {
+      drag
+        .tab_panel
+        .read(cx)
+        .dock
+        .as_ref()
+        .and_then(|d| d.upgrade())
+    } else {
+      None
+    };
+
     // Here is looks like remove_panel on a same item, but it difference.
     //
     // We must to split it to remove_panel, unless it will be crash by error:
@@ -1367,6 +1403,24 @@ impl TabPanel {
       self.insert_panel_at(panel, ix, window, cx)
     } else {
       self.add_panel_with_active(panel, active, window, cx)
+    }
+
+    // Auto-expand dock if collapsed when a panel is dropped in
+    if let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade())
+      && dock.read(cx).collapsed
+    {
+      dock.update(cx, |dock, cx| {
+        dock.set_collapsed(false, window, cx);
+      });
+    }
+
+    // Auto-collapse source dock when all panels have been moved out.
+    if let Some(source_dock) = source_dock
+      && !source_dock.read(cx).has_panels(cx)
+    {
+      source_dock.update(cx, |dock, cx| {
+        dock.set_collapsed(true, window, cx);
+      });
     }
 
     self.remove_self_if_empty(window, cx);

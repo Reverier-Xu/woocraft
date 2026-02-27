@@ -3,7 +3,8 @@ use gpui::{
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, Label, Pagination, Selectable, Sizable as _, StyledExt, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border
+  ActiveTheme, Button, ButtonVariants as _, Label, Pagination, Selectable, Sizable as _, StyledExt,
+  Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
 #[derive(Default)]

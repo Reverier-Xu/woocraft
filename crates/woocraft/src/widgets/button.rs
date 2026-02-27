@@ -8,8 +8,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, ColorExt, Icon, IconName, InteractionColors, Sizable, Size,
-  StyleSized, StyledExt, h_flex, opacity, spinner_animation,
+  ActiveTheme, ColorExt, Icon, IconName, InteractionColors, Sizable, Size, StyleSized, StyledExt,
+  h_flex, opacity, spinner_animation,
 };
 
 type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;

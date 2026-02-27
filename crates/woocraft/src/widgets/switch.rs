@@ -6,10 +6,7 @@ use gpui::{
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 
-use crate::{
-  ActiveTheme, ColorExt, Size, StyleSized, StyledExt, duration, h_flex,
-  opacity,
-};
+use crate::{ActiveTheme, ColorExt, Size, StyleSized, StyledExt, duration, h_flex, opacity};
 
 type SwitchClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 

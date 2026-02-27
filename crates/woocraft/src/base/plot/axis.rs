@@ -140,24 +140,26 @@ impl PlotAxis {
 
     // X axis
     if let Some(x) = self.x
-      && self.show_x_axis {
-        self.draw_axis(
-          origin_point(px(0.), x, origin),
-          origin_point(bounds.size.width, x, origin),
-          window,
-        );
-      }
+      && self.show_x_axis
+    {
+      self.draw_axis(
+        origin_point(px(0.), x, origin),
+        origin_point(bounds.size.width, x, origin),
+        window,
+      );
+    }
     self.x_label.paint(bounds, window, cx);
 
     // Y axis
     if let Some(y) = self.y
-      && self.show_y_axis {
-        self.draw_axis(
-          origin_point(y, px(0.), origin),
-          origin_point(y, bounds.size.height, origin),
-          window,
-        );
-      }
+      && self.show_y_axis
+    {
+      self.draw_axis(
+        origin_point(y, px(0.), origin),
+        origin_point(y, bounds.size.height, origin),
+        window,
+      );
+    }
     self.y_label.paint(bounds, window, cx);
   }
 }

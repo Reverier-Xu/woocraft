@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
 use gpui::{
-  App, AppContext, Application, Bounds, Context, Edges, Entity, FocusHandle, Focusable,
-  IntoElement, ParentElement, Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds,
+  App, AppContext, Application, Bounds, Context, Entity, FocusHandle, Focusable, IntoElement,
+  ParentElement, Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds,
   WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, CodeEditor, DockArea, DockItem, DockPlacement,
-  EditorState, IconName, Panel, PanelEvent, Theme, ThemeMode, TitleBar, h_flex, v_flex,
-  window_border,
+  ActiveTheme, Button, ButtonVariants as _, CodeEditor, DockArea, DockPlacement, EditorState,
+  IconName, Panel, PanelEvent, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
 const RUST_SAMPLE: &str = r#"use std::collections::HashMap;
@@ -239,7 +238,6 @@ impl EditorDockExample {
 
   fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
     let dock_area = cx.new(|cx| DockArea::new("editor-dock-example", Some(1), window, cx));
-    let weak = dock_area.downgrade();
 
     let rust = Self::editor_panel("main.rs", "rust", RUST_SAMPLE, false, true, window, cx);
     let ts = Self::editor_panel(
@@ -290,56 +288,23 @@ impl EditorDockExample {
     );
     let bash = Self::editor_panel("bootstrap.sh", "bash", BASH_SAMPLE, false, true, window, cx);
 
-    let center = DockItem::h_split(
-      vec![
-        DockItem::tab(rust, &weak, window, cx).size(px(620.)),
-        DockItem::v_split(
-          vec![
-            DockItem::tab(ts, &weak, window, cx),
-            DockItem::tab(markdown, &weak, window, cx).size(px(250.)),
-          ],
-          &weak,
-          window,
-          cx,
-        )
-        .size(px(420.)),
-      ],
-      &weak,
-      window,
-      cx,
-    );
-
-    let left = DockItem::tabs(
-      vec![Arc::new(python.clone()), Arc::new(toml.clone())],
-      &weak,
-      window,
-      cx,
-    );
-
-    let bottom = DockItem::tabs(
-      vec![Arc::new(json.clone()), Arc::new(bash.clone())],
-      &weak,
-      window,
-      cx,
-    );
-
-    let right = DockItem::tabs(vec![Arc::new(yaml.clone())], &weak, window, cx);
-
     dock_area.update(cx, |dock, cx| {
-      dock.set_center(center, window, cx);
-      dock.set_left_dock(left, Some(px(320.)), true, window, cx);
-      dock.set_bottom_dock(bottom, Some(px(250.)), true, window, cx);
-      dock.set_right_dock(right, Some(px(340.)), true, window, cx);
-      dock.set_dock_collapsible(
-        Edges {
-          left: true,
-          bottom: true,
-          right: true,
-          ..Default::default()
-        },
-        window,
-        cx,
-      );
+      // Add panels to center area
+      dock.add_to_center(Arc::new(rust.clone()), window, cx);
+      dock.add_to_center(Arc::new(ts.clone()), window, cx);
+      dock.add_to_center(Arc::new(markdown.clone()), window, cx);
+
+      // Add panels to side docks
+      dock.add_to_left_dock(Arc::new(python.clone()), window, cx);
+      dock.add_to_left_dock(Arc::new(toml.clone()), window, cx);
+      dock.add_to_bottom_dock(Arc::new(json.clone()), window, cx);
+      dock.add_to_bottom_dock(Arc::new(bash.clone()), window, cx);
+      dock.add_to_right_dock(Arc::new(yaml.clone()), window, cx);
+
+      // Configure dock sizes
+      dock.set_dock_size(DockPlacement::Left, px(320.), window, cx);
+      dock.set_dock_size(DockPlacement::Bottom, px(250.), window, cx);
+      dock.set_dock_size(DockPlacement::Right, px(340.), window, cx);
     });
 
     cx.new(|_| Self { dock_area })
