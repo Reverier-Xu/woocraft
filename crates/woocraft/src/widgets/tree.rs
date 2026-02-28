@@ -528,7 +528,13 @@ impl Render for TreeState {
     let draggable = self.draggable;
     let entity_id = cx.entity_id();
 
-    div().id("tree-state").size_full().relative().child(
+    div()
+      .id("tree-state")
+      .size_full()
+      .min_w_0()
+      .overflow_hidden()
+      .relative()
+      .child(
       uniform_list("entries", entries_len, {
         cx.processor(move |state, visible_range: Range<usize>, window, cx| {
           let mut items = Vec::with_capacity(visible_range.len());
@@ -626,7 +632,9 @@ impl Tree {
       state: state.clone(),
       style: StyleRefinement::default(),
       render_item: Rc::new(|_, entry, _, _, _| {
-        h_flex()
+        div()
+          .w_full()
+          .min_w_0()
           .truncate()
           .child(entry.item().label.clone())
           .into_any_element()
@@ -678,6 +686,8 @@ impl RenderOnce for Tree {
       .id(self.id)
       .key_context(CONTEXT)
       .track_focus(&focus_handle)
+      .min_w_0()
+      .overflow_hidden()
       .on_action(window.listener_for(&self.state, TreeState::on_action_confirm))
       .on_action(window.listener_for(&self.state, TreeState::on_action_left))
       .on_action(window.listener_for(&self.state, TreeState::on_action_right))

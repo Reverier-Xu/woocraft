@@ -621,6 +621,8 @@ impl TabPanel {
     let zoomable_toolbar_visible = state.zoomable.is_some_and(|v| v.toolbar_visible());
 
     h_flex()
+      .flex_none()
+      .flex_shrink_0()
       .items_center()
       .occlude()
       .when_some(self.toolbar_buttons(window, cx), |this, buttons| {
@@ -877,9 +879,10 @@ impl TabPanel {
 
         // Render empty title bar as a drop target
         let title_content = h_flex()
+          .w_full()
           .items_center()
-          .justify_between()
           .min_w_0()
+          .overflow_hidden()
           .gap_1()
           .container_size(Size::Medium)
           .container_h(Size::Medium)
@@ -889,7 +892,7 @@ impl TabPanel {
               .id("tab")
               .flex_1()
               .h_full()
-              .min_w_16()
+              .min_w_0()
               .overflow_hidden()
               .when(state.droppable, |this| {
                 this
@@ -908,6 +911,9 @@ impl TabPanel {
           );
 
         return v_flex()
+          .w_full()
+          .min_w_0()
+          .overflow_hidden()
           .when(!show_bottom_divider, |this| {
             this.child(Divider::horizontal())
           })
@@ -926,9 +932,10 @@ impl TabPanel {
       let title = panel.title(cx);
 
       let title_content = h_flex()
+        .w_full()
         .min_w_0()
+        .overflow_hidden()
         .items_center()
-        .justify_between()
         .gap_1()
         .container_size(Size::Medium)
         .container_h(Size::Medium)
@@ -937,12 +944,12 @@ impl TabPanel {
           div()
             .id("tab")
             .flex_1()
-            .min_w_16()
+            .min_w_0()
             .overflow_hidden()
-            .text_ellipsis()
-            .whitespace_nowrap()
             .child(
               IconLabel::new("panel-title")
+                .flex_1()
+                .label_flex_1()
                 .icon(Icon::new(icon))
                 .label(title),
             )
@@ -978,6 +985,7 @@ impl TabPanel {
         .child(self.render_toolbar(state, window, cx));
 
       return v_flex()
+        .w_full()
         .min_w_0()
         .overflow_hidden()
         .when(!show_bottom_divider, |this| {
@@ -1084,6 +1092,8 @@ impl TabPanel {
       .when(!self.is_dock_collapsed(cx), |this| {
         this.suffix(
           h_flex()
+            .flex_none()
+            .flex_shrink_0()
             .items_center()
             .top_0()
             .right_0()
@@ -1097,6 +1107,9 @@ impl TabPanel {
       });
 
     v_flex()
+      .w_full()
+      .min_w_0()
+      .overflow_hidden()
       .when(!show_bottom_divider, |this| {
         this.child(Divider::horizontal())
       })
@@ -1255,6 +1268,8 @@ impl TabPanel {
         .id("active-panel")
         .group("")
         .flex_1()
+        .min_w_0()
+        .overflow_hidden()
         .when_some(center_placeholder, |this, view| {
           this.child(div().size_full().overflow_hidden().child(view))
         })
@@ -1283,10 +1298,13 @@ impl TabPanel {
       .id("active-panel")
       .group("")
       .flex_1()
+      .min_w_0()
+      .overflow_hidden()
       .when(is_render_in_tabs, |this| this.pt_2())
       .child(
         div()
           .id("tab-content")
+          .min_w_0()
           .overflow_y_scroll()
           .overflow_x_hidden()
           .flex_1()
@@ -1663,13 +1681,25 @@ impl Render for TabPanel {
       let content = v_flex()
         .flex_1()
         .size_full()
+        .min_w_0()
+        .overflow_hidden()
         .child(title_bar)
         .child(active_panel_content);
 
       let main_content = if direction.is_left() {
-        h_flex().size_full().child(vertical_tab_bar).child(content)
+        h_flex()
+          .size_full()
+          .min_w_0()
+          .overflow_hidden()
+          .child(vertical_tab_bar)
+          .child(content)
       } else {
-        h_flex().size_full().child(content).child(vertical_tab_bar)
+        h_flex()
+          .size_full()
+          .min_w_0()
+          .overflow_hidden()
+          .child(content)
+          .child(vertical_tab_bar)
       };
 
       return self
@@ -1690,11 +1720,15 @@ impl Render for TabPanel {
     let main_content = if direction.is_bottom() {
       v_flex()
         .size_full()
+        .min_w_0()
+        .overflow_hidden()
         .child(active_panel_content)
         .child(title_bar)
     } else {
       v_flex()
         .size_full()
+        .min_w_0()
+        .overflow_hidden()
         .child(title_bar)
         .child(active_panel_content)
     };

@@ -11,6 +11,11 @@ use gpui::{
 use super::{super::resizable::PANEL_MIN_SIZE, DockArea, DockItem, PanelView, TabPanel};
 use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 
+/// Side docks (left/right) include a vertical tab rail plus title-bar controls.
+/// They need a larger minimum width than the generic panel minimum to prevent
+/// title/content overflow.
+const SIDE_DOCK_MIN_SIZE: Pixels = px(136.0);
+
 #[derive(Clone)]
 pub(super) struct ResizePanel;
 
@@ -41,6 +46,19 @@ pub struct Dock {
 }
 
 impl Dock {
+  #[inline]
+  fn min_size_for_placement(placement: DockPlacement) -> Pixels {
+    match placement {
+      DockPlacement::Left | DockPlacement::Right => SIDE_DOCK_MIN_SIZE,
+      DockPlacement::Bottom | DockPlacement::Center => PANEL_MIN_SIZE,
+    }
+  }
+
+  #[inline]
+  fn min_size(&self) -> Pixels {
+    Self::min_size_for_placement(self.placement)
+  }
+
   pub(crate) fn new(
     dock_area: WeakEntity<DockArea>, placement: DockPlacement, window: &mut Window,
     cx: &mut Context<Self>,
@@ -136,13 +154,14 @@ impl Dock {
       DockPlacement::Bottom => TabBarDirection::default(),
       DockPlacement::Center => TabBarDirection::default(),
     };
+    let min_size = Self::min_size_for_placement(placement);
 
     let dock = Self {
       placement,
       dock_area,
       panel,
       collapsed,
-      size,
+      size: size.max(min_size),
       tab_bar_direction,
       resizing: false,
     };
@@ -240,7 +259,7 @@ impl Dock {
 
   /// Set the size of the Dock.
   pub fn set_size(&mut self, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
-    self.size = size.max(PANEL_MIN_SIZE);
+    self.size = size.max(self.min_size());
     cx.notify();
   }
 
@@ -320,15 +339,15 @@ impl Dock {
     match self.placement {
       DockPlacement::Left => {
         let max_size = area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size;
-        self.size = size.clamp(PANEL_MIN_SIZE, max_size);
+        self.size = size.clamp(self.min_size(), max_size);
       }
       DockPlacement::Right => {
         let max_size = area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size;
-        self.size = size.clamp(PANEL_MIN_SIZE, max_size);
+        self.size = size.clamp(self.min_size(), max_size);
       }
       DockPlacement::Bottom => {
         let max_size = area_bounds.size.height - PANEL_MIN_SIZE;
-        self.size = size.clamp(PANEL_MIN_SIZE, max_size);
+        self.size = size.clamp(self.min_size(), max_size);
       }
       DockPlacement::Center => unreachable!(),
     }

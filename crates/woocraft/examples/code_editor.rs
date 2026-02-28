@@ -2,14 +2,17 @@ use std::{collections::HashMap, sync::Arc};
 
 use gpui::{
   App, AppContext, Application, Bounds, Context, Entity, FocusHandle, Focusable,
-  InteractiveElement as _, IntoElement, Menu, MenuItem, ParentElement, Render, SharedString,
-  Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, actions, div, px,
+  InteractiveElement as _, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render,
+  SharedString, Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions,
+  actions, div, px,
 };
 use woocraft::{
   ActiveTheme, AppMenuBar, CodeEditor, DockArea, DockPlacement, EditorEvent, EditorState, IconName,
   Panel, PanelEvent, PopupMenuItem, Size, StyleSized, TitleBar, TreeEvent, TreeItem, TreeState,
   h_flex, init, tree, v_flex, window_border,
 };
+#[cfg(debug_assertions)]
+use woocraft::{ScrollableElement, StyledExt};
 
 // ---------------------------------------------------------------------------
 // Actions
@@ -34,6 +37,7 @@ actions!(
     ToggleLeftDock,
     ToggleBottomDock,
     ToggleRightDock,
+    ToggleInspector,
     WordWrap,
     ShowAbout,
   ]
@@ -195,6 +199,81 @@ fn demo_tree_items() -> Vec<TreeItem> {
   ]
 }
 
+#[cfg(debug_assertions)]
+fn setup_inspector_renderer(cx: &mut App) {
+  cx.register_inspector_element::<gpui::DivInspectorState, _>(|_id, state, _window, cx| {
+    v_flex()
+      .gap_1()
+      .p_2()
+      .border_1()
+      .border_color(cx.theme().border)
+      .child(div().text_xs().font_semibold().child("Div"))
+      .child(
+        div()
+          .text_xs()
+          .text_color(cx.theme().muted_foreground)
+          .child(format!("bounds: {:?}", state.bounds)),
+      )
+      .child(
+        div()
+          .text_xs()
+          .text_color(cx.theme().muted_foreground)
+          .child(format!("content_size: {:?}", state.content_size)),
+      )
+  });
+
+  cx.set_inspector_renderer(Box::new(|inspector, window, cx| {
+    let active_element = inspector
+      .active_element_id()
+      .map(|id| format!("{id:?}"))
+      .unwrap_or_else(|| "未选中元素".to_string());
+    let mode = if inspector.is_picking() {
+      "拾取模式"
+    } else {
+      "已锁定"
+    };
+    let inspector_states = inspector.render_inspector_states(window, cx);
+
+    let state_view = if inspector_states.is_empty() {
+      div()
+        .text_xs()
+        .text_color(cx.theme().muted_foreground)
+        .child("将鼠标移动到任意元素上即可查看 inspector 状态。")
+        .into_any_element()
+    } else {
+      v_flex().gap_2().children(inspector_states).into_any_element()
+    };
+
+    v_flex()
+      .size_full()
+      .min_w_0()
+      .bg(cx.theme().background)
+      .text_color(cx.theme().foreground)
+      .border_l_1()
+      .border_color(cx.theme().border)
+      .p_2()
+      .gap_2()
+      .child(div().text_sm().font_semibold().child("GPUI Inspector"))
+      .child(
+        div()
+          .text_xs()
+          .text_color(cx.theme().muted_foreground)
+          .child(format!("模式：{}", mode)),
+      )
+      .child(div().text_xs().text_color(cx.theme().muted_foreground).child("当前元素："))
+      .child(div().min_w_0().truncate().text_xs().child(active_element))
+      .child(
+        div()
+          .flex_1()
+          .min_h_0()
+          .min_w_0()
+          .overflow_y_scrollbar()
+          .child(state_view),
+      )
+      .into_any_element()
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // FileExplorerPanel – non-closable tree panel on the left dock
 // ---------------------------------------------------------------------------
@@ -279,6 +358,8 @@ impl Render for FileExplorerPanel {
     let tree_state_for_menu = self.tree_state.clone();
 
     tree(&self.tree_state)
+      .min_w_0()
+      .overflow_hidden()
       .container_padding(Size::Medium)
       .context_menu(move |ix, entry, menu, _window, _cx| {
         let label = entry.item().label.clone();
@@ -661,6 +742,22 @@ impl CodeEditorApp {
     println!("📝 新建文件 (demo)");
   }
 
+  fn on_toggle_inspector(
+    &mut self, _: &ToggleInspector, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    #[cfg(debug_assertions)]
+    {
+      window.toggle_inspector(cx);
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+      let _ = window;
+      let _ = cx;
+      println!("Inspector is only available in debug builds.");
+    }
+  }
+
   fn on_quit(&mut self, _: &Quit, _window: &mut Window, cx: &mut Context<Self>) {
     cx.quit();
   }
@@ -678,6 +775,7 @@ impl Render for CodeEditorApp {
         .min_h_0()
         .on_action(cx.listener(Self::on_save))
         .on_action(cx.listener(Self::on_toggle_left_dock))
+        .on_action(cx.listener(Self::on_toggle_inspector))
         .on_action(cx.listener(Self::on_new_file))
         .on_action(cx.listener(Self::on_quit))
         .on_action(cx.listener(Self::on_about))
@@ -703,6 +801,13 @@ fn main() {
   app.run(|cx: &mut App| {
     init(cx);
     cx.activate(true);
+    #[cfg(debug_assertions)]
+    setup_inspector_renderer(cx);
+
+    cx.bind_keys([
+      KeyBinding::new("cmd-shift-i", ToggleInspector, None),
+      KeyBinding::new("ctrl-shift-i", ToggleInspector, None),
+    ]);
 
     // Set up application menus
     cx.set_menus(vec![
@@ -738,6 +843,8 @@ fn main() {
         name: "视图".into(),
         items: vec![
           MenuItem::action("切换侧边栏", ToggleLeftDock),
+          MenuItem::separator(),
+          MenuItem::action("切换 Inspector", ToggleInspector),
           MenuItem::separator(),
           MenuItem::action("自动换行", WordWrap),
         ],
