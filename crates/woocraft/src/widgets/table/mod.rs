@@ -6,6 +6,7 @@ mod column;
 mod delegate;
 mod loading;
 mod state;
+#[allow(clippy::module_inception)]
 mod table;
 
 pub use column::*;

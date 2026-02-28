@@ -241,7 +241,10 @@ fn setup_inspector_renderer(cx: &mut App) {
         .child("将鼠标移动到任意元素上即可查看 inspector 状态。")
         .into_any_element()
     } else {
-      v_flex().gap_2().children(inspector_states).into_any_element()
+      v_flex()
+        .gap_2()
+        .children(inspector_states)
+        .into_any_element()
     };
 
     v_flex()
@@ -260,7 +263,12 @@ fn setup_inspector_renderer(cx: &mut App) {
           .text_color(cx.theme().muted_foreground)
           .child(format!("模式：{}", mode)),
       )
-      .child(div().text_xs().text_color(cx.theme().muted_foreground).child("当前元素："))
+      .child(
+        div()
+          .text_xs()
+          .text_color(cx.theme().muted_foreground)
+          .child("当前元素："),
+      )
       .child(div().min_w_0().truncate().text_xs().child(active_element))
       .child(
         div()

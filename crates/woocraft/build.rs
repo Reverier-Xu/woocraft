@@ -1,5 +1,7 @@
 use std::{collections::BTreeSet, env, fs, io::Write, path::PathBuf};
 
+const BUILTIN_ASSET_PREFIX: &str = "tech.woooo.woocraft/assets";
+
 fn main() {
   let icons_dir = PathBuf::from("src/assets/icons");
   println!("cargo::rerun-if-changed={}", icons_dir.display());
@@ -36,7 +38,7 @@ fn main() {
       .expect("invalid utf-8 icon file name")
       .to_owned();
 
-    entries.push((variant, format!("icons/{file_name}")));
+    entries.push((variant, format!("{BUILTIN_ASSET_PREFIX}/icons/{file_name}")));
   }
 
   entries.sort_by(|a, b| a.0.cmp(&b.0));

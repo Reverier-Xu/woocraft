@@ -1,3 +1,5 @@
+#[cfg(debug_assertions)]
+use std::collections::HashSet;
 use std::{
   collections::HashMap,
   sync::{OnceLock, RwLock},
@@ -17,9 +19,51 @@ pub trait IconNamed {
 }
 
 static CUSTOM_ICON_REGISTRY: OnceLock<RwLock<HashMap<String, SharedString>>> = OnceLock::new();
+#[cfg(debug_assertions)]
+static VALIDATED_ICON_PATHS: OnceLock<RwLock<HashSet<SharedString>>> = OnceLock::new();
 
 fn custom_icon_registry() -> &'static RwLock<HashMap<String, SharedString>> {
   CUSTOM_ICON_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+#[cfg(debug_assertions)]
+fn validated_icon_paths() -> &'static RwLock<HashSet<SharedString>> {
+  VALIDATED_ICON_PATHS.get_or_init(|| RwLock::new(HashSet::new()))
+}
+
+#[cfg(debug_assertions)]
+fn debug_validate_icon_path(path: &SharedString, cx: &App) {
+  if path.is_empty() {
+    return;
+  }
+
+  {
+    let validated = validated_icon_paths()
+      .read()
+      .expect("icon validation cache poisoned");
+    if validated.contains(path) {
+      return;
+    }
+  }
+
+  match cx.asset_source().load(path.as_ref()) {
+    Ok(Some(_)) => {
+      let mut validated = validated_icon_paths()
+        .write()
+        .expect("icon validation cache poisoned");
+      validated.insert(path.clone());
+    }
+    Ok(None) => {
+      debug_assert!(false, "icon asset not found in app asset source: {}", path);
+    }
+    Err(err) => {
+      debug_assert!(
+        false,
+        "failed to load icon asset \"{}\" from app asset source: {err}",
+        path
+      );
+    }
+  }
 }
 
 fn resolve_icon_path(name_or_path: &str) -> SharedString {
@@ -146,16 +190,7 @@ impl Icon {
   }
 
   pub fn path(mut self, path: impl Into<SharedString>) -> Self {
-    let path = path.into();
-    #[cfg(all(feature = "resources", debug_assertions))]
-    {
-      debug_assert!(
-        crate::has_asset(path.as_ref()),
-        "icon asset not found: {}",
-        path
-      );
-    }
-    self.path = path;
+    self.path = path.into();
     self
   }
 
@@ -204,7 +239,10 @@ impl Sizable for Icon {
 }
 
 impl RenderOnce for Icon {
-  fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    #[cfg(debug_assertions)]
+    debug_validate_icon_path(&self.path, cx);
+
     let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
     let text_size = window.text_style().font_size.to_pixels(window.rem_size());
     let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
@@ -228,7 +266,10 @@ impl From<Icon> for AnyElement {
 }
 
 impl Render for Icon {
-  fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    #[cfg(debug_assertions)]
+    debug_validate_icon_path(&self.path, cx);
+
     let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
     let text_size = window.text_style().font_size.to_pixels(window.rem_size());
     let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();

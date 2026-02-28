@@ -91,8 +91,7 @@ pub fn tree(state: &Entity<TreeState>) -> Tree {
 pub fn tree_with<R, E>(state: &Entity<TreeState>, render_item: R) -> Tree
 where
   R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-  E: IntoElement,
-{
+  E: IntoElement, {
   Tree::new(state).render_item(render_item)
 }
 
@@ -535,78 +534,78 @@ impl Render for TreeState {
       .overflow_hidden()
       .relative()
       .child(
-      uniform_list("entries", entries_len, {
-        cx.processor(move |state, visible_range: Range<usize>, window, cx| {
-          let mut items = Vec::with_capacity(visible_range.len());
-          for ix in visible_range {
-            let Some(entry) = state.model.entry(ix) else {
-              continue;
-            };
+        uniform_list("entries", entries_len, {
+          cx.processor(move |state, visible_range: Range<usize>, window, cx| {
+            let mut items = Vec::with_capacity(visible_range.len());
+            for ix in visible_range {
+              let Some(entry) = state.model.entry(ix) else {
+                continue;
+              };
 
-            let selected = state.model.is_selected(ix);
-            let disabled = entry.is_disabled();
-            let content = (render_item)(ix, entry, selected, window, cx);
-            let list_item = state.render_list_item(ix, entry, content, cx);
-            let guides = state.render_guide_layers(ix, entry, cx);
-            let label = entry.item().label.clone();
+              let selected = state.model.is_selected(ix);
+              let disabled = entry.is_disabled();
+              let content = (render_item)(ix, entry, selected, window, cx);
+              let list_item = state.render_list_item(ix, entry, content, cx);
+              let guides = state.render_guide_layers(ix, entry, cx);
+              let label = entry.item().label.clone();
 
-            let mut row = div()
-              .id(Self::row_id(entry))
-              .relative()
-              .children(guides)
-              .child(list_item.disabled(disabled).selected(selected));
+              let mut row = div()
+                .id(Self::row_id(entry))
+                .relative()
+                .children(guides)
+                .child(list_item.disabled(disabled).selected(selected));
 
-            if !disabled {
-              row = row
-                .on_click(cx.listener(move |this, ev, window, cx| {
-                  this.on_entry_click(ix, ev, window, cx);
-                }))
-                .on_mouse_down(
-                  MouseButton::Right,
-                  cx.listener(move |this, ev, window, cx| {
-                    this.on_entry_right_click(ix, ev, window, cx);
-                  }),
-                );
+              if !disabled {
+                row = row
+                  .on_click(cx.listener(move |this, ev, window, cx| {
+                    this.on_entry_click(ix, ev, window, cx);
+                  }))
+                  .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, ev, window, cx| {
+                      this.on_entry_right_click(ix, ev, window, cx);
+                    }),
+                  );
+              }
+
+              // Drag-to-reorder support
+              if draggable && !disabled {
+                let drag_label = label.clone();
+                row = row
+                  .on_drag(
+                    DragTreeItem {
+                      entity_id,
+                      ix,
+                      label: drag_label,
+                    },
+                    |drag, _, _, cx| {
+                      cx.stop_propagation();
+                      cx.new(|_| drag.clone())
+                    },
+                  )
+                  .drag_over::<DragTreeItem>(|this, _, _, cx| {
+                    this.border_t_2().border_color(cx.theme().drag_border)
+                  })
+                  .on_drop(cx.listener(move |this, drag: &DragTreeItem, window, cx| {
+                    if drag.entity_id != cx.entity_id() {
+                      return;
+                    }
+                    this.on_drop_item(drag.ix, ix, window, cx);
+                  }));
+              }
+
+              items.push(row);
             }
 
-            // Drag-to-reorder support
-            if draggable && !disabled {
-              let drag_label = label.clone();
-              row = row
-                .on_drag(
-                  DragTreeItem {
-                    entity_id,
-                    ix,
-                    label: drag_label,
-                  },
-                  |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                  },
-                )
-                .drag_over::<DragTreeItem>(|this, _, _, cx| {
-                  this.border_t_2().border_color(cx.theme().drag_border)
-                })
-                .on_drop(cx.listener(move |this, drag: &DragTreeItem, window, cx| {
-                  if drag.entity_id != cx.entity_id() {
-                    return;
-                  }
-                  this.on_drop_item(drag.ix, ix, window, cx);
-                }));
-            }
-
-            items.push(row);
-          }
-
-          items
+            items
+          })
         })
-      })
-      .flex_grow()
-      .size_full()
-      .track_scroll(self.scroll_handle.clone())
-      .with_sizing_behavior(ListSizingBehavior::Auto)
-      .into_any_element(),
-    )
+        .flex_grow()
+        .size_full()
+        .track_scroll(self.scroll_handle.clone())
+        .with_sizing_behavior(ListSizingBehavior::Auto)
+        .into_any_element(),
+      )
   }
 }
 
@@ -646,8 +645,7 @@ impl Tree {
   pub fn render_item<R, E>(mut self, render_item: R) -> Self
   where
     R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.render_item = Rc::new(move |ix, entry, selected, window, cx| {
       render_item(ix, entry, selected, window, cx).into_any_element()
     });
@@ -695,6 +693,7 @@ impl RenderOnce for Tree {
       .on_action(window.listener_for(&self.state, TreeState::on_action_down))
       .size_full()
       .child(self.state)
+      .child(div().h_16().flex_shrink_0()) // Bottom padding to ensure last item can scroll above fold
       .refine_style(&self.style)
       .vertical_scrollbar(&scroll_handle)
       .context_menu(move |menu, window, cx| {
