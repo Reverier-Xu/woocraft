@@ -13,8 +13,9 @@ use serde::Deserialize;
 
 use crate::{
   ActiveTheme as _, Button, ButtonVariants as _, CARET_STEADY_DURATION, ContextMenuExt,
-  Disableable, ElementExt, Icon, IconName, PopupMenu, PopupMenuItem, Selectable, Selection, Sizable,
-  Size, StyleSized, StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret, translate,
+  Disableable, ElementExt, Icon, IconName, PopupMenu, PopupMenuItem, Selectable, Selection,
+  Sizable, Size, StyleSized, StyledExt, WidgetGroup, WidgetGroupChild, h_flex, render_caret,
+  translate,
 };
 
 const CONTEXT: &str = "Input";

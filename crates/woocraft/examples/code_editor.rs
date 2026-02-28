@@ -6,7 +6,9 @@ use gpui::{
   Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, actions, div, px,
 };
 use woocraft::{
-  ActiveTheme, AppMenuBar, CodeEditor, DockArea, DockPlacement, EditorEvent, EditorState, IconName, Panel, PanelEvent, PopupMenuItem, Size, StyleSized, TitleBar, TreeEvent, TreeItem, TreeState, h_flex, init, tree, v_flex, window_border
+  ActiveTheme, AppMenuBar, CodeEditor, DockArea, DockPlacement, EditorEvent, EditorState, IconName,
+  Panel, PanelEvent, PopupMenuItem, Size, StyleSized, TitleBar, TreeEvent, TreeItem, TreeState,
+  h_flex, init, tree, v_flex, window_border,
 };
 
 // ---------------------------------------------------------------------------
@@ -276,7 +278,9 @@ impl Render for FileExplorerPanel {
   fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
     let tree_state_for_menu = self.tree_state.clone();
 
-      tree(&self.tree_state).container_padding(Size::Medium).context_menu(move |ix, entry, menu, _window, _cx| {
+    tree(&self.tree_state)
+      .container_padding(Size::Medium)
+      .context_menu(move |ix, entry, menu, _window, _cx| {
         let label = entry.item().label.clone();
         let is_folder = entry.is_folder();
         let item_id = entry.item().id.clone();

@@ -124,12 +124,11 @@ impl TreeState {
       focus_handle: cx.focus_handle(),
       model: TreeModel::new(),
       scroll_handle: UniformListScrollHandle::default(),
-      render_item: Rc::new(|_, entry, _, _, _| {
+      render_item: Rc::new(move |_, entry, _, _, _| {
         div()
           .w_full()
           .min_w_0()
-          .overflow_hidden()
-          .text_ellipsis()
+          .truncate()
           .child(entry.item().label.clone())
           .into_any_element()
       }),
@@ -256,7 +255,7 @@ impl TreeState {
           .relative()
           .items_center()
           .component_gap(Size::Medium)
-          .child(div().flex_none().w(px(16.) * entry.depth()))
+          .child(div().flex_shrink_0().w(px(16.) * entry.depth()))
           .child(Icon::new(entry.icon_or_default()))
           .child(div().flex_1().truncate().min_w_0().child(content))
           .child(
@@ -627,11 +626,8 @@ impl Tree {
       state: state.clone(),
       style: StyleRefinement::default(),
       render_item: Rc::new(|_, entry, _, _, _| {
-        div()
-          .w_full()
-          .min_w_0()
-          .overflow_hidden()
-          .text_ellipsis()
+        h_flex()
+          .truncate()
           .child(entry.item().label.clone())
           .into_any_element()
       }),

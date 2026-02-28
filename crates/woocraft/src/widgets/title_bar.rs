@@ -372,14 +372,7 @@ impl RenderOnce for TitleBar {
             .flex_1()
             .child(title_display)
             .when_some(app_menu_bar_slot, |this, app_menu_bar| {
-              this.child(
-                div()
-                  .id("title-bar-app-menu-slot")
-                  .h_full()
-                  .min_w_0()
-                  .flex_1()
-                  .child(app_menu_bar),
-              )
+              this.child(app_menu_bar)
             })
             .when(is_linux && is_client_decorated, |this| {
               this.child(

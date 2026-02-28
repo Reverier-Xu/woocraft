@@ -30,14 +30,16 @@ impl AppMenuBar {
 }
 
 impl Render for AppMenuBar {
-  fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
     h_flex()
+      .flex_1()
       .id("app-menu-bar")
       .h_full()
       .min_w_0()
       .gap_x_1()
       .opacity(0.6)
       .overflow_x_scroll()
+      .justify_start()
       .hover(|this| this.opacity(1.))
       .children(self.menus.iter().enumerate().map(|(ix, menu)| {
         let menu_name = menu.name.clone();

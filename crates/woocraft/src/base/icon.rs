@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::{OnceLock, RwLock}};
+use std::{
+  collections::HashMap,
+  sync::{OnceLock, RwLock},
+};
 
 use gpui::{
   AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
@@ -20,8 +23,7 @@ fn custom_icon_registry() -> &'static RwLock<HashMap<String, SharedString>> {
 }
 
 fn resolve_icon_path(name_or_path: &str) -> SharedString {
-  custom_icon_path(name_or_path)
-    .unwrap_or_else(|| SharedString::from(name_or_path.to_owned()))
+  custom_icon_path(name_or_path).unwrap_or_else(|| SharedString::from(name_or_path.to_owned()))
 }
 
 pub fn register_icon(name: impl Into<SharedString>, path: impl Into<SharedString>) {

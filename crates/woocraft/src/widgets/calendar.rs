@@ -9,8 +9,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants as _, Date, Disableable as _, Icon, IconName, Matcher, Selectable,
-  Sizable, Size, StyledExt as _, h_flex, local_today, month_days, translate, v_flex,
+  ActiveTheme, Button, ButtonVariants as _, Date, Disableable as _, Icon, IconName, Matcher,
+  Selectable, Sizable, Size, StyledExt as _, h_flex, local_today, month_days, translate, v_flex,
 };
 
 /// Events emitted by the calendar.

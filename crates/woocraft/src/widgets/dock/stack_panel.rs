@@ -265,25 +265,27 @@ impl StackPanel {
 
     // When the root StackPanel becomes empty, insert an empty TabPanel
     // as a placeholder so the center area keeps a visible drop target.
-    if self.is_root() && self.panels.is_empty()
-      && let Some(dock_area) = self.dock_area.clone() {
-        let stack_weak = cx.entity().downgrade();
-        let tab_panel = cx.new(|cx| TabPanel::new(Some(stack_weak), dock_area.clone(), window, cx));
-        let tab_view: Arc<dyn PanelView> = Arc::new(tab_panel.clone());
-        self.panels.push(tab_view);
-        self.state.update(cx, |state, cx| {
-          state.insert_panel(None, None, cx);
-        });
-        // Subscribe the new TabPanel in DockArea
-        window.defer(cx, {
-          let tab_panel = tab_panel.clone();
-          move |window, cx| {
-            _ = dock_area.update(cx, |this, cx| {
-              this.subscribe_panel(&tab_panel, window, cx);
-            });
-          }
-        });
-      }
+    if self.is_root()
+      && self.panels.is_empty()
+      && let Some(dock_area) = self.dock_area.clone()
+    {
+      let stack_weak = cx.entity().downgrade();
+      let tab_panel = cx.new(|cx| TabPanel::new(Some(stack_weak), dock_area.clone(), window, cx));
+      let tab_view: Arc<dyn PanelView> = Arc::new(tab_panel.clone());
+      self.panels.push(tab_view);
+      self.state.update(cx, |state, cx| {
+        state.insert_panel(None, None, cx);
+      });
+      // Subscribe the new TabPanel in DockArea
+      window.defer(cx, {
+        let tab_panel = tab_panel.clone();
+        move |window, cx| {
+          _ = dock_area.update(cx, |this, cx| {
+            this.subscribe_panel(&tab_panel, window, cx);
+          });
+        }
+      });
+    }
 
     cx.emit(PanelEvent::LayoutChanged);
     self.remove_self_if_empty(window, cx);

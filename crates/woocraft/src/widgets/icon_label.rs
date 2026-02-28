@@ -155,9 +155,9 @@ impl RenderOnce for IconLabel {
       })
       .when_some(self.label, |this, label| {
         if label_expanded {
-          this.child(div().flex_1().child(label))
+          this.child(div().flex_1().truncate().min_w_0().child(label))
         } else {
-          this.child(label)
+          this.truncate().min_w_0().child(label)
         }
       })
       .children(self.children)

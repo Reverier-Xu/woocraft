@@ -447,11 +447,12 @@ impl TabPanel {
     // We check self.panels directly instead of dock.has_panels(cx) to avoid
     // re-entrant read of this TabPanel while it is being updated.
     if self.panels.is_empty()
-      && let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
-        dock.update(cx, |dock, cx| {
-          dock.set_collapsed(true, window, cx);
-        });
-      }
+      && let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade())
+    {
+      dock.update(cx, |dock, cx| {
+        dock.set_collapsed(true, window, cx);
+      });
+    }
 
     cx.emit(PanelEvent::ZoomOut);
     cx.emit(PanelEvent::LayoutChanged);
@@ -878,6 +879,7 @@ impl TabPanel {
         let title_content = h_flex()
           .items_center()
           .justify_between()
+          .min_w_0()
           .gap_1()
           .container_size(Size::Medium)
           .container_h(Size::Medium)
@@ -924,6 +926,7 @@ impl TabPanel {
       let title = panel.title(cx);
 
       let title_content = h_flex()
+        .min_w_0()
         .items_center()
         .justify_between()
         .gap_1()
@@ -938,7 +941,11 @@ impl TabPanel {
             .overflow_hidden()
             .text_ellipsis()
             .whitespace_nowrap()
-            .child(IconLabel::new("panel-title").icon(Icon::new(icon)).label(title))
+            .child(
+              IconLabel::new("panel-title")
+                .icon(Icon::new(icon))
+                .label(title),
+            )
             .when(state.draggable, |this| {
               this.on_drag(
                 DragPanel {
@@ -971,6 +978,8 @@ impl TabPanel {
         .child(self.render_toolbar(state, window, cx));
 
       return v_flex()
+        .min_w_0()
+        .overflow_hidden()
         .when(!show_bottom_divider, |this| {
           this.child(Divider::horizontal())
         })
