@@ -144,7 +144,8 @@ impl RowsCache {
   pub(crate) fn prepare_if_needed<F>(
     &mut self, sections_count: usize, measured_size: MeasuredEntrySize, cx: &App, rows_count_f: F,
   ) where
-    F: Fn(usize, &App) -> usize, {
+    F: Fn(usize, &App) -> usize,
+  {
     let mut new_sections = vec![];
     for section_ix in 0..sections_count {
       new_sections.push(rows_count_f(section_ix, cx));
@@ -225,9 +226,11 @@ mod tests {
 
   #[test]
   fn test_prev_next() {
-    let mut row_cache = RowsCache::default();
-    row_cache.sections = Rc::new(vec![2, 4, 3]);
-    row_cache.entities = Rc::new(build_entities(&[2, 4, 3]));
+    let row_cache = RowsCache {
+      sections: Rc::new(vec![2, 4, 3]),
+      entities: Rc::new(build_entities(&[2, 4, 3])),
+      ..Default::default()
+    };
 
     assert_eq!(
       row_cache.next(Some(IndexPath::new(0).section(0))),

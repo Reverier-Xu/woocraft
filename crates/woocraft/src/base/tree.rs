@@ -8,6 +8,7 @@ use crate::IconName;
 struct TreeItemState {
   expanded: bool,
   disabled: bool,
+  loading: bool,
 }
 
 /// A tree item with an id, label and nested children.
@@ -56,6 +57,11 @@ impl TreeEntry {
   #[inline]
   pub fn is_disabled(&self) -> bool {
     self.item.is_disabled()
+  }
+
+  #[inline]
+  pub fn is_loading(&self) -> bool {
+    self.item.is_loading()
   }
 
   #[inline]
@@ -118,6 +124,11 @@ impl TreeItem {
     self
   }
 
+  pub fn loading(self, loading: bool) -> Self {
+    self.state.borrow_mut().loading = loading;
+    self
+  }
+
   #[inline]
   pub fn is_folder(&self) -> bool {
     !self.children.is_empty()
@@ -126,6 +137,11 @@ impl TreeItem {
   #[inline]
   pub fn is_disabled(&self) -> bool {
     self.state.borrow().disabled
+  }
+
+  #[inline]
+  pub fn is_loading(&self) -> bool {
+    self.state.borrow().loading
   }
 
   #[inline]
@@ -299,7 +315,7 @@ impl TreeModel {
     let Some(entry) = self.entries.get_mut(ix) else {
       return;
     };
-    if !entry.is_folder() {
+    if !entry.is_folder() || entry.is_loading() {
       return;
     }
 

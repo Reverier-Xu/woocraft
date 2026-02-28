@@ -1,12 +1,13 @@
 use gpui::{
-  AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseMoveEvent,
-  ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
-  Window, div, prelude::FluentBuilder as _,
+  AnyElement, App, ClickEvent, CursorStyle, Div, ElementId, InteractiveElement, IntoElement,
+  MouseMoveEvent, ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
 use crate::{
-  ActiveTheme, Icon, Selectable, Sizable, Size, StyleSized, StyledExt, TableThemeExt, h_flex,
+  ActiveTheme, Icon, Selectable, Sizable, Size, Spinner, StyleSized, StyledExt, TableThemeExt,
+  h_flex,
 };
 
 type ListItemClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
@@ -37,6 +38,7 @@ pub struct ListItem {
   selected: bool,
   secondary_selected: bool,
   confirmed: bool,
+  loading: bool,
   check_icon: Option<Icon>,
   on_click: Option<ListItemClickHandler>,
   on_mouse_enter: Option<ListItemMouseEnterHandler>,
@@ -56,6 +58,7 @@ impl ListItem {
       selected: false,
       secondary_selected: false,
       confirmed: false,
+      loading: false,
       on_click: None,
       on_mouse_enter: None,
       check_icon: None,
@@ -93,11 +96,17 @@ impl ListItem {
     self
   }
 
+  pub fn loading(mut self, loading: bool) -> Self {
+    self.loading = loading;
+    self
+  }
+
   /// Set suffix element for the list item.
   pub fn suffix<F, E>(mut self, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.suffix = Some(Box::new(move |window, cx| {
       builder(window, cx).into_any_element()
     }));
@@ -152,6 +161,7 @@ impl RenderOnce for ListItem {
     let base_fg = cx.theme().foreground;
     let hover_bg = cx.theme().table_hover();
     let active_bg = cx.theme().table_active();
+    let is_loading = self.loading;
 
     self
       .base
@@ -166,7 +176,12 @@ impl RenderOnce for ListItem {
       .items_center()
       .justify_between()
       .refine_style(&self.style)
-      .when(is_selectable, |this| {
+      .when(is_loading, |this| {
+        this
+          .cursor(CursorStyle::OperationNotAllowed)
+          .bg(cx.theme().foreground.opacity(0.1))
+      })
+      .when(is_selectable && !is_loading, |this| {
         this
           .when_some(self.on_click, |this, on_click| this.on_click(on_click))
           .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
@@ -178,7 +193,7 @@ impl RenderOnce for ListItem {
               .active(move |this| this.bg(active_bg))
           })
       })
-      .when(!is_selectable, |this| {
+      .when(!is_selectable && !is_loading, |this| {
         this.text_color(cx.theme().muted_foreground)
       })
       .child(
@@ -209,10 +224,11 @@ impl RenderOnce for ListItem {
           }),
       )
       .when_some(self.suffix, |this, suffix| this.child(suffix(window, cx)))
+      .when(is_loading, |this| this.child(Spinner::new()))
       .map(|this| {
-        if is_selectable && self.selected {
+        if !is_loading && is_selectable && self.selected {
           this.bg(active_bg)
-        } else if is_selectable && self.secondary_selected {
+        } else if !is_loading && is_selectable && self.secondary_selected {
           this.bg(hover_bg)
         } else {
           this

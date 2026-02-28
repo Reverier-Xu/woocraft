@@ -14,8 +14,8 @@ use crate::{
 type WidgetGroupClickHandler = Box<dyn Fn(&Vec<usize>, &mut Window, &mut App) + 'static>;
 
 pub enum WidgetGroupChild {
-  Button(Button),
-  Input(Input),
+  Button(Box<Button>),
+  Input(Box<Input>),
   Element(AnyElement),
 }
 
@@ -31,13 +31,13 @@ impl WidgetGroupChild {
 
 impl From<Button> for WidgetGroupChild {
   fn from(value: Button) -> Self {
-    Self::Button(value)
+    Self::Button(Box::new(value))
   }
 }
 
 impl From<Input> for WidgetGroupChild {
   fn from(value: Input) -> Self {
-    Self::Input(value)
+    Self::Input(Box::new(value))
   }
 }
 

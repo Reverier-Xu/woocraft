@@ -265,8 +265,8 @@ impl StackPanel {
 
     // When the root StackPanel becomes empty, insert an empty TabPanel
     // as a placeholder so the center area keeps a visible drop target.
-    if self.is_root() && self.panels.is_empty() {
-      if let Some(dock_area) = self.dock_area.clone() {
+    if self.is_root() && self.panels.is_empty()
+      && let Some(dock_area) = self.dock_area.clone() {
         let stack_weak = cx.entity().downgrade();
         let tab_panel = cx.new(|cx| TabPanel::new(Some(stack_weak), dock_area.clone(), window, cx));
         let tab_view: Arc<dyn PanelView> = Arc::new(tab_panel.clone());
@@ -284,7 +284,6 @@ impl StackPanel {
           }
         });
       }
-    }
 
     cx.emit(PanelEvent::LayoutChanged);
     self.remove_self_if_empty(window, cx);

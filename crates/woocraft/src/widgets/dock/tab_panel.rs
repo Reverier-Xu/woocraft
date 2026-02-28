@@ -257,7 +257,7 @@ impl TabPanel {
     self
       .panels
       .iter()
-      .position(|panel| panel.panel_id(cx).to_string() == panel_id)
+      .position(|panel| panel.panel_id(cx) == panel_id)
   }
 
   pub(crate) fn panel_by_id(&self, panel_id: &str, cx: &App) -> Option<Arc<dyn PanelView>> {
@@ -446,13 +446,12 @@ impl TabPanel {
     // Force collapse dock when no panels remaining.
     // We check self.panels directly instead of dock.has_panels(cx) to avoid
     // re-entrant read of this TabPanel while it is being updated.
-    if self.panels.is_empty() {
-      if let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
+    if self.panels.is_empty()
+      && let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
         dock.update(cx, |dock, cx| {
           dock.set_collapsed(true, window, cx);
         });
       }
-    }
 
     cx.emit(PanelEvent::ZoomOut);
     cx.emit(PanelEvent::LayoutChanged);

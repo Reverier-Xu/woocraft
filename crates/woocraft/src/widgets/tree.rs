@@ -91,7 +91,8 @@ pub fn tree(state: &Entity<TreeState>) -> Tree {
 pub fn tree_with<R, E>(state: &Entity<TreeState>, render_item: R) -> Tree
 where
   R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-  E: IntoElement, {
+  E: IntoElement,
+{
   Tree::new(state).render_item(render_item)
 }
 
@@ -241,25 +242,33 @@ impl TreeState {
       IconName::ChevronRight
     };
 
+    let is_loading = entry.is_loading();
+    let is_folder = entry.is_folder();
+
     let _ = ix;
-    ListItem::new(Self::item_id(entry)).child(
-      h_flex()
-        .w_full()
-        .min_w_0()
-        .relative()
-        .items_center()
-        .component_gap(Size::Medium)
-        .child(div().flex_none().w(px(16.) * entry.depth()))
-        .child(Icon::new(entry.icon_or_default()))
-        .child(div().flex_1().truncate().min_w_0().child(content))
-        .child(
-          div()
-            .w_4()
-            .items_center()
-            .justify_center()
-            .when(entry.is_folder(), |this| this.child(Icon::new(expand_icon))),
-        ),
-    )
+
+    ListItem::new(Self::item_id(entry))
+      .loading(is_loading)
+      .child(
+        h_flex()
+          .w_full()
+          .min_w_0()
+          .relative()
+          .items_center()
+          .component_gap(Size::Medium)
+          .child(div().flex_none().w(px(16.) * entry.depth()))
+          .child(Icon::new(entry.icon_or_default()))
+          .child(div().flex_1().truncate().min_w_0().child(content))
+          .child(
+            div()
+              .w_4()
+              .items_center()
+              .justify_center()
+              .when(is_folder && !is_loading, |this| {
+                this.child(Icon::new(expand_icon))
+              }),
+          ),
+      )
   }
 
   fn render_guide_layers(
@@ -633,7 +642,8 @@ impl Tree {
   pub fn render_item<R, E>(mut self, render_item: R) -> Self
   where
     R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.render_item = Rc::new(move |ix, entry, selected, window, cx| {
       render_item(ix, entry, selected, window, cx).into_any_element()
     });
