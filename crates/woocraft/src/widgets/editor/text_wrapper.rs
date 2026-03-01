@@ -762,6 +762,7 @@ mod tests {
       // range: 0..15
       LineItem {
         line: Rope::from("Hello, 世界!\r"),
+        #[allow(clippy::single_range_in_vec_init)]
         wrapped_lines: vec![0..15],
       },
       // range: 16..36
@@ -777,6 +778,7 @@ mod tests {
       // range: 57..79
       LineItem {
         line: Rope::from("这里是第 4 行。"),
+        #[allow(clippy::single_range_in_vec_init)]
         wrapped_lines: vec![0..22],
       },
     ];

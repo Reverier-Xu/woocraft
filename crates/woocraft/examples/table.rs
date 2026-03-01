@@ -559,7 +559,7 @@ fn main() {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
           ..Default::default()
         },
-        |window, cx| TableWindow::view(window, cx),
+        TableWindow::view,
       )
       .expect("open table demo window failed");
 

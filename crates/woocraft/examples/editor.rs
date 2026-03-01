@@ -399,7 +399,7 @@ fn main() {
           window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
-        |window, cx| EditorDockExample::view(window, cx),
+        EditorDockExample::view,
       )
       .expect("open editor example window failed");
 

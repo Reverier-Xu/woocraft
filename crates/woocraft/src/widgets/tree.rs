@@ -161,6 +161,22 @@ impl TreeState {
     cx.notify();
   }
 
+  /// Update tree items while preserving expand/collapse state, selection,
+  /// scroll position and any open context menu.
+  ///
+  /// This is the preferred method for hot-reload scenarios (e.g., a lazy-loaded
+  /// file manager tree where expanding a folder loads its children
+  /// asynchronously). Unlike [`set_items`](Self::set_items) which resets all
+  /// state, this method:
+  /// 1. Transfers expand/collapse state from old items to new items by ID.
+  /// 2. Preserves single and multi selection by item ID.
+  /// 3. Does **not** reset `right_clicked_ix`, so an open context menu stays in
+  ///    place.
+  pub fn update_items(&mut self, items: impl Into<Vec<TreeItem>>, cx: &mut Context<Self>) {
+    self.model.update_items(items);
+    cx.notify();
+  }
+
   pub fn entries(&self) -> &[TreeEntry] {
     self.model.entries()
   }
@@ -272,7 +288,7 @@ impl TreeState {
   fn render_guide_layers(
     &self, ix: usize, entry: &TreeEntry, cx: &mut Context<Self>,
   ) -> Vec<AnyElement> {
-    const ROW_CENTER_Y: f32 = 20.0;
+    const ROW_CENTER_Y: f32 = 16.0;
     const BRANCH_LEN: f32 = 12.0;
 
     let mut layers = Vec::new();
@@ -523,89 +539,79 @@ impl Render for TreeState {
   fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let render_item = self.render_item.clone();
     let entries_len = self.model.len();
-    let _multi_selectable = self.multi_selectable;
     let draggable = self.draggable;
     let entity_id = cx.entity_id();
 
-    div()
-      .id("tree-state")
-      .size_full()
-      .min_w_0()
-      .overflow_hidden()
-      .relative()
-      .child(
-        uniform_list("entries", entries_len, {
-          cx.processor(move |state, visible_range: Range<usize>, window, cx| {
-            let mut items = Vec::with_capacity(visible_range.len());
-            for ix in visible_range {
-              let Some(entry) = state.model.entry(ix) else {
-                continue;
-              };
+    uniform_list("entries", entries_len, {
+      cx.processor(move |state, visible_range: Range<usize>, window, cx| {
+        let mut items = Vec::with_capacity(visible_range.len());
+        for ix in visible_range {
+          let Some(entry) = state.model.entry(ix) else {
+            continue;
+          };
 
-              let selected = state.model.is_selected(ix);
-              let disabled = entry.is_disabled();
-              let content = (render_item)(ix, entry, selected, window, cx);
-              let list_item = state.render_list_item(ix, entry, content, cx);
-              let guides = state.render_guide_layers(ix, entry, cx);
-              let label = entry.item().label.clone();
+          let selected = state.model.is_selected(ix);
+          let disabled = entry.is_disabled();
+          let content = (render_item)(ix, entry, selected, window, cx);
+          let list_item = state.render_list_item(ix, entry, content, cx);
+          let guides = state.render_guide_layers(ix, entry, cx);
+          let label = entry.item().label.clone();
 
-              let mut row = div()
-                .id(Self::row_id(entry))
-                .relative()
-                .children(guides)
-                .child(list_item.disabled(disabled).selected(selected));
+          let mut row = div()
+            .id(Self::row_id(entry))
+            .relative()
+            .children(guides)
+            .child(list_item.disabled(disabled).selected(selected));
 
-              if !disabled {
-                row = row
-                  .on_click(cx.listener(move |this, ev, window, cx| {
-                    this.on_entry_click(ix, ev, window, cx);
-                  }))
-                  .on_mouse_down(
-                    MouseButton::Right,
-                    cx.listener(move |this, ev, window, cx| {
-                      this.on_entry_right_click(ix, ev, window, cx);
-                    }),
-                  );
-              }
+          if !disabled {
+            row = row
+              .on_click(cx.listener(move |this, ev, window, cx| {
+                this.on_entry_click(ix, ev, window, cx);
+              }))
+              .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, ev, window, cx| {
+                  this.on_entry_right_click(ix, ev, window, cx);
+                }),
+              );
+          }
 
-              // Drag-to-reorder support
-              if draggable && !disabled {
-                let drag_label = label.clone();
-                row = row
-                  .on_drag(
-                    DragTreeItem {
-                      entity_id,
-                      ix,
-                      label: drag_label,
-                    },
-                    |drag, _, _, cx| {
-                      cx.stop_propagation();
-                      cx.new(|_| drag.clone())
-                    },
-                  )
-                  .drag_over::<DragTreeItem>(|this, _, _, cx| {
-                    this.border_t_2().border_color(cx.theme().drag_border)
-                  })
-                  .on_drop(cx.listener(move |this, drag: &DragTreeItem, window, cx| {
-                    if drag.entity_id != cx.entity_id() {
-                      return;
-                    }
-                    this.on_drop_item(drag.ix, ix, window, cx);
-                  }));
-              }
+          // Drag-to-reorder support
+          if draggable && !disabled {
+            let drag_label = label.clone();
+            row = row
+              .on_drag(
+                DragTreeItem {
+                  entity_id,
+                  ix,
+                  label: drag_label,
+                },
+                |drag, _, _, cx| {
+                  cx.stop_propagation();
+                  cx.new(|_| drag.clone())
+                },
+              )
+              .drag_over::<DragTreeItem>(|this, _, _, cx| {
+                this.border_t_2().border_color(cx.theme().drag_border)
+              })
+              .on_drop(cx.listener(move |this, drag: &DragTreeItem, window, cx| {
+                if drag.entity_id != cx.entity_id() {
+                  return;
+                }
+                this.on_drop_item(drag.ix, ix, window, cx);
+              }));
+          }
 
-              items.push(row);
-            }
+          items.push(row);
+        }
 
-            items
-          })
-        })
-        .flex_grow()
-        .size_full()
-        .track_scroll(self.scroll_handle.clone())
-        .with_sizing_behavior(ListSizingBehavior::Auto)
-        .into_any_element(),
-      )
+        items
+      })
+    })
+    .flex_grow()
+    .size_full()
+    .track_scroll(self.scroll_handle.clone())
+    .with_sizing_behavior(ListSizingBehavior::Auto)
   }
 }
 
@@ -686,6 +692,7 @@ impl RenderOnce for Tree {
       .track_focus(&focus_handle)
       .min_w_0()
       .overflow_hidden()
+      .relative()
       .on_action(window.listener_for(&self.state, TreeState::on_action_confirm))
       .on_action(window.listener_for(&self.state, TreeState::on_action_left))
       .on_action(window.listener_for(&self.state, TreeState::on_action_right))
@@ -693,7 +700,7 @@ impl RenderOnce for Tree {
       .on_action(window.listener_for(&self.state, TreeState::on_action_down))
       .size_full()
       .child(self.state)
-      .child(div().h_16().flex_shrink_0()) // Bottom padding to ensure last item can scroll above fold
+      .child(div().h_16().flex_shrink_0()) // Bottom padding
       .refine_style(&self.style)
       .vertical_scrollbar(&scroll_handle)
       .context_menu(move |menu, window, cx| {

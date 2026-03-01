@@ -53,6 +53,14 @@ pub(crate) struct RowsCache {
 }
 
 impl RowsCache {
+  /// Force the cache to be rebuilt on the next `prepare_if_needed` call.
+  ///
+  /// Call this after the underlying delegate data has changed structurally
+  /// (items added/removed/reordered) to ensure the list picks up the changes.
+  pub(crate) fn invalidate(&mut self) {
+    self.sections = Rc::new(vec![]);
+  }
+
   pub(crate) fn get(&self, flatten_ix: usize) -> Option<RowEntry> {
     self.entities.get(flatten_ix).cloned()
   }

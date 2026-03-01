@@ -588,7 +588,7 @@ impl SyntaxHighlighter {
   /// # Example
   ///
   /// ```no_run
-  /// use gpui_component::highlighter::{HighlightTheme, SyntaxHighlighter};
+  /// use woocraft::{HighlightTheme, SyntaxHighlighter};
   /// use ropey::Rope;
   ///
   /// let code = "fn main() {\n    println!(\"Hello\");\n}";
@@ -759,9 +759,10 @@ mod tests {
   use super::*;
 
   fn color_style(color: Hsla) -> HighlightStyle {
-    let mut style = HighlightStyle::default();
-    style.color = Some(color);
-    style
+    HighlightStyle {
+      color: Some(color),
+      ..Default::default()
+    }
   }
 
   #[track_caller]

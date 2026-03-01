@@ -353,7 +353,7 @@ fn main() {
           window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
-        |window, cx| DockExample::view(window, cx),
+        DockExample::view,
       )
       .expect("open dock example window failed");
 

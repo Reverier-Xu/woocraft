@@ -52,8 +52,8 @@ pub use divider::*;
 pub use dock::*;
 pub use editor::{
   CodeEditor, EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorEvent,
-  EditorPointerButton, EditorState, EditorUserAction, MaskPattern, Position, Rope, TabSize,
-  highlighter::*, lsp::*,
+  EditorPointerButton, EditorState, EditorUserAction, MaskPattern, Position, Rope, RopeExt,
+  TabSize, highlighter::*, lsp::*,
 };
 pub use form::*;
 pub use history::*;

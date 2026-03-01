@@ -163,6 +163,27 @@ impl TreeItem {
 
     None
   }
+
+  /// Collect expanded states from this item and all descendants into a map.
+  fn collect_expand_state(&self, states: &mut std::collections::HashMap<SharedString, bool>) {
+    if !self.children.is_empty() {
+      states.insert(self.id.clone(), self.is_expanded());
+    }
+    for child in &self.children {
+      child.collect_expand_state(states);
+    }
+  }
+
+  /// Apply expand states from a map (by ID). Items not in the map keep their
+  /// current state.
+  fn apply_expand_state(&self, states: &std::collections::HashMap<SharedString, bool>) {
+    if let Some(&expanded) = states.get(&self.id) {
+      self.state.borrow_mut().expanded = expanded;
+    }
+    for child in &self.children {
+      child.apply_expand_state(states);
+    }
+  }
 }
 
 /// Tree model for flattening, expansion and selection state.
@@ -192,6 +213,58 @@ impl TreeModel {
     self.rebuild_entries();
     self.selected_ix = None;
     self.selected_indices.clear();
+  }
+
+  /// Update tree items while preserving expand/collapse state and selection.
+  ///
+  /// This is the preferred method for hot-reloading scenarios (e.g.,
+  /// lazy-loaded file trees). It:
+  /// 1. Transfers expand/collapse state from old items to new items by matching
+  ///    item IDs.
+  /// 2. Preserves single selection by item ID (remaps the index).
+  /// 3. Preserves multi-selection by item IDs (remaps indices).
+  ///
+  /// Items whose IDs don't exist in the old tree keep whatever expand state
+  /// they were constructed with.
+  pub fn update_items(&mut self, items: impl Into<Vec<TreeItem>>) {
+    // Collect expand states from old tree.
+    let mut expand_states = std::collections::HashMap::new();
+    for root in &self.roots {
+      root.collect_expand_state(&mut expand_states);
+    }
+
+    // Remember selected item IDs.
+    let selected_id = self
+      .selected_ix
+      .and_then(|ix| self.entries.get(ix))
+      .map(|entry| entry.item.id.clone());
+
+    let multi_selected_ids: Vec<SharedString> = self
+      .selected_indices
+      .iter()
+      .filter_map(|&ix| self.entries.get(ix).map(|e| e.item.id.clone()))
+      .collect();
+
+    // Replace roots and apply preserved expand states.
+    self.roots = items.into();
+    for root in &self.roots {
+      root.apply_expand_state(&expand_states);
+    }
+    self.rebuild_entries();
+
+    // Restore selection by ID.
+    self.selected_ix = selected_id
+      .as_ref()
+      .and_then(|id| self.entries.iter().position(|e| e.item.id == *id));
+
+    self.selected_indices.clear();
+    if self.multi_selectable {
+      for id in &multi_selected_ids {
+        if let Some(ix) = self.entries.iter().position(|e| e.item.id == *id) {
+          self.selected_indices.insert(ix);
+        }
+      }
+    }
   }
 
   pub fn entries(&self) -> &[TreeEntry] {

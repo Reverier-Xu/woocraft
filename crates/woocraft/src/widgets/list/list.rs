@@ -44,6 +44,7 @@ struct ListOptions {
   search_placeholder: Option<SharedString>,
   max_height: Option<Length>,
   paddings: EdgesRefinement<DefiniteLength>,
+  outer_style: StyleRefinement,
 }
 
 impl Default for ListOptions {
@@ -54,6 +55,7 @@ impl Default for ListOptions {
       max_height: None,
       search_placeholder: None,
       paddings: EdgesRefinement::default(),
+      outer_style: StyleRefinement::default(),
     }
   }
 }
@@ -132,6 +134,17 @@ where
 
   pub fn set_selectable(&mut self, selectable: bool, cx: &mut Context<Self>) {
     self.selectable = selectable;
+    cx.notify();
+  }
+
+  /// Notify the list that delegate data has changed.
+  ///
+  /// Forces the row cache to be rebuilt on the next render, preserving
+  /// selection and scroll position. Use this after modifying delegate data
+  /// (items added/removed/reordered) to ensure the list reflects the changes
+  /// without disrupting any open context menus or other ephemeral UI state.
+  pub fn invalidate_data(&mut self, cx: &mut Context<Self>) {
+    self.rows_cache.invalidate();
     cx.notify();
   }
 
@@ -548,11 +561,12 @@ where
 
     v_flex()
       .key_context("List")
-      .id("list-state")
+      .id("list")
       .track_focus(&self.focus_handle)
       .size_full()
       .relative()
       .overflow_hidden()
+      .refine_style(&self.options.outer_style)
       .when_some(query_input, |this, input| {
         this.child(
           v_flex()
@@ -660,15 +674,12 @@ where
     self.options.max_height = self.style.max_size.height;
     self.style.padding = EdgesRefinement::default();
     self.style.max_size.height = None;
+    self.options.outer_style = self.style;
 
     self.state.update(cx, |state, _| {
       state.options = self.options;
     });
 
-    div()
-      .id("list")
-      .size_full()
-      .refine_style(&self.style)
-      .child(self.state.clone())
+    self.state
   }
 }

@@ -246,7 +246,8 @@ mod tests {
         self
           .files
           .keys()
-          .filter_map(|asset_path| asset_path.starts_with(path).then(|| (*asset_path).into()))
+          .filter(|&asset_path| asset_path.starts_with(path))
+          .map(|asset_path| (*asset_path).into())
           .collect(),
       )
     }
@@ -280,7 +281,8 @@ mod tests {
       );
 
     let listed = source.list("icons/").expect("list should succeed");
-    let listed = listed.iter().map(|path| path.as_ref()).collect::<Vec<_>>();
+    let mut listed = listed.iter().map(|path| path.as_ref()).collect::<Vec<_>>();
+    listed.sort();
 
     assert_eq!(listed, vec!["icons/a.svg", "icons/b.svg", "icons/c.svg"]);
   }

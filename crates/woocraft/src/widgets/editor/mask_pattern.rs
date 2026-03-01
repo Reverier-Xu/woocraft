@@ -417,37 +417,37 @@ mod tests {
 
   #[test]
   fn test_is_match() {
-    assert_eq!(MaskToken::Sep('(').is_match('('), true);
-    assert_eq!(MaskToken::Sep('-').is_match('('), false);
-    assert_eq!(MaskToken::Sep('-').is_match('3'), false);
+    assert!(MaskToken::Sep('(').is_match('('));
+    assert!(!MaskToken::Sep('-').is_match('('));
+    assert!(!MaskToken::Sep('-').is_match('3'));
 
-    assert_eq!(MaskToken::Digit.is_match('0'), true);
-    assert_eq!(MaskToken::Digit.is_match('9'), true);
-    assert_eq!(MaskToken::Digit.is_match('a'), false);
-    assert_eq!(MaskToken::Digit.is_match('C'), false);
+    assert!(MaskToken::Digit.is_match('0'));
+    assert!(MaskToken::Digit.is_match('9'));
+    assert!(!MaskToken::Digit.is_match('a'));
+    assert!(!MaskToken::Digit.is_match('C'));
 
-    assert_eq!(MaskToken::Letter.is_match('a'), true);
-    assert_eq!(MaskToken::Letter.is_match('Z'), true);
-    assert_eq!(MaskToken::Letter.is_match('3'), false);
-    assert_eq!(MaskToken::Letter.is_match('-'), false);
+    assert!(MaskToken::Letter.is_match('a'));
+    assert!(MaskToken::Letter.is_match('Z'));
+    assert!(!MaskToken::Letter.is_match('3'));
+    assert!(!MaskToken::Letter.is_match('-'));
 
-    assert_eq!(MaskToken::LetterOrDigit.is_match('0'), true);
-    assert_eq!(MaskToken::LetterOrDigit.is_match('9'), true);
-    assert_eq!(MaskToken::LetterOrDigit.is_match('a'), true);
-    assert_eq!(MaskToken::LetterOrDigit.is_match('Z'), true);
-    assert_eq!(MaskToken::LetterOrDigit.is_match('3'), true);
+    assert!(MaskToken::LetterOrDigit.is_match('0'));
+    assert!(MaskToken::LetterOrDigit.is_match('9'));
+    assert!(MaskToken::LetterOrDigit.is_match('a'));
+    assert!(MaskToken::LetterOrDigit.is_match('Z'));
+    assert!(MaskToken::LetterOrDigit.is_match('3'));
 
-    assert_eq!(MaskToken::Any.is_match('a'), true);
-    assert_eq!(MaskToken::Any.is_match('3'), true);
-    assert_eq!(MaskToken::Any.is_match('-'), true);
-    assert_eq!(MaskToken::Any.is_match(' '), true);
+    assert!(MaskToken::Any.is_match('a'));
+    assert!(MaskToken::Any.is_match('3'));
+    assert!(MaskToken::Any.is_match('-'));
+    assert!(MaskToken::Any.is_match(' '));
   }
 
   #[test]
   fn test_mask_none() {
     let mask = MaskPattern::None;
-    assert_eq!(mask.is_none(), true);
-    assert_eq!(mask.is_valid("1124124ASLDJKljk"), true);
+    assert!(mask.is_none());
+    assert!(mask.is_valid("1124124ASLDJKljk"));
     assert_eq!(mask.mask("hello-world"), "hello-world");
     assert_eq!(mask.unmask("hello-world"), "hello-world");
   }
@@ -472,19 +472,19 @@ mod tests {
       ])
     );
 
-    assert_eq!(mask.is_valid_at('(', 0), true);
-    assert_eq!(mask.is_valid_at('H', 0), true);
-    assert_eq!(mask.is_valid_at('3', 0), false);
-    assert_eq!(mask.is_valid_at('-', 0), false);
-    assert_eq!(mask.is_valid_at(')', 1), false);
-    assert_eq!(mask.is_valid_at('H', 1), true);
-    assert_eq!(mask.is_valid_at('1', 1), false);
-    assert_eq!(mask.is_valid_at('e', 2), true);
-    assert_eq!(mask.is_valid_at(')', 3), true);
-    assert_eq!(mask.is_valid_at('1', 3), true);
-    assert_eq!(mask.is_valid_at('2', 4), true);
+    assert!(mask.is_valid_at('(', 0));
+    assert!(mask.is_valid_at('H', 0));
+    assert!(!mask.is_valid_at('3', 0));
+    assert!(!mask.is_valid_at('-', 0));
+    assert!(!mask.is_valid_at(')', 1));
+    assert!(mask.is_valid_at('H', 1));
+    assert!(!mask.is_valid_at('1', 1));
+    assert!(mask.is_valid_at('e', 2));
+    assert!(mask.is_valid_at(')', 3));
+    assert!(mask.is_valid_at('1', 3));
+    assert!(mask.is_valid_at('2', 4));
 
-    assert_eq!(mask.is_valid("(AB)123-456"), true);
+    assert!(mask.is_valid("(AB)123-456"));
 
     assert_eq!(mask.mask("AB123456"), "(AB)123-456");
     assert_eq!(mask.mask("(AB)123-456"), "(AB)123-456");
@@ -497,10 +497,10 @@ mod tests {
     let unmasked_text = mask.unmask("(AB)123-456");
     assert_eq!(unmasked_text, "AB123456");
 
-    assert_eq!(mask.is_valid("12AB345"), false);
-    assert_eq!(mask.is_valid("(11)123-456"), false);
-    assert_eq!(mask.is_valid("##"), false);
-    assert_eq!(mask.is_valid("(AB)123456"), true);
+    assert!(!mask.is_valid("12AB345"));
+    assert!(!mask.is_valid("(11)123-456"));
+    assert!(!mask.is_valid("##"));
+    assert!(mask.is_valid("(AB)123456"));
   }
 
   #[test]
@@ -531,7 +531,7 @@ mod tests {
     assert_eq!(masked_text, "123-456-A(111)");
     let unmasked_text = mask.unmask(&masked_text);
     assert_eq!(unmasked_text, "123456A(111)");
-    assert_eq!(mask.is_valid(&masked_text), true);
+    assert!(mask.is_valid(&masked_text));
   }
 
   #[test]
@@ -599,29 +599,29 @@ mod tests {
       fraction: Some(2),
     };
 
-    assert_eq!(mask.is_valid("-"), true);
-    assert_eq!(mask.is_valid("-1234567"), true);
-    assert_eq!(mask.is_valid("-1,234,567"), true);
-    assert_eq!(mask.is_valid("-1234567."), true);
-    assert_eq!(mask.is_valid("-1234567.89"), true);
+    assert!(mask.is_valid("-"));
+    assert!(mask.is_valid("-1234567"));
+    assert!(mask.is_valid("-1,234,567"));
+    assert!(mask.is_valid("-1234567."));
+    assert!(mask.is_valid("-1234567.89"));
 
-    assert_eq!(mask.is_valid("+"), true);
-    assert_eq!(mask.is_valid("+1234567"), true);
-    assert_eq!(mask.is_valid("+1,234,567"), true);
-    assert_eq!(mask.is_valid("+1234567."), true);
-    assert_eq!(mask.is_valid("+1234567.89"), true);
+    assert!(mask.is_valid("+"));
+    assert!(mask.is_valid("+1234567"));
+    assert!(mask.is_valid("+1,234,567"));
+    assert!(mask.is_valid("+1234567."));
+    assert!(mask.is_valid("+1234567.89"));
 
     // Only one sign is valid
-    assert_eq!(mask.is_valid("+-"), false);
-    assert_eq!(mask.is_valid("-+"), false);
-    assert_eq!(mask.is_valid("+-1234567"), false);
+    assert!(!mask.is_valid("+-"));
+    assert!(!mask.is_valid("-+"));
+    assert!(!mask.is_valid("+-1234567"));
 
     // No sign is valid in the middle of the number
-    assert_eq!(mask.is_valid("1,-234,567"), false);
-    assert_eq!(mask.is_valid("12-34567.89"), false);
+    assert!(!mask.is_valid("1,-234,567"));
+    assert!(!mask.is_valid("12-34567.89"));
 
     // Signs in fractions are invalid
-    assert_eq!(mask.is_valid("+1234567.-"), false);
+    assert!(!mask.is_valid("+1234567.-"));
 
     // The separator does not show up before the sign i.e. -,123
     assert_eq!(mask.mask("-123"), "-123");

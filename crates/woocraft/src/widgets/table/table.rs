@@ -1,10 +1,7 @@
-use gpui::{
-  App, Entity, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce,
-  Styled, Window, div, prelude::FluentBuilder,
-};
+use gpui::{App, Entity, IntoElement, KeyBinding, RenderOnce, Window};
 
 use crate::{
-  ActiveTheme, Sizable, Size, TableDelegate, TableState, TableThemeExt,
+  Sizable, Size, TableDelegate, TableState,
   actions::{
     Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown, SelectPageUp,
     SelectPrevColumn, SelectUp,
@@ -127,9 +124,7 @@ impl<D> RenderOnce for Table<D>
 where
   D: TableDelegate,
 {
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let bordered = self.bordered;
-    let focus_handle = self.state.focus_handle(cx);
+  fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
     self.state.update(cx, |state, _| {
       state.options.bordered = self.bordered;
       state.options.stripe = self.stripe;
@@ -141,27 +136,6 @@ where
       };
     });
 
-    div()
-      .id("table")
-      .size_full()
-      .key_context(CONTEXT)
-      .track_focus(&focus_handle)
-      .on_action(window.listener_for(&self.state, TableState::action_cancel))
-      .on_action(window.listener_for(&self.state, TableState::action_select_next))
-      .on_action(window.listener_for(&self.state, TableState::action_select_prev))
-      .on_action(window.listener_for(&self.state, TableState::action_select_next_col))
-      .on_action(window.listener_for(&self.state, TableState::action_select_prev_col))
-      .on_action(window.listener_for(&self.state, TableState::action_select_first_column))
-      .on_action(window.listener_for(&self.state, TableState::action_select_last_column))
-      .on_action(window.listener_for(&self.state, TableState::action_select_page_up))
-      .on_action(window.listener_for(&self.state, TableState::action_select_page_down))
-      .bg(cx.theme().table_bg())
-      .when(bordered, |this| {
-        this
-          .rounded(cx.theme().radius)
-          .border_1()
-          .border_color(cx.theme().border)
-      })
-      .child(self.state)
+    self.state
   }
 }

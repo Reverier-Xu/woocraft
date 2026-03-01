@@ -224,10 +224,10 @@ mod tests {
   #[test]
   fn test_code_editor() {
     let mode = InputMode::code_editor("rust");
-    assert_eq!(mode.is_code_editor(), true);
-    assert_eq!(mode.is_multi_line(), true);
-    assert_eq!(mode.line_number(), true);
-    assert_eq!(mode.has_indent_guides(), true);
+    assert!(mode.is_code_editor());
+    assert!(mode.is_multi_line());
+    assert!(mode.line_number());
+    assert!(mode.has_indent_guides());
     assert_eq!(mode.max_rows(), usize::MAX);
     assert_eq!(mode.min_rows(), 1);
   }
@@ -238,17 +238,17 @@ mod tests {
       tab: TabSize::default(),
       rows: 5,
     };
-    assert_eq!(mode.is_code_editor(), false);
-    assert_eq!(mode.is_multi_line(), true);
-    assert_eq!(mode.line_number(), false);
+    assert!(!mode.is_code_editor());
+    assert!(mode.is_multi_line());
+    assert!(!mode.line_number());
     assert_eq!(mode.rows(), 5);
     assert_eq!(mode.max_rows(), usize::MAX);
     assert_eq!(mode.min_rows(), 1);
 
     let mode = InputMode::plain_text();
-    assert_eq!(mode.is_code_editor(), false);
-    assert_eq!(mode.is_multi_line(), true);
-    assert_eq!(mode.line_number(), false);
+    assert!(!mode.is_code_editor());
+    assert!(mode.is_multi_line());
+    assert!(!mode.line_number());
     assert_eq!(mode.max_rows(), usize::MAX);
     assert_eq!(mode.min_rows(), 1);
   }
@@ -256,9 +256,9 @@ mod tests {
   #[test]
   fn test_auto_grow() {
     let mut mode = InputMode::auto_grow(2, 5);
-    assert_eq!(mode.is_code_editor(), false);
-    assert_eq!(mode.is_multi_line(), true);
-    assert_eq!(mode.line_number(), false);
+    assert!(!mode.is_code_editor());
+    assert!(mode.is_multi_line());
+    assert!(!mode.line_number());
     assert_eq!(mode.rows(), 2);
     assert_eq!(mode.max_rows(), 5);
     assert_eq!(mode.min_rows(), 2);

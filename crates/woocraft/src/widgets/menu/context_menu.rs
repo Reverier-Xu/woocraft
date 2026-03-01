@@ -1,10 +1,10 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, panic::Location, rc::Rc};
 
 use gpui::{
   AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
   GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
-  MouseButton, MouseDownEvent, ParentElement, Pixels, Point, SharedString, StyleRefinement, Styled,
-  Subscription, Window, anchored, deferred, div, prelude::FluentBuilder, px,
+  MouseButton, MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled, Subscription,
+  Window, anchored, deferred, div, prelude::FluentBuilder, px,
 };
 
 use crate::{ActiveTheme, CardStyle as _, PopupMenu, Size, StyleSized as _, v_flex};
@@ -18,15 +18,14 @@ pub trait ContextMenuExt: ParentElement + Styled {
   /// This will changed the element to be `relative` positioned, and add a child
   /// `ContextMenu` element. Because the `ContextMenu` element is positioned
   /// `absolute`, it will not affect the layout of the parent element.
+  #[track_caller]
   fn context_menu(
     self, f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
   ) -> ContextMenu<Self>
   where
     Self: Sized, {
-    // Generate a unique ID based on the element's memory address to ensure
-    // each context menu has its own state and doesn't share with others
-    let id = format!("context-menu-{:p}", &self as *const _);
-    ContextMenu::new(SharedString::from(id), self).menu(f)
+    let caller = Location::caller();
+    ContextMenu::new(ElementId::CodeLocation(*caller), self).menu(f)
   }
 }
 

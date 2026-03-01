@@ -729,7 +729,7 @@ impl CodeEditorApp {
   fn on_save(&mut self, _: &Save, window: &mut Window, cx: &mut Context<Self>) {
     // Save the currently focused editor, if any
     // We iterate open editors and save the modified ones
-    for (_fid, panel) in &self.open_editors {
+    for panel in self.open_editors.values() {
       panel.update(cx, |p, cx| {
         if p.modified {
           p.save(window, cx);
@@ -875,7 +875,7 @@ fn main() {
           window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
-        |window, cx| CodeEditorApp::view(window, cx),
+        CodeEditorApp::view,
       )
       .expect("open code editor window failed");
 

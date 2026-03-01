@@ -343,6 +343,45 @@ where
     self.prepare_col_groups(cx);
   }
 
+  /// Notify the table that delegate data has changed.
+  ///
+  /// Unlike [`refresh`](Self::refresh), this method preserves the current
+  /// selection, scroll position, and right-click state. It only refreshes
+  /// column groups when the column count has changed. Use this after modifying
+  /// delegate data (rows added/removed/reordered) to ensure the table
+  /// reflects the changes without disrupting any open context menus or other
+  /// ephemeral UI state.
+  pub fn invalidate_data(&mut self, cx: &mut Context<Self>) {
+    let old_col_count = self.col_groups.len();
+    let new_col_count = self.delegate.columns_count(cx);
+    if old_col_count != new_col_count {
+      self.prepare_col_groups(cx);
+    }
+
+    let rows_count = self.delegate.rows_count(cx);
+    // Clamp selection to valid range.
+    if let Some(row) = self.selected_row
+      && row >= rows_count
+    {
+      self.selected_row = if rows_count > 0 {
+        Some(rows_count - 1)
+      } else {
+        None
+      };
+    }
+    if let Some((row, col)) = self.selected_cell
+      && (row >= rows_count || col >= new_col_count)
+    {
+      self.selected_cell = None;
+    }
+    if let Some(row) = self.right_clicked_row
+      && row >= rows_count
+    {
+      self.right_clicked_row = None;
+    }
+    cx.notify();
+  }
+
   /// Scroll to the row at the given index.
   pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
     self
@@ -1651,6 +1690,7 @@ where
       .count();
     let rows_count = self.delegate.rows_count(cx);
     let loading = self.delegate.loading(cx);
+    let bordered = self.options.bordered;
 
     let row_height = self.options.size.table_row_height();
     let total_height = self
@@ -1716,70 +1756,83 @@ where
           this.children(empty_view)
         } else {
           this.child(
-            h_flex().id("table-body").flex_grow().size_full().child(
-              uniform_list(
-                "table-uniform-list",
-                render_rows_count,
-                cx.processor(move |table, visible_range: Range<usize>, window, cx| {
-                  // We must calculate the col sizes here, because the col sizes
-                  // need render_th first, then that method will set the bounds of each col.
-                  let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
-                    table
-                      .col_groups
-                      .iter()
-                      .skip(left_columns_count)
-                      .map(|col| col.bounds.size)
-                      .collect(),
-                  );
+            uniform_list(
+              "table-uniform-list",
+              render_rows_count,
+              cx.processor(move |table, visible_range: Range<usize>, window, cx| {
+                let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
+                  table
+                    .col_groups
+                    .iter()
+                    .skip(left_columns_count)
+                    .map(|col| col.bounds.size)
+                    .collect(),
+                );
 
-                  table.load_more_if_need(rows_count, visible_range.end, window, cx);
-                  table.update_visible_range_if_need(
-                    visible_range.clone(),
-                    Axis::Vertical,
-                    window,
+                table.load_more_if_need(rows_count, visible_range.end, window, cx);
+                table.update_visible_range_if_need(
+                  visible_range.clone(),
+                  Axis::Vertical,
+                  window,
+                  cx,
+                );
+
+                if visible_range.end > rows_count {
+                  table.scroll_to_row(
+                    std::cmp::min(visible_range.start, rows_count.saturating_sub(1)),
                     cx,
                   );
+                }
 
-                  if visible_range.end > rows_count {
-                    table.scroll_to_row(
-                      std::cmp::min(visible_range.start, rows_count.saturating_sub(1)),
-                      cx,
-                    );
-                  }
+                let mut items =
+                  Vec::with_capacity(visible_range.end.saturating_sub(visible_range.start));
 
-                  let mut items =
-                    Vec::with_capacity(visible_range.end.saturating_sub(visible_range.start));
+                visible_range.for_each(|row_ix| {
+                  items.push(table.render_table_row(
+                    row_ix,
+                    rows_count,
+                    left_columns_count,
+                    col_sizes.clone(),
+                    columns_count,
+                    is_filled,
+                    window,
+                    cx,
+                  ));
+                });
 
-                  // Render fake rows to fill the table
-                  visible_range.for_each(|row_ix| {
-                    // Render real rows for available data
-                    items.push(table.render_table_row(
-                      row_ix,
-                      rows_count,
-                      left_columns_count,
-                      col_sizes.clone(),
-                      columns_count,
-                      is_filled,
-                      window,
-                      cx,
-                    ));
-                  });
-
-                  items
-                }),
-              )
-              .flex_grow()
-              .size_full()
-              .with_sizing_behavior(ListSizingBehavior::Auto)
-              .track_scroll(self.vertical_scroll_handle.clone())
-              .into_any_element(),
-            ),
+                items
+              }),
+            )
+            .flex_grow()
+            .size_full()
+            .with_sizing_behavior(ListSizingBehavior::Auto)
+            .track_scroll(self.vertical_scroll_handle.clone())
+            .into_any_element(),
           )
         }
       });
 
     div()
+      .id("table")
+      .key_context("Table")
+      .track_focus(&self.focus_handle)
+      .on_action(cx.listener(Self::action_cancel))
+      .on_action(cx.listener(Self::action_select_next))
+      .on_action(cx.listener(Self::action_select_prev))
+      .on_action(cx.listener(Self::action_select_next_col))
+      .on_action(cx.listener(Self::action_select_prev_col))
+      .on_action(cx.listener(Self::action_select_first_column))
+      .on_action(cx.listener(Self::action_select_last_column))
+      .on_action(cx.listener(Self::action_select_page_up))
+      .on_action(cx.listener(Self::action_select_page_down))
       .size_full()
+      .bg(cx.theme().table_bg())
+      .when(bordered, |this| {
+        this
+          .rounded(cx.theme().radius)
+          .border_1()
+          .border_color(cx.theme().border)
+      })
       .children(loading_view)
       .when(!loading, |this| {
         this
