@@ -817,49 +817,49 @@ fn main() {
       KeyBinding::new("ctrl-shift-i", ToggleInspector, None),
     ]);
 
-    // Set up application menus
+    // Set up application menus (use i18n keys for AppMenuBar translation)
     cx.set_menus(vec![
       Menu {
-        name: "文件".into(),
+        name: "menu.file".into(),
         items: vec![
-          MenuItem::action("新建文件", NewFile),
-          MenuItem::action("打开文件夹…", OpenFolder),
+          MenuItem::action("menu.new_file", NewFile),
+          MenuItem::action("menu.open_folder", OpenFolder),
           MenuItem::separator(),
-          MenuItem::action("保存", Save),
-          MenuItem::action("另存为…", SaveAs),
+          MenuItem::action("menu.save", Save),
+          MenuItem::action("menu.save_as", SaveAs),
           MenuItem::separator(),
-          MenuItem::action("关闭文件", CloseFile),
+          MenuItem::action("menu.close_file", CloseFile),
           MenuItem::separator(),
-          MenuItem::action("退出", Quit),
+          MenuItem::action("menu.quit", Quit),
         ],
       },
       Menu {
-        name: "编辑".into(),
+        name: "menu.edit".into(),
         items: vec![
-          MenuItem::action("撤销", Undo),
-          MenuItem::action("重做", Redo),
+          MenuItem::action("menu.undo", Undo),
+          MenuItem::action("menu.redo", Redo),
           MenuItem::separator(),
-          MenuItem::action("剪切", Cut),
-          MenuItem::action("复制", Copy),
-          MenuItem::action("粘贴", Paste),
+          MenuItem::action("menu.cut", Cut),
+          MenuItem::action("menu.copy", Copy),
+          MenuItem::action("menu.paste", Paste),
           MenuItem::separator(),
-          MenuItem::action("全选", SelectAll),
-          MenuItem::action("查找", Find),
+          MenuItem::action("menu.select_all", SelectAll),
+          MenuItem::action("menu.find", Find),
         ],
       },
       Menu {
-        name: "视图".into(),
+        name: "menu.view".into(),
         items: vec![
-          MenuItem::action("切换侧边栏", ToggleLeftDock),
+          MenuItem::action("menu.toggle_sidebar", ToggleLeftDock),
           MenuItem::separator(),
-          MenuItem::action("切换 Inspector", ToggleInspector),
+          MenuItem::action("menu.toggle_inspector", ToggleInspector),
           MenuItem::separator(),
-          MenuItem::action("自动换行", WordWrap),
+          MenuItem::action("menu.word_wrap", WordWrap),
         ],
       },
       Menu {
-        name: "帮助".into(),
-        items: vec![MenuItem::action("关于", ShowAbout)],
+        name: "menu.help".into(),
+        items: vec![MenuItem::action("menu.about", ShowAbout)],
       },
     ]);
 

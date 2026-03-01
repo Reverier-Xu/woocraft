@@ -1,4 +1,4 @@
-use gpui::Edges;
+use gpui::{Edges, Pixels};
 
 use crate::Size;
 
@@ -22,6 +22,8 @@ pub(crate) struct TableOptions {
   pub(crate) bordered: bool,
   /// The cell size of the table.
   pub(crate) size: Size,
+  /// Optional bottom gap for scrolling past the last element.
+  pub(crate) bottom_gap: Option<Pixels>,
 }
 
 impl Default for TableOptions {
@@ -31,6 +33,7 @@ impl Default for TableOptions {
       stripe: false,
       bordered: true,
       size: Size::default(),
+      bottom_gap: None,
     }
   }
 }

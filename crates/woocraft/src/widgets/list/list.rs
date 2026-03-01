@@ -1,11 +1,11 @@
-use std::ops::Range;
+use std::{ops::Range, rc::Rc};
 
 use gpui::{
   App, AppContext, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement,
   EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length,
-  ListSizingBehavior, MouseButton, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString,
-  StatefulInteractiveElement, StyleRefinement, Styled, Subscription, Task, Window, div,
-  prelude::FluentBuilder, px, size,
+  ListSizingBehavior, MouseButton, ParentElement, Pixels, Render, RenderOnce, ScrollStrategy,
+  SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Subscription, Task, Window,
+  div, prelude::FluentBuilder, px, size,
 };
 
 use super::cache::{MeasuredEntrySize, RowEntry, RowsCache};
@@ -45,6 +45,7 @@ struct ListOptions {
   max_height: Option<Length>,
   paddings: EdgesRefinement<DefiniteLength>,
   outer_style: StyleRefinement,
+  bottom_gap: Option<Pixels>,
 }
 
 impl Default for ListOptions {
@@ -56,6 +57,7 @@ impl Default for ListOptions {
       search_placeholder: None,
       paddings: EdgesRefinement::default(),
       outer_style: StyleRefinement::default(),
+      bottom_gap: None,
     }
   }
 }
@@ -456,16 +458,30 @@ where
         this.child(self.delegate.render_empty(window, cx))
       })
       .when(items_count > 0, |this| {
+        let real_entries_count = rows_cache.len();
+        let entries_sizes = if let Some(gap) = self.options.bottom_gap {
+          let mut sizes = (*rows_cache.entries_sizes).clone();
+          sizes.push(size(Pixels::ZERO, gap));
+          Rc::new(sizes)
+        } else {
+          rows_cache.entries_sizes.clone()
+        };
+
         this.child(
           v_virtual_list(
             cx.entity(),
             "virtual-list",
-            rows_cache.entries_sizes.clone(),
+            entries_sizes,
             move |list, visible_range: Range<usize>, window, cx| {
               list.load_more_if_need(entities_count, visible_range.end, window, cx);
 
               visible_range
                 .map(|ix| {
+                  // Render bottom gap placeholder
+                  if ix >= real_entries_count {
+                    return div();
+                  }
+
                   let Some(entry) = rows_cache.get(ix) else {
                     return div();
                   };
@@ -642,6 +658,13 @@ where
   /// Set placeholder text for the search input.
   pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
     self.options.search_placeholder = Some(placeholder.into());
+    self
+  }
+
+  /// Set a bottom gap (in pixels) so the user can scroll past the last
+  /// element.
+  pub fn bottom_gap(mut self, gap: impl Into<Pixels>) -> Self {
+    self.options.bottom_gap = Some(gap.into());
     self
   }
 }

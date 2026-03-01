@@ -1709,6 +1709,12 @@ where
     } else {
       rows_count
     };
+    let bottom_gap = self.options.bottom_gap;
+    let render_rows_count = if bottom_gap.is_some() {
+      render_rows_count + 1
+    } else {
+      render_rows_count
+    };
     let right_clicked_row = self.right_clicked_row;
     let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
 
@@ -1788,16 +1794,28 @@ where
                   Vec::with_capacity(visible_range.end.saturating_sub(visible_range.start));
 
                 visible_range.for_each(|row_ix| {
-                  items.push(table.render_table_row(
-                    row_ix,
-                    rows_count,
-                    left_columns_count,
-                    col_sizes.clone(),
-                    columns_count,
-                    is_filled,
-                    window,
-                    cx,
-                  ));
+                  // Render bottom gap placeholder
+                  if row_ix >= rows_count + extra_rows_count {
+                    if let Some(gap) = bottom_gap {
+                      items.push(div().h(gap).into_any_element());
+                    }
+                    return;
+                  }
+
+                  items.push(
+                    table
+                      .render_table_row(
+                        row_ix,
+                        rows_count,
+                        left_columns_count,
+                        col_sizes.clone(),
+                        columns_count,
+                        is_filled,
+                        window,
+                        cx,
+                      )
+                      .into_any_element(),
+                  );
                 });
 
                 items

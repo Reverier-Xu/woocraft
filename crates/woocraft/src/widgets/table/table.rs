@@ -1,4 +1,4 @@
-use gpui::{App, Entity, IntoElement, KeyBinding, RenderOnce, Window};
+use gpui::{App, Entity, IntoElement, KeyBinding, Pixels, RenderOnce, Window};
 
 use crate::{
   Sizable, Size, TableDelegate, TableState,
@@ -72,6 +72,7 @@ pub struct Table<D: TableDelegate> {
   size: Size,
   scrollbar_visible_vertical: bool,
   scrollbar_visible_horizontal: bool,
+  bottom_gap: Option<Pixels>,
 }
 
 impl<D> Table<D>
@@ -87,6 +88,7 @@ where
       size: Size::default(),
       scrollbar_visible_vertical: true,
       scrollbar_visible_horizontal: true,
+      bottom_gap: None,
     }
   }
 
@@ -106,6 +108,13 @@ where
   pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
     self.scrollbar_visible_vertical = vertical;
     self.scrollbar_visible_horizontal = horizontal;
+    self
+  }
+
+  /// Set a bottom gap (in pixels) so the user can scroll past the last
+  /// element.
+  pub fn bottom_gap(mut self, gap: impl Into<Pixels>) -> Self {
+    self.bottom_gap = Some(gap.into());
     self
   }
 }
@@ -134,6 +143,7 @@ where
         bottom: self.scrollbar_visible_horizontal,
         ..Default::default()
       };
+      state.options.bottom_gap = self.bottom_gap;
     });
 
     self.state

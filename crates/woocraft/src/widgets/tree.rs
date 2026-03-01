@@ -3,7 +3,7 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
   AnyElement, App, AppContext, ClickEvent, Context, ElementId, Entity, EntityId, EventEmitter,
   FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, ListSizingBehavior,
-  MouseButton, MouseDownEvent, ParentElement, Render, RenderOnce, SharedString,
+  MouseButton, MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, UniformListScrollHandle, Window, div,
   prelude::FluentBuilder as _, px, uniform_list,
 };
@@ -107,6 +107,8 @@ pub struct TreeState {
   pub multi_selectable: bool,
   /// Whether drag-to-reorder is enabled.
   pub draggable: bool,
+  /// Optional bottom gap for scrolling past the last element.
+  bottom_gap: Option<Pixels>,
 }
 
 impl Focusable for TreeState {
@@ -135,6 +137,7 @@ impl TreeState {
       right_clicked_ix: None,
       multi_selectable: false,
       draggable: false,
+      bottom_gap: None,
     }
   }
 
@@ -149,6 +152,19 @@ impl TreeState {
   pub fn draggable(mut self, enabled: bool) -> Self {
     self.draggable = enabled;
     self
+  }
+
+  /// Set an optional bottom gap (in pixels) so the user can scroll past
+  /// the last element.
+  pub fn bottom_gap(mut self, gap: impl Into<Pixels>) -> Self {
+    self.bottom_gap = Some(gap.into());
+    self
+  }
+
+  /// Set or clear the bottom gap at runtime.
+  pub fn set_bottom_gap(&mut self, gap: Option<Pixels>, cx: &mut Context<Self>) {
+    self.bottom_gap = gap;
+    cx.notify();
   }
 
   pub fn items(mut self, items: impl Into<Vec<TreeItem>>) -> Self {
@@ -541,11 +557,25 @@ impl Render for TreeState {
     let entries_len = self.model.len();
     let draggable = self.draggable;
     let entity_id = cx.entity_id();
+    let bottom_gap = self.bottom_gap;
+    let list_len = if bottom_gap.is_some() {
+      entries_len + 1
+    } else {
+      entries_len
+    };
 
-    uniform_list("entries", entries_len, {
+    uniform_list("entries", list_len, {
       cx.processor(move |state, visible_range: Range<usize>, window, cx| {
         let mut items = Vec::with_capacity(visible_range.len());
         for ix in visible_range {
+          // Render bottom gap placeholder
+          if ix >= entries_len {
+            if let Some(gap) = bottom_gap {
+              items.push(div().h(gap).into_any_element());
+            }
+            continue;
+          }
+
           let Some(entry) = state.model.entry(ix) else {
             continue;
           };
@@ -602,7 +632,7 @@ impl Render for TreeState {
               }));
           }
 
-          items.push(row);
+          items.push(row.into_any_element());
         }
 
         items
@@ -622,6 +652,7 @@ pub struct Tree {
   style: StyleRefinement,
   render_item: TreeRenderItem,
   context_menu_builder: Option<TreeContextMenuBuilder>,
+  bottom_gap: Option<Pixels>,
 }
 
 impl Focusable for Tree {
@@ -645,6 +676,7 @@ impl Tree {
           .into_any_element()
       }),
       context_menu_builder: None,
+      bottom_gap: None,
     }
   }
 
@@ -670,6 +702,13 @@ impl Tree {
     self.context_menu_builder = Some(Rc::new(builder));
     self
   }
+
+  /// Set a bottom gap (in pixels) so the user can scroll past the last
+  /// element.
+  pub fn bottom_gap(mut self, gap: impl Into<Pixels>) -> Self {
+    self.bottom_gap = Some(gap.into());
+    self
+  }
 }
 
 impl_styled!(Tree);
@@ -682,6 +721,9 @@ impl RenderOnce for Tree {
     self.state.update(cx, |state, _| {
       state.render_item = self.render_item;
       state.context_menu_builder = self.context_menu_builder;
+      if let Some(gap) = self.bottom_gap {
+        state.bottom_gap = Some(gap);
+      }
     });
 
     let tree_view = self.state.clone();
@@ -700,7 +742,6 @@ impl RenderOnce for Tree {
       .on_action(window.listener_for(&self.state, TreeState::on_action_down))
       .size_full()
       .child(self.state)
-      .child(div().h_16().flex_shrink_0()) // Bottom padding
       .refine_style(&self.style)
       .vertical_scrollbar(&scroll_handle)
       .context_menu(move |menu, window, cx| {
