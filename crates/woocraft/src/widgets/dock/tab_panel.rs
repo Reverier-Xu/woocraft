@@ -623,6 +623,7 @@ impl TabPanel {
     h_flex()
       .flex_none()
       .flex_shrink_0()
+      .container_gap(Size::Medium)
       .items_center()
       .occlude()
       .when_some(self.toolbar_buttons(window, cx), |this, buttons| {
