@@ -1,8 +1,8 @@
 //! Linear progress indicator showing completion status as a percentage.
 //!
-//! Progress displays a filled bar representing progress from 0% to 100%, typically
-//! used during file uploads, downloads, or long-running operations. Includes an
-//! optional label and percentage text, with customizable colors.
+//! Progress displays a filled bar representing progress from 0% to 100%,
+//! typically used during file uploads, downloads, or long-running operations.
+//! Includes an optional label and percentage text, with customizable colors.
 
 use std::f32::consts::TAU;
 
@@ -16,9 +16,9 @@ use crate::{ActiveTheme, Size, StyledExt, h_flex, translate};
 #[derive(IntoElement)]
 /// Linear progress bar showing completion percentage.
 ///
-/// Renders a horizontal bar where the filled portion represents progress (0-100%).
-/// Displays an optional label and percentage text above the bar. The track color
-/// defaults to a semi-transparent version of the fill color.
+/// Renders a horizontal bar where the filled portion represents progress
+/// (0-100%). Displays an optional label and percentage text above the bar. The
+/// track color defaults to a semi-transparent version of the fill color.
 pub struct Progress {
   style: StyleRefinement,
   color: Option<Hsla>,
@@ -36,7 +36,8 @@ impl Default for Progress {
 }
 
 impl Progress {
-  /// Creates a new progress bar with 0% completion and default "Loading..." label.
+  /// Creates a new progress bar with 0% completion and default "Loading..."
+  /// label.
   pub fn new() -> Self {
     Self {
       value: 0.0,
@@ -73,7 +74,8 @@ impl Progress {
     self
   }
 
-  /// Sets the text color for label and percentage (defaults to theme muted foreground).
+  /// Sets the text color for label and percentage (defaults to theme muted
+  /// foreground).
   pub fn text_color(mut self, color: impl Into<Hsla>) -> Self {
     self.text_color = Some(color.into());
     self

@@ -28,27 +28,34 @@ pub(crate) fn init(cx: &mut App) {
 
 /// A high-performance table element with virtual scrolling and cell selection.
 ///
-/// `Table` is the primary user-facing component for displaying tabular data. It wraps a
-/// [`TableState`] and delegates rendering to it. Configuration happens via builder methods
-/// on `Table` itself; the underlying state manages interaction, selection, and keyboard
-/// handling.
+/// `Table` is the primary user-facing component for displaying tabular data. It
+/// wraps a [`TableState`] and delegates rendering to it. Configuration happens
+/// via builder methods on `Table` itself; the underlying state manages
+/// interaction, selection, and keyboard handling.
 ///
 /// # Features
-/// - **Virtual Scrolling**: Efficient rendering of large datasets (tested with 100k+ rows)
-/// - **Multiple Selection Modes**: Row selection, column selection, or individual cell selection
-/// - **Keyboard Navigation**: Full keyboard support (arrow keys, Tab, Home/End, PageUp/Down)
-/// - **Customizable Rendering**: Per-cell, per-column, and per-row custom rendering via delegate
+/// - **Virtual Scrolling**: Efficient rendering of large datasets (tested with
+///   100k+ rows)
+/// - **Multiple Selection Modes**: Row selection, column selection, or
+///   individual cell selection
+/// - **Keyboard Navigation**: Full keyboard support (arrow keys, Tab, Home/End,
+///   PageUp/Down)
+/// - **Customizable Rendering**: Per-cell, per-column, and per-row custom
+///   rendering via delegate
 /// - **Visual Customization**: Striping, borders, scrollbar visibility
 ///
 /// # Configuration
-/// Configuration happens at the [`TableState`] level (via the delegate) and at the `Table`
-/// rendering level (via builder methods). Most configuration should happen before adding the
-/// table to the UI tree to avoid unnecessary re-renders.
+/// Configuration happens at the [`TableState`] level (via the delegate) and at
+/// the `Table` rendering level (via builder methods). Most configuration should
+/// happen before adding the table to the UI tree to avoid unnecessary
+/// re-renders.
 ///
 /// # Selection Modes
 /// The delegate determines selection behavior:
-/// - **Row Selection**: Click rows to select entire rows; keyboard selects adjacent rows
-/// - **Cell Selection**: Click individual cells; keyboard navigates cell-by-cell
+/// - **Row Selection**: Click rows to select entire rows; keyboard selects
+///   adjacent rows
+/// - **Cell Selection**: Click individual cells; keyboard navigates
+///   cell-by-cell
 /// - **Multi-Select**: Hold Shift to extend selection; Ctrl/Cmd to toggle cells
 ///
 /// # Example
@@ -67,9 +74,10 @@ pub(crate) fn init(cx: &mut App) {
 /// ```
 ///
 /// # Performance Characteristics
-/// The table uses virtual scrolling, so rendering time and memory are **O(viewport_height)**,
-/// not O(row_count). This means:
-/// - 100 rows with the same performance as 10,000 rows (if viewport fits ~20 rows)
+/// The table uses virtual scrolling, so rendering time and memory are
+/// **O(viewport_height)**, not O(row_count). This means:
+/// - 100 rows with the same performance as 10,000 rows (if viewport fits ~20
+///   rows)
 /// - Smooth scrolling and fast initial render regardless of data size
 /// - Horizontal scrolling within cells also uses virtualization
 ///
@@ -94,8 +102,9 @@ where
 {
   /// Create a new Table element with the given [`TableState`].
   ///
-  /// The [`TableState`] typically comes from `cx.new(|cx| TableState::new(delegate, cx))`.
-  /// Configuration such as selection mode happens on the state, not on the Table itself.
+  /// The [`TableState`] typically comes from `cx.new(|cx|
+  /// TableState::new(delegate, cx))`. Configuration such as selection mode
+  /// happens on the state, not on the Table itself.
   pub fn new(state: &Entity<TableState<D>>) -> Self {
     Self {
       state: state.clone(),
@@ -110,7 +119,8 @@ where
 
   /// Enable alternating row background colors for improved readability.
   ///
-  /// When enabled, even-numbered rows use a slightly darker background. Default: `false`.
+  /// When enabled, even-numbered rows use a slightly darker background.
+  /// Default: `false`.
   pub fn stripe(mut self, stripe: bool) -> Self {
     self.stripe = stripe;
     self
@@ -126,8 +136,8 @@ where
 
   /// Control scrollbar visibility for vertical and horizontal directions.
   ///
-  /// Scrollbars appear automatically only when content exceeds viewport size, but can be
-  /// hidden entirely with `false`. Default: both `true`.
+  /// Scrollbars appear automatically only when content exceeds viewport size,
+  /// but can be hidden entirely with `false`. Default: both `true`.
   ///
   /// # Arguments
   /// * `vertical` - Show vertical (up/down) scrollbar
@@ -140,8 +150,8 @@ where
 
   /// Add bottom padding (in pixels) so users can scroll past the last row.
   ///
-  /// Useful for ensuring the last row isn't hidden behind fixed UI elements or to improve
-  /// visual balance. Optional.
+  /// Useful for ensuring the last row isn't hidden behind fixed UI elements or
+  /// to improve visual balance. Optional.
   pub fn bottom_gap(mut self, gap: impl Into<Pixels>) -> Self {
     self.bottom_gap = Some(gap.into());
     self

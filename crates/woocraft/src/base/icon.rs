@@ -1,9 +1,9 @@
 //! Icon system with support for built-in icons and custom icon registration.
 //!
 //! Provides a comprehensive icon rendering system with 300+ pre-defined icons
-//! from the Feather icon set. Icons can be customized: change size, color (text color),
-//! rotation, and enable/disable colorization. Supports custom icon registration for
-//! user-defined SVG icons beyond the built-in set.
+//! from the Feather icon set. Icons can be customized: change size, color (text
+//! color), rotation, and enable/disable colorization. Supports custom icon
+//! registration for user-defined SVG icons beyond the built-in set.
 
 #[cfg(debug_assertions)]
 use std::collections::HashSet;
@@ -14,16 +14,16 @@ use std::{
 
 use gpui::{
   AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
-  SharedString, StyleRefinement, Styled, Svg, Transformation, Window, prelude::FluentBuilder as _,
-  svg,
+  SharedString, StyleRefinement, Styled, Svg, Transformation, Window, img,
+  prelude::FluentBuilder as _, svg,
 };
 
 use crate::base::{Sizable, Size};
 
-
 /// Trait for types that can be converted to an icon path/name.
 ///
-/// Implement this trait for custom icon name types to support conversion to Icon.
+/// Implement this trait for custom icon name types to support conversion to
+/// Icon.
 pub trait IconNamed {
   fn path(self) -> SharedString;
 }
@@ -83,7 +83,8 @@ fn resolve_icon_path(name_or_path: &str) -> SharedString {
 /// Registers a custom icon in the global registry.
 ///
 /// Maps a custom name to an SVG asset path. Once registered, the icon can be
-/// used anywhere by its custom name (name takes precedence over path resolution).
+/// used anywhere by its custom name (name takes precedence over path
+/// resolution).
 pub fn register_icon(name: impl Into<SharedString>, path: impl Into<SharedString>) {
   let name = name.into().to_string();
   let path = path.into();
@@ -169,9 +170,10 @@ impl RenderOnce for IconName {
 #[derive(IntoElement)]
 /// SVG-based icon with customizable size, color, and rotation.
 ///
-/// Icon renders as an inline SVG, defaulting to 1em size and inheriting text color.
-/// Supports 300+ built-in icons from IconName enum, or use custom SVG paths.
-/// Can be rotated, resized, and colorized (or kept as original SVG colors).
+/// Icon renders as an inline SVG, defaulting to 1em size and inheriting text
+/// color. Supports 300+ built-in icons from IconName enum, or use custom SVG
+/// paths. Can be rotated, resized, and colorized (or kept as original SVG
+/// colors).
 pub struct Icon {
   base: Svg,
   style: StyleRefinement,
@@ -224,7 +226,8 @@ impl Icon {
 
   /// Sets the SVG asset path for this icon.
   ///
-  /// Can be a built-in icon name (resolved via IconName) or a custom asset path.
+  /// Can be a built-in icon name (resolved via IconName) or a custom asset
+  /// path.
   pub fn path(mut self, path: impl Into<SharedString>) -> Self {
     self.path = path.into();
     self
@@ -297,15 +300,27 @@ impl RenderOnce for Icon {
     let text_size = window.text_style().font_size.to_pixels(window.rem_size());
     let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
 
-    let mut base = self.base;
-    *base.style() = self.style;
+    if self.colorized {
+      let mut base = self.base;
+      *base.style() = self.style;
 
-    base
-      .flex_shrink_0()
-      .when(self.colorized, |this| this.text_color(text_color))
-      .when(!has_base_size, |this| this.size(text_size))
-      .when_some(self.size, |this, size| this.size(size.icon_size()))
-      .path(self.path)
+      base
+        .flex_shrink_0()
+        .text_color(text_color)
+        .when(!has_base_size, |this| this.size(text_size))
+        .when_some(self.size, |this, size| this.size(size.icon_size()))
+        .path(self.path)
+        .into_any_element()
+    } else {
+      let mut base = img(self.path);
+      *base.style() = self.style;
+
+      base
+        .flex_shrink_0()
+        .when(!has_base_size, |this| this.size(text_size))
+        .when_some(self.size, |this, size| this.size(size.icon_size()))
+        .into_any_element()
+    }
   }
 }
 
@@ -324,17 +339,29 @@ impl Render for Icon {
     let text_size = window.text_style().font_size.to_pixels(window.rem_size());
     let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
 
-    let mut base = svg().flex_none();
-    *base.style() = self.style.clone();
+    if self.colorized {
+      let mut base = svg().flex_none();
+      *base.style() = self.style.clone();
 
-    base
-      .flex_shrink_0()
-      .when(self.colorized, |this| this.text_color(text_color))
-      .when(!has_base_size, |this| this.size(text_size))
-      .when_some(self.size, |this, size| this.size(size.icon_size()))
-      .path(self.path.clone())
-      .when_some(self.rotation, |this, rotation| {
-        this.with_transformation(Transformation::rotate(rotation))
-      })
+      base
+        .flex_shrink_0()
+        .text_color(text_color)
+        .when(!has_base_size, |this| this.size(text_size))
+        .when_some(self.size, |this, size| this.size(size.icon_size()))
+        .path(self.path.clone())
+        .when_some(self.rotation, |this, rotation| {
+          this.with_transformation(Transformation::rotate(rotation))
+        })
+        .into_any_element()
+    } else {
+      let mut base = img(self.path.clone());
+      *base.style() = self.style.clone();
+
+      base
+        .flex_shrink_0()
+        .when(!has_base_size, |this| this.size(text_size))
+        .when_some(self.size, |this, size| this.size(size.icon_size()))
+        .into_any_element()
+    }
   }
 }

@@ -1,8 +1,8 @@
 //! Color system for interactive component states.
 //!
-//! Provides InteractionColors for consistent styling of interactive elements across
-//! different states (hover, active, disabled). Includes ColorExt trait for color
-//! manipulation operations (darken, lighten, adjust opacity, etc.).
+//! Provides InteractionColors for consistent styling of interactive elements
+//! across different states (hover, active, disabled). Includes ColorExt trait
+//! for color manipulation operations (darken, lighten, adjust opacity, etc.).
 
 use gpui::Hsla;
 
@@ -11,7 +11,8 @@ use crate::base::theme::opacity;
 /// Color palette for interactive components across all states.
 ///
 /// Defines base, foreground, border, hover, and active colors for consistent
-/// interactive element styling. Supports solid, transparent, and outline color modes.
+/// interactive element styling. Supports solid, transparent, and outline color
+/// modes.
 #[derive(Debug, Clone, Copy)]
 pub struct InteractionColors {
   /// Base/background color for the component.
@@ -29,7 +30,8 @@ pub struct InteractionColors {
 impl InteractionColors {
   /// Creates interactive colors for a solid (filled) button style.
   ///
-  /// Base is the filled color, hover/active use opacity adjustments (0.8 and 0.6).
+  /// Base is the filled color, hover/active use opacity adjustments (0.8 and
+  /// 0.6).
   pub fn solid(color: Hsla, foreground: Hsla) -> Self {
     Self {
       base: color,
@@ -48,7 +50,8 @@ impl InteractionColors {
 
   /// Creates interactive colors for a transparent (ghost) button style.
   ///
-  /// Base is transparent, foreground is visible. Hover/active use opacity to show interaction.
+  /// Base is transparent, foreground is visible. Hover/active use opacity to
+  /// show interaction.
   pub fn transparent(foreground: Hsla) -> Self {
     Self {
       base: Hsla::transparent_black(),
@@ -67,7 +70,8 @@ impl InteractionColors {
 
   /// Creates interactive colors for an outline (border-only) button style.
   ///
-  /// Base is transparent with visible border. Foreground and border use the provided color.
+  /// Base is transparent with visible border. Foreground and border use the
+  /// provided color.
   pub fn outline(color: Hsla, foreground: Hsla) -> Self {
     Self {
       base: Hsla::transparent_black(),
@@ -93,8 +97,9 @@ impl InteractionColors {
 
 /// Extension trait for color manipulation on Hsla colors.
 ///
-/// Provides convenient methods for common color adjustments: opacity/alpha changes,
-/// saturation adjustment, blending, and lightness changes (darken/lighten).
+/// Provides convenient methods for common color adjustments: opacity/alpha
+/// changes, saturation adjustment, blending, and lightness changes
+/// (darken/lighten).
 pub trait ColorExt: Sized {
   /// Sets the opacity/alpha value (0.0 = transparent, 1.0 = opaque).
   fn opacity(self, alpha: f32) -> Self;

@@ -1,9 +1,10 @@
-//! Navigation breadcrumb trail showing the user's current location in a hierarchy.
+//! Navigation breadcrumb trail showing the user's current location in a
+//! hierarchy.
 //!
-//! Breadcrumb displays a sequence of navigation items separated by chevron icons,
-//! helping users understand and navigate the document structure. The last item
-//! is typically the current page and appears in normal color; earlier items are
-//! dimmed and clickable to jump to parent levels.
+//! Breadcrumb displays a sequence of navigation items separated by chevron
+//! icons, helping users understand and navigate the document structure. The
+//! last item is typically the current page and appears in normal color; earlier
+//! items are dimmed and clickable to jump to parent levels.
 //!
 //! # Example
 //! ```rust,ignore
@@ -30,8 +31,9 @@ type BreadcrumbClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 #[derive(IntoElement)]
 /// Navigation breadcrumb trail showing document hierarchy.
 ///
-/// Container for a sequence of clickable breadcrumb items separated by chevrons.
-/// The last item displays in normal text color; prior items are dimmed.
+/// Container for a sequence of clickable breadcrumb items separated by
+/// chevrons. The last item displays in normal text color; prior items are
+/// dimmed.
 pub struct Breadcrumb {
   style: StyleRefinement,
   size: Size,

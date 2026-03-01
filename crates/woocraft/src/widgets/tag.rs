@@ -1,12 +1,14 @@
 //! Styled label component for categorization and filtering.
 //!
-//! Tag displays short text content with colored background and border, typically used
-//! to label categories, tags, statuses, or filter options. Supports 6 semantic color variants
-//! (Primary, Secondary, Danger, Success, Warning, Info) plus fully custom color settings.
+//! Tag displays short text content with colored background and border,
+//! typically used to label categories, tags, statuses, or filter options.
+//! Supports 6 semantic color variants (Primary, Secondary, Danger, Success,
+//! Warning, Info) plus fully custom color settings.
 //!
 //! # Features
 //! - **Semantic variants**: Primary, Secondary, Danger, Success, Warning, Info
-//! - **Custom colors**: Full control over background, foreground, and border colors
+//! - **Custom colors**: Full control over background, foreground, and border
+//!   colors
 //! - **Outline mode**: Transparent background with colored border and text
 //! - **Rounded corners**: Configurable radius or fully rounded (pill) style
 //! - **Flexible size**: Inherits from Size trait (Small, Medium, Large)
@@ -51,9 +53,9 @@ pub enum TagVariant {
 #[derive(IntoElement)]
 /// Styled label/chip component for categorization and status indication.
 ///
-/// Tag renders as a colored pill-shaped label with optional border. Commonly used
-/// in filtering interfaces, category lists, and status indicators. Supports
-/// both filled and outline (hollow) display modes.
+/// Tag renders as a colored pill-shaped label with optional border. Commonly
+/// used in filtering interfaces, category lists, and status indicators.
+/// Supports both filled and outline (hollow) display modes.
 pub struct Tag {
   style: StyleRefinement,
   variant: TagVariant,
@@ -118,7 +120,8 @@ impl Tag {
     Self::new().with_variant(TagVariant::Info)
   }
 
-  /// Creates a custom tag with specified background, foreground, and border colors.
+  /// Creates a custom tag with specified background, foreground, and border
+  /// colors.
   ///
   /// Use this to override theme colors with specific RGB(A) values for unique
   /// color combinations not covered by semantic variants.
@@ -130,15 +133,18 @@ impl Tag {
       .custom_border(border)
   }
 
-  /// Sets the color variant (Primary, Secondary, Danger, Success, Warning, Info, Custom).
+  /// Sets the color variant (Primary, Secondary, Danger, Success, Warning,
+  /// Info, Custom).
   pub fn with_variant(mut self, variant: TagVariant) -> Self {
     self.variant = variant;
     self
   }
 
-  /// Switches to outline mode (transparent background, colored border and text).
+  /// Switches to outline mode (transparent background, colored border and
+  /// text).
   ///
-  /// When enabled, background becomes transparent and border/text use the variant color.
+  /// When enabled, background becomes transparent and border/text use the
+  /// variant color.
   pub fn outline(mut self) -> Self {
     self.outline = true;
     self

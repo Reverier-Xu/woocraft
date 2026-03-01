@@ -1,16 +1,20 @@
 //! Date picker calendar component with month/year navigation.
 //!
-//! Calendar provides an interactive month-view widget for selecting single dates or date ranges.
-//! Users can navigate months, years, and decades with dedicated buttons. Supports custom
-//! disabled date rules via matcher predicates. Typically used as the underlying component
-//! for date picker popups, though it can be embedded directly in forms.
+//! Calendar provides an interactive month-view widget for selecting single
+//! dates or date ranges. Users can navigate months, years, and decades with
+//! dedicated buttons. Supports custom disabled date rules via matcher
+//! predicates. Typically used as the underlying component for date picker
+//! popups, though it can be embedded directly in forms.
 //!
 //! # Features
 //! - **Single or Range Selection**: Pick one date or a continuous date range
-//! - **Month/Year Navigation**: Arrows to move between months, year/decade picker for faster navigation
-//! - **Disabled Dates**: Define custom rules to disable specific dates (e.g., weekends, past dates)
+//! - **Month/Year Navigation**: Arrows to move between months, year/decade
+//!   picker for faster navigation
+//! - **Disabled Dates**: Define custom rules to disable specific dates (e.g.,
+//!   weekends, past dates)
 //! - **Today Indicator**: Visual highlight of the current date
-//! - **Multi-Month View**: Optionally display 2+ months side-by-side (for range selection)
+//! - **Multi-Month View**: Optionally display 2+ months side-by-side (for range
+//!   selection)
 //! - **Keyboard Accessible**: Tab support and focus management
 //!
 //! # Example
@@ -27,9 +31,10 @@
 //! ```
 //!
 //! # Performance Notes
-//! Calendar renders efficiently even for large date ranges. The disabled matcher is evaluated
-//! per cell, so keep matcher predicates fast. Navigation between months/years is instant as
-//! date calculations happen in-place without re-rendering the entire grid.
+//! Calendar renders efficiently even for large date ranges. The disabled
+//! matcher is evaluated per cell, so keep matcher predicates fast. Navigation
+//! between months/years is instant as date calculations happen in-place without
+//! re-rendering the entire grid.
 
 use std::rc::Rc;
 
@@ -77,12 +82,14 @@ impl ViewMode {
 #[derive(IntoElement)]
 /// Interactive calendar widget for date selection.
 ///
-/// `Calendar` provides a month-view grid with navigation controls for picking single
-/// dates or continuous date ranges. The component manages internal state (current month/year,
-/// selection, year page) while delegating styling and sizing to the parent context via traits.
+/// `Calendar` provides a month-view grid with navigation controls for picking
+/// single dates or continuous date ranges. The component manages internal state
+/// (current month/year, selection, year page) while delegating styling and
+/// sizing to the parent context via traits.
 ///
-/// Most configuration happens through the associated `CalendarState`, accessed via context
-/// updates. The `Calendar` itself is a relatively thin wrapper around the renderer.
+/// Most configuration happens through the associated `CalendarState`, accessed
+/// via context updates. The `Calendar` itself is a relatively thin wrapper
+/// around the renderer.
 pub struct Calendar {
   id: ElementId,
   size: Size,
@@ -94,13 +101,15 @@ pub struct Calendar {
 
 /// Internal state management for the calendar component.
 ///
-/// Manages the current view mode (day/month/year), selected date(s), current month/year,
-/// year pagination, and disabled date rules. Updates to CalendarState trigger calendar
-/// re-renders and emit `CalendarEvent` when dates are selected.
+/// Manages the current view mode (day/month/year), selected date(s), current
+/// month/year, year pagination, and disabled date rules. Updates to
+/// CalendarState trigger calendar re-renders and emit `CalendarEvent` when
+/// dates are selected.
 ///
 /// # Configuration Methods
 /// - `disabled_matcher()`: Define which dates cannot be selected
-/// - `set_number_of_months()`: Display multiple months (useful for range selection)
+/// - `set_number_of_months()`: Display multiple months (useful for range
+///   selection)
 /// - `year_range()`: Set the range of years available for navigation
 pub struct CalendarState {
   focus_handle: FocusHandle,
@@ -119,7 +128,8 @@ pub struct CalendarState {
 impl CalendarState {
   /// Create a new calendar state with today's date as the initial view.
   ///
-  /// Defaults to single-month view, Day mode, and a 100-year range (±50 years from current year).
+  /// Defaults to single-month view, Day mode, and a 100-year range (±50 years
+  /// from current year).
   pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
     let today = local_today();
     Self {
@@ -139,7 +149,8 @@ impl CalendarState {
 
   /// Set a matcher for disabling specific dates.
   ///
-  /// Any date matching the `Matcher` predicate cannot be selected. Builder method.
+  /// Any date matching the `Matcher` predicate cannot be selected. Builder
+  /// method.
   pub fn disabled_matcher(mut self, matcher: impl Into<Matcher>) -> Self {
     self.disabled_matcher = Some(Rc::new(matcher.into()));
     self
@@ -147,19 +158,21 @@ impl CalendarState {
 
   /// Update the disabled date matcher on an existing calendar.
   ///
-  /// The disabled matcher determines which dates appear grayed out and cannot be clicked.
-  /// Use `Matcher::weekends()` to disable weekends, or construct custom matchers.
+  /// The disabled matcher determines which dates appear grayed out and cannot
+  /// be clicked. Use `Matcher::weekends()` to disable weekends, or construct
+  /// custom matchers.
   pub fn set_disabled_matcher(
     &mut self, disabled: impl Into<Matcher>, _: &mut Window, _: &mut Context<Self>,
   ) {
     self.disabled_matcher = Some(Rc::new(disabled.into()));
   }
 
-  /// Set the selected date(s) and update the calendar view to show the selection.
+  /// Set the selected date(s) and update the calendar view to show the
+  /// selection.
   ///
   /// For `Date::Single(Some(date))`, the calendar jumps to that month.
-  /// For `Date::Range(Some(start), Some(end))`, jumps to the month of the start date.
-  /// If the date matches the disabled matcher, the change is ignored.
+  /// For `Date::Range(Some(start), Some(end))`, jumps to the month of the start
+  /// date. If the date matches the disabled matcher, the change is ignored.
   pub fn set_date(&mut self, date: impl Into<Date>, _: &mut Window, cx: &mut Context<Self>) {
     let date = date.into();
     let invalid = self
@@ -193,8 +206,8 @@ impl CalendarState {
 
   /// Set the number of months to display horizontally.
   ///
-  /// Useful for range pickers where showing 2 months side-by-side helps users compare dates.
-  /// Default: 1.
+  /// Useful for range pickers where showing 2 months side-by-side helps users
+  /// compare dates. Default: 1.
   pub fn set_number_of_months(
     &mut self, number_of_months: usize, _: &mut Window, cx: &mut Context<Self>,
   ) {
@@ -204,8 +217,8 @@ impl CalendarState {
 
   /// Set the year range available for navigation.
   ///
-  /// Years are grouped into pages of 20. Default range: ±50 years from current year.
-  /// # Arguments
+  /// Years are grouped into pages of 20. Default range: ±50 years from current
+  /// year. # Arguments
   /// * `range` - Tuple of (start_year, end_year) inclusive
   pub fn year_range(mut self, range: (i32, i32)) -> Self {
     self.years = (range.0..range.1)

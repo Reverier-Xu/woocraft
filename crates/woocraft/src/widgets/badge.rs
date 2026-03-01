@@ -1,17 +1,19 @@
 //! Notification badge component for displaying counts, status dots, or icons.
 //!
-//! Badge is a small overlay element typically positioned on top of buttons or list items
-//! to indicate notifications, unread counts, or status. Supports three display modes:
-//! numeric count (with optional max), simple dot, or custom icon. Commonly placed in
-//! the top-right corner of avatars or buttons.
+//! Badge is a small overlay element typically positioned on top of buttons or
+//! list items to indicate notifications, unread counts, or status. Supports
+//! three display modes: numeric count (with optional max), simple dot, or
+//! custom icon. Commonly placed in the top-right corner of avatars or buttons.
 //!
 //! # Features
-//! - **Numeric Display**: Show unread/notification count (auto-capped at max value like "99+")
+//! - **Numeric Display**: Show unread/notification count (auto-capped at max
+//!   value like "99+")
 //! - **Simple Dot**: Minimal notification indicator (no number)
 //! - **Icon Mode**: Display custom status icon instead of count
 //! - **Color Control**: Customizable background color (default: danger/red)
 //! - **Size Variants**: Small, Medium, Large sizing options
-//! - **Visibility Control**: Automatically hides when count is zero (for number mode)
+//! - **Visibility Control**: Automatically hides when count is zero (for number
+//!   mode)
 //!
 //! # Example
 //! ```rust,ignore
@@ -46,9 +48,10 @@ enum BadgeVariant {
 #[derive(IntoElement)]
 /// Small notification or status indicator badge.
 ///
-/// Badge is an overlay component positioned on top of other UI elements (buttons, avatars,
-/// icons) to show notifications or status. Displays as a colored circle with a count,
-/// simple dot, or icon. Designed to be nested as a child of other elements.
+/// Badge is an overlay component positioned on top of other UI elements
+/// (buttons, avatars, icons) to show notifications or status. Displays as a
+/// colored circle with a count, simple dot, or icon. Designed to be nested as a
+/// child of other elements.
 pub struct Badge {
   style: StyleRefinement,
   count: usize,
@@ -84,8 +87,8 @@ impl Badge {
 
   /// Switch badge to simple dot mode (no number).
   ///
-  /// Shows a small colored circle instead of a count. Useful for online status or
-  /// simple presence indicators. Builder method.
+  /// Shows a small colored circle instead of a count. Useful for online status
+  /// or simple presence indicators. Builder method.
   pub fn dot(mut self) -> Self {
     self.variant = BadgeVariant::Dot;
     self
@@ -93,8 +96,8 @@ impl Badge {
 
   /// Set the notification count to display.
   ///
-  /// The count is capped at the maximum value set via `max()`. Zero hides the badge
-  /// in numeric mode.
+  /// The count is capped at the maximum value set via `max()`. Zero hides the
+  /// badge in numeric mode.
   pub fn count(mut self, count: usize) -> Self {
     self.count = count;
     self

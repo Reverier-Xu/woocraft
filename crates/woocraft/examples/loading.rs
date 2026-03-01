@@ -325,8 +325,8 @@ impl LoadingWindow {
           .rounded(cx.theme().radius_container)
           .bg(cx.theme().card)
           .p_2()
-          .child(
-            tree(&self.tree_state).bottom_gap(px(64.)).context_menu(move |ix, entry, menu, _window, _cx| {
+          .child(tree(&self.tree_state).bottom_gap(px(64.)).context_menu(
+            move |ix, entry, menu, _window, _cx| {
               let label = entry.item().label.clone();
               let is_folder = entry.is_folder();
               let tree_entity = tree_state_for_menu.clone();
@@ -350,8 +350,8 @@ impl LoadingWindow {
                     });
                   }),
                 )
-            }),
-          ),
+            },
+          )),
       )
   }
 

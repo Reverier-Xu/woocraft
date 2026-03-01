@@ -38,8 +38,9 @@ impl NaiveDateExt for NaiveDate {
 
 /// Selected date value for calendar and date picker widgets.
 ///
-/// Can represent a single date or a date range. Each variant can be empty (None values),
-/// indicating no selection yet. Used for capturing user input in date selection components.
+/// Can represent a single date or a date range. Each variant can be empty (None
+/// values), indicating no selection yet. Used for capturing user input in date
+/// selection components.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Date {
   /// Single date selection (None = no date selected).
@@ -79,7 +80,8 @@ impl Date {
     matches!(self, Self::Single(Some(_)) | Self::Range(Some(_), _))
   }
 
-  /// Returns true if the date is completely selected (single date or complete range).
+  /// Returns true if the date is completely selected (single date or complete
+  /// range).
   pub fn is_complete(&self) -> bool {
     matches!(self, Self::Single(Some(_)) | Self::Range(Some(_), Some(_)))
   }
@@ -117,7 +119,8 @@ impl Date {
     matches!(self, Self::Single(_))
   }
 
-  /// Checks if a value is one of the active endpoints (single date or range start/end).
+  /// Checks if a value is one of the active endpoints (single date or range
+  /// start/end).
   pub fn is_active(&self, value: &NaiveDate) -> bool {
     let value = *value;
     match self {
@@ -126,7 +129,8 @@ impl Date {
     }
   }
 
-  /// Checks if a value falls within a selected range (returns false for single dates).
+  /// Checks if a value falls within a selected range (returns false for single
+  /// dates).
   pub fn is_in_range(&self, value: &NaiveDate) -> bool {
     let value = *value;
     match self {

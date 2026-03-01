@@ -1,9 +1,10 @@
 //! Toggle switch component for boolean state selection.
 //!
-//! Switch provides an animated toggle between on/off states. Smoother and more touch-friendly
-//! than checkbox for binary choices. Animated sliding thumb indicates state change. Supports
-//! 4 color variants (Primary, Success, Warning, Danger) and optional label text. Common in
-//! settings panels, feature toggles, and mobile-style UI.
+//! Switch provides an animated toggle between on/off states. Smoother and more
+//! touch-friendly than checkbox for binary choices. Animated sliding thumb
+//! indicates state change. Supports 4 color variants (Primary, Success,
+//! Warning, Danger) and optional label text. Common in settings panels, feature
+//! toggles, and mobile-style UI.
 //!
 //! # Features
 //! - **Animated Toggle**: Smooth sliding animation when toggled
@@ -59,8 +60,8 @@ pub enum SwitchVariant {
 
 /// Convenience trait for types that support switch variant styling.
 ///
-/// Provides shorthand methods for setting switch color variants without explicitly
-/// constructing `SwitchVariant` enum values.
+/// Provides shorthand methods for setting switch color variants without
+/// explicitly constructing `SwitchVariant` enum values.
 pub trait SwitchVariants: Sized {
   /// Set the switch variant directly.
   fn with_variant(self, variant: SwitchVariant) -> Self;
@@ -89,9 +90,10 @@ pub trait SwitchVariants: Sized {
 #[derive(IntoElement)]
 /// Animated toggle switch for boolean on/off selection.
 ///
-/// Switch renders as a rounded pill-shaped control with an animated sliding thumb.
-/// Toggled by clicking or pressing Space. Uses smooth animation to indicate state change.
-/// Great for settings, feature toggles, and any binary on/off configuration.
+/// Switch renders as a rounded pill-shaped control with an animated sliding
+/// thumb. Toggled by clicking or pressing Space. Uses smooth animation to
+/// indicate state change. Great for settings, feature toggles, and any binary
+/// on/off configuration.
 pub struct Switch {
   id: ElementId,
   style: StyleRefinement,
@@ -132,8 +134,8 @@ impl Switch {
 
   /// Sets an optional text label to display next to the switch.
   ///
-  /// The label appears to the right of the toggle pill, typically used to describe
-  /// what the switch controls (e.g., "Enable notifications").
+  /// The label appears to the right of the toggle pill, typically used to
+  /// describe what the switch controls (e.g., "Enable notifications").
   pub fn label(mut self, label: impl Into<SharedString>) -> Self {
     self.label = Some(label.into());
     self

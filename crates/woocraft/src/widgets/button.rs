@@ -1,17 +1,22 @@
-//! Interactive button component with support for multiple visual variants, sizes, and states.
+//! Interactive button component with support for multiple visual variants,
+//! sizes, and states.
 //!
-//! Buttons are fundamental interactive elements used to trigger actions or navigate between views.
-//! This implementation provides a rich feature set including variant styling, loading states, icons,
-//! tooltips, and accessibility support via keyboard navigation.
+//! Buttons are fundamental interactive elements used to trigger actions or
+//! navigate between views. This implementation provides a rich feature set
+//! including variant styling, loading states, icons, tooltips, and
+//! accessibility support via keyboard navigation.
 //!
 //! # Features
-//! - **8 Visual Variants**: Primary, Success, Warning, Info, Default, Link, Flat, Danger
-//! - **Size Variations**: Small, Medium (default), Large for different UI contexts
+//! - **8 Visual Variants**: Primary, Success, Warning, Info, Default, Link,
+//!   Flat, Danger
+//! - **Size Variations**: Small, Medium (default), Large for different UI
+//!   contexts
 //! - **State Management**: Supports disabled, loading, and selected states
 //! - **Icon Support**: Optional leading icon or loading spinner with animation
 //! - **Customization**: Outline style, border corner control, width expansion
 //! - **Interactivity**: Click handlers, hover callbacks, tooltips
-//! - **Accessibility**: Keyboard tab navigation with configurable tab stop and index
+//! - **Accessibility**: Keyboard tab navigation with configurable tab stop and
+//!   index
 //!
 //! # Example
 //! ```rust,ignore
@@ -45,9 +50,10 @@
 //! ```
 //!
 //! # Performance Notes
-//! Button rendering is optimized for rapid state updates. The component recomputes styling on
-//! variant or state changes but caches icon animations. For buttons in large lists (100+),
-//! consider using `virtual_list` to only render visible buttons.
+//! Button rendering is optimized for rapid state updates. The component
+//! recomputes styling on variant or state changes but caches icon animations.
+//! For buttons in large lists (100+), consider using `virtual_list` to only
+//! render visible buttons.
 
 use std::rc::Rc;
 
@@ -72,7 +78,8 @@ type TooltipBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 /// Each variant has a specific purpose and conveys meaning through color:
 /// - **Primary**: Main call-to-action button (blue/primary color)
 /// - **Success**: Indicates a positive action or confirmation (green)
-/// - **Warning**: Alerts user to potential risks or important actions (yellow/orange)
+/// - **Warning**: Alerts user to potential risks or important actions
+///   (yellow/orange)
 /// - **Info**: Provides information or secondary action (info color)
 /// - **Default**: Standard neutral button with border (gray)
 /// - **Link**: Text-only link-style button, no background
@@ -94,19 +101,22 @@ pub enum ButtonVariant {
   /// Default neutral button. Use when variant is not semantically important.
   #[default]
   Default,
-  /// Link-style button with no background. Use for inline actions or navigation.
+  /// Link-style button with no background. Use for inline actions or
+  /// navigation.
   Link,
   /// Flat minimal button with transparent background. Use in dense UI layouts.
   Flat,
-  /// Danger/destructive button. Use only for delete, remove, or other irreversible actions.
+  /// Danger/destructive button. Use only for delete, remove, or other
+  /// irreversible actions.
   Danger,
 }
 
 /// Border radius style for button corners.
 ///
-/// Provides preset radius values that follow the design system's border radius scale,
-/// or allows custom pixel-based radius. The radius is applied to all corners by default,
-/// but can be customized per-corner using `border_corners()`.
+/// Provides preset radius values that follow the design system's border radius
+/// scale, or allows custom pixel-based radius. The radius is applied to all
+/// corners by default, but can be customized per-corner using
+/// `border_corners()`.
 #[derive(Default, Clone, Copy, Debug)]
 pub enum ButtonRounded {
   /// No rounding (sharp corners).
@@ -178,11 +188,13 @@ pub trait ButtonVariants: Sized {
   }
 }
 
-/// Interactive button element with configurable styling, state, and event handling.
+/// Interactive button element with configurable styling, state, and event
+/// handling.
 ///
-/// `Button` is typically constructed using the builder pattern via `Button::new()`, then
-/// configured using chainable methods. The component automatically handles styling changes
-/// based on variant, size, disabled state, and hover/click interactions.
+/// `Button` is typically constructed using the builder pattern via
+/// `Button::new()`, then configured using chainable methods. The component
+/// automatically handles styling changes based on variant, size, disabled
+/// state, and hover/click interactions.
 ///
 /// # Builder Example
 /// ```rust,ignore
@@ -205,7 +217,8 @@ pub trait ButtonVariants: Sized {
 /// Style is determined by the combination of variant, size, and outline flag:
 /// - `variant`: Controls semantic color and styling (8 options)
 /// - `size`: Controls padding, height, text size, and gap (via `Sizable` trait)
-/// - `outline`: Renders empty background with colored border instead of solid background
+/// - `outline`: Renders empty background with colored border instead of solid
+///   background
 #[derive(IntoElement)]
 pub struct Button {
   id: ElementId,
@@ -233,12 +246,13 @@ pub struct Button {
 impl Button {
   /// Create a new button with the given unique identifier.
   ///
-  /// The button starts with default configuration: no label, Default variant, Medium size,
-  /// and no attached handlers. Use builder methods to customize the button.
+  /// The button starts with default configuration: no label, Default variant,
+  /// Medium size, and no attached handlers. Use builder methods to customize
+  /// the button.
   ///
   /// # Arguments
-  /// * `id` - Unique identifier for the button within its window. Used for state management,
-  ///   focus handling, and accessibility.
+  /// * `id` - Unique identifier for the button within its window. Used for
+  ///   state management, focus handling, and accessibility.
   ///
   /// # Example
   /// ```rust,ignore
@@ -271,9 +285,10 @@ impl Button {
 
   /// Set the button's label text.
   ///
-  /// The label is the primary text content displayed in the button. Can be combined with
-  /// `icon()` to display both icon and text. If both `label` and `icon` are set, they are
-  /// displayed horizontally centered with spacing determined by the button's size.
+  /// The label is the primary text content displayed in the button. Can be
+  /// combined with `icon()` to display both icon and text. If both `label`
+  /// and `icon` are set, they are displayed horizontally centered with
+  /// spacing determined by the button's size.
   pub fn label(mut self, label: impl Into<SharedString>) -> Self {
     self.label = Some(label.into());
     self
@@ -281,9 +296,9 @@ impl Button {
 
   /// Set the button's leading icon.
   ///
-  /// The icon is displayed before the label text. When no label is set and this is the only
-  /// content, the button becomes square (icon-only). Icon size is determined by the button's
-  /// size setting via the `Sizable` trait.
+  /// The icon is displayed before the label text. When no label is set and this
+  /// is the only content, the button becomes square (icon-only). Icon size is
+  /// determined by the button's size setting via the `Sizable` trait.
   pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
@@ -291,11 +306,13 @@ impl Button {
 
   /// Attach a click event handler to the button.
   ///
-  /// The handler is called when the user clicks the button, unless the button is disabled
-  /// or loading. The handler receives the `ClickEvent`, mutable window and app context.
+  /// The handler is called when the user clicks the button, unless the button
+  /// is disabled or loading. The handler receives the `ClickEvent`, mutable
+  /// window and app context.
   ///
   /// # Arguments
-  /// * `handler` - Closure with signature `(event: &ClickEvent, window: &mut Window, cx: &mut App)`
+  /// * `handler` - Closure with signature `(event: &ClickEvent, window: &mut
+  ///   Window, cx: &mut App)`
   pub fn on_click(
     mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
   ) -> Self {
@@ -305,12 +322,13 @@ impl Button {
 
   /// Attach a hover state change handler.
   ///
-  /// The handler is called when the user hovers over or leaves the button. Receives a boolean
-  /// indicating whether the mouse is currently over the button. Disabled and loading buttons
-  /// do not trigger hover events.
+  /// The handler is called when the user hovers over or leaves the button.
+  /// Receives a boolean indicating whether the mouse is currently over the
+  /// button. Disabled and loading buttons do not trigger hover events.
   ///
   /// # Arguments
-  /// * `handler` - Closure with signature `(hovered: &bool, window: &mut Window, cx: &mut App)`
+  /// * `handler` - Closure with signature `(hovered: &bool, window: &mut
+  ///   Window, cx: &mut App)`
   pub fn on_hover(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
     self.on_hover = Some(Rc::new(handler));
     self
@@ -318,9 +336,9 @@ impl Button {
 
   /// Set whether the button should render in outline style.
   ///
-  /// When `true`, the button renders with a transparent background and colored border instead
-  /// of a solid background. Outline style is commonly used for secondary actions or to reduce
-  /// visual prominence. Default: `false`.
+  /// When `true`, the button renders with a transparent background and colored
+  /// border instead of a solid background. Outline style is commonly used for
+  /// secondary actions or to reduce visual prominence. Default: `false`.
   pub fn outline(mut self, outline: bool) -> Self {
     self.outline = outline;
     self
@@ -328,8 +346,8 @@ impl Button {
 
   /// Set the border radius style for all corners.
   ///
-  /// Applies the same border radius to all four corners. Use `border_corners()` to customize
-  /// per-corner. Default: `ButtonRounded::Medium`.
+  /// Applies the same border radius to all four corners. Use `border_corners()`
+  /// to customize per-corner. Default: `ButtonRounded::Medium`.
   pub fn rounded(mut self, rounded: impl Into<ButtonRounded>) -> Self {
     self.rounded = rounded.into();
     self
@@ -337,9 +355,10 @@ impl Button {
 
   /// Control which corners are rounded individually.
   ///
-  /// Allows fine-grained control over individual corner rounding, useful for buttons in
-  /// button groups where only outer corners should be rounded. Order: top-left, top-right,
-  /// bottom-left, bottom-right. Default: all `true`.
+  /// Allows fine-grained control over individual corner rounding, useful for
+  /// buttons in button groups where only outer corners should be rounded.
+  /// Order: top-left, top-right, bottom-left, bottom-right. Default: all
+  /// `true`.
   pub fn border_corners(mut self, corners: impl Into<Corners<bool>>) -> Self {
     self.border_corners = corners.into();
     self
@@ -347,8 +366,9 @@ impl Button {
 
   /// Set whether the button should expand to fill available width.
   ///
-  /// When `true`, the button grows to fill its parent's width and aligns content to the left.
-  /// Useful for full-width buttons in forms or dialogs. Default: `false`.
+  /// When `true`, the button grows to fill its parent's width and aligns
+  /// content to the left. Useful for full-width buttons in forms or dialogs.
+  /// Default: `false`.
   pub fn expand(mut self, expanded: bool) -> Self {
     self.expanded = expanded;
     self
@@ -356,8 +376,8 @@ impl Button {
 
   /// Enable or disable the button as a tab stop in keyboard navigation.
   ///
-  /// When `true`, the button can receive focus via Tab key. When `false`, the button is
-  /// skipped during keyboard navigation. Default: `true`.
+  /// When `true`, the button can receive focus via Tab key. When `false`, the
+  /// button is skipped during keyboard navigation. Default: `true`.
   pub fn tab_stop(mut self, tab_stop: bool) -> Self {
     self.tab_stop = tab_stop;
     self
@@ -365,8 +385,8 @@ impl Button {
 
   /// Set the button's tab index for keyboard navigation order.
   ///
-  /// Controls the keyboard navigation order. Buttons with higher tab index are focused after
-  /// those with lower index. Default: `0`.
+  /// Controls the keyboard navigation order. Buttons with higher tab index are
+  /// focused after those with lower index. Default: `0`.
   pub fn tab_index(mut self, tab_index: isize) -> Self {
     self.tab_index = tab_index;
     self
@@ -374,9 +394,10 @@ impl Button {
 
   /// Set the button's loading state.
   ///
-  /// When `true`, displays a loading spinner icon and disables click interactions. Useful for
-  /// async operations like form submission. The spinner animates automatically. See
-  /// `loading_icon()` to customize the spinner appearance. Default: `false`.
+  /// When `true`, displays a loading spinner icon and disables click
+  /// interactions. Useful for async operations like form submission. The
+  /// spinner animates automatically. See `loading_icon()` to customize the
+  /// spinner appearance. Default: `false`.
   pub fn loading(mut self, loading: bool) -> Self {
     self.loading = loading;
     self
@@ -384,9 +405,9 @@ impl Button {
 
   /// Set a custom loading spinner icon.
   ///
-  /// Customizes the icon displayed when `loading()` is `true`. If not set, defaults to
-  /// a standard spinner. The icon is automatically animated with rotation. Only used if
-  /// `loading()` is set to `true`.
+  /// Customizes the icon displayed when `loading()` is `true`. If not set,
+  /// defaults to a standard spinner. The icon is automatically animated with
+  /// rotation. Only used if `loading()` is set to `true`.
   pub fn loading_icon(mut self, icon: Icon) -> Self {
     self.loading_icon = Some(icon);
     self
@@ -394,9 +415,10 @@ impl Button {
 
   /// Set the button's tooltip.
   ///
-  /// The tooltip builder function is called when the user hovers over the button and should
-  /// return an `AnyView` containing the tooltip content. Use for brief help text or shortened
-  /// labels. The tooltip appears with delay and is automatically positioned.
+  /// The tooltip builder function is called when the user hovers over the
+  /// button and should return an `AnyView` containing the tooltip content.
+  /// Use for brief help text or shortened labels. The tooltip appears with
+  /// delay and is automatically positioned.
   pub fn tooltip(mut self, builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
     self.tooltip_builder = Some(Rc::new(builder));
     self

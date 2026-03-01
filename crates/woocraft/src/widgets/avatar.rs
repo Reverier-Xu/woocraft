@@ -1,17 +1,20 @@
 //! User profile picture component with automatic initial fallback.
 //!
-//! Avatar displays a user's profile image, or falls back to displaying their initials
-//! (derived from name) or a placeholder icon. Supports multiple display modes: image,
-//! initials with auto-generated background color, or custom icon. Great for user lists,
-//! headers, and comments sections.
+//! Avatar displays a user's profile image, or falls back to displaying their
+//! initials (derived from name) or a placeholder icon. Supports multiple
+//! display modes: image, initials with auto-generated background color, or
+//! custom icon. Great for user lists, headers, and comments sections.
 //!
 //! # Features
 //! - **Image Display**: Show a profile picture from local or remote source
-//! - **Initial Fallback**: Auto-extract initials from name (e.g., "John Doe" → "JD")
-//! - **Color Backgrounds**: Auto-assigned colors based on name hash for visual variety
+//! - **Initial Fallback**: Auto-extract initials from name (e.g., "John Doe" →
+//!   "JD")
+//! - **Color Backgrounds**: Auto-assigned colors based on name hash for visual
+//!   variety
 //! - **Icon Support**: Use custom icons instead of initials or images
 //! - **Size Flexibility**: Supports Small, Medium, Large sizing
-//! - **Styled Border**: Respects corner radius settings for circular or rounded display
+//! - **Styled Border**: Respects corner radius settings for circular or rounded
+//!   display
 //!
 //! # Example
 //! ```rust,ignore
@@ -51,10 +54,10 @@ fn extract_text_initials(text: &str) -> String {
 #[derive(IntoElement)]
 /// User profile picture component with image, initial, or icon display.
 ///
-/// Avatar renders a circular or rounded square showing user identity through an image,
-/// auto-generated initials, or a placeholder icon. The component automatically derives
-/// initials from names and assigns consistent background colors. Useful in any UI showing
-/// user information.
+/// Avatar renders a circular or rounded square showing user identity through an
+/// image, auto-generated initials, or a placeholder icon. The component
+/// automatically derives initials from names and assigns consistent background
+/// colors. Useful in any UI showing user information.
 pub struct Avatar {
   base: Div,
   style: StyleRefinement,
@@ -69,7 +72,8 @@ pub struct Avatar {
 impl Avatar {
   /// Create a new, empty avatar.
   ///
-  /// Starts with a Person icon placeholder and no image or name. Configure with builder methods.
+  /// Starts with a Person icon placeholder and no image or name. Configure with
+  /// builder methods.
   pub fn new() -> Self {
     Self {
       base: h_flex(),
@@ -85,8 +89,8 @@ impl Avatar {
 
   /// Set the avatar image source (URL or local path).
   ///
-  /// When set, the image is displayed instead of initials or placeholder. Falls back to
-  /// initials if the image fails to load.
+  /// When set, the image is displayed instead of initials or placeholder. Falls
+  /// back to initials if the image fails to load.
   pub fn src(mut self, source: impl Into<ImageSource>) -> Self {
     self.src = Some(source.into());
     self
@@ -94,8 +98,9 @@ impl Avatar {
 
   /// Set the avatar name to derive initials from.
   ///
-  /// Initials are automatically extracted (e.g., "John Doe" → "JD", "Alice" → "AL").
-  /// Also determines the background color if not explicitly set via `bg_color()`.
+  /// Initials are automatically extracted (e.g., "John Doe" → "JD", "Alice" →
+  /// "AL"). Also determines the background color if not explicitly set via
+  /// `bg_color()`.
   pub fn name(mut self, name: impl Into<SharedString>) -> Self {
     let name: SharedString = name.into();
     let short: SharedString = extract_text_initials(&name).into();
@@ -107,7 +112,8 @@ impl Avatar {
 
   /// Set a custom placeholder icon (shown when no image or initials available).
   ///
-  /// Default: PersonIcon. Useful for special avatar types (groups, organizations, etc.).
+  /// Default: PersonIcon. Useful for special avatar types (groups,
+  /// organizations, etc.).
   pub fn placeholder(mut self, icon: impl Into<Icon>) -> Self {
     self.placeholder = icon.into();
     self
@@ -115,7 +121,8 @@ impl Avatar {
 
   /// Explicitly set the background color for initials display.
   ///
-  /// If not set, color is auto-generated from the name using a hash (ensures consistency).
+  /// If not set, color is auto-generated from the name using a hash (ensures
+  /// consistency).
   pub fn bg_color(mut self, color: Hsla) -> Self {
     self.bg_color = Some(color);
     self

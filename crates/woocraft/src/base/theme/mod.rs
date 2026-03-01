@@ -1,9 +1,10 @@
 //! Theme system for managing colors, tokens, and appearance settings.
 //!
-//! Provides global Theme configuration including light/dark mode, color palette,
-//! sizing tokens (radius, fonts, icons), and scrollbar behavior. The theme system
-//! auto-syncs with system appearance (light/dark mode) and can be programmatically
-//! updated. All UI components automatically inherit theme colors via the ActiveTheme trait.
+//! Provides global Theme configuration including light/dark mode, color
+//! palette, sizing tokens (radius, fonts, icons), and scrollbar behavior. The
+//! theme system auto-syncs with system appearance (light/dark mode) and can be
+//! programmatically updated. All UI components automatically inherit theme
+//! colors via the ActiveTheme trait.
 //!
 //! # Example
 //! ```rust,ignore
@@ -26,7 +27,8 @@ pub use tokens::*;
 
 /// Scrollbar visibility mode.
 ///
-/// Scrollbars can be hidden until scrolling is needed, shown on hover, or always visible.
+/// Scrollbars can be hidden until scrolling is needed, shown on hover, or
+/// always visible.
 /// - Scrolling: Hidden by default, appears only while scrolling
 /// - Hover: Appears on mouse hover
 /// - Always: Always visible
@@ -79,10 +81,11 @@ impl From<WindowAppearance> for ThemeMode {
 
 /// Global application theme configuration.
 ///
-/// Contains all theme settings: color palette for light/dark modes, sizing tokens
-/// (fonts, icons, radii), and UI behavior settings (scrollbar visibility).
-/// Available globally via Theme::global(cx) and accessible through ActiveTheme trait.
-/// Colors update automatically when mode changes or tokens are reloaded.
+/// Contains all theme settings: color palette for light/dark modes, sizing
+/// tokens (fonts, icons, radii), and UI behavior settings (scrollbar
+/// visibility). Available globally via Theme::global(cx) and accessible through
+/// ActiveTheme trait. Colors update automatically when mode changes or tokens
+/// are reloaded.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Theme {
   pub mode: ThemeMode,
@@ -121,8 +124,9 @@ impl Global for Theme {}
 
 /// Trait providing access to the global active theme.
 ///
-/// Implemented for App context, allowing easy access to theme colors, tokens, and settings.
-/// All components use this trait to fetch theme values for rendering.
+/// Implemented for App context, allowing easy access to theme colors, tokens,
+/// and settings. All components use this trait to fetch theme values for
+/// rendering.
 pub trait ActiveTheme {
   /// Returns a reference to the global active theme.
   fn theme(&self) -> &Theme;

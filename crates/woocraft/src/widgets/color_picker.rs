@@ -1,15 +1,20 @@
 //! Advanced color picker with multiple color space support.
 //!
-//! ColorPicker provides a comprehensive color selection interface that supports multiple color spaces:
-//! RGBA (Red/Green/Blue with Alpha), Oklch (perceptually uniform), and HSLA (traditional hue/saturation/lightness).
-//! The picker includes a 2D gradient selector for lightness/chroma and 1D sliders for hue and alpha.
+//! ColorPicker provides a comprehensive color selection interface that supports
+//! multiple color spaces: RGBA (Red/Green/Blue with Alpha), Oklch (perceptually
+//! uniform), and HSLA (traditional hue/saturation/lightness). The picker
+//! includes a 2D gradient selector for lightness/chroma and 1D sliders for hue
+//! and alpha.
 //!
 //! # Features
-//! - **Multi-space support**: RGBA, Oklch (perceptually uniform), HSLA (traditional)
+//! - **Multi-space support**: RGBA, Oklch (perceptually uniform), HSLA
+//!   (traditional)
 //! - **Hex editor**: Type or paste hex color codes directly (8-digit RGB hex)
-//! - **2D gradient picker**: Visual lightness/chroma selection with interactive gradient
+//! - **2D gradient picker**: Visual lightness/chroma selection with interactive
+//!   gradient
 //! - **1D sliders**: Dedicated sliders for hue and alpha channels
-//! - **Intelligent conversion**: Seamless conversion between color spaces preserving hue on RGB changes
+//! - **Intelligent conversion**: Seamless conversion between color spaces
+//!   preserving hue on RGB changes
 //! - **Popover trigger**: Integrated popover button for space-efficient UI
 //!
 //! # Example
@@ -24,9 +29,10 @@
 //! ```
 //!
 //! # Internals
-//! The picker uses Oklch as the internal representation because it's perceptually uniform—
-//! equal numeric changes produce visually equal color differences. RGB values and hex input
-//! are converted to Oklch on change, with hue preservation when changing from RGB.
+//! The picker uses Oklch as the internal representation because it's
+//! perceptually uniform— equal numeric changes produce visually equal color
+//! differences. RGB values and hex input are converted to Oklch on change, with
+//! hue preservation when changing from RGB.
 
 use gpui::{
   App, AppContext as _, Bounds, Context, ElementId, Entity, EventEmitter, Hsla,
@@ -65,10 +71,12 @@ pub struct ColorPickerRgba {
 
 /// Oklch color representation for the color picker (default internal space).
 ///
-/// Oklch is a perceptually uniform color space ideal for intuitive color selection.
-/// All components are in range 0.0..=1.0 (except hue which is 0.0..=360.0).
+/// Oklch is a perceptually uniform color space ideal for intuitive color
+/// selection. All components are in range 0.0..=1.0 (except hue which is
+/// 0.0..=360.0).
 /// - `lightness`: Perceived brightness (0.0 = black, 1.0 = white)
-/// - `chroma`: Color intensity/saturation (0.0 = gray, higher = more vivid, max ~0.4)
+/// - `chroma`: Color intensity/saturation (0.0 = gray, higher = more vivid, max
+///   ~0.4)
 /// - `hue`: Color angle in degrees (0.0..=360.0; red=0, green=120, blue=240)
 /// - `alpha`: Transparency (0.0 = transparent, 1.0 = opaque)
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -81,8 +89,8 @@ pub struct ColorPickerOklch {
 
 /// HSLA color representation for the color picker.
 ///
-/// Traditional hue/saturation/lightness color space. All components in range 0.0..=1.0
-/// (except hue which is 0.0..=360.0).
+/// Traditional hue/saturation/lightness color space. All components in range
+/// 0.0..=1.0 (except hue which is 0.0..=360.0).
 /// - `hue`: Color angle (0.0..=360.0; red=0, green=120, blue=240)
 /// - `saturation`: Color purity (0.0 = gray, 1.0 = fully saturated)
 /// - `lightness`: Brightness (0.0 = black, 0.5 = normal, 1.0 = white)
@@ -110,7 +118,8 @@ pub struct ColorPickerValue {
 
 /// Event emitted when the selected color changes.
 ///
-/// Fired whenever the user adjusts any channel (2D gradient, hue/alpha sliders, or hex input).
+/// Fired whenever the user adjusts any channel (2D gradient, hue/alpha sliders,
+/// or hex input).
 #[derive(Clone)]
 pub enum ColorPickerEvent {
   Change(ColorPickerValue),
@@ -251,7 +260,8 @@ impl ColorPickerState {
   /// Updates the color to the specified Oklch value, emitting Change event.
   ///
   /// Use this to programmatically set the color (e.g., from external input).
-  /// If the value hasn't changed, no event is emitted. All values are clamped to valid ranges.
+  /// If the value hasn't changed, no event is emitted. All values are clamped
+  /// to valid ranges.
   pub fn set_oklch(&mut self, value: ColorPickerOklch, cx: &mut Context<Self>) {
     let next = sanitize_oklch(value);
     if self.value == next {
@@ -376,7 +386,8 @@ impl EventEmitter<ColorPickerEvent> for ColorPickerState {}
 /// ColorPicker is a complex component that manages a 2D gradient selector for
 /// lightness/chroma, plus 1D sliders for hue and alpha. It includes an embedded
 /// hex color input field and emits Change events whenever the user modifies
-/// any channel. The picker opens in a popover positioned relative to the trigger button.
+/// any channel. The picker opens in a popover positioned relative to the
+/// trigger button.
 pub struct ColorPicker {
   id: SharedString,
   state: Entity<ColorPickerState>,
@@ -391,8 +402,8 @@ impl ColorPicker {
   /// Creates a color picker trigger button bound to the provided state.
   ///
   /// The `id` uniquely identifies this picker instance. The `state` entity
-  /// must outlive the picker and is updated whenever the user changes the color.
-  /// Default is non-outlined, Size::Medium, ButtonVariant::Default.
+  /// must outlive the picker and is updated whenever the user changes the
+  /// color. Default is non-outlined, Size::Medium, ButtonVariant::Default.
   pub fn new(id: impl Into<SharedString>, state: &Entity<ColorPickerState>) -> Self {
     Self {
       id: id.into(),
@@ -408,7 +419,8 @@ impl ColorPicker {
   /// Sets the outline style for the trigger button.
   ///
   /// When `true`, renders a border-only button. When `false` (default),
-  /// renders a filled button. The button background is always the current selected color.
+  /// renders a filled button. The button background is always the current
+  /// selected color.
   pub fn outline(mut self, outline: bool) -> Self {
     self.outline = outline;
     self

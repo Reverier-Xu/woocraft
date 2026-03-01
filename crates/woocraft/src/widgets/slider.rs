@@ -1,17 +1,21 @@
 //! Numeric range slider control with single or dual thumb support.
 //!
-//! Slider allows users to select numeric values by dragging a thumb along a horizontal
-//! track. Supports single value selection (one thumb) or range selection (two thumbs).
-//! Configurable min/max bounds, step intervals, and scale modes (linear or logarithmic).
-//! Useful for volume controls, price filters, date range selection, and any numeric
-//! input where visual feedback and drag interaction improves UX over text input.
+//! Slider allows users to select numeric values by dragging a thumb along a
+//! horizontal track. Supports single value selection (one thumb) or range
+//! selection (two thumbs). Configurable min/max bounds, step intervals, and
+//! scale modes (linear or logarithmic). Useful for volume controls, price
+//! filters, date range selection, and any numeric input where visual feedback
+//! and drag interaction improves UX over text input.
 //!
 //! # Features
 //! - **Single or Range**: One thumb for a single value, two thumbs for a range
 //! - **Numeric Bounds**: Set min, max, and step increment
-//! - **Scale Modes**: Linear (uniform spacing) or Logarithmic (for audio/exponential data)
-//! - **Keyboard Support**: Arrow keys adjust value; Alt/Shift modifiers for large/small steps
-//! - **Visual Feedback**: Filled track, thumb indicator, and optional labels (via delegate)
+//! - **Scale Modes**: Linear (uniform spacing) or Logarithmic (for
+//!   audio/exponential data)
+//! - **Keyboard Support**: Arrow keys adjust value; Alt/Shift modifiers for
+//!   large/small steps
+//! - **Visual Feedback**: Filled track, thumb indicator, and optional labels
+//!   (via delegate)
 //! - **Smooth Dragging**: Immediate visual feedback while dragging
 //!
 //! # Example
@@ -54,8 +58,8 @@ impl Render for DragThumb {
 /// Numeric value type for slider: single value or range.
 ///
 /// `Single(f32)`: One numeric value (one thumb on the slider).
-/// `Range(f32, f32)`: Two values representing a range (start, end) with two thumbs.
-/// Range values are always kept in order (start ≤ end).
+/// `Range(f32, f32)`: Two values representing a range (start, end) with two
+/// thumbs. Range values are always kept in order (start ≤ end).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SliderValue {
   /// Single value (one thumb).
@@ -118,9 +122,9 @@ impl SliderValue {
 
 /// Numeric scale type for slider value calculation.
 ///
-/// Linear: Values increase uniformly across the track. For volume, brightness, etc.
-/// Logarithmic: Values increase exponentially. For audio frequencies, price ranges, etc.
-/// Requires min > 0 for logarithmic scale.
+/// Linear: Values increase uniformly across the track. For volume, brightness,
+/// etc. Logarithmic: Values increase exponentially. For audio frequencies,
+/// price ranges, etc. Requires min > 0 for logarithmic scale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SliderScale {
   /// Uniform spacing. Default.
@@ -133,15 +137,17 @@ pub enum SliderScale {
 #[derive(Clone)]
 /// Events emitted by the slider when value changes.
 pub enum SliderEvent {
-  /// Emitted when user drags thumb or changes value via keyboard. Contains new value.
+  /// Emitted when user drags thumb or changes value via keyboard. Contains new
+  /// value.
   Change(SliderValue),
 }
 
 /// Internal state management for slider control.
 ///
-/// Handles numeric range calculation, value clamping, and scale conversion (linear/logarithmic).
-/// Emits `SliderEvent::Change` when user drags or adjusts value via keyboard.
-/// Use `SliderValue::Single()` or `SliderValue::Range()` to start with different modes.
+/// Handles numeric range calculation, value clamping, and scale conversion
+/// (linear/logarithmic). Emits `SliderEvent::Change` when user drags or adjusts
+/// value via keyboard. Use `SliderValue::Single()` or `SliderValue::Range()` to
+/// start with different modes.
 pub struct SliderState {
   min: f32,
   max: f32,

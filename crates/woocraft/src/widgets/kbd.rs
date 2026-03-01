@@ -3,7 +3,8 @@
 //! Kbd displays a keystroke or key combination in a styled box, useful for
 //! documenting keyboard shortcuts in help text, tooltips, or instructions.
 //! Automatically formats modifier keys (Ctrl, Shift, Alt, Cmd) and special keys
-//! (Enter, Escape, etc.) with platform-specific symbols (e.g., ⌘ on macOS, Ctrl on Linux/Windows).
+//! (Enter, Escape, etc.) with platform-specific symbols (e.g., ⌘ on macOS, Ctrl
+//! on Linux/Windows).
 
 use gpui::{
   Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, ParentElement as _,
@@ -16,7 +17,8 @@ use crate::{ActiveTheme, StyledExt};
 /// Visual keyboard key or shortcut display.
 ///
 /// Renders a keystroke in a styled box with platform-appropriate formatting.
-/// Default appearance applies theme styling; `appearance(false)` removes styling.
+/// Default appearance applies theme styling; `appearance(false)` removes
+/// styling.
 pub struct Kbd {
   style: StyleRefinement,
   stroke: Keystroke,
@@ -62,7 +64,8 @@ impl Kbd {
     self
   }
 
-  /// Looks up the highest-precedence keybinding for an action and creates a Kbd from it.
+  /// Looks up the highest-precedence keybinding for an action and creates a Kbd
+  /// from it.
   ///
   /// Returns `None` if the action has no keybinding.
   /// Optionally filters by key context (e.g., "vim", "editor").
@@ -81,7 +84,8 @@ impl Kbd {
       .map(|key| Self::new(key.as_keystroke().clone()))
   }
 
-  /// Looks up the highest-precedence keybinding for an action in a specific focus context.
+  /// Looks up the highest-precedence keybinding for an action in a specific
+  /// focus context.
   ///
   /// Returns `None` if the action has no keybinding in that focus context.
   pub fn binding_for_action_in(

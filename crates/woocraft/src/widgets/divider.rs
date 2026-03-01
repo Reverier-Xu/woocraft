@@ -1,8 +1,8 @@
 //! Visual separator line between content sections.
 //!
-//! Divider renders a horizontal or vertical line, typically used to visually separate
-//! sections of content. Supports solid and dashed line styles, optional center labels
-//! (for horizontal dividers), and customizable colors.
+//! Divider renders a horizontal or vertical line, typically used to visually
+//! separate sections of content. Supports solid and dashed line styles,
+//! optional center labels (for horizontal dividers), and customizable colors.
 
 use gpui::{
   App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
@@ -25,7 +25,8 @@ pub enum DividerStyle {
 /// Visual separator line (horizontal or vertical).
 ///
 /// Divider renders a 1-pixel line to separate content sections. Can be single
-/// horizontal/vertical line, optionally with a centered label (horizontal only).
+/// horizontal/vertical line, optionally with a centered label (horizontal
+/// only).
 pub struct Divider {
   base: Div,
   style: StyleRefinement,

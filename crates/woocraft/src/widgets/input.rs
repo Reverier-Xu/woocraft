@@ -1,16 +1,23 @@
-//! Single-line text input component with validation, formatting, and state management.
+//! Single-line text input component with validation, formatting, and state
+//! management.
 //!
-//! The input component provides a flexible text input field with built-in support for pattern
-//! validation, custom masking (for passwords), undo/redo history, clipboard operations, and
-//! full keyboard accessibility. It manages internal caret position, text selection, and
-//! horizontal scrolling for long text.
+//! The input component provides a flexible text input field with built-in
+//! support for pattern validation, custom masking (for passwords), undo/redo
+//! history, clipboard operations, and full keyboard accessibility. It manages
+//! internal caret position, text selection, and horizontal scrolling for long
+//! text.
 //!
 //! # Features
-//! - **Validation & Patterns**: Regex pattern matching and custom validation callbacks
-//! - **Masking**: Display masked text (e.g., for password fields) while preserving actual value
-//! - **Text Editing**: Full undo/redo history (up to 256 snapshots), copy/cut/paste operations
-//! - **Keyboard Navigation**: Word-based movement, selection, home/end key support
-//! - **Events**: Change, Focus, Blur, PressEnter (normal and secondary/Shift+Enter variants)
+//! - **Validation & Patterns**: Regex pattern matching and custom validation
+//!   callbacks
+//! - **Masking**: Display masked text (e.g., for password fields) while
+//!   preserving actual value
+//! - **Text Editing**: Full undo/redo history (up to 256 snapshots),
+//!   copy/cut/paste operations
+//! - **Keyboard Navigation**: Word-based movement, selection, home/end key
+//!   support
+//! - **Events**: Change, Focus, Blur, PressEnter (normal and
+//!   secondary/Shift+Enter variants)
 //! - **Accessibility**: Focus management, keyboard tab stop, IME support
 //! - **Customization**: Placeholder text, custom text style, size variations
 //!
@@ -37,10 +44,10 @@
 //! ```
 //!
 //! # Performance Notes
-//! Input maintains an undo/redo stack capped at 256 snapshots per instance. For heavy
-//! real-time validation, use a debounce approach in the validation callback to avoid
-//! excessive cloning. Horizontal scrolling is calculated on-demand during rendering and
-//! is efficient even for very long text.
+//! Input maintains an undo/redo stack capped at 256 snapshots per instance. For
+//! heavy real-time validation, use a debounce approach in the validation
+//! callback to avoid excessive cloning. Horizontal scrolling is calculated
+//! on-demand during rendering and is efficient even for very long text.
 
 use std::{ops::Range, rc::Rc, time::Instant};
 
@@ -157,7 +164,8 @@ pub fn init(cx: &mut App) {
 
 #[derive(Clone)]
 pub enum InputEvent {
-  /// Emitted when the input text changes (via user input or programmatic update).
+  /// Emitted when the input text changes (via user input or programmatic
+  /// update).
   Change,
   /// Emitted when the user presses Enter. `secondary` is true for Shift+Enter.
   PressEnter { secondary: bool },
@@ -175,12 +183,14 @@ struct Snapshot {
 
 /// Internal state management for text input field.
 ///
-/// Manages rendering and user interaction for a single-line text input. Handles text editing
-/// operations (insert, delete, replace), selection management, clipboard operations, undo/redo,
-/// and validation. This is the component that implements the `Render` trait for display.
+/// Manages rendering and user interaction for a single-line text input. Handles
+/// text editing operations (insert, delete, replace), selection management,
+/// clipboard operations, undo/redo, and validation. This is the component that
+/// implements the `Render` trait for display.
 ///
-/// Construction uses the builder pattern from `InputState::new()`, followed by chainable
-/// configuration methods. State changes are communicated via the `InputEvent` enum.
+/// Construction uses the builder pattern from `InputState::new()`, followed by
+/// chainable configuration methods. State changes are communicated via the
+/// `InputEvent` enum.
 ///
 /// # Builder Configuration
 /// - `placeholder()`: Hint text shown when empty
@@ -257,8 +267,8 @@ impl InputState {
 
   /// Set the placeholder text shown when input is empty.
   ///
-  /// Placeholder is grayed out and disappears as soon as the user begins typing.
-  /// Does not affect the actual input value.
+  /// Placeholder is grayed out and disappears as soon as the user begins
+  /// typing. Does not affect the actual input value.
   pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
     self.placeholder = placeholder.into();
     self
@@ -274,7 +284,8 @@ impl InputState {
 
   /// Set the initial value of the input and place cursor at the end.
   ///
-  /// Used in builder pattern. For updating an existing input, use `set_value()`.
+  /// Used in builder pattern. For updating an existing input, use
+  /// `set_value()`.
   pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
     self.text = value.into().to_string();
     self.selected_range = Selection::new(self.text.len(), self.text.len());
@@ -311,7 +322,8 @@ impl InputState {
 
   /// Set whether input text should be masked (shown as bullet points).
   ///
-  /// Useful for password fields. The actual value is preserved; only display is masked.
+  /// Useful for password fields. The actual value is preserved; only display is
+  /// masked.
   pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
     self.masked = masked;
     cx.notify();
@@ -348,13 +360,15 @@ impl InputState {
   /// Set a custom validation callback.
   ///
   /// Callback returns `true` if text is valid. Called on every text change.
-  /// For performance-heavy validations, implement debouncing inside the callback.
+  /// For performance-heavy validations, implement debouncing inside the
+  /// callback.
   pub fn validate(mut self, f: impl Fn(&str, &mut Context<Self>) -> bool + 'static) -> Self {
     self.validate = Some(Box::new(f));
     self
   }
 
-  /// Set the loading state (disables input, shows spinner icon in parent widget).
+  /// Set the loading state (disables input, shows spinner icon in parent
+  /// widget).
   pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
     self.loading = loading;
     cx.notify();

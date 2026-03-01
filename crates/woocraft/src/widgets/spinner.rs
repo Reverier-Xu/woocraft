@@ -1,8 +1,8 @@
 //! Animated rotating icon for indicating loading or processing state.
 //!
-//! Spinner renders an animated icon that continuously rotates, commonly displayed
-//! while content is loading, processing, or waiting. Fully customizable: change the
-//! icon, rotation speed, and color.
+//! Spinner renders an animated icon that continuously rotates, commonly
+//! displayed while content is loading, processing, or waiting. Fully
+//! customizable: change the icon, rotation speed, and color.
 
 use std::time::Duration;
 
@@ -17,7 +17,8 @@ use crate::{Icon, IconName, Sizable, Size, duration};
 /// Animated rotating icon indicating loading or processing state.
 ///
 /// Spinner displays a fullscreen rotation animation. Default icon is
-/// `SpinnerIos`. Rotation speed defaults to theme duration (typically 1-2 seconds).
+/// `SpinnerIos`. Rotation speed defaults to theme duration (typically 1-2
+/// seconds).
 pub struct Spinner {
   size: Size,
   icon: Icon,
