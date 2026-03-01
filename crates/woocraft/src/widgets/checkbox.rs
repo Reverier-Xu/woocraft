@@ -1,3 +1,28 @@
+//! Checkbox component for boolean selection with optional label.
+//!
+//! Checkbox provides a clickable box that toggles between checked and unchecked states.
+//! Optionally displays a label next to the checkbox. Fully keyboard accessible with Tab
+//! navigation and Space/Enter to toggle. Common in forms, settings, and multi-select lists
+//! where users need to opt in or out of multiple independent options.
+//!
+//! # Features
+//! - **Checked State**: Toggle between true/false with click or Space key
+//! - **Optional Label**: Display text label to the right of checkbox
+//! - **Keyboard Accessible**: Full keyboard support (Tab to focus, Space/Enter to toggle)
+//! - **Disabled State**: Prevent interaction and dim appearance when disabled
+//! - **Size Variants**: Small, Medium, Large sizing options
+//! - **Click Handler**: Callback fires when user toggles state
+//!
+//! # Example
+//! ```rust,ignore
+//! Checkbox::new("agree_terms")
+//!   .label("I agree to the terms")
+//!   .checked(false)
+//!   .on_click(|_is_checked, _window, _cx| {
+//!     // Handle toggle
+//!   })
+//! ```
+
 use std::rc::Rc;
 
 use gpui::{
@@ -11,6 +36,12 @@ use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt, h
 type CheckboxClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
 
 #[derive(IntoElement)]
+/// Checkbox input for boolean/toggled selection.
+///
+/// Checkbox renders a clickable, keyboard-accessible box that users interact with to
+/// toggle a boolean state. Can display an optional label and supports both click and
+/// keyboard (`Space`/`Enter`) interaction. Useful for yes/no questions, feature toggles,
+/// and multi-select scenarios.
 pub struct Checkbox {
   id: ElementId,
   style: StyleRefinement,
@@ -25,6 +56,9 @@ pub struct Checkbox {
 }
 
 impl Checkbox {
+  /// Create a new unchecked checkbox with the given identifier.
+  ///
+  /// The ID is used for focus management and state tracking. Default state is unchecked.
   pub fn new(id: impl Into<ElementId>) -> Self {
     Self {
       id: id.into(),
@@ -40,26 +74,41 @@ impl Checkbox {
     }
   }
 
+  /// Set the label text or element displayed next to the checkbox.
+  ///
+  /// Label appears to the right of the checkbox box. Clicking the label also toggles
+  /// the checkbox (improves hit target on touch devices).
   pub fn label(mut self, label: impl IntoElement) -> Self {
     self.label = Some(label.into_any_element());
     self
   }
 
+  /// Set the initial checked state (default: unchecked/false).
   pub fn checked(mut self, checked: bool) -> Self {
     self.checked = checked;
     self
   }
 
+  /// Attach a click/toggle handler.
+  ///
+  /// Handler receives the new checked state (after toggle). Called on both click and
+  /// keyboard (Space/Enter) activation by the user.
   pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
     self.on_click = Some(Rc::new(handler));
     self
   }
 
+  /// Control whether the checkbox can receive focus via Tab key.
+  ///
+  /// Default: true. Set to false to skip this checkbox during keyboard navigation.
   pub fn tab_stop(mut self, tab_stop: bool) -> Self {
     self.tab_stop = tab_stop;
     self
   }
 
+  /// Set the tab index for keyboard navigation order.
+  ///
+  /// Higher indices are focused after lower ones. Default: 0.
   pub fn tab_index(mut self, tab_index: isize) -> Self {
     self.tab_index = tab_index;
     self

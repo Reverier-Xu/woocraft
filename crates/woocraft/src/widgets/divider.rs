@@ -1,3 +1,9 @@
+//! Visual separator line between content sections.
+//!
+//! Divider renders a horizontal or vertical line, typically used to visually separate
+//! sections of content. Supports solid and dashed line styles, optional center labels
+//! (for horizontal dividers), and customizable colors.
+
 use gpui::{
   App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
   StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
@@ -5,14 +11,21 @@ use gpui::{
 
 use crate::{ActiveTheme, StyledExt};
 
+/// Line style for divider rendering.
 #[derive(Clone, Copy, PartialEq, Default)]
 pub enum DividerStyle {
   #[default]
+  /// Solid continuous line.
   Solid,
+  /// Dashed line with gaps.
   Dashed,
 }
 
 #[derive(IntoElement)]
+/// Visual separator line (horizontal or vertical).
+///
+/// Divider renders a 1-pixel line to separate content sections. Can be single
+/// horizontal/vertical line, optionally with a centered label (horizontal only).
 pub struct Divider {
   base: Div,
   style: StyleRefinement,
@@ -30,6 +43,7 @@ impl Divider {
     })
   }
 
+  /// Creates a new vertical divider with default (solid) style.
   pub fn vertical() -> Self {
     Self {
       base: Self::render_base(Axis::Vertical),
@@ -41,6 +55,7 @@ impl Divider {
     }
   }
 
+  /// Creates a new horizontal divider with default (solid) style.
   pub fn horizontal() -> Self {
     Self {
       base: Self::render_base(Axis::Horizontal),
@@ -52,24 +67,29 @@ impl Divider {
     }
   }
 
+  /// Creates a new vertical divider with dashed style.
   pub fn vertical_dashed() -> Self {
     Self::vertical().dashed()
   }
 
+  /// Creates a new horizontal divider with dashed style.
   pub fn horizontal_dashed() -> Self {
     Self::horizontal().dashed()
   }
 
+  /// Sets an optional centered label for the divider (horizontal only).
   pub fn label(mut self, label: impl Into<SharedString>) -> Self {
     self.label = Some(label.into());
     self
   }
 
+  /// Sets the divider line color (defaults to theme border).
   pub fn color(mut self, color: impl Into<Hsla>) -> Self {
     self.color = Some(color.into());
     self
   }
 
+  /// Switches the line style to dashed.
   pub fn dashed(mut self) -> Self {
     self.line_style = DividerStyle::Dashed;
     self

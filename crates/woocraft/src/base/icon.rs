@@ -1,3 +1,10 @@
+//! Icon system with support for built-in icons and custom icon registration.
+//!
+//! Provides a comprehensive icon rendering system with 300+ pre-defined icons
+//! from the Feather icon set. Icons can be customized: change size, color (text color),
+//! rotation, and enable/disable colorization. Supports custom icon registration for
+//! user-defined SVG icons beyond the built-in set.
+
 #[cfg(debug_assertions)]
 use std::collections::HashSet;
 use std::{
@@ -13,7 +20,10 @@ use gpui::{
 
 use crate::base::{Sizable, Size};
 
-/// Types implementing this trait can automatically be converted to [`Icon`].
+
+/// Trait for types that can be converted to an icon path/name.
+///
+/// Implement this trait for custom icon name types to support conversion to Icon.
 pub trait IconNamed {
   fn path(self) -> SharedString;
 }
@@ -70,6 +80,10 @@ fn resolve_icon_path(name_or_path: &str) -> SharedString {
   custom_icon_path(name_or_path).unwrap_or_else(|| SharedString::from(name_or_path.to_owned()))
 }
 
+/// Registers a custom icon in the global registry.
+///
+/// Maps a custom name to an SVG asset path. Once registered, the icon can be
+/// used anywhere by its custom name (name takes precedence over path resolution).
 pub fn register_icon(name: impl Into<SharedString>, path: impl Into<SharedString>) {
   let name = name.into().to_string();
   let path = path.into();
@@ -79,6 +93,10 @@ pub fn register_icon(name: impl Into<SharedString>, path: impl Into<SharedString
   registry.insert(name, path);
 }
 
+/// Unregisters a custom icon from the global registry.
+///
+/// Returns the previously registered path if found, or None if the icon
+/// was not registered.
 pub fn unregister_icon(name: &str) -> Option<SharedString> {
   let mut registry = custom_icon_registry()
     .write()
@@ -86,6 +104,7 @@ pub fn unregister_icon(name: &str) -> Option<SharedString> {
   registry.remove(name)
 }
 
+/// Clears all custom icons from the registry.
 pub fn clear_custom_icons() {
   let mut registry = custom_icon_registry()
     .write()
@@ -93,6 +112,9 @@ pub fn clear_custom_icons() {
   registry.clear();
 }
 
+/// Looks up a custom icon path by name.
+///
+/// Returns Some(path) if the icon is registered, or None otherwise.
 pub fn custom_icon_path(name: &str) -> Option<SharedString> {
   let registry = custom_icon_registry()
     .read()
@@ -145,6 +167,11 @@ impl RenderOnce for IconName {
 }
 
 #[derive(IntoElement)]
+/// SVG-based icon with customizable size, color, and rotation.
+///
+/// Icon renders as an inline SVG, defaulting to 1em size and inheriting text color.
+/// Supports 300+ built-in icons from IconName enum, or use custom SVG paths.
+/// Can be rotated, resized, and colorized (or kept as original SVG colors).
 pub struct Icon {
   base: Svg,
   style: StyleRefinement,
@@ -181,6 +208,12 @@ impl Clone for Icon {
 }
 
 impl Icon {
+  /// Creates a new icon from an IconName enum value or custom path.
+  ///
+  /// Can accept:
+  /// - [`IconName`] enum variants (e.g., `IconName::Check`, `IconName::X`)
+  /// - `&str` paths (e.g., `"icons/custom.svg"`)
+  /// - [`SharedString`] paths
   pub fn new(icon: impl Into<Icon>) -> Self {
     icon.into()
   }
@@ -189,24 +222,37 @@ impl Icon {
     Self::default().path(name.path())
   }
 
+  /// Sets the SVG asset path for this icon.
+  ///
+  /// Can be a built-in icon name (resolved via IconName) or a custom asset path.
   pub fn path(mut self, path: impl Into<SharedString>) -> Self {
     self.path = path.into();
     self
   }
 
+  /// Creates a new Entity<Icon> for use as a stateful component in views.
+  ///
+  /// Useful when icon state needs to be managed within the app context.
   pub fn view(self, cx: &mut App) -> Entity<Icon> {
     cx.new(|_| self)
   }
 
+  /// Applies a transformation (scale, rotate, translate) to the icon.
+  ///
+  /// Use for custom transforms beyond the rotate() method.
   pub fn transform(mut self, transformation: gpui::Transformation) -> Self {
     self.base = self.base.with_transformation(transformation);
     self
   }
 
+  /// Returns an empty icon (no path, invisible).
   pub fn empty() -> Self {
     Self::default()
   }
 
+  /// Rotates the icon by the specified angle in radians.
+  ///
+  /// Example: `Icon::new(IconName::ChevronRight).rotate(90.0.to_radians())`
   pub fn rotate(mut self, radians: impl Into<Radians>) -> Self {
     self.base = self
       .base
@@ -214,6 +260,10 @@ impl Icon {
     self
   }
 
+  /// Controls whether the icon is colorized with the text color.
+  ///
+  /// When `true` (default), the icon inherits the text color from the context.
+  /// When `false`, the icon retains its original SVG colors.
   pub fn colorized(mut self, colorized: bool) -> Self {
     self.colorized = colorized;
     self

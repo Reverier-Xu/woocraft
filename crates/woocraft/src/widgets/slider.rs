@@ -1,3 +1,38 @@
+//! Numeric range slider control with single or dual thumb support.
+//!
+//! Slider allows users to select numeric values by dragging a thumb along a horizontal
+//! track. Supports single value selection (one thumb) or range selection (two thumbs).
+//! Configurable min/max bounds, step intervals, and scale modes (linear or logarithmic).
+//! Useful for volume controls, price filters, date range selection, and any numeric
+//! input where visual feedback and drag interaction improves UX over text input.
+//!
+//! # Features
+//! - **Single or Range**: One thumb for a single value, two thumbs for a range
+//! - **Numeric Bounds**: Set min, max, and step increment
+//! - **Scale Modes**: Linear (uniform spacing) or Logarithmic (for audio/exponential data)
+//! - **Keyboard Support**: Arrow keys adjust value; Alt/Shift modifiers for large/small steps
+//! - **Visual Feedback**: Filled track, thumb indicator, and optional labels (via delegate)
+//! - **Smooth Dragging**: Immediate visual feedback while dragging
+//!
+//! # Example
+//! ```rust,ignore
+//! // Volume slider (0-100)
+//! let slider_state = cx.new(|cx| {
+//!   SliderState::new()
+//!     .min(0.0)
+//!     .max(100.0)
+//!     .step(1.0)
+//! });
+//!
+//! // Price range filter ($10-$100)
+//! let range_slider = cx.new(|cx| {
+//!   SliderState::new()
+//!     .min(10.0)
+//!     .max(100.0)
+//!     .value(SliderValue::Range(25.0, 75.0))
+//! });
+//! ```
+
 use gpui::{
   App, AppContext as _, Axis, Bounds, Context, DragMoveEvent, Empty, Entity, EntityId,
   EventEmitter, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
@@ -16,9 +51,16 @@ impl Render for DragThumb {
   }
 }
 
+/// Numeric value type for slider: single value or range.
+///
+/// `Single(f32)`: One numeric value (one thumb on the slider).
+/// `Range(f32, f32)`: Two values representing a range (start, end) with two thumbs.
+/// Range values are always kept in order (start ≤ end).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SliderValue {
+  /// Single value (one thumb).
   Single(f32),
+  /// Range: start and end values (two thumbs). Automatically kept in order.
   Range(f32, f32),
 }
 
@@ -74,18 +116,32 @@ impl SliderValue {
   }
 }
 
+/// Numeric scale type for slider value calculation.
+///
+/// Linear: Values increase uniformly across the track. For volume, brightness, etc.
+/// Logarithmic: Values increase exponentially. For audio frequencies, price ranges, etc.
+/// Requires min > 0 for logarithmic scale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SliderScale {
+  /// Uniform spacing. Default.
   #[default]
   Linear,
+  /// Exponential spacing (min must be > 0).
   Logarithmic,
 }
 
 #[derive(Clone)]
+/// Events emitted by the slider when value changes.
 pub enum SliderEvent {
+  /// Emitted when user drags thumb or changes value via keyboard. Contains new value.
   Change(SliderValue),
 }
 
+/// Internal state management for slider control.
+///
+/// Handles numeric range calculation, value clamping, and scale conversion (linear/logarithmic).
+/// Emits `SliderEvent::Change` when user drags or adjusts value via keyboard.
+/// Use `SliderValue::Single()` or `SliderValue::Range()` to start with different modes.
 pub struct SliderState {
   min: f32,
   max: f32,
@@ -104,6 +160,7 @@ impl Default for SliderState {
 }
 
 impl SliderState {
+  /// Create a new slider with default range (0-100), step 1, and linear scale.
   pub fn new() -> Self {
     let mut this = Self {
       min: 0.0,
@@ -119,23 +176,37 @@ impl SliderState {
     this
   }
 
+  /// Set the minimum value for the slider.
+  ///
+  /// Default: 0.0. For logarithmic scale, min must be > 0.
   pub fn min(mut self, min: f32) -> Self {
     self.min = min;
     self.sync_percentage();
     self
   }
 
+  /// Set the maximum value for the slider.
+  ///
+  /// Default: 100.0. Must be greater than min.
   pub fn max(mut self, max: f32) -> Self {
     self.max = max;
     self.sync_percentage();
     self
   }
 
+  /// Set the step interval for keyboard adjustments.
+  ///
+  /// When user presses arrow keys, value changes by step amount. Default: 1.0.
+  /// For fine-grain control, use small steps (e.g., 0.1).
   pub fn step(mut self, step: f32) -> Self {
     self.step = step.max(0.000_001);
     self
   }
 
+  /// Set the numeric scale mode (Linear or Logarithmic).
+  ///
+  /// Linear: uniform spacing (default). Logarithmic: exponential spacing.
+  /// For logarithmic scale, min must be > 0.
   pub fn scale(mut self, scale: SliderScale) -> Self {
     if matches!(scale, SliderScale::Logarithmic) {
       assert!(self.min > 0.0, "min must be > 0 for logarithmic slider");

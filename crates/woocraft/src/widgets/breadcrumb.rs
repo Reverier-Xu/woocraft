@@ -1,3 +1,20 @@
+//! Navigation breadcrumb trail showing the user's current location in a hierarchy.
+//!
+//! Breadcrumb displays a sequence of navigation items separated by chevron icons,
+//! helping users understand and navigate the document structure. The last item
+//! is typically the current page and appears in normal color; earlier items are
+//! dimmed and clickable to jump to parent levels.
+//!
+//! # Example
+//! ```rust,ignore
+//! use woocraft::Breadcrumb;
+//!
+//! let breadcrumbs = Breadcrumb::new()
+//!   .child("Home")
+//!   .child("Products")
+//!   .child("Electronics");
+//! ```
+
 use std::rc::Rc;
 
 use gpui::{
@@ -11,6 +28,10 @@ use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt, h
 type BreadcrumbClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 #[derive(IntoElement)]
+/// Navigation breadcrumb trail showing document hierarchy.
+///
+/// Container for a sequence of clickable breadcrumb items separated by chevrons.
+/// The last item displays in normal text color; prior items are dimmed.
 pub struct Breadcrumb {
   style: StyleRefinement,
   size: Size,
@@ -18,6 +39,10 @@ pub struct Breadcrumb {
 }
 
 #[derive(IntoElement)]
+/// Single item in a breadcrumb trail.
+///
+/// Represents one level in the navigation hierarchy. Can be labeled, disabled,
+/// and optionally handle click events to navigate to that level.
 pub struct BreadcrumbItem {
   id: ElementId,
   style: StyleRefinement,
@@ -34,6 +59,7 @@ impl Default for Breadcrumb {
 }
 
 impl Breadcrumb {
+  /// Creates a new empty breadcrumb trail container.
   pub fn new() -> Self {
     Self {
       style: StyleRefinement::default(),
@@ -42,11 +68,13 @@ impl Breadcrumb {
     }
   }
 
+  /// Adds a single breadcrumb item to the trail.
   pub fn child(mut self, item: impl Into<BreadcrumbItem>) -> Self {
     self.items.push(item.into());
     self
   }
 
+  /// Adds multiple breadcrumb items to the trail.
   pub fn children(mut self, items: impl IntoIterator<Item = impl Into<BreadcrumbItem>>) -> Self {
     self.items.extend(items.into_iter().map(Into::into));
     self
@@ -80,6 +108,7 @@ impl RenderOnce for Breadcrumb {
 }
 
 impl BreadcrumbItem {
+  /// Creates a new breadcrumb item with the given label.
   pub fn new(label: impl Into<SharedString>) -> Self {
     Self {
       id: ElementId::Integer(0),
@@ -91,6 +120,7 @@ impl BreadcrumbItem {
     }
   }
 
+  /// Sets the click handler for this breadcrumb item.
   pub fn on_click(
     mut self, on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
   ) -> Self {
@@ -98,6 +128,7 @@ impl BreadcrumbItem {
     self
   }
 
+  /// Disables the breadcrumb item, making it non-clickable and visually faded.
   pub fn disabled(mut self, disabled: bool) -> Self {
     self.disabled = disabled;
     self

@@ -15,9 +15,15 @@ use crate::{
   StyledExt, duration, h_flex, v_flex,
 };
 
+/// Handler type invoked when a notification (or its action) is clicked.
+///
+/// The handler receives a mutable reference to the current `Window` and `App`.
 type NotificationClickHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// Where the notification center will be placed on screen.
+///
+/// Controls alignment of the notification container relative to the window.
 pub enum NotificationPlacement {
   TopLeft,
   #[default]
@@ -38,6 +44,9 @@ impl NotificationPlacement {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+/// Semantic type of a notification.
+///
+/// Determines the icon and color used when rendering the notification.
 pub enum NotificationType {
   #[default]
   Info,
@@ -66,6 +75,10 @@ impl NotificationType {
   }
 }
 
+/// A single notification description used to create notifications.
+///
+/// Construct with `Notification::new()` or helper constructors like
+/// `Notification::info(...)` / `Notification::success(...)`.
 #[derive(Clone)]
 pub struct Notification {
   key: Option<SharedString>,
@@ -87,6 +100,9 @@ impl Default for Notification {
 }
 
 impl Notification {
+  /// Create a new notification with default settings.
+  ///
+  /// Defaults to `Info` type, autohide enabled and default duration.
   pub fn new() -> Self {
     Self {
       key: None,
@@ -102,70 +118,92 @@ impl Notification {
     }
   }
 
+  /// Set a unique key for the notification.
+  ///
+  /// If a key is provided and another pending notification with the same key
+  /// exists, the previous one will be removed before pushing the new one.
   pub fn key(mut self, key: impl Into<SharedString>) -> Self {
     self.key = Some(key.into());
     self
   }
 
+  /// Set the semantic `NotificationType` for this notification.
   pub fn with_type(mut self, type_: NotificationType) -> Self {
     self.type_ = type_;
     self
   }
 
+  /// Create an `Info` notification with a message.
   pub fn info(message: impl Into<SharedString>) -> Self {
     Self::new()
       .with_type(NotificationType::Info)
       .message(message)
   }
 
+  /// Create a `Success` notification with a message.
   pub fn success(message: impl Into<SharedString>) -> Self {
     Self::new()
       .with_type(NotificationType::Success)
       .message(message)
   }
 
+  /// Create a `Warning` notification with a message.
   pub fn warning(message: impl Into<SharedString>) -> Self {
     Self::new()
       .with_type(NotificationType::Warning)
       .message(message)
   }
 
+  /// Create an `Error` notification with a message.
   pub fn error(message: impl Into<SharedString>) -> Self {
     Self::new()
       .with_type(NotificationType::Error)
       .message(message)
   }
 
+  /// Set the title for the notification.
   pub fn title(mut self, title: impl Into<SharedString>) -> Self {
     self.title = Some(title.into());
     self
   }
 
+  /// Set the main message body for the notification.
   pub fn message(mut self, message: impl Into<SharedString>) -> Self {
     self.message = Some(message.into());
     self
   }
 
+  /// Enable or disable automatic hiding for the notification.
+  ///
+  /// When `false`, the notification will remain until explicitly acted on.
   pub fn autohide(mut self, autohide: bool) -> Self {
     self.autohide = autohide;
     self
   }
 
+  /// Override the default icon for the notification.
   pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
   }
 
+  /// Set the autohide duration for the notification.
   pub fn duration(mut self, duration: Duration) -> Self {
     self.duration = duration;
     self
   }
 
+  /// Register a click handler invoked when the notification is clicked.
   pub fn on_click(mut self, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Self {
     self.on_click = Some(Rc::new(on_click));
     self
   }
 
+  /// Add an action button to the notification.
+  ///
+  /// The `label` will be displayed as the action text and `on_click` will be
+  /// called when the action is triggered. Adding an action disables autohide
+  /// by default so users can interact with the notification.
   pub fn action(
     mut self, label: impl Into<SharedString>, on_click: impl Fn(&mut Window, &mut App) + 'static,
   ) -> Self {

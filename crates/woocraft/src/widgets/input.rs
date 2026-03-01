@@ -1,3 +1,47 @@
+//! Single-line text input component with validation, formatting, and state management.
+//!
+//! The input component provides a flexible text input field with built-in support for pattern
+//! validation, custom masking (for passwords), undo/redo history, clipboard operations, and
+//! full keyboard accessibility. It manages internal caret position, text selection, and
+//! horizontal scrolling for long text.
+//!
+//! # Features
+//! - **Validation & Patterns**: Regex pattern matching and custom validation callbacks
+//! - **Masking**: Display masked text (e.g., for password fields) while preserving actual value
+//! - **Text Editing**: Full undo/redo history (up to 256 snapshots), copy/cut/paste operations
+//! - **Keyboard Navigation**: Word-based movement, selection, home/end key support
+//! - **Events**: Change, Focus, Blur, PressEnter (normal and secondary/Shift+Enter variants)
+//! - **Accessibility**: Focus management, keyboard tab stop, IME support
+//! - **Customization**: Placeholder text, custom text style, size variations
+//!
+//! # Example
+//! ```rust,ignore
+//! use woocraft::InputState;
+//!
+//! // Basic text input
+//! let input = InputState::new(cx)
+//!   .placeholder("Enter your name")
+//!   .default_value("John");
+//!
+//! // Email input with validation
+//! let email = InputState::new(cx)
+//!   .placeholder("Email address")
+//!   .validate(|text, _cx| {
+//!     text.contains('@')
+//!   });
+//!
+//! // Password input with masking
+//! let password = InputState::new(cx)
+//!   .placeholder("Password")
+//!   .masked(true);
+//! ```
+//!
+//! # Performance Notes
+//! Input maintains an undo/redo stack capped at 256 snapshots per instance. For heavy
+//! real-time validation, use a debounce approach in the validation callback to avoid
+//! excessive cloning. Horizontal scrolling is calculated on-demand during rendering and
+//! is efficient even for very long text.
+
 use std::{ops::Range, rc::Rc, time::Instant};
 
 use gpui::{
@@ -113,9 +157,13 @@ pub fn init(cx: &mut App) {
 
 #[derive(Clone)]
 pub enum InputEvent {
+  /// Emitted when the input text changes (via user input or programmatic update).
   Change,
+  /// Emitted when the user presses Enter. `secondary` is true for Shift+Enter.
   PressEnter { secondary: bool },
+  /// Emitted when the input gains focus.
   Focus,
+  /// Emitted when the input loses focus.
   Blur,
 }
 
@@ -125,6 +173,22 @@ struct Snapshot {
   selection: Selection,
 }
 
+/// Internal state management for text input field.
+///
+/// Manages rendering and user interaction for a single-line text input. Handles text editing
+/// operations (insert, delete, replace), selection management, clipboard operations, undo/redo,
+/// and validation. This is the component that implements the `Render` trait for display.
+///
+/// Construction uses the builder pattern from `InputState::new()`, followed by chainable
+/// configuration methods. State changes are communicated via the `InputEvent` enum.
+///
+/// # Builder Configuration
+/// - `placeholder()`: Hint text shown when empty
+/// - `default_value()`: Initial text value
+/// - `masked()`: Mask display for sensitive input (passwords)
+/// - `pattern()`: Regex for format validation
+/// - `validate()`: Custom validation callback
+/// - `clean_on_escape()`: Auto-clear on Escape key
 pub struct InputState {
   focus_handle: FocusHandle,
   text: String,
@@ -191,11 +255,16 @@ impl InputState {
     }
   }
 
+  /// Set the placeholder text shown when input is empty.
+  ///
+  /// Placeholder is grayed out and disappears as soon as the user begins typing.
+  /// Does not affect the actual input value.
   pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
     self.placeholder = placeholder.into();
     self
   }
 
+  /// Update the placeholder text on an existing input instance.
   pub fn set_placeholder(
     &mut self, placeholder: impl Into<SharedString>, _: &mut Window, cx: &mut Context<Self>,
   ) {
@@ -203,12 +272,19 @@ impl InputState {
     cx.notify();
   }
 
+  /// Set the initial value of the input and place cursor at the end.
+  ///
+  /// Used in builder pattern. For updating an existing input, use `set_value()`.
   pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
     self.text = value.into().to_string();
     self.selected_range = Selection::new(self.text.len(), self.text.len());
     self
   }
 
+  /// Set the input value on a mutable instance, clearing any selection.
+  ///
+  /// Emits `InputEvent::Change` and places cursor at the end of the new text.
+  /// Clears undo/redo history.
   pub fn set_value(
     &mut self, value: impl Into<SharedString>, _: &mut Window, cx: &mut Context<Self>,
   ) {
@@ -218,57 +294,79 @@ impl InputState {
     cx.notify();
   }
 
+  /// Get the current input value as a `SharedString`.
   pub fn value(&self) -> SharedString {
     self.text.clone().into()
   }
 
+  /// Get the unmasked input value. For non-masked inputs, same as `value()`.
   pub fn unmask_value(&self) -> SharedString {
     self.value()
   }
 
+  /// Get the current input text as a string slice.
   pub fn text(&self) -> &str {
     &self.text
   }
 
+  /// Set whether input text should be masked (shown as bullet points).
+  ///
+  /// Useful for password fields. The actual value is preserved; only display is masked.
   pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
     self.masked = masked;
     cx.notify();
   }
 
+  /// Configure the input to render text as masked (for passwords).
+  ///
+  /// Builder method version. Use `set_masked()` to update an existing instance.
   pub fn masked(mut self, masked: bool) -> Self {
     self.masked = masked;
     self
   }
 
+  /// Clear input on Escape key press (builder method).
   pub fn clean_on_escape(mut self) -> Self {
     self.clean_on_escape = true;
     self
   }
 
+  /// Set a regex pattern for text validation.
+  ///
+  /// Text will only be accepted if it matches the pattern. Use `validate()` for
+  /// more complex validation logic.
   pub fn pattern(mut self, pattern: Regex) -> Self {
     self.pattern = Some(pattern);
     self
   }
 
+  /// Update the validation pattern on an existing input.
   pub fn set_pattern(&mut self, pattern: Regex, _: &mut Window, _: &mut Context<Self>) {
     self.pattern = Some(pattern);
   }
 
+  /// Set a custom validation callback.
+  ///
+  /// Callback returns `true` if text is valid. Called on every text change.
+  /// For performance-heavy validations, implement debouncing inside the callback.
   pub fn validate(mut self, f: impl Fn(&str, &mut Context<Self>) -> bool + 'static) -> Self {
     self.validate = Some(Box::new(f));
     self
   }
 
+  /// Set the loading state (disables input, shows spinner icon in parent widget).
   pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
     self.loading = loading;
     cx.notify();
   }
 
+  /// Programmatically focus this input field.
   pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
     let _ = cx;
     self.focus_handle.focus(window);
   }
 
+  /// Clear all text from the input. Pushes undo snapshot.
   pub fn clean(&mut self, _: &mut Window, cx: &mut Context<Self>) {
     self.push_undo_snapshot();
     self.text.clear();
@@ -277,12 +375,14 @@ impl InputState {
     cx.notify();
   }
 
+  /// Insert text at the current cursor position.
   pub fn insert(
     &mut self, text: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.replace_text_in_range_silent(None, text.into().as_ref(), window, cx);
   }
 
+  /// Replace selected text or insert at cursor position.
   pub fn replace(
     &mut self, text: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>,
   ) {

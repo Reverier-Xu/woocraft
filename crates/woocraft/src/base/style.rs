@@ -1,12 +1,22 @@
+//! Style utilities and trait extensions for layout, typography, and styling.
+//!
+//! Provides PixelsExt for Pixels conversions, helper functions for flex layouts (h_flex, v_flex),
+//! font fallback configuration for multilingual text, and style-related traits.
+
 use gpui::{
   BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks, FontFeatures, Hsla, Pixels,
   Refineable, StyleRefinement, Styled, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
-/// A trait for converting [`Pixels`] to primitive float values.
+/// Trait for converting [`Pixels`] to primitive float values.
+///
+/// Provides convenience methods to convert GPUI Pixels to f32 or f64 for mathematical operations.
 pub trait PixelsExt {
+  /// Converts Pixels to f32.
   fn as_f32(&self) -> f32;
+
+  /// Converts Pixels to f64.
   fn as_f64(&self) -> f64;
 }
 
@@ -70,13 +80,19 @@ pub fn default_font() -> Font {
   }
 }
 
-/// Returns a `Div` as horizontal flex layout.
+/// Returns a default-styled `Div` in horizontal flex layout mode.
+///
+/// Shortcut for `div().h_flex()`. Children are laid out left-to-right.
+/// Font is set to the default locale-appropriate font (with CJK fallbacks as needed).
 #[inline(always)]
 pub fn h_flex() -> Div {
   div().h_flex().font(default_font())
 }
 
-/// Returns a `Div` as vertical flex layout.
+/// Returns a default-styled `Div` in vertical flex layout mode.
+///
+/// Shortcut for `div().v_flex()`. Children are laid out top-to-bottom.
+/// Font is set to the default locale-appropriate font (with CJK fallbacks as needed).
 #[inline(always)]
 pub fn v_flex() -> Div {
   div().v_flex().font(default_font())

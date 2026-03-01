@@ -1,3 +1,9 @@
+//! Linear progress indicator showing completion status as a percentage.
+//!
+//! Progress displays a filled bar representing progress from 0% to 100%, typically
+//! used during file uploads, downloads, or long-running operations. Includes an
+//! optional label and percentage text, with customizable colors.
+
 use std::f32::consts::TAU;
 
 use gpui::{
@@ -8,6 +14,11 @@ use gpui::{
 use crate::{ActiveTheme, Size, StyledExt, h_flex, translate};
 
 #[derive(IntoElement)]
+/// Linear progress bar showing completion percentage.
+///
+/// Renders a horizontal bar where the filled portion represents progress (0-100%).
+/// Displays an optional label and percentage text above the bar. The track color
+/// defaults to a semi-transparent version of the fill color.
 pub struct Progress {
   style: StyleRefinement,
   color: Option<Hsla>,
@@ -25,6 +36,7 @@ impl Default for Progress {
 }
 
 impl Progress {
+  /// Creates a new progress bar with 0% completion and default "Loading..." label.
   pub fn new() -> Self {
     Self {
       value: 0.0,
@@ -37,26 +49,31 @@ impl Progress {
     }
   }
 
+  /// Sets the fill color (defaults to theme primary).
   pub fn color(mut self, color: impl Into<Hsla>) -> Self {
     self.color = Some(color.into());
     self
   }
 
+  /// Sets the current progress as a percentage (0-100, clamped automatically).
   pub fn value(mut self, value: f32) -> Self {
     self.value = value.clamp(0.0, 100.0);
     self
   }
 
+  /// Sets the label text displayed above the progress bar.
   pub fn label(mut self, label: impl Into<SharedString>) -> Self {
     self.label = label.into();
     self
   }
 
+  /// Sets the background/track color (defaults to fill color with 20% opacity).
   pub fn track_color(mut self, color: impl Into<Hsla>) -> Self {
     self.track_color = Some(color.into());
     self
   }
 
+  /// Sets the text color for label and percentage (defaults to theme muted foreground).
   pub fn text_color(mut self, color: impl Into<Hsla>) -> Self {
     self.text_color = Some(color.into());
     self

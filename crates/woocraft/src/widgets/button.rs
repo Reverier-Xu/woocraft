@@ -1,3 +1,54 @@
+//! Interactive button component with support for multiple visual variants, sizes, and states.
+//!
+//! Buttons are fundamental interactive elements used to trigger actions or navigate between views.
+//! This implementation provides a rich feature set including variant styling, loading states, icons,
+//! tooltips, and accessibility support via keyboard navigation.
+//!
+//! # Features
+//! - **8 Visual Variants**: Primary, Success, Warning, Info, Default, Link, Flat, Danger
+//! - **Size Variations**: Small, Medium (default), Large for different UI contexts
+//! - **State Management**: Supports disabled, loading, and selected states
+//! - **Icon Support**: Optional leading icon or loading spinner with animation
+//! - **Customization**: Outline style, border corner control, width expansion
+//! - **Interactivity**: Click handlers, hover callbacks, tooltips
+//! - **Accessibility**: Keyboard tab navigation with configurable tab stop and index
+//!
+//! # Example
+//! ```rust,ignore
+//! use woocraft::{Button, Size};
+//!
+//! // Primary button with click handler
+//! Button::new("submit_btn")
+//!   .label("Submit")
+//!   .primary()
+//!   .on_click(|_event, _window, _cx| {
+//!     println!("Form submitted!");
+//!   })
+//!
+//! // Danger button with outline style
+//! Button::new("delete_btn")
+//!   .label("Delete")
+//!   .danger()
+//!   .outline(true)
+//!
+//! // Loading state button
+//! Button::new("save_btn")
+//!   .label("Saving...")
+//!   .loading(true)
+//!   .disabled(true)
+//!
+//! // Icon-only button
+//! let icon = Icon::new(IconName::Copy);
+//! Button::new("copy_btn")
+//!   .icon(icon)
+//!   .info()
+//! ```
+//!
+//! # Performance Notes
+//! Button rendering is optimized for rapid state updates. The component recomputes styling on
+//! variant or state changes but caches icon animations. For buttons in large lists (100+),
+//! consider using `virtual_list` to only render visible buttons.
+
 use std::rc::Rc;
 
 use gpui::{
@@ -16,26 +67,58 @@ type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type ButtonHoverHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 type TooltipBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 
+/// Semantic button style variants with color and behavior differences.
+///
+/// Each variant has a specific purpose and conveys meaning through color:
+/// - **Primary**: Main call-to-action button (blue/primary color)
+/// - **Success**: Indicates a positive action or confirmation (green)
+/// - **Warning**: Alerts user to potential risks or important actions (yellow/orange)
+/// - **Info**: Provides information or secondary action (info color)
+/// - **Default**: Standard neutral button with border (gray)
+/// - **Link**: Text-only link-style button, no background
+/// - **Flat**: Minimal flat button with transparent background
+/// - **Danger**: Destructive actions like delete or remove (red)
+///
+/// All variants respect the current theme and disabled state, automatically
+/// adjusting opacity when disabled.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ButtonVariant {
+  /// Primary action button. Use for main CTAs like "Submit", "Save", "Confirm".
   Primary,
+  /// Success/positive action button. Use for "Create", "Publish", "Approve".
   Success,
+  /// Warning button. Use for less critical alerts like "Change", "Restart".
   Warning,
+  /// Info button for secondary information or support actions.
   Info,
+  /// Default neutral button. Use when variant is not semantically important.
   #[default]
   Default,
+  /// Link-style button with no background. Use for inline actions or navigation.
   Link,
+  /// Flat minimal button with transparent background. Use in dense UI layouts.
   Flat,
+  /// Danger/destructive button. Use only for delete, remove, or other irreversible actions.
   Danger,
 }
 
+/// Border radius style for button corners.
+///
+/// Provides preset radius values that follow the design system's border radius scale,
+/// or allows custom pixel-based radius. The radius is applied to all corners by default,
+/// but can be customized per-corner using `border_corners()`.
 #[derive(Default, Clone, Copy, Debug)]
 pub enum ButtonRounded {
+  /// No rounding (sharp corners).
   None,
+  /// Small radius (theme.radius / 2.0).
   Small,
+  /// Medium radius (theme.radius). Default.
   #[default]
   Medium,
+  /// Large radius (theme.radius_container).
   Large,
+  /// Custom pixel-based radius.
   Size(Pixels),
 }
 
@@ -45,42 +128,84 @@ impl From<Pixels> for ButtonRounded {
   }
 }
 
+/// Convenience trait for types that support button variant styling.
+///
+/// This trait provides shorthand methods for setting button variants without
+/// explicitly constructing `ButtonVariant` enum values. Implemented by both
+/// `Button` and other button-like components.
 pub trait ButtonVariants: Sized {
+  /// Set the button variant directly.
   fn with_variant(self, variant: ButtonVariant) -> Self;
 
+  /// Set button to Primary variant (main call-to-action).
   fn primary(self) -> Self {
     self.with_variant(ButtonVariant::Primary)
   }
 
+  /// Set button to Success variant (positive actions).
   fn success(self) -> Self {
     self.with_variant(ButtonVariant::Success)
   }
 
+  /// Set button to Warning variant (important but less critical actions).
   fn warning(self) -> Self {
     self.with_variant(ButtonVariant::Warning)
   }
 
+  /// Set button to Info variant (secondary information).
   fn info(self) -> Self {
     self.with_variant(ButtonVariant::Info)
   }
 
+  /// Set button to Default variant (neutral style).
   fn default(self) -> Self {
     self.with_variant(ButtonVariant::Default)
   }
 
+  /// Set button to Flat variant (minimal transparent style).
   fn flat(self) -> Self {
     self.with_variant(ButtonVariant::Flat)
   }
 
+  /// Set button to Link variant (text-only link style).
   fn link(self) -> Self {
     self.with_variant(ButtonVariant::Link)
   }
 
+  /// Set button to Danger variant (destructive actions).
   fn danger(self) -> Self {
     self.with_variant(ButtonVariant::Danger)
   }
 }
 
+/// Interactive button element with configurable styling, state, and event handling.
+///
+/// `Button` is typically constructed using the builder pattern via `Button::new()`, then
+/// configured using chainable methods. The component automatically handles styling changes
+/// based on variant, size, disabled state, and hover/click interactions.
+///
+/// # Builder Example
+/// ```rust,ignore
+/// Button::new("btn_id")
+///   .label("Click Me")
+///   .primary()
+///   .on_click(|event, window, cx| {
+///     // Handle click
+///   })
+/// ```
+///
+/// # States
+/// The button supports several interactive states:
+/// - **default**: Normal state, responds to clicks and hover
+/// - **disabled**: Cannot be clicked, grayed out appearance
+/// - **loading**: Shows spinner icon, click handler disabled
+/// - **selected**: Highlighted state for toggle-like usage
+///
+/// # Styling
+/// Style is determined by the combination of variant, size, and outline flag:
+/// - `variant`: Controls semantic color and styling (8 options)
+/// - `size`: Controls padding, height, text size, and gap (via `Sizable` trait)
+/// - `outline`: Renders empty background with colored border instead of solid background
 #[derive(IntoElement)]
 pub struct Button {
   id: ElementId,
@@ -106,6 +231,19 @@ pub struct Button {
 }
 
 impl Button {
+  /// Create a new button with the given unique identifier.
+  ///
+  /// The button starts with default configuration: no label, Default variant, Medium size,
+  /// and no attached handlers. Use builder methods to customize the button.
+  ///
+  /// # Arguments
+  /// * `id` - Unique identifier for the button within its window. Used for state management,
+  ///   focus handling, and accessibility.
+  ///
+  /// # Example
+  /// ```rust,ignore
+  /// let button = Button::new("confirm_btn");
+  /// ```
   pub fn new(id: impl Into<ElementId>) -> Self {
     Self {
       id: id.into(),
@@ -131,16 +269,33 @@ impl Button {
     }
   }
 
+  /// Set the button's label text.
+  ///
+  /// The label is the primary text content displayed in the button. Can be combined with
+  /// `icon()` to display both icon and text. If both `label` and `icon` are set, they are
+  /// displayed horizontally centered with spacing determined by the button's size.
   pub fn label(mut self, label: impl Into<SharedString>) -> Self {
     self.label = Some(label.into());
     self
   }
 
+  /// Set the button's leading icon.
+  ///
+  /// The icon is displayed before the label text. When no label is set and this is the only
+  /// content, the button becomes square (icon-only). Icon size is determined by the button's
+  /// size setting via the `Sizable` trait.
   pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
   }
 
+  /// Attach a click event handler to the button.
+  ///
+  /// The handler is called when the user clicks the button, unless the button is disabled
+  /// or loading. The handler receives the `ClickEvent`, mutable window and app context.
+  ///
+  /// # Arguments
+  /// * `handler` - Closure with signature `(event: &ClickEvent, window: &mut Window, cx: &mut App)`
   pub fn on_click(
     mut self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
   ) -> Self {
@@ -148,56 +303,106 @@ impl Button {
     self
   }
 
+  /// Attach a hover state change handler.
+  ///
+  /// The handler is called when the user hovers over or leaves the button. Receives a boolean
+  /// indicating whether the mouse is currently over the button. Disabled and loading buttons
+  /// do not trigger hover events.
+  ///
+  /// # Arguments
+  /// * `handler` - Closure with signature `(hovered: &bool, window: &mut Window, cx: &mut App)`
   pub fn on_hover(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
     self.on_hover = Some(Rc::new(handler));
     self
   }
 
+  /// Set whether the button should render in outline style.
+  ///
+  /// When `true`, the button renders with a transparent background and colored border instead
+  /// of a solid background. Outline style is commonly used for secondary actions or to reduce
+  /// visual prominence. Default: `false`.
   pub fn outline(mut self, outline: bool) -> Self {
     self.outline = outline;
     self
   }
 
+  /// Set the border radius style for all corners.
+  ///
+  /// Applies the same border radius to all four corners. Use `border_corners()` to customize
+  /// per-corner. Default: `ButtonRounded::Medium`.
   pub fn rounded(mut self, rounded: impl Into<ButtonRounded>) -> Self {
     self.rounded = rounded.into();
     self
   }
 
+  /// Control which corners are rounded individually.
+  ///
+  /// Allows fine-grained control over individual corner rounding, useful for buttons in
+  /// button groups where only outer corners should be rounded. Order: top-left, top-right,
+  /// bottom-left, bottom-right. Default: all `true`.
   pub fn border_corners(mut self, corners: impl Into<Corners<bool>>) -> Self {
     self.border_corners = corners.into();
     self
   }
 
+  /// Set whether the button should expand to fill available width.
+  ///
+  /// When `true`, the button grows to fill its parent's width and aligns content to the left.
+  /// Useful for full-width buttons in forms or dialogs. Default: `false`.
   pub fn expand(mut self, expanded: bool) -> Self {
     self.expanded = expanded;
     self
   }
 
+  /// Enable or disable the button as a tab stop in keyboard navigation.
+  ///
+  /// When `true`, the button can receive focus via Tab key. When `false`, the button is
+  /// skipped during keyboard navigation. Default: `true`.
   pub fn tab_stop(mut self, tab_stop: bool) -> Self {
     self.tab_stop = tab_stop;
     self
   }
 
+  /// Set the button's tab index for keyboard navigation order.
+  ///
+  /// Controls the keyboard navigation order. Buttons with higher tab index are focused after
+  /// those with lower index. Default: `0`.
   pub fn tab_index(mut self, tab_index: isize) -> Self {
     self.tab_index = tab_index;
     self
   }
 
+  /// Set the button's loading state.
+  ///
+  /// When `true`, displays a loading spinner icon and disables click interactions. Useful for
+  /// async operations like form submission. The spinner animates automatically. See
+  /// `loading_icon()` to customize the spinner appearance. Default: `false`.
   pub fn loading(mut self, loading: bool) -> Self {
     self.loading = loading;
     self
   }
 
+  /// Set a custom loading spinner icon.
+  ///
+  /// Customizes the icon displayed when `loading()` is `true`. If not set, defaults to
+  /// a standard spinner. The icon is automatically animated with rotation. Only used if
+  /// `loading()` is set to `true`.
   pub fn loading_icon(mut self, icon: Icon) -> Self {
     self.loading_icon = Some(icon);
     self
   }
 
+  /// Set the button's tooltip.
+  ///
+  /// The tooltip builder function is called when the user hovers over the button and should
+  /// return an `AnyView` containing the tooltip content. Use for brief help text or shortened
+  /// labels. The tooltip appears with delay and is automatically positioned.
   pub fn tooltip(mut self, builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
     self.tooltip_builder = Some(Rc::new(builder));
     self
   }
 
+  /// Get the button's unique element identifier.
   pub fn element_id(&self) -> ElementId {
     self.id.clone()
   }

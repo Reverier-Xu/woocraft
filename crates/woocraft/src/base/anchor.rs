@@ -1,5 +1,15 @@
+//! Anchor positioning for popover and floating element placement.
+//!
+//! Defines nine anchor points around an element (top-left, top-center, top-right,
+//! bottom-left, bottom-center, bottom-right, plus center variations) for positioning
+//! popovers, dropdowns, and other floating containers.
+
 use gpui::Corner;
 
+/// Anchor point for positioning floating elements (popovers, dropdowns, menus).
+///
+/// Specifies where a floating container should be positioned relative to a trigger element.
+/// Example: TopRight anchors the floating element to the top-right corner of the trigger.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Anchor {
   #[default]

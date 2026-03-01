@@ -1,3 +1,9 @@
+//! Animated rotating icon for indicating loading or processing state.
+//!
+//! Spinner renders an animated icon that continuously rotates, commonly displayed
+//! while content is loading, processing, or waiting. Fully customizable: change the
+//! icon, rotation speed, and color.
+
 use std::time::Duration;
 
 use gpui::{
@@ -8,6 +14,10 @@ use gpui::{
 use crate::{Icon, IconName, Sizable, Size, duration};
 
 #[derive(IntoElement)]
+/// Animated rotating icon indicating loading or processing state.
+///
+/// Spinner displays a fullscreen rotation animation. Default icon is
+/// `SpinnerIos`. Rotation speed defaults to theme duration (typically 1-2 seconds).
 pub struct Spinner {
   size: Size,
   icon: Icon,
@@ -22,6 +32,7 @@ impl Default for Spinner {
 }
 
 impl Spinner {
+  /// Creates a new spinner with default icon (SpinnerIos) and size.
   pub fn new() -> Self {
     Self {
       size: Size::Medium,
@@ -31,16 +42,19 @@ impl Spinner {
     }
   }
 
+  /// Sets the rotating icon (e.g., SpinnerIos, Loader, LoaderCircle).
   pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
     self.icon = icon.into();
     self
   }
 
+  /// Sets the icon color.
   pub fn color(mut self, color: Hsla) -> Self {
     self.color = Some(color);
     self
   }
 
+  /// Sets the rotation speed (one full rotation per duration).
   pub fn speed(mut self, speed: Duration) -> Self {
     self.speed = speed;
     self

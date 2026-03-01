@@ -1,3 +1,10 @@
+//! Visual representation of keyboard keys and keyboard shortcuts.
+//!
+//! Kbd displays a keystroke or key combination in a styled box, useful for
+//! documenting keyboard shortcuts in help text, tooltips, or instructions.
+//! Automatically formats modifier keys (Ctrl, Shift, Alt, Cmd) and special keys
+//! (Enter, Escape, etc.) with platform-specific symbols (e.g., ⌘ on macOS, Ctrl on Linux/Windows).
+
 use gpui::{
   Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, ParentElement as _,
   RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative,
@@ -6,6 +13,10 @@ use gpui::{
 use crate::{ActiveTheme, StyledExt};
 
 #[derive(IntoElement, Clone, Debug)]
+/// Visual keyboard key or shortcut display.
+///
+/// Renders a keystroke in a styled box with platform-appropriate formatting.
+/// Default appearance applies theme styling; `appearance(false)` removes styling.
 pub struct Kbd {
   style: StyleRefinement,
   stroke: Keystroke,
@@ -25,6 +36,9 @@ impl From<Keystroke> for Kbd {
 }
 
 impl Kbd {
+  /// Creates a new keyboard key display for the given keystroke.
+  ///
+  /// Default uses theme styling and platform-appropriate key symbols.
   pub fn new(stroke: Keystroke) -> Self {
     Self {
       style: StyleRefinement::default(),
@@ -34,16 +48,24 @@ impl Kbd {
     }
   }
 
+  /// Toggles the themed appearance (rounded box with background).
+  ///
+  /// When `false`, renders plain undecorated text with no styling.
   pub fn appearance(mut self, appearance: bool) -> Self {
     self.appearance = appearance;
     self
   }
 
+  /// Switches to outline appearance (transparent background, bordered).
   pub fn outline(mut self) -> Self {
     self.outline = true;
     self
   }
 
+  /// Looks up the highest-precedence keybinding for an action and creates a Kbd from it.
+  ///
+  /// Returns `None` if the action has no keybinding.
+  /// Optionally filters by key context (e.g., "vim", "editor").
   pub fn binding_for_action(
     action: &dyn Action, context: Option<&str>, window: &Window,
   ) -> Option<Self> {
@@ -59,6 +81,9 @@ impl Kbd {
       .map(|key| Self::new(key.as_keystroke().clone()))
   }
 
+  /// Looks up the highest-precedence keybinding for an action in a specific focus context.
+  ///
+  /// Returns `None` if the action has no keybinding in that focus context.
   pub fn binding_for_action_in(
     action: &dyn Action, focus_handle: &FocusHandle, window: &Window,
   ) -> Option<Self> {
@@ -69,6 +94,11 @@ impl Kbd {
       .map(|key| Self::new(key.as_keystroke().clone()))
   }
 
+  /// Formats a keystroke for human-readable display.
+  ///
+  /// Combines modifiers (Ctrl, Shift, Alt, Cmd) with the key, using
+  /// platform-specific symbols (⌘ on macOS, Ctrl on others) and special
+  /// key names (Space, Enter, Esc, Backspace, etc.) formatted appropriately.
   pub fn format(key: &Keystroke) -> String {
     #[cfg(target_os = "macos")]
     const DIVIDER: &str = "";

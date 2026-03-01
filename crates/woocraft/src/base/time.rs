@@ -1,3 +1,9 @@
+//! Date/time utilities and matchers for calendar and date picker components.
+//!
+//! Provides Date enum for single-date and date-range selection, date matchers
+//! for disabling specific dates (weekends, date ranges, custom rules), and
+//! formatting utilities.
+
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use gpui::SharedString;
 
@@ -30,10 +36,15 @@ impl NaiveDateExt for NaiveDate {
   }
 }
 
-/// Selected date value for calendar-like widgets.
+/// Selected date value for calendar and date picker widgets.
+///
+/// Can represent a single date or a date range. Each variant can be empty (None values),
+/// indicating no selection yet. Used for capturing user input in date selection components.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Date {
+  /// Single date selection (None = no date selected).
   Single(Option<NaiveDate>),
+  /// Date range selection (start, end; either can be None = incomplete range).
   Range(Option<NaiveDate>, Option<NaiveDate>),
 }
 
@@ -63,14 +74,17 @@ impl From<(NaiveDate, NaiveDate)> for Date {
 }
 
 impl Date {
+  /// Returns true if a date has been selected (not empty).
   pub fn is_some(&self) -> bool {
     matches!(self, Self::Single(Some(_)) | Self::Range(Some(_), _))
   }
 
+  /// Returns true if the date is completely selected (single date or complete range).
   pub fn is_complete(&self) -> bool {
     matches!(self, Self::Single(Some(_)) | Self::Range(Some(_), Some(_)))
   }
 
+  /// Returns the start date (single date or range start).
   pub fn start(&self) -> Option<NaiveDate> {
     match self {
       Self::Single(Some(date)) => Some(*date),
@@ -79,6 +93,7 @@ impl Date {
     }
   }
 
+  /// Returns the end date (only for ranges; None for single dates).
   pub fn end(&self) -> Option<NaiveDate> {
     match self {
       Self::Range(_, Some(end)) => Some(*end),
@@ -86,6 +101,7 @@ impl Date {
     }
   }
 
+  /// Formats the date using the provided format string (chrono fmt syntax).
   pub fn format(&self, format: &str) -> Option<SharedString> {
     match self {
       Self::Single(Some(date)) => Some(date.format(format).to_string().into()),
@@ -96,10 +112,12 @@ impl Date {
     }
   }
 
+  /// Returns true if this is a single-date selection (not a range).
   pub fn is_single(&self) -> bool {
     matches!(self, Self::Single(_))
   }
 
+  /// Checks if a value is one of the active endpoints (single date or range start/end).
   pub fn is_active(&self, value: &NaiveDate) -> bool {
     let value = *value;
     match self {
@@ -108,6 +126,7 @@ impl Date {
     }
   }
 
+  /// Checks if a value falls within a selected range (returns false for single dates).
   pub fn is_in_range(&self, value: &NaiveDate) -> bool {
     let value = *value;
     match self {
@@ -117,19 +136,25 @@ impl Date {
   }
 }
 
-/// Matcher to match dates before and after the interval.
+/// Date matcher for disabling dates before and after an interval.
 pub struct IntervalMatcher {
   before: Option<NaiveDate>,
   after: Option<NaiveDate>,
 }
 
-/// Matcher to match dates within the range.
+/// Date matcher for disabling/highlighting dates within a range.
 pub struct RangeMatcher {
   from: Option<NaiveDate>,
   to: Option<NaiveDate>,
 }
 
-/// Matcher to match dates.
+/// Matcher rule for determining which dates should be disabled or highlighted.
+///
+/// Provides multiple matching strategies:
+/// - DayOfWeek: Match by weekday (0=Sunday, 6=Saturday)
+/// - Interval: Match dates outside [before, after]
+/// - Range: Match dates inside [from, to]
+/// - Custom: Match using a custom predicate
 pub enum Matcher {
   /// Match weekdays by index from Sunday (0..=6).
   DayOfWeek(Vec<u32>),

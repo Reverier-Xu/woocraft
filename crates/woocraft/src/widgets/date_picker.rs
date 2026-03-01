@@ -1,3 +1,28 @@
+//! Date picker component with popup calendar and optional presets.
+//!
+//! DatePicker wraps the Calendar component in a Popover, providing a text input that
+//! displays the Calendar on click or keyboard activation. Supports single date or date range
+//! selection with optional preset buttons (e.g., "Today", "Last 7 Days"). Formats selected
+//! dates for display, validates against disabled date rules, and emits change events.
+//!
+//! # Modes
+//! - **Single Date**: Pick one specific date (default)
+//! - **Date Range**: Pick start and end dates for a range (via `.range()`)
+//!
+//! # Features
+//! - **Popup Calendar**: Click input to open calendar picker
+//! - **Keyboard Support**: Enter/Escape to confirm/cancel, arrow keys in calendar
+//! - **Date Presets**: Quick-select buttons for common ranges ("Today", "Last 30 Days", etc.)
+//! - **Disabled Dates**: Block specific dates via custom matcher (e.g., weekends)
+//! - **Format Control**: Customize date display format
+//! - **Clear Button**: Delete button to unset the date
+//!
+//! # Example
+//! ```rust,ignore
+//! let date_picker = cx.new(|cx| DatePickerState::new(window, cx));
+//! let date_range_picker = cx.new(|cx| DatePickerState::range(window, cx));
+//! ```
+
 use std::rc::Rc;
 
 use chrono::NaiveDate;
@@ -27,19 +52,30 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 /// Events emitted by the DatePicker.
+/// 
+/// Currently emits `Change` event when the user selects a date or date range.
 #[derive(Clone)]
 pub enum DatePickerEvent {
+  /// Emitted when user selects a date or closes the calendar with a selection.
   Change(Date),
 }
 
-/// Preset value for DateRangePreset.
+/// Preset value for date range selection.
+///
+/// Represents either a single date or a date range that can be applied via a quick-select button.
 #[derive(Clone)]
 pub enum DateRangePresetValue {
+  /// Single date preset.
   Single(NaiveDate),
+  /// Date range preset (start, end).
   Range(NaiveDate, NaiveDate),
 }
 
-/// Preset for date range selection.
+/// Quick-select preset button for date picker.
+///
+/// Provides a label and corresponding date(s) that users can click to quickly populate
+/// the date picker without manually selecting from the calendar. Useful for common ranges
+/// like "Today", "Last 7 Days", "This Month", etc.
 #[derive(Clone)]
 pub struct DateRangePreset {
   label: SharedString,
@@ -47,7 +83,11 @@ pub struct DateRangePreset {
 }
 
 impl DateRangePreset {
-  /// Creates a new DateRangePreset with a date.
+  /// Create a preset with a single date.
+  ///
+  /// # Arguments
+  /// * `label` - Display text for the preset button
+  /// * `date` - The date to apply
   pub fn single(label: impl Into<SharedString>, date: NaiveDate) -> Self {
     Self {
       label: label.into(),
@@ -55,7 +95,12 @@ impl DateRangePreset {
     }
   }
 
-  /// Creates a new DateRangePreset with a range of dates.
+  /// Create a preset with a date range.
+  ///
+  /// # Arguments
+  /// * `label` - Display text for the preset button
+  /// * `start` - Start date of the range
+  /// * `end` - End date of the range
   pub fn range(label: impl Into<SharedString>, start: NaiveDate, end: NaiveDate) -> Self {
     Self {
       label: label.into(),
@@ -64,7 +109,11 @@ impl DateRangePreset {
   }
 }
 
-/// Stores the state of the date picker.
+/// Internal state management for the date picker component.
+///
+/// Manages the open/closed state of the popup calendar, the selected date(s),
+/// date format, disabled date rules, and subscriptions to calendar selection events.
+/// Use `DatePickerState::new()` for single-date mode or `.range()` for date range mode.
 pub struct DatePickerState {
   focus_handle: FocusHandle,
   date: Date,
@@ -85,12 +134,17 @@ impl Focusable for DatePickerState {
 impl EventEmitter<DatePickerEvent> for DatePickerState {}
 
 impl DatePickerState {
-  /// Create a date state.
+  /// Create a date picker for selecting a single date.
+  ///
+  /// Starts with no date selected. User can click the input or press Enter to open the calendar.
   pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
     Self::new_with_range(false, window, cx)
   }
 
-  /// Create a date state with range mode.
+  /// Create a date picker for selecting a date range.
+  ///
+  /// Starts with no range selected. User can click the input or press Enter to open the calendar.
+  /// Calendar will display 2 months to make range selection easier.
   pub fn range(window: &mut Window, cx: &mut Context<Self>) -> Self {
     Self::new_with_range(true, window, cx)
   }
