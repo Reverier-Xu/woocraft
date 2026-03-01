@@ -136,8 +136,13 @@ pub fn try_translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) ->
   let locale = normalize_locale(locale.as_ref());
   let key = key.as_ref();
 
-  lookup_custom_translation(&locale, key)
-    .or_else(|| crate::_rust_i18n_try_translate(&locale, key).map(|value| value.into_owned()))
+  // First, try to find the translation in the custom locale chain
+  if let Some(value) = lookup_custom_translation_merged(&locale, key) {
+    return Some(value);
+  }
+
+  // If not found in custom or rust_i18n fallbacks, try rust_i18n directly
+  crate::_rust_i18n_try_translate(&locale, key).map(|value| value.into_owned())
 }
 
 pub fn try_translate(key: impl AsRef<str>) -> Option<String> {
@@ -149,10 +154,12 @@ pub fn translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> Str
   let locale = normalize_locale(locale.as_ref());
   let key = key.as_ref();
 
-  if let Some(value) = lookup_custom_translation(&locale, key) {
+  // First, try to find the translation in the custom locale chain with rust_i18n fallback
+  if let Some(value) = lookup_custom_translation_merged(&locale, key) {
     return value;
   }
 
+  // This should not be reached, as rust_i18n should always return something (the key itself)
   crate::_rust_i18n_translate(&locale, key).into_owned()
 }
 
@@ -163,10 +170,13 @@ pub fn translate(key: impl AsRef<str>) -> String {
 
 pub fn locale_display_name(locale: impl AsRef<str>) -> String {
   let locale = normalize_locale(locale.as_ref());
-  if let Some(name) = lookup_custom_translation(&locale, "i18n.name") {
+  
+  // First try the merged lookup (custom + rust_i18n)
+  if let Some(name) = lookup_custom_translation_merged(&locale, "i18n.name") {
     return name;
   }
 
+  // If the locale has custom translations registered, use the locale code as fallback
   let custom_locales = CUSTOM_LOCALES
     .read()
     .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -175,27 +185,90 @@ pub fn locale_display_name(locale: impl AsRef<str>) -> String {
   }
   drop(custom_locales);
 
-  if let Some(name) = crate::_rust_i18n_try_translate(&locale, "i18n.name") {
-    return name.into_owned();
-  }
-
+  // Last resort: just return the locale code
   locale
 }
 
-fn lookup_custom_translation(locale: &str, key: &str) -> Option<String> {
+/// Look up a translation with proper merging of custom and rust_i18n translations.
+/// 
+/// This function implements a merged lookup strategy:
+/// 1. Check custom locale chain first
+/// 2. If not found, check rust_i18n for the same locale
+/// 3. If found in rust_i18n, return it
+/// 4. If not found, continue with fallback locale from rust_i18n
+/// 5. This ensures that incomplete user translations don't hide built-in translations
+fn lookup_custom_translation_merged(locale: &str, key: &str) -> Option<String> {
   let custom_locales = CUSTOM_LOCALES
     .read()
     .unwrap_or_else(|poisoned| poisoned.into_inner());
-  let mut current_locale = Some(locale);
+  let mut current_locale = Some(locale.to_string());
 
-  while let Some(locale) = current_locale {
-    if let Some(translations) = custom_locales.get(locale)
+  while let Some(locale_str) = current_locale {
+    // First check if this locale has custom translations
+    if let Some(translations) = custom_locales.get(&locale_str)
       && let Some(value) = translations.get(key)
     {
       return Some(value.clone());
     }
-    current_locale = crate::_rust_i18n_lookup_fallback(locale);
+
+    // If custom translation not found, try rust_i18n for this specific locale
+    // This ensures built-in translations are used as fallback
+    if let Some(value) = crate::_rust_i18n_try_translate(&locale_str, key) {
+      return Some(value.into_owned());
+    }
+
+    // Move to the next locale in the fallback chain
+    current_locale = crate::_rust_i18n_lookup_fallback(&locale_str).map(|s| s.to_string());
   }
 
   None
+}
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_incomplete_custom_translation_merges_with_builtin() {
+    // Load only a partial Chinese (Simplified) translation
+    let mut partial_translations = HashMap::new();
+    partial_translations.insert("custom_key".to_string(), "自定义翻译".to_string());
+    // Note: NOT adding "i18n.name" to simulate incomplete translation
+
+    load_locale("zh-hans", partial_translations);
+
+    // Should return the custom translation for custom_key
+    assert_eq!(translate_in_locale("zh-hans", "custom_key"), "自定义翻译");
+
+    // Should Fall back to built-in translation for keys not in custom translation
+    // (i18n.name exists in the built-in translation)
+    let display_name = locale_display_name("zh-hans");
+    assert!(!display_name.is_empty());
+    // The display name should be a proper name, not "i18n.name" (the key itself)
+    assert_ne!(display_name, "i18n.name", "Should not return the key itself when merging with built-in translations");
+  }
+
+  #[test]
+  fn test_custom_translation_priority_over_builtin() {
+    let mut custom_translations = HashMap::new();
+    custom_translations.insert("i18n.name".to_string(), "我的自定义语言名".to_string());
+    custom_translations.insert("some_key".to_string(), "自定义值".to_string());
+
+    load_locale("test-locale", custom_translations);
+
+    // Custom translation should take priority
+    assert_eq!(translate_in_locale("test-locale", "i18n.name"), "我的自定义语言名");
+    assert_eq!(translate_in_locale("test-locale", "some_key"), "自定义值");
+  }
+
+  #[test]
+  fn test_extend_locale_preserves_builtin_translations() {
+    // Clear and extend with just a few keys
+    let mut partial_translations = HashMap::new();
+    partial_translations.insert("extended_key".to_string(), "扩展翻译".to_string());
+
+    extend_locale("zh-hans", partial_translations);
+
+    // Custom extended translation should be available
+    assert_eq!(translate_in_locale("zh-hans", "extended_key"), "扩展翻译");
+  }
 }

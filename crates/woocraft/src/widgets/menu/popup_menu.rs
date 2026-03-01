@@ -12,7 +12,7 @@ use crate::{
   ActiveTheme, CardStyle, Disableable, Divider, ElementExt, Icon, IconLabel, IconName, Kbd,
   ScrollableElement, Selectable, Size, StyleSized,
   actions::{Cancel, Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
-  h_flex, translate, v_flex,
+  h_flex, v_flex,
   widgets::{Button, ButtonVariants},
 };
 
@@ -639,13 +639,13 @@ impl PopupMenu {
     for item in items {
       match item.into() {
         OwnedMenuItem::Action { name, action, .. } => {
-          self = self.menu(translate(name.as_str()), action.boxed_clone())
+          self = self.menu(name.as_str().to_owned(), action.boxed_clone())
         }
         OwnedMenuItem::Separator => {
           self = self.separator();
         }
         OwnedMenuItem::Submenu(submenu) => {
-          let translated_name = translate(submenu.name.as_str());
+          let translated_name = submenu.name.as_str().to_owned();
           self = self.submenu(translated_name, window, cx, move |menu, window, cx| {
             menu.with_menu_items(submenu.items.clone(), window, cx)
           })
