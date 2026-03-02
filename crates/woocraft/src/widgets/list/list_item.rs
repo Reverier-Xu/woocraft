@@ -165,8 +165,8 @@ impl RenderOnce for ListItem {
     self
       .base
       .relative()
-      .container_size(self.size)
-      .container_gap(self.size)
+      .component_size(self.size)
+      .component_gap(self.size)
       .component_min_h(self.size)
       .component_rounded(self.size)
       .text_base()
@@ -201,14 +201,7 @@ impl RenderOnce for ListItem {
           .min_w_0()
           .items_center()
           .gap_x(self.size.component_gap())
-          .child(
-            div()
-              .flex_1()
-              .min_w_0()
-              .overflow_hidden()
-              .text_ellipsis()
-              .children(self.children),
-          )
+          .children(self.children)
           .when_some(self.check_icon, |this, icon| {
             this.child(
               div()

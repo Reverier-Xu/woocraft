@@ -91,7 +91,8 @@ pub fn tree(state: &Entity<TreeState>) -> Tree {
 pub fn tree_with<R, E>(state: &Entity<TreeState>, render_item: R) -> Tree
 where
   R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-  E: IntoElement, {
+  E: IntoElement,
+{
   Tree::new(state).render_item(render_item)
 }
 
@@ -286,18 +287,12 @@ impl TreeState {
           .relative()
           .items_center()
           .component_gap(Size::Medium)
-          .child(div().flex_shrink_0().w(px(16.) * entry.depth()))
+          .pl(px(16.) * entry.depth())
           .child(Icon::new(entry.icon_or_default()))
           .child(div().flex_1().truncate().min_w_0().child(content))
-          .child(
-            div()
-              .w_4()
-              .items_center()
-              .justify_center()
-              .when(is_folder && !is_loading, |this| {
-                this.child(Icon::new(expand_icon))
-              }),
-          ),
+          .when(is_folder && !is_loading, |this| {
+            this.child(Icon::new(expand_icon))
+          }),
       )
   }
 
@@ -683,7 +678,8 @@ impl Tree {
   pub fn render_item<R, E>(mut self, render_item: R) -> Self
   where
     R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     self.render_item = Rc::new(move |ix, entry, selected, window, cx| {
       render_item(ix, entry, selected, window, cx).into_any_element()
     });
