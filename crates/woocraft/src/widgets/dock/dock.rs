@@ -14,7 +14,7 @@ use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 /// Side docks (left/right) include a vertical tab rail plus title-bar controls.
 /// They need a larger minimum width than the generic panel minimum to prevent
 /// title/content overflow.
-const SIDE_DOCK_MIN_SIZE: Pixels = px(136.0);
+const SIDE_DOCK_MIN_SIZE: Pixels = px(16.0 * 16.0);
 
 #[derive(Clone)]
 pub(super) struct ResizePanel;
