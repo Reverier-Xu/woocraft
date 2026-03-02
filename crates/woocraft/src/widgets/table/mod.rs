@@ -110,7 +110,7 @@ pub trait TableThemeExt {
 
 impl TableThemeExt for crate::Theme {
   fn table_bg(&self) -> gpui::Hsla {
-    self.card
+    self.background
   }
 
   fn table_head(&self) -> gpui::Hsla {
