@@ -20,6 +20,8 @@ const CONTEXT: &str = "Tree";
 type TreeRenderItem = Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> AnyElement>;
 type TreeContextMenuBuilder =
   Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+type TreeBlankContextMenuBuilder =
+  Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
 
 /// Events emitted by the tree component.
 #[derive(Clone, Debug)]
@@ -102,8 +104,10 @@ pub struct TreeState {
   scroll_handle: UniformListScrollHandle,
   render_item: TreeRenderItem,
   context_menu_builder: Option<TreeContextMenuBuilder>,
+  blank_context_menu_builder: Option<TreeBlankContextMenuBuilder>,
   /// The index of the row that was right-clicked (used by context menu).
   right_clicked_ix: Option<usize>,
+  right_clicked_blank: bool,
   /// Whether multi-selection is enabled.
   pub multi_selectable: bool,
   /// Whether drag-to-reorder is enabled.
@@ -135,7 +139,9 @@ impl TreeState {
           .into_any_element()
       }),
       context_menu_builder: None,
+      blank_context_menu_builder: None,
       right_clicked_ix: None,
+      right_clicked_blank: false,
       multi_selectable: false,
       draggable: false,
       bottom_gap: None,
@@ -530,10 +536,19 @@ impl TreeState {
   }
 
   fn on_entry_right_click(
-    &mut self, ix: usize, _: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>,
+    &mut self, ix: usize, ev: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>,
   ) {
+    cx.stop_propagation();
+    let _ = ev;
     self.right_clicked_ix = Some(ix);
+    self.right_clicked_blank = false;
     cx.emit(TreeEvent::RightClicked(ix));
+    cx.notify();
+  }
+
+  fn on_blank_right_click(&mut self, _: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    self.right_clicked_ix = None;
+    self.right_clicked_blank = true;
     cx.notify();
   }
 
@@ -633,6 +648,12 @@ impl Render for TreeState {
         items
       })
     })
+    .on_mouse_down(
+      MouseButton::Right,
+      cx.listener(|state, ev, window, cx| {
+        state.on_blank_right_click(ev, window, cx);
+      }),
+    )
     .flex_grow()
     .size_full()
     .track_scroll(self.scroll_handle.clone())
@@ -647,6 +668,7 @@ pub struct Tree {
   style: StyleRefinement,
   render_item: TreeRenderItem,
   context_menu_builder: Option<TreeContextMenuBuilder>,
+  blank_context_menu_builder: Option<TreeBlankContextMenuBuilder>,
   bottom_gap: Option<Pixels>,
 }
 
@@ -671,6 +693,7 @@ impl Tree {
           .into_any_element()
       }),
       context_menu_builder: None,
+      blank_context_menu_builder: None,
       bottom_gap: None,
     }
   }
@@ -699,6 +722,15 @@ impl Tree {
     self
   }
 
+  /// Set a context menu builder for right-clicks on blank area.
+  pub fn blank_context_menu<F>(mut self, builder: F) -> Self
+  where
+    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+  {
+    self.blank_context_menu_builder = Some(Rc::new(builder));
+    self
+  }
+
   /// Set a bottom gap (in pixels) so the user can scroll past the last
   /// element.
   pub fn bottom_gap(mut self, gap: impl Into<Pixels>) -> Self {
@@ -717,6 +749,7 @@ impl RenderOnce for Tree {
     self.state.update(cx, |state, _| {
       state.render_item = self.render_item;
       state.context_menu_builder = self.context_menu_builder;
+      state.blank_context_menu_builder = self.blank_context_menu_builder;
       if let Some(gap) = self.bottom_gap {
         state.bottom_gap = Some(gap);
       }
@@ -742,18 +775,28 @@ impl RenderOnce for Tree {
       .vertical_scrollbar(&scroll_handle)
       .context_menu(move |menu, window, cx| {
         let state = tree_view.read(cx);
-        let Some(ix) = state.right_clicked_ix else {
-          return menu;
-        };
-        let Some(entry) = state.model.entry(ix) else {
-          return menu;
-        };
-        let entry = entry.clone();
         let builder = state.context_menu_builder.clone();
+        let blank_builder = state.blank_context_menu_builder.clone();
+        let right_clicked_blank = state.right_clicked_blank;
+        let right_clicked_ix = state.right_clicked_ix;
         let _ = state;
 
-        if let Some(builder) = builder {
-          builder(ix, &entry, menu, window, cx)
+        if let Some(ix) = right_clicked_ix {
+          let Some(entry) = tree_view.read(cx).model.entry(ix).cloned() else {
+            return menu;
+          };
+
+          if let Some(builder) = builder {
+            builder(ix, &entry, menu, window, cx)
+          } else {
+            menu
+          }
+        } else if right_clicked_blank {
+          if let Some(builder) = blank_builder {
+            builder(menu, window, cx)
+          } else {
+            menu
+          }
         } else {
           menu
         }

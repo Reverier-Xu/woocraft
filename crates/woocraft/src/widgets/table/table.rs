@@ -1,4 +1,6 @@
-use gpui::{App, Entity, IntoElement, KeyBinding, Pixels, RenderOnce, Window};
+use std::rc::Rc;
+
+use gpui::{App, Context, Entity, IntoElement, KeyBinding, Pixels, RenderOnce, Window};
 
 use crate::{
   Sizable, Size, TableDelegate, TableState,
@@ -94,6 +96,8 @@ pub struct Table<D: TableDelegate> {
   scrollbar_visible_vertical: bool,
   scrollbar_visible_horizontal: bool,
   bottom_gap: Option<Pixels>,
+  blank_context_menu_builder:
+    Option<Rc<dyn Fn(crate::PopupMenu, &mut Window, &mut Context<TableState<D>>) -> crate::PopupMenu>>,
 }
 
 impl<D> Table<D>
@@ -114,6 +118,7 @@ where
       scrollbar_visible_vertical: true,
       scrollbar_visible_horizontal: true,
       bottom_gap: None,
+      blank_context_menu_builder: None,
     }
   }
 
@@ -156,6 +161,17 @@ where
     self.bottom_gap = Some(gap.into());
     self
   }
+
+  /// Inject a context menu builder for right-clicks on table blank area.
+  ///
+  /// This does not affect row context menus provided by [`TableDelegate`].
+  pub fn blank_context_menu<F>(mut self, builder: F) -> Self
+  where
+    F: Fn(crate::PopupMenu, &mut Window, &mut Context<TableState<D>>) -> crate::PopupMenu + 'static,
+  {
+    self.blank_context_menu_builder = Some(Rc::new(builder));
+    self
+  }
 }
 
 impl<D> Sizable for Table<D>
@@ -183,6 +199,7 @@ where
         ..Default::default()
       };
       state.options.bottom_gap = self.bottom_gap;
+      state.blank_context_menu_builder = self.blank_context_menu_builder;
     });
 
     self.state

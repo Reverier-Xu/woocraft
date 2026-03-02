@@ -27,6 +27,9 @@ enum SelectionMode {
   Cell,
 }
 
+pub(crate) type TableBlankContextMenuBuilder<D> =
+  Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<TableState<D>>) -> PopupMenu>;
+
 impl SelectionMode {
   #[inline(always)]
   fn is_row(&self) -> bool {
@@ -217,6 +220,8 @@ pub struct TableState<D: TableDelegate> {
   selection_mode: SelectionMode,
   right_clicked_row: Option<usize>,
   right_clicked_cell: Option<(usize, usize)>,
+  right_clicked_blank: bool,
+  pub(crate) blank_context_menu_builder: Option<TableBlankContextMenuBuilder<D>>,
   selected_col: Option<usize>,
   selected_cell: Option<(usize, usize)>,
 
@@ -247,6 +252,8 @@ where
       selected_row: None,
       right_clicked_row: None,
       right_clicked_cell: None,
+      right_clicked_blank: false,
+      blank_context_menu_builder: None,
       selected_col: None,
       selected_cell: None,
       resizing_col: None,
@@ -415,6 +422,8 @@ where
     cx.stop_propagation();
     self.selection_mode = SelectionMode::Row;
     self.right_clicked_row = None;
+    self.right_clicked_cell = None;
+    self.right_clicked_blank = false;
     self.selected_row = Some(row_ix);
     if let Some(row_ix) = self.selected_row {
       self.vertical_scroll_handle.scroll_to_item(
@@ -485,6 +494,9 @@ where
   /// ```
   pub fn set_selected_cell(&mut self, row_ix: usize, col_ix: usize, cx: &mut Context<Self>) {
     self.selection_mode = SelectionMode::Cell;
+    self.right_clicked_row = None;
+    self.right_clicked_cell = None;
+    self.right_clicked_blank = false;
     self.selected_cell = Some((row_ix, col_ix));
 
     // Scroll to the cell
@@ -503,6 +515,9 @@ where
     self.selected_row = None;
     self.selected_col = None;
     self.selected_cell = None;
+    self.right_clicked_row = None;
+    self.right_clicked_cell = None;
+    self.right_clicked_blank = false;
     cx.emit(TableEvent::ClearSelection);
     cx.notify();
   }
@@ -577,8 +592,10 @@ where
   fn on_row_right_click(
     &mut self, _: &MouseDownEvent, row_ix: Option<usize>, _: &mut Window, cx: &mut Context<Self>,
   ) {
+    cx.stop_propagation();
     self.right_clicked_row = row_ix;
     self.right_clicked_cell = None;
+    self.right_clicked_blank = false;
     cx.emit(TableEvent::RightClickedRow(row_ix));
   }
 
@@ -593,7 +610,16 @@ where
     cx.stop_propagation();
     self.right_clicked_cell = Some((row_ix, col_ix));
     self.right_clicked_row = None;
+    self.right_clicked_blank = false;
     cx.emit(TableEvent::RightClickedCell(row_ix, col_ix));
+  }
+
+  fn on_blank_right_click(&mut self, _: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    self.right_clicked_row = None;
+    self.right_clicked_cell = None;
+    self.right_clicked_blank = true;
+    cx.emit(TableEvent::RightClickedRow(None));
+    cx.notify();
   }
 
   fn on_row_left_click(
@@ -1715,7 +1741,8 @@ where
     } else {
       render_rows_count
     };
-    let right_clicked_row = self.right_clicked_row;
+    let has_right_click_target =
+      self.right_clicked_row.is_some() || self.right_clicked_cell.is_some() || self.right_clicked_blank;
     let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
 
     let loading_view = if loading {
@@ -1744,16 +1771,37 @@ where
       .id("table-inner")
       .size_full()
       .overflow_hidden()
+      .on_mouse_down(
+        MouseButton::Right,
+        cx.listener(|this, e, window, cx| {
+          this.on_blank_right_click(e, window, cx);
+        }),
+      )
       .child(self.render_table_header(left_columns_count, window, cx))
       .context_menu({
         let view = cx.entity().clone();
-        move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
-          if let Some(row_ix) = view.read(cx).right_clicked_row {
-            view.update(cx, |menu, cx| {
-              menu.delegate_mut().context_menu(row_ix, this, window, cx)
+        move |menu, window: &mut Window, cx: &mut Context<PopupMenu>| {
+          let (right_clicked_row, right_clicked_blank, blank_context_menu_builder) = {
+            let state = view.read(cx);
+            (
+              state.right_clicked_row,
+              state.right_clicked_blank,
+              state.blank_context_menu_builder.clone(),
+            )
+          };
+
+          if let Some(row_ix) = right_clicked_row {
+            view.update(cx, |state, cx| {
+              state.delegate_mut().context_menu(row_ix, menu, window, cx)
             })
+          } else if right_clicked_blank {
+            if let Some(builder) = blank_context_menu_builder {
+              view.update(cx, |_, cx| builder(menu, window, cx))
+            } else {
+              menu
+            }
           } else {
-            this
+            menu
           }
         }
       })
@@ -1859,7 +1907,7 @@ where
             Axis::Horizontal,
             &self.horizontal_scroll_handle,
           ))
-          .when(right_clicked_row.is_some(), |this| {
+          .when(has_right_click_target, |this| {
             this.on_mouse_down_out(cx.listener(|this, e, window, cx| {
               this.on_row_right_click(e, None, window, cx);
               cx.notify();

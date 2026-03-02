@@ -10,9 +10,9 @@ use gpui::{
 
 use super::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::{
-  ActiveTheme as _, Icon, IconName, IndexPath, Input, InputEvent, InputState, ListDelegate,
-  Scrollbar, Selectable, Sizable, Size, StyledExt, VirtualListScrollHandle, WidgetGroup,
-  WidgetGroupChild,
+  ActiveTheme as _, ContextMenuExt as _, Icon, IconName, IndexPath, Input, InputEvent, InputState,
+  ListDelegate, PopupMenu, Scrollbar, Selectable, Sizable, Size, StyledExt,
+  VirtualListScrollHandle, WidgetGroup, WidgetGroupChild,
   actions::{Cancel, Confirm, SelectDown, SelectUp},
   translate, v_flex, v_virtual_list,
 };
@@ -48,6 +48,9 @@ struct ListOptions {
   bottom_gap: Option<Pixels>,
 }
 
+type ListContextMenuBuilder<D> =
+  Rc<dyn Fn(Option<IndexPath>, PopupMenu, &mut Window, &mut Context<ListState<D>>) -> PopupMenu>;
+
 impl Default for ListOptions {
   fn default() -> Self {
     Self {
@@ -77,6 +80,8 @@ pub struct ListState<D: ListDelegate> {
   item_to_measure_index: IndexPath,
   deferred_scroll_to_index: Option<(IndexPath, ScrollStrategy)>,
   mouse_right_clicked_index: Option<IndexPath>,
+  mouse_right_clicked_blank: bool,
+  context_menu_builder: Option<ListContextMenuBuilder<D>>,
   reset_on_cancel: bool,
   searchable: bool,
   selectable: bool,
@@ -109,6 +114,8 @@ where
       item_to_measure_index: IndexPath::default(),
       deferred_scroll_to_index: None,
       mouse_right_clicked_index: None,
+      mouse_right_clicked_blank: false,
+      context_menu_builder: None,
       scroll_handle: VirtualListScrollHandle::new(),
       reset_on_cancel: true,
       _search_task: Task::ready(()),
@@ -193,12 +200,19 @@ where
     &mut self, ix: Option<IndexPath>, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.mouse_right_clicked_index = ix;
+    self.mouse_right_clicked_blank = false;
     self.delegate.set_right_clicked_index(ix, window, cx);
   }
 
   /// Return index of right-clicked item.
   pub fn right_clicked_index(&self) -> Option<IndexPath> {
     self.mouse_right_clicked_index
+  }
+
+  fn on_blank_right_click(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    self.set_right_clicked_index(None, window, cx);
+    self.mouse_right_clicked_blank = true;
+    cx.notify();
   }
 
   /// Set item used for measurement.
@@ -433,6 +447,7 @@ where
           .on_mouse_down(
             MouseButton::Right,
             cx.listener(move |this, _, window, cx| {
+              cx.stop_propagation();
               this.set_right_clicked_index(Some(ix), window, cx);
               cx.notify();
             }),
@@ -573,9 +588,9 @@ where
     };
     let items_count = self.rows_cache.items_count();
     let entities_count = self.rows_cache.len();
-    let mouse_right_clicked_index = self.mouse_right_clicked_index;
+    let has_right_clicked_target = self.mouse_right_clicked_index.is_some() || self.mouse_right_clicked_blank;
 
-    v_flex()
+    let list = v_flex()
       .key_context("List")
       .id("list")
       .track_focus(&self.focus_handle)
@@ -606,6 +621,9 @@ where
       })
       .when(!loading, |this| {
         this
+          .on_mouse_down(MouseButton::Right, cx.listener(|this, _, window, cx| {
+            this.on_blank_right_click(window, cx);
+          }))
           .on_action(cx.listener(Self::on_action_cancel))
           .on_action(cx.listener(Self::on_action_confirm))
           .on_action(cx.listener(Self::on_action_select_next))
@@ -617,7 +635,7 @@ where
               this.child(self.render_items(items_count, entities_count, window, cx))
             }
           })
-          .when(mouse_right_clicked_index.is_some(), |this| {
+          .when(has_right_clicked_target, |this| {
             this.on_mouse_down_out(cx.listener(|this, _, window, cx| {
               this.set_right_clicked_index(None, window, cx);
               cx.notify();
@@ -625,6 +643,31 @@ where
           })
       })
       .children(loading_view)
+      ;
+
+    if let Some(builder) = self.context_menu_builder.clone() {
+      let list_state = cx.entity().clone();
+      list
+        .context_menu(move |menu, window, cx| {
+          let (target, has_target) = {
+            let state = list_state.read(cx);
+            if state.mouse_right_clicked_blank {
+              (None, true)
+            } else {
+              (state.mouse_right_clicked_index, state.mouse_right_clicked_index.is_some())
+            }
+          };
+
+          if has_target {
+            list_state.update(cx, |_, cx| builder(target, menu, window, cx))
+          } else {
+            menu
+          }
+        })
+        .into_any_element()
+    } else {
+      list.into_any_element()
+    }
   }
 }
 
@@ -634,6 +677,7 @@ pub struct List<D: ListDelegate + 'static> {
   state: gpui::Entity<ListState<D>>,
   style: StyleRefinement,
   options: ListOptions,
+  context_menu_builder: Option<ListContextMenuBuilder<D>>,
 }
 
 impl<D> List<D>
@@ -646,6 +690,7 @@ where
       state: state.clone(),
       style: StyleRefinement::default(),
       options: ListOptions::default(),
+      context_menu_builder: None,
     }
   }
 
@@ -665,6 +710,20 @@ where
   /// element.
   pub fn bottom_gap(mut self, gap: impl Into<Pixels>) -> Self {
     self.options.bottom_gap = Some(gap.into());
+    self
+  }
+
+  /// Set context menu builder for right-clicked item or blank area.
+  ///
+  /// `target` is `Some(IndexPath)` for item right-click and `None` for blank
+  /// area right-click.
+  pub fn context_menu<F>(mut self, builder: F) -> Self
+  where
+    F:
+      Fn(Option<IndexPath>, PopupMenu, &mut Window, &mut Context<ListState<D>>) -> PopupMenu
+        + 'static,
+  {
+    self.context_menu_builder = Some(Rc::new(builder));
     self
   }
 }
@@ -701,6 +760,7 @@ where
 
     self.state.update(cx, |state, _| {
       state.options = self.options;
+      state.context_menu_builder = self.context_menu_builder;
     });
 
     self.state

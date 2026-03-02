@@ -158,13 +158,12 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
           (shared_state.position, shared_state.open)
         };
         let menu_view = state.shared_state.borrow().menu_view.clone();
+        let has_menu_item = menu_view
+          .as_ref()
+          .map(|menu| !menu.read(cx).is_empty())
+          .unwrap_or(false);
         let mut menu_element = None;
         if open {
-          let has_menu_item = menu_view
-            .as_ref()
-            .map(|menu| !menu.read(cx).is_empty())
-            .unwrap_or(false);
-
           if has_menu_item {
             menu_element = Some(
               deferred(
@@ -216,7 +215,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
           layout_id,
           ContextMenuState {
             element: Some(element),
-            open,
+            open: open && has_menu_item,
             ..Default::default()
           },
         )
@@ -288,18 +287,26 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                   build(menu, window, cx)
                 });
 
-                // Set up the subscription for dismiss handling
-                let _subscription = window.subscribe(&menu, cx, {
-                  let shared_state = shared_state.clone();
-                  move |_, _: &DismissEvent, window, _cx| {
-                    shared_state.borrow_mut().open = false;
-                    window.refresh();
-                  }
-                });
-
                 // Update the shared state with the built menu and subscription
                 {
                   let mut state = shared_state.borrow_mut();
+                  if menu.read(cx).is_empty() {
+                    state.open = false;
+                    state.menu_view = None;
+                    state._subscription = None;
+                    window.refresh();
+                    return;
+                  }
+
+                  // Set up the subscription for dismiss handling
+                  let _subscription = window.subscribe(&menu, cx, {
+                    let shared_state = shared_state.clone();
+                    move |_, _: &DismissEvent, window, _cx| {
+                      shared_state.borrow_mut().open = false;
+                      window.refresh();
+                    }
+                  });
+
                   state.menu_view = Some(menu.clone());
                   state._subscription = Some(_subscription);
                   window.refresh();
