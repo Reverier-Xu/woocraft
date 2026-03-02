@@ -3,7 +3,7 @@ use std::sync::Arc;
 use gpui::{
   AnyElement, App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
   EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-  Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+  Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
   WeakEntity, Window, div, prelude::FluentBuilder, relative,
 };
 
@@ -1310,9 +1310,7 @@ impl TabPanel {
           .overflow_x_hidden()
           .flex_1()
           .child(
-            active_panel
-              .view()
-              .cached(StyleRefinement::default().absolute().size_full()),
+            active_panel.view(), // .cached(StyleRefinement::default().absolute().size_full()),
           ),
       )
       .when(state.droppable, |this| {
