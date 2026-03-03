@@ -163,8 +163,8 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
           .map(|menu| !menu.read(cx).is_empty())
           .unwrap_or(false);
         let mut menu_element = None;
-        if open {
-          if has_menu_item {
+        if open
+          && has_menu_item {
             menu_element = Some(
               deferred(
                 anchored().child(
@@ -200,7 +200,6 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
               .into_any(),
             );
           }
-        }
 
         let mut element = this
           .element

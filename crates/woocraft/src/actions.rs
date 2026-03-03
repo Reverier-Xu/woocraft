@@ -1,7 +1,8 @@
-use gpui::{Action, App, KeyBinding, actions};
+use gpui::{actions, Action, App, KeyBinding};
 use serde::Deserialize;
 
 pub const POPOVER_CONTEXT: &str = "Popover";
+pub const DIALOG_CONTEXT: &str = "Dialog";
 
 #[derive(Clone, Action, PartialEq, Eq, Deserialize)]
 #[action(namespace = woocraft, no_json)]
@@ -27,5 +28,8 @@ actions!(
 );
 
 pub fn init(cx: &mut App) {
-  cx.bind_keys([KeyBinding::new("escape", Cancel, Some(POPOVER_CONTEXT))]);
+  cx.bind_keys([
+    KeyBinding::new("escape", Cancel, Some(POPOVER_CONTEXT)),
+    KeyBinding::new("escape", Cancel, Some(DIALOG_CONTEXT)),
+  ]);
 }

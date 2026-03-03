@@ -7,6 +7,7 @@ mod chart;
 mod checkbox;
 mod color_picker;
 mod date_picker;
+mod dialog;
 mod divider;
 mod dock;
 mod editor;
@@ -48,6 +49,7 @@ pub use chart::*;
 pub use checkbox::*;
 pub use color_picker::*;
 pub use date_picker::*;
+pub use dialog::*;
 pub use divider::*;
 pub use dock::*;
 pub use editor::{
