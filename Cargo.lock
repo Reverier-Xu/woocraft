@@ -7472,7 +7472,7 @@ dependencies = [
 
 [[package]]
 name = "woocraft"
-version = "0.3.14"
+version = "0.3.15"
 dependencies = [
  "aho-corasick",
  "anyhow",
