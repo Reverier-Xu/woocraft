@@ -28,6 +28,9 @@ pub(crate) fn init(cx: &mut App) {
   ]);
 }
 
+type BlankContextMenuBuilder<D> =
+  dyn Fn(crate::PopupMenu, &mut Window, &mut Context<TableState<D>>) -> crate::PopupMenu;
+
 /// A high-performance table element with virtual scrolling and cell selection.
 ///
 /// `Table` is the primary user-facing component for displaying tabular data. It
@@ -96,8 +99,7 @@ pub struct Table<D: TableDelegate> {
   scrollbar_visible_vertical: bool,
   scrollbar_visible_horizontal: bool,
   bottom_gap: Option<Pixels>,
-  blank_context_menu_builder:
-    Option<Rc<dyn Fn(crate::PopupMenu, &mut Window, &mut Context<TableState<D>>) -> crate::PopupMenu>>,
+  blank_context_menu_builder: Option<Rc<BlankContextMenuBuilder<D>>>,
 }
 
 impl<D> Table<D>

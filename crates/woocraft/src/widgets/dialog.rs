@@ -471,6 +471,11 @@ impl RenderOnce for Dialog {
       .bg(cx.theme().foreground.opacity(0.35))
       // Always block pointer events reaching content underneath.
       .occlude()
+      // Fill the constrained area so that flexbox centering has a reference
+      // size.  Without explicit dimensions the flex container collapses to
+      // zero and the panel ends up at the origin (top-left corner).
+      .w_full()
+      .h_full()
       // Center the dialog panel.
       .flex()
       .items_center()
