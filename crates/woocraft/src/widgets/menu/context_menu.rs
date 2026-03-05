@@ -163,43 +163,42 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
           .map(|menu| !menu.read(cx).is_empty())
           .unwrap_or(false);
         let mut menu_element = None;
-        if open
-          && has_menu_item {
-            menu_element = Some(
-              deferred(
-                anchored().child(
-                  div()
-                    .w(window.bounds().size.width)
-                    .h(window.bounds().size.height)
-                    .on_scroll_wheel(|_, _, cx| {
-                      cx.stop_propagation();
-                    })
-                    .child(
-                      anchored()
-                        .position(position)
-                        .snap_to_window_with_margin(px(8.))
-                        .anchor(anchor)
-                        .when_some(menu_view, |this, menu| {
-                          // Focus the menu, so that can be handle the action.
-                          if !menu.focus_handle(cx).contains_focused(window, cx) {
-                            menu.focus_handle(cx).focus(window);
-                          }
+        if open && has_menu_item {
+          menu_element = Some(
+            deferred(
+              anchored().child(
+                div()
+                  .w(window.bounds().size.width)
+                  .h(window.bounds().size.height)
+                  .on_scroll_wheel(|_, _, cx| {
+                    cx.stop_propagation();
+                  })
+                  .child(
+                    anchored()
+                      .position(position)
+                      .snap_to_window_with_margin(px(8.))
+                      .anchor(anchor)
+                      .when_some(menu_view, |this, menu| {
+                        // Focus the menu, so that can be handle the action.
+                        if !menu.focus_handle(cx).contains_focused(window, cx) {
+                          menu.focus_handle(cx).focus(window);
+                        }
 
-                          this.child(
-                            v_flex()
-                              .popover_style(cx.theme())
-                              .shadow_md()
-                              .container_padding(Size::Medium)
-                              .child(menu.clone()),
-                          )
-                        }),
-                    ),
-                ),
-              )
-              .with_priority(1)
-              .into_any(),
-            );
-          }
+                        this.child(
+                          v_flex()
+                            .popover_style(cx.theme())
+                            .shadow_md()
+                            .container_padding(Size::Medium)
+                            .child(menu.clone()),
+                        )
+                      }),
+                  ),
+              ),
+            )
+            .with_priority(1)
+            .into_any(),
+          );
+        }
 
         let mut element = this
           .element

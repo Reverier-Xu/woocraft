@@ -9,7 +9,7 @@ use gpui::{
 use super::state::{CONTEXT, Copy, Cut, InputState, Paste, SelectAll};
 use crate::{
   ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Size, StyleSized as _, StyledExt,
-  translate, v_flex,
+  translate_woocraft, v_flex,
   widgets::{
     editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN},
     scroll::Scrollbar,
@@ -393,26 +393,26 @@ impl RenderOnce for Editor {
         if default_context_menu {
           menu = menu
             .menu_with_icon_and_disabled(
-              translate("editor.context_menu.cut"),
+              translate_woocraft("editor.context_menu.cut"),
               IconName::Cut,
               Box::new(Cut),
               !(is_writable && has_selection),
             )
             .menu_with_icon_and_disabled(
-              translate("editor.context_menu.copy"),
+              translate_woocraft("editor.context_menu.copy"),
               IconName::Copy,
               Box::new(Copy),
               !has_selection,
             )
             .menu_with_icon_and_disabled(
-              translate("editor.context_menu.paste"),
+              translate_woocraft("editor.context_menu.paste"),
               IconName::ClipboardPaste,
               Box::new(Paste),
               !has_paste,
             )
             .separator()
             .menu_with_icon(
-              translate("editor.context_menu.select_all"),
+              translate_woocraft("editor.context_menu.select_all"),
               IconName::SelectAllOn,
               Box::new(SelectAll),
             );

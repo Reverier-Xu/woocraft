@@ -5,12 +5,29 @@ use std::{
 };
 
 pub const SUPPORTED_LOCALES: [&str; 4] = ["zh-hans", "zh-hant", "en-us", "ja-jp"];
+pub const WOOCRAFT_I18N_DOMAIN: &str = "tech.woooo.woocraft";
 
 type LocaleTranslations = HashMap<String, String>;
 type CustomLocaleStore = HashMap<String, LocaleTranslations>;
 
 static CUSTOM_LOCALES: LazyLock<RwLock<CustomLocaleStore>> =
   LazyLock::new(|| RwLock::new(HashMap::new()));
+
+fn is_woocraft_domain_key(key: &str) -> bool {
+  key == WOOCRAFT_I18N_DOMAIN
+    || key
+      .strip_prefix(WOOCRAFT_I18N_DOMAIN)
+      .is_some_and(|rest| rest.starts_with('.'))
+}
+
+pub fn woocraft_key(key: impl AsRef<str>) -> String {
+  let key = key.as_ref();
+  if is_woocraft_domain_key(key) {
+    key.to_string()
+  } else {
+    format!("{WOOCRAFT_I18N_DOMAIN}.{key}")
+  }
+}
 
 fn normalize_known_locale(locale: &str) -> Option<&'static str> {
   if locale == "zh"
@@ -110,6 +127,11 @@ pub fn available_locales() -> Vec<String> {
 
 pub fn load_locale(locale: impl AsRef<str>, translations: HashMap<String, String>) {
   let locale = normalize_locale(locale.as_ref());
+  let translations = translations
+    .into_iter()
+    .filter(|(key, _)| !is_woocraft_domain_key(key))
+    .collect();
+
   CUSTOM_LOCALES
     .write()
     .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -128,8 +150,37 @@ where
   let locale_translations = custom_locales.entry(locale).or_default();
 
   for (key, value) in translations {
-    locale_translations.insert(key.into(), value.into());
+    let key = key.into();
+    if !is_woocraft_domain_key(&key) {
+      locale_translations.insert(key, value.into());
+    }
   }
+}
+
+pub fn try_translate_woocraft_in_locale(
+  locale: impl AsRef<str>, key: impl AsRef<str>,
+) -> Option<String> {
+  let locale = normalize_locale(locale.as_ref());
+  let key = woocraft_key(key);
+  lookup_rust_i18n_translation_merged(&locale, &key)
+}
+
+pub fn try_translate_woocraft(key: impl AsRef<str>) -> Option<String> {
+  let locale = locale();
+  try_translate_woocraft_in_locale(&*locale, key)
+}
+
+pub fn translate_woocraft_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> String {
+  let locale = normalize_locale(locale.as_ref());
+  let key = woocraft_key(key);
+
+  lookup_rust_i18n_translation_merged(&locale, &key)
+    .unwrap_or_else(|| crate::_rust_i18n_translate(&locale, &key).into_owned())
+}
+
+pub fn translate_woocraft(key: impl AsRef<str>) -> String {
+  let locale = locale();
+  translate_woocraft_in_locale(&*locale, key)
 }
 
 pub fn try_translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> Option<String> {
@@ -154,12 +205,14 @@ pub fn translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> Str
   let locale = normalize_locale(locale.as_ref());
   let key = key.as_ref();
 
-  // First, try to find the translation in the custom locale chain with rust_i18n fallback
+  // First, try to find the translation in the custom locale chain with rust_i18n
+  // fallback
   if let Some(value) = lookup_custom_translation_merged(&locale, key) {
     return value;
   }
 
-  // This should not be reached, as rust_i18n should always return something (the key itself)
+  // This should not be reached, as rust_i18n should always return something (the
+  // key itself)
   crate::_rust_i18n_translate(&locale, key).into_owned()
 }
 
@@ -170,13 +223,20 @@ pub fn translate(key: impl AsRef<str>) -> String {
 
 pub fn locale_display_name(locale: impl AsRef<str>) -> String {
   let locale = normalize_locale(locale.as_ref());
-  
-  // First try the merged lookup (custom + rust_i18n)
+  let builtin_key = woocraft_key("i18n.name");
+
+  // First try the built-in woocraft domain key
+  if let Some(name) = lookup_rust_i18n_translation_merged(&locale, &builtin_key) {
+    return name;
+  }
+
+  // Then try user-defined locale display names in custom locales
   if let Some(name) = lookup_custom_translation_merged(&locale, "i18n.name") {
     return name;
   }
 
-  // If the locale has custom translations registered, use the locale code as fallback
+  // If the locale has custom translations registered, use the locale code as
+  // fallback
   let custom_locales = CUSTOM_LOCALES
     .read()
     .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -189,15 +249,21 @@ pub fn locale_display_name(locale: impl AsRef<str>) -> String {
   locale
 }
 
-/// Look up a translation with proper merging of custom and rust_i18n translations.
-/// 
+/// Look up a translation with proper merging of custom and rust_i18n
+/// translations.
+///
 /// This function implements a merged lookup strategy:
 /// 1. Check custom locale chain first
 /// 2. If not found, check rust_i18n for the same locale
 /// 3. If found in rust_i18n, return it
 /// 4. If not found, continue with fallback locale from rust_i18n
-/// 5. This ensures that incomplete user translations don't hide built-in translations
+/// 5. This ensures that incomplete user translations don't hide built-in
+///    translations
 fn lookup_custom_translation_merged(locale: &str, key: &str) -> Option<String> {
+  if is_woocraft_domain_key(key) {
+    return lookup_rust_i18n_translation_merged(locale, key);
+  }
+
   let custom_locales = CUSTOM_LOCALES
     .read()
     .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -211,13 +277,24 @@ fn lookup_custom_translation_merged(locale: &str, key: &str) -> Option<String> {
       return Some(value.clone());
     }
 
-    // If custom translation not found, try rust_i18n for this specific locale
-    // This ensures built-in translations are used as fallback
     if let Some(value) = crate::_rust_i18n_try_translate(&locale_str, key) {
       return Some(value.into_owned());
     }
 
-    // Move to the next locale in the fallback chain
+    current_locale = crate::_rust_i18n_lookup_fallback(&locale_str).map(|s| s.to_string());
+  }
+
+  None
+}
+
+fn lookup_rust_i18n_translation_merged(locale: &str, key: &str) -> Option<String> {
+  let mut current_locale = Some(locale.to_string());
+
+  while let Some(locale_str) = current_locale {
+    if let Some(value) = crate::_rust_i18n_try_translate(&locale_str, key) {
+      return Some(value.into_owned());
+    }
+
     current_locale = crate::_rust_i18n_lookup_fallback(&locale_str).map(|s| s.to_string());
   }
 
@@ -232,7 +309,7 @@ mod tests {
     // Load only a partial Chinese (Simplified) translation
     let mut partial_translations = HashMap::new();
     partial_translations.insert("custom_key".to_string(), "自定义翻译".to_string());
-    // Note: NOT adding "i18n.name" to simulate incomplete translation
+    // Note: NOT adding built-in domain key to simulate incomplete translation
 
     load_locale("zh-hans", partial_translations);
 
@@ -244,7 +321,10 @@ mod tests {
     let display_name = locale_display_name("zh-hans");
     assert!(!display_name.is_empty());
     // The display name should be a proper name, not "i18n.name" (the key itself)
-    assert_ne!(display_name, "i18n.name", "Should not return the key itself when merging with built-in translations");
+    assert_ne!(
+      display_name, "i18n.name",
+      "Should not return the key itself when merging with built-in translations"
+    );
   }
 
   #[test]
@@ -256,8 +336,27 @@ mod tests {
     load_locale("test-locale", custom_translations);
 
     // Custom translation should take priority
-    assert_eq!(translate_in_locale("test-locale", "i18n.name"), "我的自定义语言名");
+    assert_eq!(
+      translate_in_locale("test-locale", "i18n.name"),
+      "我的自定义语言名"
+    );
     assert_eq!(translate_in_locale("test-locale", "some_key"), "自定义值");
+  }
+
+  #[test]
+  fn test_custom_locale_cannot_override_woocraft_domain_key() {
+    let mut custom_translations = HashMap::new();
+    custom_translations.insert(
+      woocraft_key("common.loading"),
+      "This should be ignored".to_string(),
+    );
+
+    load_locale("en-us", custom_translations);
+
+    assert_eq!(
+      translate_woocraft_in_locale("en-us", "common.loading"),
+      "Loading..."
+    );
   }
 
   #[test]

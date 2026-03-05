@@ -14,7 +14,7 @@ use crate::{
   ListDelegate, PopupMenu, Scrollbar, Selectable, Sizable, Size, StyledExt,
   VirtualListScrollHandle, WidgetGroup, WidgetGroupChild,
   actions::{Cancel, Confirm, SelectDown, SelectUp},
-  translate, v_flex, v_virtual_list,
+  translate_woocraft, v_flex, v_virtual_list,
 };
 
 pub(crate) fn init(cx: &mut App) {
@@ -96,7 +96,7 @@ where
 {
   pub fn new(delegate: D, _window: &mut Window, cx: &mut Context<Self>) -> Self {
     let query_input =
-      cx.new(|cx| InputState::new(cx).placeholder(translate("list.search_placeholder")));
+      cx.new(|cx| InputState::new(cx).placeholder(translate_woocraft("list.search_placeholder")));
 
     let _query_input_subscription =
       cx.subscribe_in(&query_input, _window, Self::on_query_input_event);
@@ -588,7 +588,8 @@ where
     };
     let items_count = self.rows_cache.items_count();
     let entities_count = self.rows_cache.len();
-    let has_right_clicked_target = self.mouse_right_clicked_index.is_some() || self.mouse_right_clicked_blank;
+    let has_right_clicked_target =
+      self.mouse_right_clicked_index.is_some() || self.mouse_right_clicked_blank;
 
     let list = v_flex()
       .key_context("List")
@@ -621,9 +622,12 @@ where
       })
       .when(!loading, |this| {
         this
-          .on_mouse_down(MouseButton::Right, cx.listener(|this, _, window, cx| {
-            this.on_blank_right_click(window, cx);
-          }))
+          .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(|this, _, window, cx| {
+              this.on_blank_right_click(window, cx);
+            }),
+          )
           .on_action(cx.listener(Self::on_action_cancel))
           .on_action(cx.listener(Self::on_action_confirm))
           .on_action(cx.listener(Self::on_action_select_next))
@@ -642,8 +646,7 @@ where
             }))
           })
       })
-      .children(loading_view)
-      ;
+      .children(loading_view);
 
     if let Some(builder) = self.context_menu_builder.clone() {
       let list_state = cx.entity().clone();
@@ -654,7 +657,10 @@ where
             if state.mouse_right_clicked_blank {
               (None, true)
             } else {
-              (state.mouse_right_clicked_index, state.mouse_right_clicked_index.is_some())
+              (
+                state.mouse_right_clicked_index,
+                state.mouse_right_clicked_index.is_some(),
+              )
             }
           };
 
@@ -719,10 +725,8 @@ where
   /// area right-click.
   pub fn context_menu<F>(mut self, builder: F) -> Self
   where
-    F:
-      Fn(Option<IndexPath>, PopupMenu, &mut Window, &mut Context<ListState<D>>) -> PopupMenu
-        + 'static,
-  {
+    F: Fn(Option<IndexPath>, PopupMenu, &mut Window, &mut Context<ListState<D>>) -> PopupMenu
+      + 'static, {
     self.context_menu_builder = Some(Rc::new(builder));
     self
   }

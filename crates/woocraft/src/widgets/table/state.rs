@@ -1741,8 +1741,9 @@ where
     } else {
       render_rows_count
     };
-    let has_right_click_target =
-      self.right_clicked_row.is_some() || self.right_clicked_cell.is_some() || self.right_clicked_blank;
+    let has_right_click_target = self.right_clicked_row.is_some()
+      || self.right_clicked_cell.is_some()
+      || self.right_clicked_blank;
     let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
 
     let loading_view = if loading {

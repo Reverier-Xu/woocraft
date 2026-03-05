@@ -3,8 +3,8 @@ use std::sync::Arc;
 use gpui::{
   AnyElement, App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
   EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-  Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
-  WeakEntity, Window, div, prelude::FluentBuilder, relative,
+  Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, WeakEntity,
+  Window, div, prelude::FluentBuilder, relative,
 };
 
 use super::{
@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{
   ActiveTheme, AxisExt, Disableable, Divider, DockPlacement, Icon, IconLabel, IconName, Placement,
-  Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate, v_flex,
+  Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate_woocraft, v_flex,
 };
 
 #[derive(Clone)]
@@ -634,10 +634,14 @@ impl TabPanel {
           Some((
             "zoom-out",
             IconName::ArrowMinimize,
-            translate("dock.zoom_out"),
+            translate_woocraft("dock.zoom_out"),
           ))
         } else if zoomable_toolbar_visible {
-          Some(("zoom-in", IconName::Maximize, translate("dock.zoom_in")))
+          Some((
+            "zoom-in",
+            IconName::Maximize,
+            translate_woocraft("dock.zoom_in"),
+          ))
         } else {
           None
         };
@@ -675,9 +679,9 @@ impl TabPanel {
                   .separator()
                   .menu_with_icon_and_disabled(
                     if zoomed {
-                      translate("dock.zoom_out")
+                      translate_woocraft("dock.zoom_out")
                     } else {
-                      translate("dock.zoom_in")
+                      translate_woocraft("dock.zoom_in")
                     },
                     if zoomed {
                       IconName::ArrowMinimize
@@ -689,7 +693,7 @@ impl TabPanel {
                   )
                   .when(closable, |this| {
                     this.separator().menu_with_icon(
-                      translate("dock.close"),
+                      translate_woocraft("dock.close"),
                       IconName::Dismiss,
                       Box::new(ClosePanel),
                     )
@@ -773,9 +777,9 @@ impl TabPanel {
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
-              translate("dock.expand")
+              translate_woocraft("dock.expand")
             } else {
-              translate("dock.collapse")
+              translate_woocraft("dock.collapse")
             }
             .to_string(),
           );
@@ -826,9 +830,9 @@ impl TabPanel {
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
-              translate("dock.expand")
+              translate_woocraft("dock.expand")
             } else {
-              translate("dock.collapse")
+              translate_woocraft("dock.collapse")
             }
             .to_string(),
           );

@@ -1,17 +1,17 @@
-[common]
+[tech.woooo.woocraft.common]
 loading = "加载中..."
 
-[title_bar]
+[tech.woooo.woocraft.title_bar]
 untitled = "未命名"
 
-[list]
+[tech.woooo.woocraft.list]
 search_placeholder = "搜索..."
 
-[pagination]
+[tech.woooo.woocraft.pagination]
 next     = "下一页"
 previous = "上一页"
 
-[dock]
+[tech.woooo.woocraft.dock]
 close    = "关闭"
 collapse = "折叠"
 expand   = "展开"
@@ -19,80 +19,80 @@ unnamed  = "未命名"
 zoom_in  = "放大"
 zoom_out = "缩小"
 
-[editor.context_menu]
-go_to_definition = "转到定义"
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "复制"
+cut               = "剪切"
+go_to_definition  = "转到定义"
+paste             = "粘贴"
+select_all        = "全选"
 show_code_actions = "显示代码操作"
-cut = "剪切"
-copy = "复制"
-paste = "粘贴"
-select_all = "全选"
 
-[editor.search]
-replace = "替换"
+[tech.woooo.woocraft.editor.search]
+replace     = "替换"
 replace_all = "全部替换"
 
-[input.context_menu]
-cut = "剪切"
-copy = "复制"
-paste = "粘贴"
+[tech.woooo.woocraft.input.context_menu]
+copy       = "复制"
+cut        = "剪切"
+paste      = "粘贴"
 select_all = "全选"
 
-[color_picker]
+[tech.woooo.woocraft.color_picker]
+alpha           = "透明度"
+chroma          = "彩度"
 hex_placeholder = "#RRGGBBAA"
-lightness = "明度"
-chroma = "彩度"
-hue = "色相"
-alpha = "透明度"
-hue_unit = "度"
+hue             = "色相"
+hue_unit        = "度"
+lightness       = "明度"
 
-[calendar.week]
-sunday = "日"
-monday = "一"
-tuesday = "二"
+[tech.woooo.woocraft.calendar.week]
+friday    = "五"
+monday    = "一"
+saturday  = "六"
+sunday    = "日"
+thursday  = "四"
+tuesday   = "二"
 wednesday = "三"
-thursday = "四"
-friday = "五"
-saturday = "六"
 
-[calendar.month]
-january = "一月"
-february = "二月"
-march = "三月"
-april = "四月"
-may = "五月"
-june = "六月"
-july = "七月"
-august = "八月"
+[tech.woooo.woocraft.calendar.month]
+april     = "四月"
+august    = "八月"
+december  = "十二月"
+february  = "二月"
+january   = "一月"
+july      = "七月"
+june      = "六月"
+march     = "三月"
+may       = "五月"
+november  = "十一月"
+october   = "十月"
 september = "九月"
-october = "十月"
-november = "十一月"
-december = "十二月"
 
-[date_picker]
+[tech.woooo.woocraft.date_picker]
 placeholder = "选择日期"
 
-[i18n]
+[tech.woooo.woocraft.i18n]
 name = "简体中文"
 
-[menu]
-file = "文件"
-edit = "编辑"
-view = "视图"
-help = "帮助"
-new_file = "新建文件"
-open_folder = "打开文件夹…"
-save = "保存"
-save_as = "另存为…"
-close_file = "关闭文件"
-quit = "退出"
-undo = "撤销"
-redo = "重做"
-cut = "剪切"
-copy = "复制"
-paste = "粘贴"
-select_all = "全选"
-find = "查找"
-toggle_sidebar = "切换侧边栏"
+[tech.woooo.woocraft.menu]
+about            = "关于"
+close_file       = "关闭文件"
+copy             = "复制"
+cut              = "剪切"
+edit             = "编辑"
+file             = "文件"
+find             = "查找"
+help             = "帮助"
+new_file         = "新建文件"
+open_folder      = "打开文件夹…"
+paste            = "粘贴"
+quit             = "退出"
+redo             = "重做"
+save             = "保存"
+save_as          = "另存为…"
+select_all       = "全选"
 toggle_inspector = "切换 Inspector"
-word_wrap = "自动换行"
-about = "关于"
+toggle_sidebar   = "切换侧边栏"
+undo             = "撤销"
+view             = "视图"
+word_wrap        = "自动换行"

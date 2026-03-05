@@ -10,7 +10,7 @@ use gpui::{
 use crate::{
   ActiveTheme, Button, ButtonVariants, DropdownMenu as _, Icon, IconLabel, IconName, PopupMenu,
   PopupMenuItem, Sizable as _, Size, StyleSized, StyledExt, Theme, ThemeMode, available_locales,
-  h_flex, locale, locale_display_name, set_locale, translate,
+  h_flex, locale, locale_display_name, set_locale, translate_woocraft,
 };
 
 type CloseWindowHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -275,7 +275,7 @@ impl RenderOnce for TitleBar {
     let title = title.unwrap_or_else(|| {
       let window_title = window.window_title();
       if window_title.is_empty() {
-        translate("title_bar.untitled").into()
+        translate_woocraft("title_bar.untitled").into()
       } else {
         window_title.into()
       }

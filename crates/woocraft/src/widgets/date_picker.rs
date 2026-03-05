@@ -41,7 +41,7 @@ use crate::{
   ActiveTheme, Anchor, Button, ButtonVariants as _, Calendar, CalendarEvent, CalendarState, Date,
   Delete, Disableable, Icon, IconName, Matcher, Popover, Selectable, Sizable, Size, StyledExt as _,
   actions::{Cancel, Confirm},
-  h_flex, translate, v_flex,
+  h_flex, translate_woocraft, v_flex,
 };
 
 const CONTEXT: &str = "DatePicker";
@@ -404,7 +404,7 @@ impl RenderOnce for DatePicker {
     let placeholder = self
       .placeholder
       .clone()
-      .unwrap_or_else(|| SharedString::from(translate("date_picker.placeholder")));
+      .unwrap_or_else(|| SharedString::from(translate_woocraft("date_picker.placeholder")));
     let display_title = state_view
       .date
       .format(&state_view.date_format)

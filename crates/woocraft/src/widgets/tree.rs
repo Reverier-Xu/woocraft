@@ -93,8 +93,7 @@ pub fn tree(state: &Entity<TreeState>) -> Tree {
 pub fn tree_with<R, E>(state: &Entity<TreeState>, render_item: R) -> Tree
 where
   R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-  E: IntoElement,
-{
+  E: IntoElement, {
   Tree::new(state).render_item(render_item)
 }
 
@@ -701,8 +700,7 @@ impl Tree {
   pub fn render_item<R, E>(mut self, render_item: R) -> Self
   where
     R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.render_item = Rc::new(move |ix, entry, selected, window, cx| {
       render_item(ix, entry, selected, window, cx).into_any_element()
     });
@@ -725,8 +723,7 @@ impl Tree {
   /// Set a context menu builder for right-clicks on blank area.
   pub fn blank_context_menu<F>(mut self, builder: F) -> Self
   where
-    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-  {
+    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static, {
     self.blank_context_menu_builder = Some(Rc::new(builder));
     self
   }

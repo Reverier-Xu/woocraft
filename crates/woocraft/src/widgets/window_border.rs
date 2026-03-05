@@ -7,9 +7,9 @@ use gpui::{
 use crate::{ActiveTheme, default_font, v_flex};
 
 #[cfg(not(target_os = "linux"))]
-const SHADOW_SIZE: Pixels = px(0.0);
+pub(crate) const WINDOW_SHADOW_SIZE: Pixels = px(0.0);
 #[cfg(target_os = "linux")]
-const SHADOW_SIZE: Pixels = px(12.0);
+pub(crate) const WINDOW_SHADOW_SIZE: Pixels = px(12.0);
 
 const BORDER_SIZE: Pixels = px(1.0);
 
@@ -32,7 +32,7 @@ pub fn window_paddings(window: &Window) -> Edges<Pixels> {
   match window.window_decorations() {
     Decorations::Server => Edges::all(px(0.0)),
     Decorations::Client { tiling } => {
-      let mut paddings = Edges::all(SHADOW_SIZE);
+      let mut paddings = Edges::all(WINDOW_SHADOW_SIZE);
       if tiling.top {
         paddings.top = px(0.0);
       }
@@ -60,7 +60,7 @@ impl RenderOnce for WindowBorder {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let decorations = window.window_decorations();
     let border_radius = cx.theme().radius_container;
-    window.set_client_inset(SHADOW_SIZE);
+    window.set_client_inset(WINDOW_SHADOW_SIZE);
 
     div()
       .id("window-backdrop")
@@ -84,7 +84,7 @@ impl RenderOnce for WindowBorder {
               move |_bounds, hitbox, window, _| {
                 let mouse = window.mouse_position();
                 let size = window.window_bounds().get_bounds().size;
-                let Some(edge) = resize_edge(mouse, SHADOW_SIZE, size) else {
+                let Some(edge) = resize_edge(mouse, WINDOW_SHADOW_SIZE, size) else {
                   return;
                 };
                 window.set_cursor_style(
@@ -117,15 +117,15 @@ impl RenderOnce for WindowBorder {
           .when(!(tiling.bottom || tiling.right), |div| {
             div.rounded_br(border_radius)
           })
-          .when(!tiling.top, |div| div.pt(SHADOW_SIZE))
-          .when(!tiling.bottom, |div| div.pb(SHADOW_SIZE))
-          .when(!tiling.left, |div| div.pl(SHADOW_SIZE))
-          .when(!tiling.right, |div| div.pr(SHADOW_SIZE))
+          .when(!tiling.top, |div| div.pt(WINDOW_SHADOW_SIZE))
+          .when(!tiling.bottom, |div| div.pb(WINDOW_SHADOW_SIZE))
+          .when(!tiling.left, |div| div.pl(WINDOW_SHADOW_SIZE))
+          .when(!tiling.right, |div| div.pr(WINDOW_SHADOW_SIZE))
           .on_mouse_down(MouseButton::Left, move |_, window, _| {
             let size = window.window_bounds().get_bounds().size;
             let pos = window.mouse_position();
 
-            if let Some(edge) = resize_edge(pos, SHADOW_SIZE, size)
+            if let Some(edge) = resize_edge(pos, WINDOW_SHADOW_SIZE, size)
               && !window.is_maximized()
               && !window.is_fullscreen()
             {
@@ -168,7 +168,7 @@ impl RenderOnce for WindowBorder {
                     l: 0.,
                     a: 0.3,
                   },
-                  blur_radius: SHADOW_SIZE / 2.,
+                  blur_radius: WINDOW_SHADOW_SIZE / 2.,
                   spread_radius: px(0.),
                   offset: point(px(0.0), px(0.0)),
                 }])

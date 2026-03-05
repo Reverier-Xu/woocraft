@@ -44,7 +44,7 @@ use palette::{FromColor, Hsl, OklabHue, Oklch, Srgb};
 
 use crate::{
   ActiveTheme, Anchor, Button, ButtonVariant, ButtonVariants, Disableable, ElementExt, Input,
-  InputEvent, InputState, Popover, Sizable, Size, StyledExt, h_flex, translate, v_flex,
+  InputEvent, InputState, Popover, Sizable, Size, StyledExt, h_flex, translate_woocraft, v_flex,
 };
 
 const CHROMA_MAX: f32 = 0.4;
@@ -297,7 +297,7 @@ impl ColorPickerState {
     let initial_hex = self.value().rgba_hex.to_string();
     let hex_input = cx.new(|cx| {
       InputState::new(cx)
-        .placeholder(translate("color_picker.hex_placeholder"))
+        .placeholder(translate_woocraft("color_picker.hex_placeholder"))
         .default_value(initial_hex.clone())
     });
     let subscription = cx.subscribe(&hex_input, Self::on_hex_input_event);
@@ -542,7 +542,7 @@ fn render_channel_row(
         .justify_between()
         .text_xs()
         .text_color(cx.theme().muted_foreground)
-        .child(SharedString::from(translate(channel.i18n_key())))
+        .child(SharedString::from(translate_woocraft(channel.i18n_key())))
         .child(
           h_flex()
             .items_center()
@@ -772,7 +772,7 @@ fn normalize_degrees(value: f32) -> f32 {
 
 fn format_channel_value(channel: PickerChannel, value: f32) -> String {
   match channel {
-    PickerChannel::Hue => format!("{value:.0} {}", translate("color_picker.hue_unit")),
+    PickerChannel::Hue => format!("{value:.0} {}", translate_woocraft("color_picker.hue_unit")),
     _ => format!("{value:.3}"),
   }
 }

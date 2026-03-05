@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use super::{DockArea, PanelInfo, PanelState, TabPanel, invalid_panel::InvalidPanel};
-use crate::{Button, IconName, PopupMenu, translate};
+use crate::{Button, IconName, PopupMenu, translate_woocraft};
 
 type PanelBuilderFn = dyn Fn(
   WeakEntity<DockArea>,
@@ -86,7 +86,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 
   /// The title of the panel
   fn title(&self, cx: &App) -> SharedString {
-    translate("dock.unnamed").into()
+    translate_woocraft("dock.unnamed").into()
   }
 
   /// The icon of the panel, default is `IconName::Grid`

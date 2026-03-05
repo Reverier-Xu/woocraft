@@ -1,7 +1,7 @@
 //! Modal dialog component with backdrop overlay.
 //!
-//! Provides a centered dialog window that renders above all other content with a
-//! semi-transparent backdrop. Supports two interaction modes:
+//! Provides a centered dialog window that renders above all other content with
+//! a semi-transparent backdrop. Supports two interaction modes:
 //!
 //! - **Light** (`DialogMode::Light`): clicking outside the dialog dismisses it
 //!   (similar to how `Popover` and `Menu` work with `on_mouse_down_out`).
@@ -35,16 +35,18 @@
 use std::rc::Rc;
 
 use gpui::{
-  deferred, div, point, prelude::FluentBuilder as _, px, AnyElement, App, BoxShadow, Corners,
-  Decorations, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable, Hsla,
+  anchored, deferred, div, point, prelude::FluentBuilder as _, px, AnyElement, App, BoxShadow,
+  Corners, Decorations, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable, Hsla,
   InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Render, RenderOnce,
   SharedString, StyleRefinement, Styled, Subscription, Window,
 };
 
 use crate::{
   actions::{Cancel, DIALOG_CONTEXT},
-  h_flex, v_flex, window_paddings, ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon,
-  IconName, Sizable, Size, StyleSized, StyledExt,
+  h_flex, v_flex,
+  widgets::window_border::WINDOW_SHADOW_SIZE,
+  window_paddings, ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconName,
+  Sizable, Size, StyleSized, StyledExt,
 };
 
 // ─── Interaction mode ───────────────────────────────────────────────────────
@@ -312,11 +314,27 @@ impl RenderOnce for Dialog {
 
     // ── Window geometry for correct overlay sizing ───────────────────────
     //
-    // The overlay must cover the *content* area of the window, not the
-    // transparent drop-shadow padding that surrounds the client-decorated
-    // frame on Linux.  We use `window_paddings()` to get those insets.
+    // Use the current window bounds as the overlay reference rect.
     let decorations = window.window_decorations();
     let paddings = window_paddings(window);
+    let window_size = window.bounds().size;
+    let backdrop_width = (window_size.width - paddings.left - paddings.right).max(px(0.));
+    let backdrop_height = (window_size.height - paddings.top - paddings.bottom).max(px(0.));
+    let (backdrop_x, backdrop_y) = match decorations {
+      Decorations::Server => (px(0.), px(0.)),
+      Decorations::Client { tiling } => (
+        if tiling.left {
+          -WINDOW_SHADOW_SIZE
+        } else {
+          px(0.)
+        },
+        if tiling.top {
+          -WINDOW_SHADOW_SIZE
+        } else {
+          px(0.)
+        },
+      ),
+    };
 
     // Compute the corner radii for the overlay so that it tracks the
     // rounded window corners regardless of decoration mode or tiling state.
@@ -456,12 +474,12 @@ impl RenderOnce for Dialog {
     let mode = self.mode;
     let backdrop = div()
       .id("dialog-backdrop")
-      // Fill the entire content area (absolute, inset by shadow padding).
+      // Fill the entire window overlay space.
       .absolute()
-      .top(paddings.top)
-      .bottom(paddings.bottom)
-      .left(paddings.left)
-      .right(paddings.right)
+      .top(backdrop_y)
+      .left(backdrop_x)
+      .w(backdrop_width)
+      .h(backdrop_height)
       // Rounded corners matching the window frame.
       .rounded_tl(overlay_corners.top_left)
       .rounded_tr(overlay_corners.top_right)
@@ -471,11 +489,6 @@ impl RenderOnce for Dialog {
       .bg(cx.theme().foreground.opacity(0.35))
       // Always block pointer events reaching content underneath.
       .occlude()
-      // Fill the constrained area so that flexbox centering has a reference
-      // size.  Without explicit dimensions the flex container collapses to
-      // zero and the panel ends up at the origin (top-left corner).
-      .w_full()
-      .h_full()
       // Center the dialog panel.
       .flex()
       .items_center()
@@ -491,7 +504,9 @@ impl RenderOnce for Dialog {
       );
 
     // `deferred` at priority 2 paints above popovers (priority 1).
-    let overlay = deferred(backdrop).with_priority(2);
+    // Use an anchored root so the overlay is positioned in window coordinates
+    // instead of inheriting the host element's local layout offset.
+    let overlay = deferred(anchored().child(backdrop)).with_priority(2);
 
     // Zero-size host element — doesn't affect layout but carries the overlay.
     div().id(self.id).size_0().child(overlay).into_any_element()
