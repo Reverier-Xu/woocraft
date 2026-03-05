@@ -28,6 +28,9 @@ pub struct Column {
   pub paddings: Option<Edges<Pixels>>,
   /// The width of the column.
   pub width: Pixels,
+  /// Optional forced width used only when table auto width detection is
+  /// enabled.
+  pub auto_width: Option<Pixels>,
   /// Whether the column is fixed, the fixed column will pin at the left side
   /// when scrolling horizontally.
   pub fixed: Option<ColumnFixed>,
@@ -61,6 +64,7 @@ impl Default for Column {
       sort: None,
       paddings: None,
       width: px(100.),
+      auto_width: None,
       fixed: None,
       resizable: true,
       movable: true,
@@ -139,6 +143,13 @@ impl Column {
   /// Set the width of the column, default is 100px.
   pub fn width(mut self, width: impl Into<Pixels>) -> Self {
     self.width = width.into();
+    self
+  }
+
+  /// Force a fixed width for this column when table auto width detection is
+  /// enabled.
+  pub fn force_width_in_auto_mode(mut self, width: impl Into<Pixels>) -> Self {
+    self.auto_width = Some(width.into());
     self
   }
 

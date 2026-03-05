@@ -85,6 +85,8 @@ pub(crate) struct TableOptions {
   pub(crate) size: Size,
   /// Optional bottom gap (in pixels) to allow scrolling past the last element.
   pub(crate) bottom_gap: Option<Pixels>,
+  /// Whether to auto-detect column widths from header and sample rows.
+  pub(crate) auto_detect_col_width: bool,
 }
 
 impl Default for TableOptions {
@@ -95,6 +97,7 @@ impl Default for TableOptions {
       bordered: true,
       size: Size::default(),
       bottom_gap: None,
+      auto_detect_col_width: false,
     }
   }
 }

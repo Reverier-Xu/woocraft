@@ -96,6 +96,7 @@ pub struct Table<D: TableDelegate> {
   stripe: bool,
   bordered: bool,
   size: Size,
+  auto_detect_col_width: bool,
   scrollbar_visible_vertical: bool,
   scrollbar_visible_horizontal: bool,
   bottom_gap: Option<Pixels>,
@@ -117,6 +118,7 @@ where
       stripe: false,
       bordered: true,
       size: Size::default(),
+      auto_detect_col_width: false,
       scrollbar_visible_vertical: true,
       scrollbar_visible_horizontal: true,
       bottom_gap: None,
@@ -164,6 +166,20 @@ where
     self
   }
 
+  /// Enable/disable auto-detection for column widths.
+  ///
+  /// When enabled, table computes each column width from shaped text metrics
+  /// (same strategy used by Input caret/selection measurement), using the
+  /// widest item among header and the first 3 rows of
+  /// `TableDelegate::cell_text`, then clamps with column `min_width` /
+  /// `max_width`.
+  ///
+  /// Default: `false`.
+  pub fn auto_detect_col_width(mut self, auto_detect_col_width: bool) -> Self {
+    self.auto_detect_col_width = auto_detect_col_width;
+    self
+  }
+
   /// Inject a context menu builder for right-clicks on table blank area.
   ///
   /// This does not affect row context menus provided by [`TableDelegate`].
@@ -191,10 +207,15 @@ where
   D: TableDelegate,
 {
   fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-    self.state.update(cx, |state, _| {
+    self.state.update(cx, |state, cx| {
+      let should_refresh_col_groups = state.options.auto_detect_col_width
+        != self.auto_detect_col_width
+        || (self.auto_detect_col_width && state.options.size != self.size);
+
       state.options.bordered = self.bordered;
       state.options.stripe = self.stripe;
       state.options.size = self.size;
+      state.options.auto_detect_col_width = self.auto_detect_col_width;
       state.options.scrollbar_visible = gpui::Edges {
         right: self.scrollbar_visible_vertical,
         bottom: self.scrollbar_visible_horizontal,
@@ -202,6 +223,10 @@ where
       };
       state.options.bottom_gap = self.bottom_gap;
       state.blank_context_menu_builder = self.blank_context_menu_builder;
+
+      if should_refresh_col_groups {
+        state.refresh(cx);
+      }
     });
 
     self.state

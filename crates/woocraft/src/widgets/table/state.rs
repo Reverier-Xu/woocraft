@@ -1,17 +1,17 @@
-use std::{ops::Range, rc::Rc, time::Duration};
+use std::{collections::HashMap, ops::Range, rc::Rc, time::Duration};
 
 use gpui::{
   App, AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter,
   FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
   MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
-  StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
+  StatefulInteractiveElement as _, Styled, Task, TextStyle, UniformListScrollHandle, Window, div,
   prelude::FluentBuilder, px, uniform_list,
 };
 
 use super::*;
 use crate::{
   ActiveTheme, Button, ButtonVariants as _, ContextMenuExt, ElementExt, Icon, IconName, PopupMenu,
-  ScrollableMask, Scrollbar, Selectable, Sizable, StyleSized as _, StyledExt, TableThemeExt,
+  ScrollableMask, Scrollbar, Selectable, Sizable, Size, StyleSized as _, StyledExt, TableThemeExt,
   VirtualListScrollHandle,
   actions::{
     Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown, SelectPageUp,
@@ -19,6 +19,8 @@ use crate::{
   },
   h_flex, v_flex,
 };
+
+const AUTO_WIDTH_SAMPLE_ROWS: usize = 3;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum SelectionMode {
@@ -227,6 +229,8 @@ pub struct TableState<D: TableDelegate> {
 
   /// The column index that is being resized.
   resizing_col: Option<usize>,
+  pending_auto_detect_col_width: bool,
+  manual_col_widths: HashMap<SharedString, Pixels>,
 
   /// The visible range of the rows and columns.
   visible_range: TableVisibleRange,
@@ -257,6 +261,8 @@ where
       selected_col: None,
       selected_cell: None,
       resizing_col: None,
+      pending_auto_detect_col_width: false,
+      manual_col_widths: HashMap::new(),
       bounds: Bounds::default(),
       fixed_head_cols_bounds: Bounds::default(),
       visible_range: TableVisibleRange::default(),
@@ -557,17 +563,100 @@ where
   }
 
   fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
+    self.pending_auto_detect_col_width = self.options.auto_detect_col_width;
     self.col_groups = (0..self.delegate.columns_count(cx))
       .map(|col_ix| {
         let column = self.delegate().column(col_ix, cx);
+        let width = if self.options.auto_detect_col_width {
+          self
+            .manual_col_widths
+            .get(&column.key)
+            .copied()
+            .unwrap_or(column.width)
+        } else {
+          column.width
+        };
         ColGroup {
-          width: column.width,
+          width,
           bounds: Bounds::default(),
           column,
         }
       })
       .collect();
     cx.notify();
+  }
+
+  fn table_text_style(&self, window: &Window) -> TextStyle {
+    let mut text_style = window.text_style();
+    text_style.font_size = self.options.size.text_size().into();
+    text_style
+  }
+
+  fn shape_line_for_display(&self, text: &str, window: &Window) -> gpui::ShapedLine {
+    let text_style = self.table_text_style(window);
+    let font_size = text_style.font_size.to_pixels(window.rem_size());
+    let runs = [text_style.to_run(text.len())];
+
+    window
+      .text_system()
+      .shape_line(text.to_string().into(), font_size, &runs, None)
+  }
+
+  fn estimate_column_width(
+    &self, col_ix: usize, column: &Column, window: &Window, cx: &App,
+  ) -> Pixels {
+    let sample_rows = self.delegate.rows_count(cx).min(AUTO_WIDTH_SAMPLE_ROWS);
+    let mut max_text_width = self
+      .shape_line_for_display(column.name.as_ref(), window)
+      .width;
+
+    for row_ix in 0..sample_rows {
+      let cell_text = self.delegate.cell_text(row_ix, col_ix, cx);
+      max_text_width = max_text_width.max(self.shape_line_for_display(&cell_text, window).width);
+    }
+
+    let padding = column
+      .paddings
+      .as_ref()
+      .map(|edges| edges.left + edges.right)
+      .unwrap_or_else(|| {
+        let default_padding = self.options.size.table_cell_padding();
+        default_padding.left + default_padding.right
+      });
+
+    let sort_icon_width = if self.sortable && column.sort.is_some() {
+      // Header labels are IconLabel (default Medium), while sort icon uses a
+      // Small icon-only Button. Reserve the delta over the baseline label
+      // paddings to prevent header text clipping.
+      Size::Small.component_height() + Size::Medium.component_gap() - Size::Medium.component_px()
+        + Size::Medium.container_px()
+    } else {
+      px(0.)
+    };
+    let estimated = max_text_width + padding + sort_icon_width + px(32.);
+
+    estimated.clamp(column.min_width, column.max_width)
+  }
+
+  fn apply_auto_detect_col_widths(&mut self, window: &Window, cx: &App) {
+    if !self.options.auto_detect_col_width || !self.pending_auto_detect_col_width {
+      return;
+    }
+
+    for col_ix in 0..self.col_groups.len() {
+      let column = self.col_groups[col_ix].column.clone();
+      if let Some(width) = self.manual_col_widths.get(&column.key).copied() {
+        self.col_groups[col_ix].width = width;
+        continue;
+      }
+      if let Some(width) = column.auto_width {
+        self.col_groups[col_ix].width = width;
+        continue;
+      }
+      self.col_groups[col_ix].width = self.estimate_column_width(col_ix, &column, window, cx);
+    }
+
+    self.pending_auto_detect_col_width = false;
   }
 
   fn fixed_left_cols_count(&self) -> usize {
@@ -958,6 +1047,11 @@ where
     // Only update if it actually changed
     if col_group.width != new_width {
       col_group.width = new_width;
+      if self.options.auto_detect_col_width {
+        self
+          .manual_col_widths
+          .insert(col_group.column.key.clone(), new_width);
+      }
       cx.notify();
     }
   }
@@ -1699,6 +1793,7 @@ where
 {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     self.measure(window, cx);
+    self.apply_auto_detect_col_widths(window, cx);
 
     // Horizontal header/body share one handle; keep y locked to avoid transient
     // vertical drift when scrolling table content.

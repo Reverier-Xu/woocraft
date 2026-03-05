@@ -1,10 +1,10 @@
 use gpui::{
-  div, px, App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement,
-  Render, Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions,
+  App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
+  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  h_flex, init, v_flex, window_border, ActiveTheme, Button, ButtonVariants as _, Dialog,
-  DialogMode, Selectable, StyledExt, Theme, ThemeMode, TitleBar,
+  ActiveTheme, Button, ButtonVariants as _, Dialog, DialogMode, Selectable, StyledExt, Theme,
+  ThemeMode, TitleBar, h_flex, init, v_flex, window_border,
 };
 
 #[derive(Default)]

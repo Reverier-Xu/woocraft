@@ -198,7 +198,12 @@ impl TableDelegate for TableDemoDelegate {
       column = column.text_right();
     }
     if matches!(col, TableCol::Actions) {
-      column = column.text_center().resizable(false).movable(false).p_0();
+      column = column
+        .text_center()
+        .resizable(false)
+        .movable(false)
+        .p_0()
+        .force_width_in_auto_mode(px(140.));
     }
 
     column
@@ -334,6 +339,7 @@ struct TableWindow {
   last_event: String,
   dump_preview: String,
   cell_mode: bool,
+  auto_width_mode: bool,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -383,6 +389,7 @@ impl TableWindow {
         last_event: "Ready".to_string(),
         dump_preview: "".to_string(),
         cell_mode: false,
+        auto_width_mode: true,
         _subscriptions: subscriptions,
       }
     })
@@ -432,6 +439,19 @@ impl Render for TableWindow {
                 .label("Dark")
                 .selected(is_dark)
                 .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
+            )
+            .child(
+              Button::new("table-toggle-auto-width")
+                .label(if self.auto_width_mode {
+                  "Auto Width: ON"
+                } else {
+                  "Auto Width: OFF"
+                })
+                .when(self.auto_width_mode, |this| this.primary())
+                .on_click(cx.listener(|this, _, _, cx| {
+                  this.auto_width_mode = !this.auto_width_mode;
+                  cx.notify();
+                })),
             )
             .child(
               Button::new("table-toggle-cell-mode")
@@ -513,8 +533,17 @@ impl Render for TableWindow {
             )),
         )
         .child(
+          div()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child(
+              "Auto width samples header + first 3 rows; Actions column is force-set to 140px.",
+            ),
+        )
+        .child(
           div().flex_1().min_h(px(420.0)).child(
             Table::new(&self.table_state)
+              .auto_detect_col_width(self.auto_width_mode)
               .stripe(true)
               .bordered(true)
               .scrollbar_visible(true, true),
