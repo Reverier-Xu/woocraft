@@ -42,8 +42,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconName, Sizable, Size,
-  StyleSized, StyledExt,
+  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconLabel, IconName, Sizable,
+  Size, StyleSized,
   actions::{Cancel, DIALOG_CONTEXT},
   h_flex, v_flex,
   widgets::window_border::WINDOW_SHADOW_SIZE,
@@ -264,7 +264,8 @@ impl Dialog {
   /// `this.dialog_open = false; cx.notify();`.
   pub fn on_close<F>(mut self, callback: F) -> Self
   where
-    F: Fn(&mut Window, &mut App) + 'static, {
+    F: Fn(&mut Window, &mut App) + 'static,
+  {
     self.on_close = Some(Rc::new(callback));
     self
   }
@@ -273,7 +274,8 @@ impl Dialog {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> E + 'static, {
+    F: Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> E + 'static,
+  {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));
@@ -389,7 +391,6 @@ impl RenderOnce for Dialog {
     let content_builder = self.content;
     let extra_children = self.children;
     let theme_border = cx.theme().border;
-    let theme_text_size = size.text_size();
 
     let on_close_btn = on_close_from_state.clone();
 
@@ -406,7 +407,12 @@ impl RenderOnce for Dialog {
           .border_b_1()
           .border_color(theme_border)
           .when_some(title, |this, t| {
-            this.child(div().font_semibold().text_size(theme_text_size).child(t))
+            this.child(
+              IconLabel::new("dialog-title")
+                .with_size(size)
+                .icon(Icon::new(IconName::Info))
+                .label(t),
+            )
           })
           .when(!has_title, |this: gpui::Stateful<gpui::Div>| {
             this.child(div().flex_1())
@@ -485,7 +491,7 @@ impl RenderOnce for Dialog {
       .rounded_bl(overlay_corners.bottom_left)
       .rounded_br(overlay_corners.bottom_right)
       // Semi-transparent dark scrim.
-      .bg(cx.theme().foreground.opacity(0.35))
+      .bg(cx.theme().background.opacity(0.35))
       // Always block pointer events reaching content underneath.
       .occlude()
       // Center the dialog panel.
