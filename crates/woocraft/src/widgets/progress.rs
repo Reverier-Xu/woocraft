@@ -11,7 +11,7 @@ use gpui::{
   StyleRefinement, Styled, Window, canvas, div, point, px, relative,
 };
 
-use crate::{ActiveTheme, Size, StyleSized, StyledExt, h_flex, translate_woocraft};
+use crate::{ActiveTheme, Size, StyleSized, StyledExt, h_flex, translate_woocraft, v_flex};
 
 #[derive(IntoElement)]
 /// Linear progress bar showing completion percentage.
@@ -94,42 +94,35 @@ impl RenderOnce for Progress {
     let progress = format!("{:.0}%", self.value);
     let line_h = self.size.track_thickness();
 
-    h_flex()
-      .relative()
+    v_flex()
       .component_h(self.size)
-      .component_gap(self.size)
       .refine_style(&self.style)
       .items_center()
       .text_size(text_size)
       .text_color(text_color)
       .child(
         h_flex()
-          .flex_1()
           .items_center()
-          .truncate()
-          .min_w_0()
-          .child(self.label),
-      )
-      .child(h_flex().items_center().flex_shrink_0().child(progress))
-      .child(
-        div()
-          .absolute()
-          .bottom_0()
-          .left_0()
-          .right_0()
-          .h(line_h)
-          .rounded(line_h / 2.0)
-          .bg(track_color),
+          .w_full()
+          .flex_1()
+          .child(
+            h_flex()
+              .flex_1()
+              .items_center()
+              .truncate()
+              .min_w_0()
+              .child(self.label),
+          )
+          .child(h_flex().items_center().flex_shrink_0().child(progress)),
       )
       .child(
-        div()
-          .absolute()
-          .bottom_0()
-          .left_0()
+        h_flex()
           .h(line_h)
-          .rounded(line_h / 2.0)
-          .bg(color)
-          .w(relative(self.value / 100.0)),
+          .flex_shrink_0()
+          .w_full()
+          .justify_start()
+          .bg(track_color)
+          .child(h_flex().h_full().bg(color).w(relative(self.value / 100.0))),
       )
   }
 }
