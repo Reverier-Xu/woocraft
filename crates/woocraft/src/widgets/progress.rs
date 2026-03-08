@@ -93,17 +93,24 @@ impl RenderOnce for Progress {
     let text_size = self.size.text_size();
     let progress = format!("{:.0}%", self.value);
     let line_h = self.size.track_thickness();
-    let label_gap = self.size.component_gap();
 
     h_flex()
       .relative()
-      .container_h(self.size)
+      .component_h(self.size)
+      .component_gap(self.size)
       .refine_style(&self.style)
       .items_center()
       .text_size(text_size)
       .text_color(text_color)
-      .child(div().flex_1().truncate().min_w_0().child(self.label))
-      .child(div().flex_none().child(progress))
+      .child(
+        h_flex()
+          .flex_1()
+          .items_center()
+          .truncate()
+          .min_w_0()
+          .child(self.label),
+      )
+      .child(h_flex().items_center().flex_shrink_0().child(progress))
       .child(
         div()
           .absolute()
