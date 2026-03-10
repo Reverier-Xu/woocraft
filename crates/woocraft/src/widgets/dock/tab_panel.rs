@@ -278,13 +278,13 @@ impl TabPanel {
   }
 
   pub(crate) fn close_panel_by_id(
-    &mut self, panel_id: &str, window: &mut Window, cx: &mut Context<Self>,
+    &mut self, panel_id: &str, dock_area_locked: bool, window: &mut Window, cx: &mut Context<Self>,
   ) -> bool {
     let Some(ix) = self.panel_index_by_id(panel_id, cx) else {
       return false;
     };
 
-    if !self.closable_by_layout(cx) {
+    if !self.closable_by_layout_with_dock_area_locked(dock_area_locked, cx) {
       return false;
     }
 
@@ -513,12 +513,20 @@ impl TabPanel {
     cx.notify();
   }
 
-  fn is_locked(&self, cx: &App) -> bool {
+  fn dock_area_locked(&self, cx: &App) -> bool {
     let Some(dock_area) = self.dock_area.upgrade() else {
       return true;
     };
 
-    if dock_area.read(cx).is_locked() {
+    dock_area.read(cx).is_locked()
+  }
+
+  fn is_locked(&self, cx: &App) -> bool {
+    self.is_locked_with_dock_area_locked(self.dock_area_locked(cx))
+  }
+
+  fn is_locked_with_dock_area_locked(&self, dock_area_locked: bool) -> bool {
+    if dock_area_locked {
       return true;
     }
 
@@ -549,7 +557,11 @@ impl TabPanel {
   }
 
   fn closable_by_layout(&self, cx: &App) -> bool {
-    if self.is_locked(cx) {
+    self.closable_by_layout_with_dock_area_locked(self.dock_area_locked(cx), cx)
+  }
+
+  fn closable_by_layout_with_dock_area_locked(&self, dock_area_locked: bool, cx: &App) -> bool {
+    if self.is_locked_with_dock_area_locked(dock_area_locked) {
       return false;
     }
 

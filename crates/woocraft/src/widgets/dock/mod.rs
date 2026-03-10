@@ -996,10 +996,14 @@ impl DockArea {
   pub fn close_panel_by_id(
     &mut self, panel_id: &str, window: &mut Window, cx: &mut Context<Self>,
   ) -> bool {
+    // Cache the lock state before updating TabPanels so they do not re-read
+    // this DockArea while it is already inside an update.
+    let dock_area_locked = self.is_locked();
+
     for tab_panel in self.all_tab_panels(cx) {
       let mut closed = false;
       tab_panel.update(cx, |tab_panel, cx| {
-        closed = tab_panel.close_panel_by_id(panel_id, window, cx);
+        closed = tab_panel.close_panel_by_id(panel_id, dock_area_locked, window, cx);
       });
 
       if closed {
