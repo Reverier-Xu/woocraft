@@ -35,19 +35,18 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, BoxShadow, Corners, Decorations, DismissEvent, ElementId, EventEmitter,
-  FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
-  Pixels, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
-  anchored, deferred, div, point, prelude::FluentBuilder as _, px,
+  anchored, deferred, div, point, prelude::FluentBuilder as _, px, AnyElement, App, BoxShadow,
+  Corners, Decorations, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable, Hsla,
+  InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Render, RenderOnce,
+  SharedString, StyleRefinement, Styled, Subscription, Window,
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconLabel, IconName, Sizable,
-  Size, StyleSized,
   actions::{Cancel, DIALOG_CONTEXT},
   h_flex, v_flex,
   widgets::window_border::WINDOW_SHADOW_SIZE,
-  window_paddings,
+  window_paddings, ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconLabel,
+  IconName, Sizable, Size, StyleSized,
 };
 
 // ─── Interaction mode ───────────────────────────────────────────────────────
