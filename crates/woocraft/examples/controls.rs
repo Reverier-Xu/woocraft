@@ -937,7 +937,7 @@ impl Render for ControlsWindow {
                     .child(
                       div().w(px(360.)).child(
                         Progress::new()
-                          .label("[registry] 欢迎使用进制回溯!")
+                          .label("[registry] 欢迎使用进制回溯！")
                           .color(cx.theme().primary)
                           .track_color(cx.theme().muted)
                           .text_color(cx.theme().muted_foreground)

@@ -552,16 +552,15 @@ impl Render for TableWindow {
         .when(!self.dump_preview.is_empty(), |this| {
           this
             .child(
-              div()
+              h_flex()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .font_medium()
                 .child("Dump Preview (first 6 rows):"),
             )
             .child(
-              div()
+              h_flex()
                 .text_xs()
-                .font_family("Reverier Mono")
                 .bg(cx.theme().card)
                 .rounded(cx.theme().radius_container)
                 .border_1()

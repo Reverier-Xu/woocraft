@@ -33,52 +33,22 @@ impl PixelsExt for Pixels {
 }
 
 pub fn default_font() -> Font {
-  let locale = crate::locale();
-  let cjk_fallbacks = if locale.starts_with("zh-hans") {
-    vec![
-      "Sarasa Mono SC".into(),
-      "Source Han Sans CN".into(),
-      "Source Han Sans SC".into(),
-      "Noto Sans CJK SC".into(),
-      "PingFang SC".into(),
-      "Microsoft YaHei".into(),
-      "Hiragino Sans GB".into(),
-      "WenQuanYi Micro Hei".into(),
-    ]
-  } else if locale.starts_with("zh-hant") {
-    vec![
-      "PingFang TC".into(),
-      "Heiti TC".into(),
-      "Source Han Sans TC".into(),
-      "Noto Sans CJK TC".into(),
-      "Microsoft JhengHei".into(),
-    ]
-  } else if locale.starts_with("ja") {
-    vec![
-      "Hiragino Kaku Gothic ProN".into(),
-      "Yu Gothic".into(),
-      "Meiryo".into(),
-      "Noto Sans CJK JP".into(),
-      "Source Han Sans JP".into(),
-    ]
-  } else {
-    vec![
-      "Source Han Sans CN".into(),
-      "Source Han Sans SC".into(),
-      "Noto Sans CJK SC".into(),
-      "PingFang SC".into(),
-      "Microsoft YaHei".into(),
-      "Hiragino Sans GB".into(),
-      "WenQuanYi Micro Hei".into(),
-    ]
-  };
+  let fallbacks = vec![
+    "Source Han Sans CN".into(),
+    "Source Han Sans SC".into(),
+    "Noto Sans CJK SC".into(),
+    "PingFang SC".into(),
+    "Microsoft YaHei".into(),
+    "Hiragino Sans GB".into(),
+    "WenQuanYi Micro Hei".into(),
+  ];
 
   Font {
     family: crate::DEFAULT_FONT_FAMILY.into(),
     weight: gpui::FontWeight::NORMAL,
     style: gpui::FontStyle::Normal,
     features: FontFeatures::default(),
-    fallbacks: Some(FontFallbacks::from_fonts(cjk_fallbacks)),
+    fallbacks: Some(FontFallbacks::from_fonts(fallbacks)),
   }
 }
 
@@ -144,7 +114,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let paddings = paddings.into();
     self
       .pt(paddings.top.into())
@@ -155,7 +126,8 @@ pub trait StyledExt: Styled + Sized {
 
   fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
+  {
     let margins = margins.into();
     self
       .mt(margins.top.into())
