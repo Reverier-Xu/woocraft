@@ -5,8 +5,8 @@
 //! style-related traits.
 
 use gpui::{
-  BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks, FontFeatures, Hsla, Pixels,
-  Refineable, StyleRefinement, Styled, div, point, px,
+  div, point, px, BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks,
+  FontFeatures, Hsla, Pixels, Refineable, StyleRefinement, Styled,
 };
 use serde::{Deserialize, Serialize};
 

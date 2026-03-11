@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::HashSet, marker::PhantomData, sync::Arc};
 
+use anyhow::Context;
 use gpui::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
 
@@ -7,11 +8,15 @@ use crate::IconNamed;
 
 pub const BUILTIN_ASSET_PREFIX: &str = "tech.woooo.woocraft/assets";
 
+const FONT_ASSET_PREFIX: &str = "fonts/";
+const ZSTD_EXTENSION: &str = ".zst";
+
 /// Embedded application assets for woocraft.
 #[derive(RustEmbed)]
 #[folder = "src/assets"]
 #[include = "icons/**/*.svg"]
-#[include = "fonts/**/*.ttf"]
+#[include = "fonts/**/*.ttf.zst"]
+#[include = "fonts/**/*.otf.zst"]
 pub struct Assets;
 
 impl AssetSource for Assets {
@@ -111,17 +116,79 @@ impl AssetSource for CombinedSource {
   }
 }
 
+fn is_font_asset(path: &str) -> bool {
+  path.starts_with(FONT_ASSET_PREFIX)
+}
+
+fn is_compressed_font_asset(path: &str) -> bool {
+  is_font_asset(path) && path.ends_with(ZSTD_EXTENSION)
+}
+
+fn compressed_font_asset_path(path: &str) -> Option<String> {
+  if is_font_asset(path) && !path.ends_with('/') && !path.ends_with(ZSTD_EXTENSION) {
+    Some(format!("{path}{ZSTD_EXTENSION}"))
+  } else {
+    None
+  }
+}
+
+fn visible_asset_path(path: &str) -> &str {
+  if is_compressed_font_asset(path) {
+    path
+      .strip_suffix(ZSTD_EXTENSION)
+      .expect("compressed font asset should end with .zst")
+  } else {
+    path
+  }
+}
+
+fn decode_embedded_asset(path: &str, data: Cow<'static, [u8]>) -> Result<Cow<'static, [u8]>> {
+  if !is_compressed_font_asset(path) {
+    return Ok(data);
+  }
+
+  let decompressed = zstd::stream::decode_all(data.as_ref())
+    .with_context(|| format!("failed to decompress embedded font asset: {path}"))?;
+
+  Ok(Cow::Owned(decompressed))
+}
+
+fn embedded_asset_exists<T: RustEmbed>(path: &str) -> bool {
+  T::get(path).is_some()
+    || compressed_font_asset_path(path)
+      .is_some_and(|compressed_path| T::get(compressed_path.as_str()).is_some())
+}
+
 fn load_embedded_asset<T: RustEmbed>(path: &str) -> Result<Option<Cow<'static, [u8]>>> {
   if path.is_empty() {
     return Ok(None);
   }
 
-  Ok(T::get(path).map(|file| file.data))
+  if let Some(file) = T::get(path) {
+    return decode_embedded_asset(path, file.data).map(Some);
+  }
+
+  let Some(compressed_path) = compressed_font_asset_path(path) else {
+    return Ok(None);
+  };
+
+  T::get(compressed_path.as_str())
+    .map(|file| decode_embedded_asset(compressed_path.as_str(), file.data))
+    .transpose()
 }
 
 fn list_embedded_assets<T: RustEmbed>(path: &str) -> Vec<SharedString> {
+  let mut seen = HashSet::<String>::new();
+
   T::iter()
-    .filter_map(|asset_path| asset_path.starts_with(path).then(|| asset_path.into()))
+    .filter_map(|asset_path| {
+      let asset_path = asset_path.as_ref();
+      let visible_path = visible_asset_path(asset_path);
+
+      (asset_path.starts_with(path) || visible_path.starts_with(path))
+        .then(|| visible_path.to_owned())
+    })
+    .filter_map(|asset_path| seen.insert(asset_path.clone()).then(|| asset_path.into()))
     .collect()
 }
 
@@ -173,8 +240,7 @@ fn list_builtin_assets(path: &str) -> Vec<SharedString> {
 pub fn has_asset(path: &str) -> bool {
   strip_builtin_asset_prefix(path)
     .filter(|internal_path| !internal_path.is_empty())
-    .and_then(Assets::get)
-    .is_some()
+    .is_some_and(embedded_asset_exists::<Assets>)
 }
 
 pub fn list_assets(path_prefix: &str) -> Vec<SharedString> {
@@ -194,10 +260,13 @@ pub fn list_icons() -> Vec<crate::IconName> {
 }
 
 pub fn register_fonts(text_system: &gpui::TextSystem) -> Result<()> {
-  let fonts = Assets::iter()
-    .filter(|path| path.starts_with("fonts/"))
-    .filter_map(|path| Assets::get(path.as_ref()).map(|file| file.data))
-    .collect::<Vec<Cow<'static, [u8]>>>();
+  let mut fonts = Vec::new();
+
+  for path in Assets::iter().filter(|path| is_font_asset(path.as_ref())) {
+    if let Some(font) = load_embedded_asset::<Assets>(path.as_ref())? {
+      fonts.push(font);
+    }
+  }
 
   text_system.add_fonts(fonts)?;
 
@@ -301,5 +370,54 @@ mod tests {
       .strip_prefix(&(super::BUILTIN_ASSET_PREFIX.to_owned() + "/"))
       .expect("icon path should include built-in prefix");
     assert!(!super::has_asset(unprefixed_path));
+  }
+
+  #[cfg(feature = "resources")]
+  #[test]
+  fn builtin_fonts_are_listed_without_compression_suffix() {
+    let font_assets = super::list_assets(super::BUILTIN_ASSET_PREFIX)
+      .into_iter()
+      .filter(|path| path.as_ref().contains("/fonts/"))
+      .collect::<Vec<_>>();
+
+    assert!(
+      font_assets
+        .iter()
+        .any(|path| path.as_ref().ends_with("fonts/default-font.ttf")),
+      "compressed font should be exposed via its original extension"
+    );
+    assert!(
+      font_assets
+        .iter()
+        .all(|path| !path.as_ref().ends_with(".zst")),
+      "compression suffix should stay internal to asset loading"
+    );
+    assert!(super::has_asset(&format!(
+      "{}/fonts/default-font.ttf",
+      super::BUILTIN_ASSET_PREFIX
+    )));
+  }
+
+  #[cfg(feature = "resources")]
+  #[test]
+  fn builtin_fonts_are_decompressed_on_load() {
+    let raw_font = super::Assets::get("fonts/default-font.ttf.zst")
+      .expect("compressed font should be embedded in test builds");
+
+    assert!(
+      raw_font.data.as_ref().starts_with(b"\x28\xb5\x2f\xfd"),
+      "embedded font should be stored in zstd format"
+    );
+
+    let font_path = format!("{}/fonts/default-font.ttf", super::BUILTIN_ASSET_PREFIX);
+    let loaded_font = super::load_builtin_asset(&font_path)
+      .expect("font load should succeed")
+      .expect("font asset should exist");
+
+    assert_ne!(loaded_font.as_ref(), raw_font.data.as_ref());
+    assert!(
+      !loaded_font.as_ref().starts_with(b"\x28\xb5\x2f\xfd"),
+      "font bytes should be decompressed before registration"
+    );
   }
 }

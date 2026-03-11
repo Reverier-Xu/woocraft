@@ -77,6 +77,7 @@ tree-sitter-typescript        = "0.23"
 tree-sitter-yaml              = "0.7"
 tree-sitter-zig               = "1.1"
 unicode-segmentation          = "1.12"
+zstd                          = "0.13"
 
 rust-embed = { version = "8.11", features = ["interpolate-folder-path"] }
 rust-i18n  = "3.1"

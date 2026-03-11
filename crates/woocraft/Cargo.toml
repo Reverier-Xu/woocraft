@@ -75,10 +75,11 @@ unicode-segmentation          = { workspace = true }
 # For assets embedding, optional and workspace to avoid unnecessary dependency for users who don't need it.
 rust-embed = { workspace = true, optional = true }
 rust-i18n  = { workspace = true }
+zstd       = { workspace = true, optional = true }
 
 [features]
 default = ["resources", "tree-sitter-languages"]
-resources = ["dep:rust-embed"]
+resources = ["dep:rust-embed", "dep:zstd"]
 tree-sitter-languages = [
   "dep:tree-sitter-astro-next",
   "dep:tree-sitter-bash",
