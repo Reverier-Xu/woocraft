@@ -4,7 +4,7 @@ use gpui::{Entity, HighlightStyle, MouseButton, SharedString, Window};
 use lsp_types::Position;
 use ropey::Rope;
 
-use super::{RopeExt as _, highlighter::HighlightTheme, state::InputState};
+use super::{highlighter::HighlightTheme, state::InputState, RopeExt as _};
 use crate::PopupMenu;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,7 +208,8 @@ pub trait EditorContextMenuProvider {
 }
 
 pub trait EditorBackend:
-  EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider {
+  EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider
+{
   fn revision(&self) -> u64;
 
   fn capabilities(&self) -> EditorBackendCapabilities {
@@ -287,113 +288,6 @@ impl EditorSnapshot for RopeEditorSnapshot {
     self
       .text
       .offset_to_position((offset as usize).min(self.text.len()))
-  }
-}
-
-pub struct LegacyEditorDataBackendAdapter<T> {
-  inner: T,
-}
-
-impl<T> LegacyEditorDataBackendAdapter<T> {
-  pub fn new(inner: T) -> Self {
-    Self { inner }
-  }
-
-  pub fn into_inner(self) -> T {
-    self.inner
-  }
-
-  pub fn inner(&self) -> &T {
-    &self.inner
-  }
-
-  pub fn inner_mut(&mut self) -> &mut T {
-    &mut self.inner
-  }
-}
-
-impl<T> From<T> for LegacyEditorDataBackendAdapter<T> {
-  fn from(inner: T) -> Self {
-    Self::new(inner)
-  }
-}
-
-impl<T: EditorDataBackend> EditorActionSink for LegacyEditorDataBackendAdapter<T> {
-  fn on_user_action(&mut self, action: &EditorUserAction) {
-    self.inner.on_user_action(action);
-  }
-}
-
-impl<T: EditorDataBackend> EditorContextMenuProvider for LegacyEditorDataBackendAdapter<T> {
-  fn extend_context_menu(
-    &self, menu: PopupMenu, state: &Entity<InputState>, window: &mut Window,
-  ) -> PopupMenu {
-    self.inner.extend_context_menu(menu, state, window)
-  }
-}
-
-impl<T: EditorDataBackend> EditorHighlighterProvider for LegacyEditorDataBackendAdapter<T> {}
-
-impl<T: EditorDataBackend> EditorBackend for LegacyEditorDataBackendAdapter<T> {
-  fn revision(&self) -> u64 {
-    self.inner.revision()
-  }
-
-  fn snapshot(&self) -> Arc<dyn EditorSnapshot> {
-    Arc::new(RopeEditorSnapshot::new(
-      self.inner.revision(),
-      Rope::from(self.inner.snapshot().as_str()),
-    ))
-  }
-
-  fn apply_edit(
-    &mut self, request: EditorBackendEditRequest,
-  ) -> Result<EditorBackendEditResult, EditorEditError> {
-    Ok(self.inner.apply_edit(request))
-  }
-}
-
-pub trait EditorDataBackend {
-  /// Monotonic revision used by editor for cache synchronization.
-  fn revision(&self) -> u64;
-
-  /// Total logical line count.
-  fn line_count(&self) -> u64;
-
-  /// Return display line number text for a row.
-  ///
-  /// The returned value is not required to start from 0/1.
-  fn line_number_text(&self, row: u64) -> Option<String> {
-    Some((row.saturating_add(1)).to_string())
-  }
-
-  /// Return an upper-bound sample text used to measure line-number gutter
-  /// width.
-  fn max_line_number_text(&self) -> Option<String> {
-    let line_count = self.line_count().max(1);
-    self.line_number_text(line_count.saturating_sub(1))
-  }
-
-  /// Return utf-8 byte range for the target row.
-  fn row_range(&self, row: u64) -> Option<Range<u64>>;
-
-  /// Return text for utf-8 byte range.
-  fn text_for_range(&self, range: Range<u64>) -> Option<String>;
-
-  /// Return a full snapshot for layout/highlight cache.
-  fn snapshot(&self) -> String;
-
-  /// Apply an edit from editor input.
-  fn apply_edit(&mut self, request: EditorBackendEditRequest) -> EditorBackendEditResult;
-
-  /// Receive user operations from editor.
-  fn on_user_action(&mut self, _action: &EditorUserAction) {}
-
-  /// Allow backend to extend the right-click menu.
-  fn extend_context_menu(
-    &self, menu: PopupMenu, _state: &Entity<InputState>, _window: &mut Window,
-  ) -> PopupMenu {
-    menu
   }
 }
 

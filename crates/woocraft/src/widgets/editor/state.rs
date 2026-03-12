@@ -18,9 +18,9 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-  EditorBackend, EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend,
-  EditorEditError, EditorPointerButton, EditorSnapshot, EditorUserAction,
-  LegacyEditorDataBackendAdapter, Position,
+  EditorBackend, EditorBackendEditRequest, EditorBackendEditResult, EditorEditError,
+  EditorHighlighter, EditorPointerButton, EditorSnapshot, EditorUserAction, Position,
+  RopeBufferBackend,
   blink_cursor::BlinkCursor,
   change::Change,
   highlighter::DiagnosticSet,
@@ -302,6 +302,9 @@ pub struct InputState {
   pub(super) backend: Option<Box<dyn EditorBackend>>,
   pub(super) backend_revision: u64,
   pub(super) backend_snapshot: Option<Arc<dyn EditorSnapshot>>,
+  pub(super) highlighter: Option<Box<dyn EditorHighlighter>>,
+  pub(super) highlighter_revision: u64,
+  pub(super) builtin_backend_language: Option<SharedString>,
   pub(super) text_wrapper: TextWrapper,
   pub(super) history: History<Change>,
   pub(super) blink_cursor: Entity<BlinkCursor>,
@@ -332,7 +335,6 @@ pub struct InputState {
   pub(super) read_only: bool,
   pub(super) masked: bool,
   pub(super) clean_on_escape: bool,
-  pub(super) soft_wrap: bool,
   pub(super) show_whitespaces: bool,
   pub(super) pattern: Option<regex::Regex>,
   pub(super) validate: Option<Box<ValidateFn<InputState>>>,
@@ -414,6 +416,9 @@ impl InputState {
       backend: None,
       backend_revision: 0,
       backend_snapshot: None,
+      highlighter: None,
+      highlighter_revision: 0,
+      builtin_backend_language: None,
       text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
       blink_cursor,
       history,
@@ -429,7 +434,6 @@ impl InputState {
       read_only: false,
       masked: false,
       clean_on_escape: false,
-      soft_wrap: true,
       show_whitespaces: false,
       loading: false,
       pattern: None,
@@ -476,8 +480,6 @@ impl InputState {
   /// - height: 100%
   /// - indent_guides: true
   ///
-  /// If `highlighter` is None, will use the default highlighter.
-  ///
   /// Code Editor aim for help used to simple code editing or display, not a
   /// full-featured code editor.
   ///
@@ -489,7 +491,8 @@ impl InputState {
   /// - Large Text support, up to 50K lines.
   pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
     let language: SharedString = language.into();
-    self.mode = InputMode::code_editor(language);
+    self.mode = InputMode::code_editor();
+    self.builtin_backend_language = Some(language);
     self.searchable = true;
     self
   }
@@ -506,7 +509,10 @@ impl InputState {
       self.text = Rope::from(snapshot_text.as_ref());
       self.backend_revision = backend.revision();
       self.backend_snapshot = Some(snapshot);
+      self.highlighter = backend.create_highlighter();
+      self.highlighter_revision = 0;
       self.text_wrapper.set_default_text(&self.text);
+      self.refresh_backend_highlighter(true);
     }
     self
   }
@@ -518,6 +524,8 @@ impl InputState {
     self.backend = Some(Box::new(backend));
     self.backend_revision = 0;
     self.backend_snapshot = None;
+    self.highlighter = None;
+    self.highlighter_revision = 0;
     self.sync_text_with_backend(true, window, cx);
     cx.notify();
   }
@@ -527,6 +535,8 @@ impl InputState {
     self.backend = None;
     self.backend_revision = 0;
     self.backend_snapshot = None;
+    self.highlighter = None;
+    self.highlighter_revision = 0;
     cx.notify();
   }
 
@@ -535,30 +545,7 @@ impl InputState {
     self.backend.is_some()
   }
 
-  /// Set a custom editor data backend.
-  pub fn data_backend(self, backend: impl EditorDataBackend + 'static) -> Self {
-    self.backend(LegacyEditorDataBackendAdapter::new(backend))
-  }
-
-  /// Replace current custom data backend.
-  pub fn set_data_backend(
-    &mut self, backend: impl EditorDataBackend + 'static, window: &mut Window,
-    cx: &mut Context<Self>,
-  ) {
-    self.set_backend(LegacyEditorDataBackendAdapter::new(backend), window, cx);
-  }
-
-  /// Remove custom data backend and switch back to builtin rope backend.
-  pub fn clear_data_backend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    self.clear_backend(window, cx);
-  }
-
-  /// Whether current editor is driven by custom backend.
-  pub fn has_custom_data_backend(&self) -> bool {
-    self.has_backend()
-  }
-
-  fn current_backend_snapshot(&self) -> Option<Arc<dyn EditorSnapshot>> {
+  pub(crate) fn current_backend_snapshot(&self) -> Option<Arc<dyn EditorSnapshot>> {
     self
       .backend_snapshot
       .clone()
@@ -664,6 +651,49 @@ impl InputState {
     }
   }
 
+  fn install_builtin_backend_if_needed(&mut self) {
+    if !self.mode.is_code_editor() || self.backend.is_some() {
+      return;
+    }
+
+    let Some(language) = self.builtin_backend_language.clone() else {
+      return;
+    };
+
+    self.backend = Some(Box::new(
+      RopeBufferBackend::new(self.text.to_string()).with_language(language),
+    ));
+    self.backend_revision = 0;
+    self.backend_snapshot = None;
+    self.highlighter = None;
+    self.highlighter_revision = 0;
+  }
+
+  fn refresh_backend_highlighter(&mut self, force: bool) {
+    let Some(snapshot) = self.backend_snapshot.clone() else {
+      self.highlighter = None;
+      self.highlighter_revision = 0;
+      return;
+    };
+
+    if self.highlighter.is_none() {
+      self.highlighter = self
+        .backend
+        .as_ref()
+        .and_then(|backend| backend.create_highlighter());
+      self.highlighter_revision = 0;
+    }
+
+    if !force && self.highlighter_revision == snapshot.revision() {
+      return;
+    }
+
+    if let Some(highlighter) = self.highlighter.as_mut() {
+      highlighter.sync(snapshot.as_ref(), None);
+      self.highlighter_revision = snapshot.revision();
+    }
+  }
+
   fn sync_text_with_backend(
     &mut self, force: bool, window: &mut Window, cx: &mut Context<Self>,
   ) -> bool {
@@ -691,9 +721,7 @@ impl InputState {
     if !self.mode.is_code_editor() {
       self.text_wrapper.set_default_text(&self.text);
     }
-    self
-      .mode
-      .update_highlighter(&(0..0), &self.text, "", false, cx);
+    self.refresh_backend_highlighter(true);
     self.lsp.update(&self.text, window, cx);
     self.update_search(cx);
     if !self.mode.is_code_editor() {
@@ -773,27 +801,6 @@ impl InputState {
       }
     }
     self
-  }
-
-  /// Set highlighter language for for [`InputMode::CodeEditor`] mode.
-  pub fn set_highlighter(&mut self, new_language: impl Into<SharedString>, cx: &mut Context<Self>) {
-    if let InputMode::CodeEditor {
-      language,
-      highlighter,
-      ..
-    } = &mut self.mode
-    {
-      *language = new_language.into();
-      *highlighter.borrow_mut() = None;
-    }
-    cx.notify();
-  }
-
-  fn reset_highlighter(&mut self, cx: &mut Context<Self>) {
-    if let InputMode::CodeEditor { highlighter, .. } = &mut self.mode {
-      *highlighter.borrow_mut() = None;
-    }
-    cx.notify();
   }
 
   #[inline]
@@ -908,7 +915,6 @@ impl InputState {
     let text: SharedString = text.into();
     let range = 0..self.text.chars().map(|c| c.len_utf16()).sum();
     self.replace_text_in_range_silent(Some(range), &text, window, cx);
-    self.reset_highlighter(cx);
     self.disabled = was_disabled;
   }
 
@@ -959,30 +965,10 @@ impl InputState {
     self
   }
 
-  /// Set the soft wrap mode for multi-line input, default is true.
-  ///
-  /// The viewport renderer always wraps lines, so this flag is retained only
-  /// for API compatibility.
-  pub fn soft_wrap(mut self, _wrap: bool) -> Self {
-    debug_assert!(self.mode.is_multi_line());
-    self.soft_wrap = true;
-    self
-  }
-
   /// Set whether to show whitespace characters.
   pub fn show_whitespaces(mut self, show: bool) -> Self {
     self.show_whitespaces = show;
     self
-  }
-
-  /// Update the soft wrap mode for multi-line input, default is true.
-  ///
-  /// The viewport renderer always wraps lines, so this setter is a no-op aside
-  /// from triggering a redraw.
-  pub fn set_soft_wrap(&mut self, _wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
-    debug_assert!(self.mode.is_multi_line());
-    self.soft_wrap = true;
-    cx.notify();
   }
 
   /// Update whether to show whitespace characters.
@@ -1990,14 +1976,7 @@ impl InputState {
     if let Some(last_layout) = self.last_layout.as_ref()
       && wrap_width_changed
     {
-      let wrap_width = if !self.soft_wrap {
-        // None to disable wrapping (will use Pixels::MAX)
-        None
-      } else {
-        last_layout.wrap_width
-      };
-
-      self.text_wrapper.set_wrap_width(wrap_width, cx);
+      self.text_wrapper.set_wrap_width(last_layout.wrap_width, cx);
       self.mode.update_auto_grow(&self.text_wrapper);
       cx.notify();
     }
@@ -2193,9 +2172,6 @@ impl EntityInputHandler for InputState {
         .text_wrapper
         .update(&self.text, &range, &Rope::from(new_text), cx);
     }
-    self
-      .mode
-      .update_highlighter(&range, &self.text, new_text, true, cx);
     self.lsp.update(&self.text, window, cx);
     self.selected_range = (new_offset..new_offset).into();
     self.ime_marked_range.take();
@@ -2299,9 +2275,6 @@ impl EntityInputHandler for InputState {
         .text_wrapper
         .update(&self.text, &range, &Rope::from(new_text), cx);
     }
-    self
-      .mode
-      .update_highlighter(&range, &self.text, new_text, true, cx);
     self.lsp.update(&self.text, window, cx);
     if new_text.is_empty() {
       // Cancel selection, when cancel IME input.
@@ -2500,12 +2473,12 @@ impl Focusable for InputState {
 
 impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    self.install_builtin_backend_if_needed();
     self.sync_text_with_backend(false, window, cx);
+    self.refresh_backend_highlighter(false);
 
     if self._pending_update {
-      self
-        .mode
-        .update_highlighter(&(0..0), &self.text, "", false, cx);
+      self.refresh_backend_highlighter(true);
       self.lsp.update(&self.text, window, cx);
       self._pending_update = false;
     }

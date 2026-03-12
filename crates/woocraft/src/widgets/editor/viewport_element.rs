@@ -490,35 +490,26 @@ impl ViewportElement {
   }
 
   fn highlight_lines(
-    &mut self, visible_range: &Range<usize>, visible_byte_range: Range<usize>, cx: &mut App,
+    &self, _visible_range: &Range<usize>, visible_byte_range: Range<usize>, cx: &mut App,
   ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
     let state = self.state.read(cx);
-    let text = &state.text;
-    let (mut highlighter, diagnostics) = match &state.mode {
-      InputMode::CodeEditor {
-        highlighter,
-        diagnostics,
-        ..
-      } => (highlighter.borrow_mut(), diagnostics),
+    let snapshot = state.current_backend_snapshot()?;
+    let diagnostics = match &state.mode {
+      InputMode::CodeEditor { diagnostics, .. } => diagnostics,
       _ => return None,
     };
-    let highlighter = highlighter.as_mut()?;
+    let highlighter = state.highlighter.as_ref()?;
 
-    let mut offset = visible_byte_range.start;
-    let mut styles = vec![];
     let highlight_theme = HighlightTheme::from_theme(cx.theme());
-
-    for line in text
-      .iter_lines()
-      .skip(visible_range.start)
-      .take(visible_range.len())
-    {
-      let line_len = line.len() + 1;
-      let range = offset..offset + line_len;
-      let line_styles = highlighter.styles(&range, &highlight_theme);
-      styles = gpui::combine_highlights(styles, line_styles).collect();
-      offset = range.end;
-    }
+    let mut styles = highlighter
+      .highlight_range(
+        snapshot.as_ref(),
+        visible_byte_range.start as u64..visible_byte_range.end as u64,
+        &highlight_theme,
+      )
+      .into_iter()
+      .map(|(range, style)| (range.start as usize..range.end as usize, style))
+      .collect::<Vec<_>>();
 
     let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
     if let Some(hover_style) = self.layout_hover_definition(cx) {

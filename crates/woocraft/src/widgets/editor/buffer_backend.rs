@@ -3,8 +3,8 @@ use ropey::Rope;
 
 use super::{
   EditorBackend, EditorBackendCapabilities, EditorBackendEditRequest, EditorBackendEditResult,
-  EditorDataBackend, EditorEditError, EditorHighlighter, EditorHighlighterProvider, EditorSnapshot,
-  EditorTextChange, HighlightTheme, RopeEditorSnapshot, RopeExt as _, SyntaxHighlighter,
+  EditorEditError, EditorHighlighter, EditorHighlighterProvider, EditorSnapshot, EditorTextChange,
+  HighlightTheme, RopeEditorSnapshot, RopeExt as _, SyntaxHighlighter,
 };
 
 pub struct RopeBufferBackend {
@@ -141,45 +141,6 @@ impl EditorBackend for RopeBufferBackend {
     &mut self, request: EditorBackendEditRequest,
   ) -> Result<EditorBackendEditResult, EditorEditError> {
     self.apply_edit_internal(&request)
-  }
-}
-
-impl EditorDataBackend for RopeBufferBackend {
-  fn revision(&self) -> u64 {
-    self.revision
-  }
-
-  fn line_count(&self) -> u64 {
-    self.text.lines_len() as u64
-  }
-
-  fn row_range(&self, row: u64) -> Option<std::ops::Range<u64>> {
-    let row = row as usize;
-    if row >= self.text.lines_len() {
-      return None;
-    }
-
-    Some(self.text.line_start_offset(row) as u64..self.text.line_end_offset(row) as u64)
-  }
-
-  fn text_for_range(&self, range: std::ops::Range<u64>) -> Option<String> {
-    let start = (range.start as usize).min(self.text.len());
-    let end = (range.end as usize).min(self.text.len());
-    Some(self.text.slice(start..end).to_string())
-  }
-
-  fn snapshot(&self) -> String {
-    self.text.to_string()
-  }
-
-  fn apply_edit(&mut self, request: EditorBackendEditRequest) -> EditorBackendEditResult {
-    self
-      .apply_edit_internal(&request)
-      .unwrap_or(EditorBackendEditResult {
-        accepted: false,
-        selection: None,
-        cursor: None,
-      })
   }
 }
 

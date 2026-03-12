@@ -54,11 +54,10 @@ pub use divider::*;
 pub use dock::*;
 pub use editor::{
   CodeEditor, EditorActionSink, EditorBackend, EditorBackendCapabilities, EditorBackendEditRequest,
-  EditorBackendEditResult, EditorContextMenuProvider, EditorDataBackend, EditorEditError,
-  EditorEvent, EditorHighlighter, EditorHighlighterProvider, EditorLine, EditorPointerButton,
-  EditorSnapshot, EditorState, EditorTextChange, EditorUserAction, LegacyEditorDataBackendAdapter,
-  MaskPattern, Position, Rope, RopeBufferBackend, RopeEditorSnapshot, RopeExt, TabSize,
-  highlighter::*, lsp::*,
+  EditorBackendEditResult, EditorContextMenuProvider, EditorEditError, EditorEvent,
+  EditorHighlighter, EditorHighlighterProvider, EditorLine, EditorPointerButton, EditorSnapshot,
+  EditorState, EditorTextChange, EditorUserAction, MaskPattern, Position, Rope,
+  RopeBufferBackend, RopeEditorSnapshot, RopeExt, TabSize, highlighter::*, lsp::*,
 };
 pub use form::*;
 pub use history::*;
