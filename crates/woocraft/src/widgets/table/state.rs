@@ -97,8 +97,8 @@ pub enum TableEvent {
   /// index.
   ///
   /// Use this event to show context menus specific to the cell content.
-  /// The right-clicked cell is highlighted with a subtle border until another
-  /// cell is clicked.
+  /// The right-clicked cell becomes the current primary selection before the
+  /// context menu opens.
   RightClickedCell(usize, usize),
   /// The selection has been cleared.
   ///
@@ -140,7 +140,7 @@ impl TableVisibleRange {
 ///
 /// When `cell_selectable` is enabled, users can:
 /// - Click on cells to select them
-/// - Right-click on cells to mark them for context menus
+/// - Right-click on cells to select them before opening a context menu
 /// - Double-click on cells to trigger actions
 /// - Navigate between cells using keyboard (arrow keys, Home, End, PageUp,
 ///   PageDown, Tab)
@@ -387,6 +387,11 @@ where
     {
       self.selected_cell = None;
     }
+    if let Some((row, col)) = self.right_clicked_cell
+      && (row >= rows_count || col >= new_col_count)
+    {
+      self.right_clicked_cell = None;
+    }
     if let Some(row) = self.right_clicked_row
       && row >= rows_count
     {
@@ -415,11 +420,19 @@ where
 
   /// Returns the selected row index.
   pub fn selected_row(&self) -> Option<usize> {
-    self.selected_row
+    if self.selection_mode.is_row() {
+      self.selected_row
+    } else {
+      None
+    }
   }
 
   /// Sets the selected row to the given index.
   pub fn set_selected_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
+    self.select_row(row_ix, true, cx);
+  }
+
+  fn select_row(&mut self, row_ix: usize, clear_right_click_target: bool, cx: &mut Context<Self>) {
     let is_down = match self.selected_row {
       Some(selected_row) => row_ix > selected_row,
       None => true,
@@ -427,9 +440,13 @@ where
 
     cx.stop_propagation();
     self.selection_mode = SelectionMode::Row;
-    self.right_clicked_row = None;
-    self.right_clicked_cell = None;
-    self.right_clicked_blank = false;
+    self.selected_col = None;
+    self.selected_cell = None;
+
+    if clear_right_click_target {
+      self.clear_right_click_target(cx, true);
+    }
+
     self.selected_row = Some(row_ix);
     if let Some(row_ix) = self.selected_row {
       self.vertical_scroll_handle.scroll_to_item(
@@ -442,7 +459,6 @@ where
       );
     }
     cx.emit(TableEvent::SelectRow(row_ix));
-    cx.emit(TableEvent::RightClickedRow(None));
     cx.notify();
   }
 
@@ -453,12 +469,27 @@ where
 
   /// Returns the selected column index.
   pub fn selected_col(&self) -> Option<usize> {
-    self.selected_col
+    if self.selection_mode.is_column() {
+      self.selected_col
+    } else {
+      None
+    }
   }
 
   /// Sets the selected col to the given index.
   pub fn set_selected_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
+    self.select_col(col_ix, true, cx);
+  }
+
+  fn select_col(&mut self, col_ix: usize, clear_right_click_target: bool, cx: &mut Context<Self>) {
     self.selection_mode = SelectionMode::Column;
+    self.selected_row = None;
+    self.selected_cell = None;
+
+    if clear_right_click_target {
+      self.clear_right_click_target(cx, true);
+    }
+
     self.selected_col = Some(col_ix);
     if let Some(col_ix) = self.selected_col {
       self.scroll_to_col(col_ix, cx);
@@ -480,7 +511,11 @@ where
   /// }
   /// ```
   pub fn selected_cell(&self) -> Option<(usize, usize)> {
-    self.selected_cell
+    if self.selection_mode.is_cell() {
+      self.selected_cell
+    } else {
+      None
+    }
   }
 
   /// Sets the selected cell to the given row and column indices.
@@ -499,10 +534,20 @@ where
   /// });
   /// ```
   pub fn set_selected_cell(&mut self, row_ix: usize, col_ix: usize, cx: &mut Context<Self>) {
+    self.select_cell(row_ix, col_ix, true, cx);
+  }
+
+  fn select_cell(
+    &mut self, row_ix: usize, col_ix: usize, clear_right_click_target: bool, cx: &mut Context<Self>,
+  ) {
     self.selection_mode = SelectionMode::Cell;
-    self.right_clicked_row = None;
-    self.right_clicked_cell = None;
-    self.right_clicked_blank = false;
+    self.selected_row = None;
+    self.selected_col = None;
+
+    if clear_right_click_target {
+      self.clear_right_click_target(cx, true);
+    }
+
     self.selected_cell = Some((row_ix, col_ix));
 
     // Scroll to the cell
@@ -513,6 +558,20 @@ where
 
     cx.emit(TableEvent::SelectCell(row_ix, col_ix));
     cx.notify();
+  }
+
+  fn clear_right_click_target(&mut self, cx: &mut Context<Self>, emit_event: bool) {
+    let had_right_click_target = self.right_clicked_row.is_some()
+      || self.right_clicked_cell.is_some()
+      || self.right_clicked_blank;
+
+    self.right_clicked_row = None;
+    self.right_clicked_cell = None;
+    self.right_clicked_blank = false;
+
+    if emit_event && had_right_click_target {
+      cx.emit(TableEvent::RightClickedRow(None));
+    }
   }
 
   /// Clear the selection of the table.
@@ -682,10 +741,20 @@ where
     &mut self, _: &MouseDownEvent, row_ix: Option<usize>, _: &mut Window, cx: &mut Context<Self>,
   ) {
     cx.stop_propagation();
-    self.right_clicked_row = row_ix;
-    self.right_clicked_cell = None;
-    self.right_clicked_blank = false;
-    cx.emit(TableEvent::RightClickedRow(row_ix));
+
+    if let Some(row_ix) = row_ix {
+      self.select_row(row_ix, false, cx);
+      self.right_clicked_row = Some(row_ix);
+      self.right_clicked_cell = None;
+      self.right_clicked_blank = false;
+      cx.emit(TableEvent::RightClickedRow(Some(row_ix)));
+      cx.notify();
+      return;
+    }
+
+    self.clear_right_click_target(cx, false);
+    cx.emit(TableEvent::RightClickedRow(None));
+    cx.notify();
   }
 
   fn on_cell_right_click(
@@ -697,15 +766,16 @@ where
     }
 
     cx.stop_propagation();
+    self.select_cell(row_ix, col_ix, false, cx);
     self.right_clicked_cell = Some((row_ix, col_ix));
     self.right_clicked_row = None;
     self.right_clicked_blank = false;
     cx.emit(TableEvent::RightClickedCell(row_ix, col_ix));
+    cx.notify();
   }
 
   fn on_blank_right_click(&mut self, _: &MouseDownEvent, _: &mut Window, cx: &mut Context<Self>) {
-    self.right_clicked_row = None;
-    self.right_clicked_cell = None;
+    self.clear_right_click_target(cx, false);
     self.right_clicked_blank = true;
     cx.emit(TableEvent::RightClickedRow(None));
     cx.notify();
@@ -1540,7 +1610,7 @@ where
         .when(is_stripe_row, |this| this.bg(cx.theme().table_even()))
         .refine_style(&style)
         .hover(|this| {
-          if is_selected || self.right_clicked_row == Some(row_ix) {
+          if is_selected {
             this
           } else {
             this.bg(cx.theme().table_hover())
@@ -1561,7 +1631,6 @@ where
                 (0..left_columns_count).for_each(|col_ix| {
                   let is_cell_selected =
                     self.selected_cell == Some((row_ix, col_ix)) && self.selection_mode.is_cell();
-                  let is_cell_right_clicked = self.right_clicked_cell == Some((row_ix, col_ix));
 
                   items.push(
                     self
@@ -1574,9 +1643,6 @@ where
                           .child(self.measure_render_td(row_ix, col_ix, window, cx))
                           .when(is_cell_selected, |this| {
                             this.child(div().absolute().inset_0().bg(cx.theme().table_active()))
-                          })
-                          .when(is_cell_right_clicked && !is_cell_selected, |this| {
-                            this.child(div().absolute().inset_0().bg(cx.theme().table_hover()))
                           })
                           .when(self.cell_selectable, |this| {
                             this
@@ -1631,7 +1697,6 @@ where
                     let col_ix = col_ix + left_columns_count;
                     let is_cell_selected = table.selected_cell == Some((row_ix, col_ix))
                       && table.selection_mode.is_cell();
-                    let is_cell_right_clicked = table.right_clicked_cell == Some((row_ix, col_ix));
 
                     let el = table
                       .render_col_wrap(Some(row_ix), col_ix, window, cx)
@@ -1643,9 +1708,6 @@ where
                           .child(table.measure_render_td(row_ix, col_ix, window, cx))
                           .when(is_cell_selected, |this| {
                             this.child(div().absolute().inset_0().bg(cx.theme().table_active()))
-                          })
-                          .when(is_cell_right_clicked && !is_cell_selected, |this| {
-                            this.child(div().absolute().inset_0().bg(cx.theme().table_hover()))
                           })
                           .when(table.cell_selectable, |this| {
                             this
@@ -1678,10 +1740,6 @@ where
           this.when(is_selected && self.selection_mode.is_row(), |this| {
             this.child(div().absolute().inset_0().bg(cx.theme().table_active()))
           })
-        })
-        // Row right click row style
-        .when(self.right_clicked_row == Some(row_ix), |this| {
-          this.child(div().absolute().inset_0().bg(cx.theme().table_hover()))
         })
         .on_mouse_down(
           MouseButton::Right,
@@ -1877,16 +1935,28 @@ where
       .context_menu({
         let view = cx.entity().clone();
         move |menu, window: &mut Window, cx: &mut Context<PopupMenu>| {
-          let (right_clicked_row, right_clicked_blank, blank_context_menu_builder) = {
+          let (
+            right_clicked_row,
+            right_clicked_cell,
+            right_clicked_blank,
+            blank_context_menu_builder,
+          ) = {
             let state = view.read(cx);
             (
               state.right_clicked_row,
+              state.right_clicked_cell,
               state.right_clicked_blank,
               state.blank_context_menu_builder.clone(),
             )
           };
 
-          if let Some(row_ix) = right_clicked_row {
+          if let Some((row_ix, col_ix)) = right_clicked_cell {
+            view.update(cx, |state, cx| {
+              state
+                .delegate_mut()
+                .cell_context_menu(row_ix, col_ix, menu, window, cx)
+            })
+          } else if let Some(row_ix) = right_clicked_row {
             view.update(cx, |state, cx| {
               state.delegate_mut().context_menu(row_ix, menu, window, cx)
             })

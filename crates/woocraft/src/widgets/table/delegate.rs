@@ -61,6 +61,18 @@ pub trait TableDelegate: Sized + 'static {
     menu
   }
 
+  /// Render the context menu for the cell at the given row and column indices.
+  ///
+  /// By default this falls back to the row context menu so existing delegates
+  /// continue to work in cell selection mode.
+  fn cell_context_menu(
+    &mut self, row_ix: usize, col_ix: usize, menu: PopupMenu, window: &mut Window,
+    cx: &mut Context<TableState<Self>>,
+  ) -> PopupMenu {
+    let _ = col_ix;
+    self.context_menu(row_ix, menu, window, cx)
+  }
+
   /// Render cell at the given row and column.
   fn render_td(
     &mut self, row_ix: usize, col_ix: usize, window: &mut Window,

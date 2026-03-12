@@ -539,8 +539,27 @@ impl TreeState {
   ) {
     cx.stop_propagation();
     let _ = ev;
+
+    let should_emit_select = !self.model.is_selected(ix) || self.model.selected_index() != Some(ix);
+
+    if self.multi_selectable {
+      if self.model.is_selected(ix) {
+        self.model.set_selected_index(Some(ix));
+      } else {
+        self.model.clear_selection();
+        self.model.toggle_selected(ix);
+      }
+    } else {
+      self.model.set_selected_index(Some(ix));
+    }
+
     self.right_clicked_ix = Some(ix);
     self.right_clicked_blank = false;
+
+    if should_emit_select {
+      cx.emit(TreeEvent::Select(ix));
+    }
+
     cx.emit(TreeEvent::RightClicked(ix));
     cx.notify();
   }

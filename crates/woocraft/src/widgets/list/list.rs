@@ -415,10 +415,6 @@ where
   ) -> impl IntoElement {
     let selectable = self.selectable;
     let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
-    let mouse_right_clicked = self
-      .mouse_right_clicked_index
-      .map(|s| s.eq_row(ix))
-      .unwrap_or(false);
     let id = SharedString::from(format!("list-item-{}", ix));
 
     div()
@@ -426,11 +422,12 @@ where
       .w_full()
       .relative()
       .overflow_hidden()
-      .children(self.delegate.render_item(ix, window, cx).map(|item| {
-        item
-          .selected(selected)
-          .secondary_selected(mouse_right_clicked)
-      }))
+      .children(
+        self
+          .delegate
+          .render_item(ix, window, cx)
+          .map(|item| item.selected(selected)),
+      )
       .when(selectable, |this| {
         this
           .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
@@ -448,6 +445,7 @@ where
             MouseButton::Right,
             cx.listener(move |this, _, window, cx| {
               cx.stop_propagation();
+              this.select_item(ix, window, cx);
               this.set_right_clicked_index(Some(ix), window, cx);
               cx.notify();
             }),
