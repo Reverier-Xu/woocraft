@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6.0.2
 
       - name: install linux dependencies
         run: |
@@ -42,12 +42,13 @@ jobs:
             pkg-config
 
       - name: setup nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@v1
         with:
+          toolchain: nightly
           components: rustfmt, clippy
 
       - name: cache cargo artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.0
 
       - name: check formatting
         run: cargo +nightly fmt --all --check
