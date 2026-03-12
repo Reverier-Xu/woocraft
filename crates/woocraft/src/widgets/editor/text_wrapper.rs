@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-  App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextAlign, TextRun, Window,
-  point, px, size,
+  point, px, size, App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextAlign,
+  TextRun, Window,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -235,7 +235,8 @@ impl TextWrapper {
   fn _update<F>(
     &mut self, changed_text: &Rope, range: &Range<usize>, new_text: &Rope, wrap_line: &mut F,
   ) where
-    F: FnMut(&str, Pixels) -> Vec<Range<usize>>, {
+    F: FnMut(&str, Pixels) -> Vec<Range<usize>>,
+  {
     // Remove the old changed lines.
     let start_row = self.text.offset_to_point(range.start).row;
     let start_row = start_row.min(self.lines.len().saturating_sub(1));
@@ -633,7 +634,7 @@ impl LineLayout {
 
 #[cfg(test)]
 mod tests {
-  use gpui::{FontFeatures, FontStyle, FontWeight, px};
+  use gpui::{px, FontFeatures, FontStyle, FontWeight};
 
   use super::*;
 
@@ -946,5 +947,39 @@ mod tests {
       wrapper.display_point_to_offset(DisplayPoint::new(0, 0, 15)),
       15
     );
+  }
+
+  #[test]
+  fn test_display_row_to_line_row() {
+    let font = gpui::Font {
+      family: "Arial".into(),
+      weight: FontWeight::default(),
+      style: FontStyle::Normal,
+      features: FontFeatures::default(),
+      fallbacks: None,
+    };
+
+    let mut wrapper = TextWrapper::new(font, px(14.), None);
+    wrapper.lines = vec![
+      LineItem {
+        line: Rope::from("alpha"),
+        wrapped_lines: vec![0..2, 2..5],
+      },
+      LineItem {
+        line: Rope::from("beta"),
+        wrapped_lines: vec![0..4],
+      },
+      LineItem {
+        line: Rope::from("gamma"),
+        wrapped_lines: vec![0..1, 1..3, 3..5],
+      },
+    ];
+    wrapper.soft_lines = wrapper.lines.iter().map(LineItem::lines_len).sum();
+
+    assert_eq!(wrapper.display_row_to_line_row(0), Some((0, 0)));
+    assert_eq!(wrapper.display_row_to_line_row(1), Some((0, 1)));
+    assert_eq!(wrapper.display_row_to_line_row(2), Some((1, 0)));
+    assert_eq!(wrapper.display_row_to_line_row(3), Some((2, 0)));
+    assert_eq!(wrapper.display_row_to_line_row(5), Some((2, 2)));
   }
 }

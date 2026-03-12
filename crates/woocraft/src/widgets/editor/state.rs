@@ -2390,16 +2390,23 @@ impl EntityInputHandler for InputState {
   }
 
   fn character_index_for_point(
-    &mut self, point: gpui::Point<Pixels>, _window: &mut Window, _cx: &mut Context<Self>,
+    &mut self, position: gpui::Point<Pixels>, _window: &mut Window, _cx: &mut Context<Self>,
   ) -> Option<usize> {
     let last_layout = self.last_layout.as_ref()?;
-    let line_point = self.last_bounds?.localize(&point)?;
-    let offset = last_layout.visible_range_offset.start;
+    let bounds = self.last_bounds?;
+    let inner_point =
+      position - bounds.origin - point(last_layout.line_number_width, last_layout.visible_top);
+    let mut offset = last_layout.visible_range_offset.start;
+    let mut y_offset = last_layout.visible_top;
 
     for line in last_layout.lines.iter() {
-      if let Some(utf8_index) = line.index_for_position(line_point, last_layout) {
+      let local_point = inner_point - point(px(0.0), y_offset);
+      if let Some(utf8_index) = line.index_for_position(local_point, last_layout) {
         return Some(self.offset_to_utf16(offset + utf8_index));
       }
+
+      offset += line.len() + 1;
+      y_offset += line.size(last_layout.line_height).height;
     }
 
     None
@@ -2545,6 +2552,7 @@ impl Render for InputState {
           if this.drag_scrollbar_to(event.position, window) {
             cx.notify();
           }
+          cx.stop_propagation();
         });
       }
     });
