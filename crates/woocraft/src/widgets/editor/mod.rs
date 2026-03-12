@@ -2,6 +2,7 @@
 
 mod backend;
 mod blink_cursor;
+mod buffer_backend;
 mod change;
 mod cursor;
 mod editor;
@@ -21,6 +22,7 @@ mod viewport;
 mod viewport_element;
 
 pub use backend::*;
+pub use buffer_backend::RopeBufferBackend;
 pub use editor::Editor as CodeEditor;
 #[allow(unused_imports)]
 pub use highlighter::*;
