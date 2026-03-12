@@ -164,6 +164,7 @@ impl InputState {
   }
 }
 
+#[allow(dead_code)]
 impl TextElement {
   pub(crate) fn layout_hover_definition(&self, cx: &App) -> Option<(Range<usize>, HighlightStyle)> {
     let editor = self.state.read(cx);

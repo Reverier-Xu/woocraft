@@ -38,6 +38,7 @@ impl LineItem {
   }
 
   /// Get the height of this line item with given line height.
+  #[allow(dead_code)]
   pub(super) fn height(&self, line_height: Pixels) -> Pixels {
     self.lines_len() as f32 * line_height
   }

@@ -1,4 +1,4 @@
-use gpui::{Context, Point, Window};
+use gpui::{Context, Window};
 
 use crate::widgets::editor::{
   EditorUserAction, InputState, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp,
@@ -65,42 +65,25 @@ impl InputState {
   pub(super) fn move_vertical(
     &mut self, move_lines: isize, _: &mut Window, cx: &mut Context<Self>,
   ) {
-    let Some(last_layout) = &self.last_layout else {
-      return;
-    };
-
     let offset = self.cursor();
     let was_preferred_column = self.preferred_column;
 
-    let mut display_point = self.text_wrapper.offset_to_display_point(offset);
-    display_point.row = display_point.row.saturating_add_signed(move_lines);
-    display_point.column = 0;
-    let mut new_offset = self.text_wrapper.display_point_to_offset(display_point);
-
-    if let Some((preferred_x, column)) = was_preferred_column {
-      // Get display point again to update local_row.
-      let mut next_display_point = self.text_wrapper.offset_to_display_point(new_offset);
-      next_display_point.column = 0;
-      let next_point = self.text_wrapper.display_point_to_point(next_display_point);
-      let line_start_offset = self.text.line_start_offset(next_point.row);
-
-      // If in visible range, prefer to use position to get column.
-      if let Some(line) = last_layout.line(next_point.row) {
-        if let Some(x) = line.closest_index_for_position(
-          Point {
-            x: preferred_x,
-            y: next_display_point.local_row * last_layout.line_height,
-          },
-          last_layout,
-        ) {
-          new_offset = line_start_offset + x;
-        }
-      } else {
-        // Not in visible range, use column directly.
-        let max_line_len = self.text.slice_line(next_point.row).len();
-        new_offset = line_start_offset + column.min(max_line_len);
-      }
+    let point = self.text.offset_to_point(offset);
+    let total_rows = self.text.lines_len();
+    if total_rows == 0 {
+      return;
     }
+
+    let next_row = point
+      .row
+      .saturating_add_signed(move_lines)
+      .min(total_rows.saturating_sub(1));
+    let line_start_offset = self.text.line_start_offset(next_row);
+    let max_line_len = self.text.slice_line(next_row).len();
+    let preferred_column = was_preferred_column
+      .map(|(_, column)| column)
+      .unwrap_or(point.column);
+    let new_offset = line_start_offset + preferred_column.min(max_line_len);
 
     self.pause_blink_cursor(cx);
     let direction = if move_lines < 0 {

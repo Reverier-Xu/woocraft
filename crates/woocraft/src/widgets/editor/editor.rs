@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, Context, DefiniteLength, Edges, EdgesRefinement, Entity, Focusable,
-  InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce,
+  AnyElement, App, Context, DefiniteLength, EdgesRefinement, Entity, Focusable,
+  InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
@@ -10,10 +10,6 @@ use super::state::{CONTEXT, Copy, Cut, InputState, Paste, SelectAll};
 use crate::{
   ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Size, StyleSized as _, StyledExt,
   translate_woocraft, v_flex,
-  widgets::{
-    editor::element::{LINE_NUMBER_TEXT_GAP, RIGHT_MARGIN},
-    scroll::Scrollbar,
-  },
 };
 
 type ContextMenuBuilder =
@@ -146,67 +142,13 @@ impl Editor {
 
   /// This method must after the refine_style.
   fn render_editor(
-    paddings: EdgesRefinement<DefiniteLength>, input_state: &Entity<InputState>,
-    state: &InputState, window: &Window, _cx: &App,
+    _paddings: EdgesRefinement<DefiniteLength>, input_state: &Entity<InputState>,
+    state: &InputState, _window: &Window, _cx: &App,
   ) -> impl IntoElement {
-    let base_size = window.text_style().font_size;
-    let rem_size = window.rem_size();
-
-    let paddings = Edges {
-      left: paddings
-        .left
-        .map(|v| v.to_pixels(base_size, rem_size))
-        .unwrap_or(px(0.)),
-      right: paddings
-        .right
-        .map(|v| v.to_pixels(base_size, rem_size))
-        .unwrap_or(px(0.)),
-      top: paddings
-        .top
-        .map(|v| v.to_pixels(base_size, rem_size))
-        .unwrap_or(px(0.)),
-      bottom: paddings
-        .bottom
-        .map(|v| v.to_pixels(base_size, rem_size))
-        .unwrap_or(px(0.)),
-    };
-
     v_flex()
       .size_full()
       .children(state.search_panel.clone())
-      .child(div().flex_1().child(input_state.clone()).map(|this| {
-        if let Some(last_layout) = state.last_layout.as_ref() {
-          let left = if last_layout.line_number_width.is_zero() {
-            px(0.)
-          } else {
-            // Align left edge to the line number.
-            paddings.left + last_layout.line_number_width - LINE_NUMBER_TEXT_GAP
-          };
-
-          let scroll_size = gpui::Size {
-            width: state.scroll_size.width - left + paddings.right + RIGHT_MARGIN,
-            height: state.scroll_size.height,
-          };
-
-          let scrollbar = if !state.soft_wrap {
-            Scrollbar::new(&state.scroll_handle)
-          } else {
-            Scrollbar::vertical(&state.scroll_handle)
-          };
-
-          this.relative().child(
-            div()
-              .absolute()
-              .top(-paddings.top)
-              .left(left)
-              .right(-paddings.right)
-              .bottom(-paddings.bottom)
-              .child(scrollbar.scroll_size(scroll_size)),
-          )
-        } else {
-          this
-        }
-      }))
+      .child(div().flex_1().min_h_0().child(input_state.clone()))
   }
 }
 

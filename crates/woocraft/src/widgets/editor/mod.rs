@@ -18,6 +18,8 @@ mod search;
 mod selection;
 mod state;
 mod text_wrapper;
+mod viewport;
+mod viewport_element;
 
 pub use backend::*;
 pub use editor::Editor as CodeEditor;

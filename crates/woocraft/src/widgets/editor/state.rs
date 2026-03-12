@@ -10,7 +10,8 @@ use gpui::{
   EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
   KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
   Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
-  Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point, px,
+  Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
+  prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -22,7 +23,6 @@ use super::{
   EditorUserAction, Position,
   blink_cursor::{BlinkCursor, CURSOR_WIDTH},
   change::Change,
-  element::{RIGHT_MARGIN, TextElement},
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
   mask_pattern::MaskPattern,
@@ -30,10 +30,12 @@ use super::{
   movement::MoveDirection,
   popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
   search::{self, SearchPanel},
-  text_wrapper::{LineItem, LineLayout, TextWrapper},
+  text_wrapper::{LineLayout, TextWrapper},
+  viewport,
+  viewport_element::ViewportElement,
 };
 use crate::{
-  PixelsExt, Selection, Size,
+  ActiveTheme as _, PixelsExt, Selection, Size,
   actions::{SelectDown, SelectLeft, SelectRight, SelectUp},
   widgets::{editor::RopeExt as _, history::History},
 };
@@ -273,6 +275,7 @@ impl LastLayout {
   /// 0 is the viewport first visible line.
   ///
   /// Returns None if the row is out of range.
+  #[allow(dead_code)]
   pub(crate) fn line(&self, row: usize) -> Option<&LineLayout> {
     if row < self.visible_range.start || row >= self.visible_range.end {
       return None;
@@ -322,6 +325,7 @@ pub struct InputState {
   pub(super) last_bounds: Option<Bounds<Pixels>>,
   pub(super) last_selected_range: Option<Selection>,
   pub(super) selecting: bool,
+  pub(super) top_row: usize,
   pub(super) size: Size,
   pub(super) disabled: bool,
   pub(super) read_only: bool,
@@ -333,8 +337,10 @@ pub struct InputState {
   pub(super) validate: Option<Box<ValidateFn<InputState>>>,
   pub(crate) scroll_handle: ScrollHandle,
   /// The deferred scroll offset to apply on next layout.
+  #[allow(dead_code)]
   pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
   /// The size of the scrollable content.
+  #[allow(dead_code)]
   pub(crate) scroll_size: gpui::Size<Pixels>,
   pub(super) text_align: TextAlign,
 
@@ -438,6 +444,7 @@ impl InputState {
       last_bounds: None,
       last_selected_range: None,
       last_cursor: None,
+      top_row: 0,
       scroll_handle: ScrollHandle::new(),
       scroll_size: gpui::size(px(0.), px(0.)),
       deferred_scroll_offset: None,
@@ -539,6 +546,42 @@ impl InputState {
       .unwrap_or(self.text.lines_len() as u64)
   }
 
+  pub(crate) fn viewport_rows(&self, line_height: Pixels) -> usize {
+    viewport::viewport_rows(self.input_bounds.size.height, line_height)
+  }
+
+  pub(crate) fn clamp_top_row(&mut self, line_height: Pixels) {
+    self.top_row = viewport::clamp_top_row(
+      self.top_row,
+      self.line_count_u64() as usize,
+      self.viewport_rows(line_height),
+    );
+  }
+
+  pub(crate) fn set_top_row(&mut self, row: usize, line_height: Pixels) -> bool {
+    let clamped = viewport::clamp_top_row(
+      row,
+      self.line_count_u64() as usize,
+      self.viewport_rows(line_height),
+    );
+    if clamped == self.top_row {
+      return false;
+    }
+
+    self.top_row = clamped;
+    self.diagnostic_popover = None;
+    true
+  }
+
+  pub(crate) fn scroll_rows(&mut self, delta_rows: i64, line_height: Pixels) -> bool {
+    let target_row = if delta_rows < 0 {
+      self.top_row.saturating_sub((-delta_rows) as usize)
+    } else {
+      self.top_row.saturating_add(delta_rows as usize)
+    };
+    self.set_top_row(target_row, line_height)
+  }
+
   /// Display line number text for row.
   pub fn line_number_text_for_row(&self, row: u64) -> String {
     self
@@ -616,13 +659,18 @@ impl InputState {
       diagnostics.reset(&self.text);
     }
 
-    self.text_wrapper.set_default_text(&self.text);
+    if !self.mode.is_code_editor() {
+      self.text_wrapper.set_default_text(&self.text);
+    }
     self
       .mode
       .update_highlighter(&(0..0), &self.text, "", false, cx);
     self.lsp.update(&self.text, window, cx);
     self.update_search(cx);
-    self.mode.update_auto_grow(&self.text_wrapper);
+    if !self.mode.is_code_editor() {
+      self.mode.update_auto_grow(&self.text_wrapper);
+    }
+    self.clamp_top_row(window.line_height());
     true
   }
 
@@ -782,6 +830,7 @@ impl InputState {
     }
 
     // Move scroll to top
+    self.top_row = 0;
     self.scroll_handle.set_offset(point(px(0.), px(0.)));
 
     cx.notify();
@@ -891,6 +940,13 @@ impl InputState {
   /// Update the soft wrap mode for multi-line input, default is true.
   pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
     debug_assert!(self.mode.is_multi_line());
+    self.soft_wrap = true;
+    if self.mode.is_code_editor() {
+      let _ = wrap;
+      cx.notify();
+      return;
+    }
+
     self.soft_wrap = wrap;
     if wrap {
       let wrap_width = self
@@ -949,7 +1005,9 @@ impl InputState {
     if let Some(diagnostics) = self.mode.diagnostics_mut() {
       diagnostics.reset(&self.text)
     }
-    self.text_wrapper.set_default_text(&self.text);
+    if !self.mode.is_code_editor() {
+      self.text_wrapper.set_default_text(&self.text);
+    }
     self._pending_update = true;
     self
   }
@@ -1448,6 +1506,8 @@ impl InputState {
   pub(super) fn on_scroll_wheel(
     &mut self, event: &ScrollWheelEvent, window: &mut Window, cx: &mut Context<Self>,
   ) {
+    const SCROLL_LINES: i64 = 3;
+
     let line_height = self
       .last_layout
       .as_ref()
@@ -1459,22 +1519,32 @@ impl InputState {
       delta_y: delta.y.as_f64() as f32,
     });
 
-    let old_offset = self.scroll_handle.offset();
-    let target_offset = old_offset + delta;
-    self.update_scroll_offset(Some(target_offset), cx);
-    let new_offset = self.scroll_handle.offset();
+    let delta_px = delta.y.as_f32();
+    if delta_px.abs() < 0.01 {
+      return;
+    }
 
-    // Also consume wheel events when they hit scroll boundaries to avoid parent
-    // scroll jitter.
-    let hit_vertical_boundary =
-      delta.y != px(0.) && new_offset.y == old_offset.y && new_offset.y != target_offset.y;
-    if new_offset != old_offset || hit_vertical_boundary {
+    let line_height_px = line_height.as_f32();
+    let ticks = (delta_px / line_height_px).round() as i64;
+    let delta_rows = if ticks == 0 {
+      if delta_px > 0.0 {
+        -SCROLL_LINES
+      } else {
+        SCROLL_LINES
+      }
+    } else {
+      -ticks * SCROLL_LINES
+    };
+
+    if self.scroll_rows(delta_rows, line_height) {
       cx.stop_propagation();
+      cx.notify();
     }
 
     self.diagnostic_popover = None;
   }
 
+  #[allow(dead_code)]
   pub(super) fn update_scroll_offset(
     &mut self, offset: Option<Point<Pixels>>, cx: &mut Context<Self>,
   ) {
@@ -1487,6 +1557,7 @@ impl InputState {
     cx.notify();
   }
 
+  #[allow(dead_code)]
   pub(super) fn clamp_scroll_offset_for_viewport(
     &self, mut offset: Point<Pixels>, scroll_size: gpui::Size<Pixels>,
     viewport_size: gpui::Size<Pixels>,
@@ -1517,78 +1588,25 @@ impl InputState {
     let Some(last_layout) = self.last_layout.as_ref() else {
       return;
     };
-    let Some(bounds) = self.last_bounds.as_ref() else {
-      return;
-    };
-
-    let mut scroll_offset = self.scroll_handle.offset();
-    let was_offset = scroll_offset;
-    let line_height = last_layout.line_height;
-
-    let point = self.text.offset_to_point(offset);
-
-    let row = point.row;
-
-    let mut row_offset_y = px(0.);
-    for (ix, wrap_line) in self.text_wrapper.lines.iter().enumerate() {
-      if ix == row {
-        break;
-      }
-
-      row_offset_y += wrap_line.height(line_height);
-    }
-
-    // Apart from left alignment, just leave enough space for the cursor size on the
-    // right side.
-    let safety_margin = if last_layout.text_align == TextAlign::Left {
-      RIGHT_MARGIN
+    let row = self.text.offset_to_point(offset).row;
+    let viewport_rows = self.viewport_rows(last_layout.line_height);
+    let margin_rows = if direction.is_some() && self.mode.is_code_editor() {
+      3
     } else {
-      CURSOR_WIDTH
+      1
     };
-    if let Some(line) = last_layout
-      .lines
-      .get(row.saturating_sub(last_layout.visible_range.start))
-    {
-      // Check to scroll horizontally and soft wrap lines
-      if let Some(pos) = line.position_for_index(point.column, last_layout) {
-        let bounds_width = bounds.size.width - last_layout.line_number_width;
-        let col_offset_x = pos.x;
-        row_offset_y += pos.y;
-        if col_offset_x - safety_margin < -scroll_offset.x {
-          // If the position is out of the visible area, scroll to make it visible
-          scroll_offset.x = -col_offset_x + safety_margin;
-        } else if col_offset_x + safety_margin > -scroll_offset.x + bounds_width {
-          scroll_offset.x = -(col_offset_x - bounds_width + safety_margin);
-        }
-      }
+
+    let mut new_top_row = self.top_row;
+    if row < self.top_row.saturating_add(margin_rows) {
+      new_top_row = row.saturating_sub(margin_rows);
+    } else if row.saturating_add(margin_rows) >= self.top_row.saturating_add(viewport_rows) {
+      let keep_rows = viewport_rows.saturating_sub(1);
+      new_top_row = row.saturating_add(margin_rows).saturating_sub(keep_rows);
     }
 
-    // Check if row_offset_y is out of the viewport
-    // If row offset is not in the viewport, scroll to make it visible
-    let edge_height = if direction.is_some() && self.mode.is_code_editor() {
-      3 * line_height
-    } else {
-      line_height
-    };
-    if row_offset_y - edge_height + line_height < -scroll_offset.y {
-      // Scroll up
-      scroll_offset.y = -row_offset_y + edge_height - line_height;
-    } else if row_offset_y + edge_height > -scroll_offset.y + bounds.size.height {
-      // Scroll down
-      scroll_offset.y = -(row_offset_y - bounds.size.height + edge_height);
+    if self.set_top_row(new_top_row, last_layout.line_height) {
+      cx.notify();
     }
-
-    // Avoid necessary scroll, when it was already in the correct position.
-    if direction == Some(MoveDirection::Up) {
-      scroll_offset.y = scroll_offset.y.max(was_offset.y);
-    } else if direction == Some(MoveDirection::Down) {
-      scroll_offset.y = scroll_offset.y.min(was_offset.y);
-    }
-
-    scroll_offset.x = scroll_offset.x.min(px(0.));
-    scroll_offset.y = scroll_offset.y.min(px(0.));
-    self.deferred_scroll_offset = Some(scroll_offset);
-    cx.notify();
   }
 
   pub(super) fn show_character_palette(
@@ -1719,25 +1737,10 @@ impl InputState {
     let inner_position = position - bounds.origin - point(line_number_width, px(0.));
 
     let mut index = last_layout.visible_range_offset.start;
-    let mut y_offset = last_layout.visible_top;
-    for (ix, line) in self
-      .text_wrapper
-      .lines
-      .iter()
-      .skip(last_layout.visible_range.start)
-      .enumerate()
-    {
-      let line_origin = self.line_origin_with_y_offset(&mut y_offset, line, line_height);
+    let mut y_offset = px(0.);
+    for line_layout in last_layout.lines.iter() {
+      let line_origin = point(px(0.), y_offset);
       let pos = inner_position - line_origin;
-
-      let Some(line_layout) = last_layout.lines.get(ix) else {
-        if pos.y < line_origin.y + line_height {
-          break;
-        }
-
-        continue;
-      };
-
       if let Some(v) = line_layout.closest_index_for_position(pos, last_layout) {
         index += v;
         break;
@@ -1745,7 +1748,7 @@ impl InputState {
         break;
       }
 
-      // +1 for `\n`
+      y_offset += line_layout.size(line_height).height;
       index += line_layout.len() + 1;
     }
 
@@ -1761,19 +1764,6 @@ impl InputState {
     } else {
       index
     }
-  }
-
-  /// Returns a y offsetted point for the line origin.
-  fn line_origin_with_y_offset(
-    &self, y_offset: &mut Pixels, line: &LineItem, line_height: Pixels,
-  ) -> Point<Pixels> {
-    // NOTE: About line.wrap_boundaries.len()
-    //
-    // If only 1 line, the value is 0
-    // If have 2 line, the value is 1
-    let p = point(px(0.), *y_offset);
-    *y_offset += line.height(line_height);
-    p
   }
 
   /// Select the text from the current cursor position to the given offset.
@@ -2001,7 +1991,13 @@ impl InputState {
     cx.notify();
   }
 
+  #[allow(dead_code)]
   pub(super) fn set_input_bounds(&mut self, new_bounds: Bounds<Pixels>, cx: &mut Context<Self>) {
+    if self.mode.is_code_editor() {
+      self.input_bounds = new_bounds;
+      return;
+    }
+
     let wrap_width_changed = self.input_bounds.size.width != new_bounds.size.width;
     self.input_bounds = new_bounds;
 
@@ -2028,6 +2024,7 @@ impl InputState {
     self.text.slice(range)
   }
 
+  #[allow(dead_code)]
   pub(crate) fn range_to_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
     let last_layout = self.last_layout.as_ref()?;
     let last_bounds = self.last_bounds?;
@@ -2168,7 +2165,10 @@ impl EntityInputHandler for InputState {
       self.ime_marked_range.take();
       self.update_preferred_column();
       self.update_search(cx);
-      self.mode.update_auto_grow(&self.text_wrapper);
+      if !self.mode.is_code_editor() {
+        self.mode.update_auto_grow(&self.text_wrapper);
+      }
+      self.clamp_top_row(window.line_height());
       if !self.silent_replace_text {
         self.handle_completion_trigger(&range, new_text, window, cx);
       }
@@ -2203,9 +2203,11 @@ impl EntityInputHandler for InputState {
     if let Some(diagnostics) = self.mode.diagnostics_mut() {
       diagnostics.reset(&self.text)
     }
-    self
-      .text_wrapper
-      .update(&self.text, &range, &Rope::from(new_text), cx);
+    if !self.mode.is_code_editor() {
+      self
+        .text_wrapper
+        .update(&self.text, &range, &Rope::from(new_text), cx);
+    }
     self
       .mode
       .update_highlighter(&range, &self.text, new_text, true, cx);
@@ -2214,7 +2216,10 @@ impl EntityInputHandler for InputState {
     self.ime_marked_range.take();
     self.update_preferred_column();
     self.update_search(cx);
-    self.mode.update_auto_grow(&self.text_wrapper);
+    if !self.mode.is_code_editor() {
+      self.mode.update_auto_grow(&self.text_wrapper);
+    }
+    self.clamp_top_row(window.line_height());
     if !self.silent_replace_text {
       self.handle_completion_trigger(&range, new_text, window, cx);
     }
@@ -2281,7 +2286,10 @@ impl EntityInputHandler for InputState {
         self.ime_marked_range = Some((fallback..fallback).into());
       }
 
-      self.mode.update_auto_grow(&self.text_wrapper);
+      if !self.mode.is_code_editor() {
+        self.mode.update_auto_grow(&self.text_wrapper);
+      }
+      self.clamp_top_row(window.line_height());
       self.history.start_grouping();
       cx.notify();
       return;
@@ -2301,9 +2309,11 @@ impl EntityInputHandler for InputState {
     if let Some(diagnostics) = self.mode.diagnostics_mut() {
       diagnostics.reset(&self.text)
     }
-    self
-      .text_wrapper
-      .update(&self.text, &range, &Rope::from(new_text), cx);
+    if !self.mode.is_code_editor() {
+      self
+        .text_wrapper
+        .update(&self.text, &range, &Rope::from(new_text), cx);
+    }
     self
       .mode
       .update_highlighter(&range, &self.text, new_text, true, cx);
@@ -2321,7 +2331,10 @@ impl EntityInputHandler for InputState {
         .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len())
         .into();
     }
-    self.mode.update_auto_grow(&self.text_wrapper);
+    if !self.mode.is_code_editor() {
+      self.mode.update_auto_grow(&self.text_wrapper);
+    }
+    self.clamp_top_row(window.line_height());
     self.history.start_grouping();
     self.push_history(&old_text, &range, new_text);
     cx.notify();
@@ -2395,6 +2408,105 @@ impl EntityInputHandler for InputState {
   }
 }
 
+impl InputState {
+  fn render_vertical_scrollbar(
+    &self, window: &mut Window, cx: &mut Context<Self>,
+  ) -> gpui::AnyElement {
+    let line_height = self
+      .last_layout
+      .as_ref()
+      .map(|layout| layout.line_height)
+      .unwrap_or(window.line_height());
+    let total_rows = self.line_count_u64() as usize;
+    let viewport_rows = self.viewport_rows(line_height);
+    let (thumb_y, thumb_h) = viewport::compute_scrollbar_thumb(
+      self.top_row,
+      viewport_rows,
+      total_rows,
+      self.input_bounds.size.height,
+    );
+    let entity = cx.entity().clone();
+    let theme = cx.theme();
+
+    let mut scrollbar = div()
+      .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
+      .h_full()
+      .flex_shrink_0()
+      .bg(theme.background)
+      .border_l_1()
+      .border_color(theme.border)
+      .relative()
+      .on_mouse_down(
+        MouseButton::Left,
+        move |event: &MouseDownEvent, window, cx| {
+          entity.update(cx, |this, cx| {
+            let line_height = this
+              .last_layout
+              .as_ref()
+              .map(|layout| layout.line_height)
+              .unwrap_or(window.line_height());
+            let viewport_rows = this.viewport_rows(line_height);
+            let local_y = event.position.y - this.input_bounds.origin.y;
+            let row = viewport::scrollbar_y_to_top_row(
+              local_y,
+              this.line_count_u64() as usize,
+              viewport_rows,
+              this.input_bounds.size.height,
+            );
+            if this.set_top_row(row, line_height) {
+              cx.notify();
+            }
+            cx.stop_propagation();
+          });
+        },
+      )
+      .on_mouse_move({
+        let entity = cx.entity().clone();
+        move |event: &MouseMoveEvent, window, cx| {
+          if !event.dragging() {
+            return;
+          }
+
+          entity.update(cx, |this, cx| {
+            let line_height = this
+              .last_layout
+              .as_ref()
+              .map(|layout| layout.line_height)
+              .unwrap_or(window.line_height());
+            let viewport_rows = this.viewport_rows(line_height);
+            let local_y = event.position.y - this.input_bounds.origin.y;
+            let row = viewport::scrollbar_y_to_top_row(
+              local_y,
+              this.line_count_u64() as usize,
+              viewport_rows,
+              this.input_bounds.size.height,
+            );
+            if this.set_top_row(row, line_height) {
+              cx.notify();
+            }
+            cx.stop_propagation();
+          });
+        }
+      });
+
+    if total_rows > viewport_rows {
+      scrollbar = scrollbar.child(
+        div()
+          .absolute()
+          .left_0()
+          .right_0()
+          .top(thumb_y)
+          .h(thumb_h)
+          .bg(theme.primary.opacity(0.45))
+          .border_1()
+          .border_color(theme.primary.opacity(0.8)),
+      );
+    }
+
+    scrollbar.into_any_element()
+  }
+}
+
 impl Focusable for InputState {
   fn focus_handle(&self, _cx: &App) -> FocusHandle {
     self.focus_handle.clone()
@@ -2418,8 +2530,25 @@ impl Render for InputState {
       .flex_1()
       .h_full()
       .flex_grow()
-      .overflow_x_hidden()
-      .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
+      .min_w_0()
+      .min_h_0()
+      .overflow_hidden()
+      .relative()
+      .child(
+        div()
+          .flex()
+          .size_full()
+          .min_w_0()
+          .min_h_0()
+          .child(
+            div().flex_1().min_w_0().min_h_0().child(
+              ViewportElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()),
+            ),
+          )
+          .when(self.mode.is_code_editor(), |this| {
+            this.child(self.render_vertical_scrollbar(window, cx))
+          }),
+      )
       .children(self.diagnostic_popover.clone())
       .children(self.context_menu.as_ref().map(|menu| menu.render()))
       .children(self.hover_popover.clone())
