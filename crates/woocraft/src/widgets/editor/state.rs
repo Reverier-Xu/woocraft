@@ -2,7 +2,7 @@
 //!
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
-use std::{ops::Range, rc::Rc};
+use std::{ops::Range, rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use gpui::{
@@ -18,8 +18,9 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-  EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorPointerButton,
-  EditorUserAction, Position,
+  EditorBackend, EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend,
+  EditorEditError, EditorPointerButton, EditorSnapshot, EditorUserAction,
+  LegacyEditorDataBackendAdapter, Position,
   blink_cursor::BlinkCursor,
   change::Change,
   highlighter::DiagnosticSet,
@@ -298,8 +299,9 @@ pub struct InputState {
   pub(super) focus_handle: FocusHandle,
   pub(super) mode: InputMode,
   pub(super) text: Rope,
-  pub(super) data_backend: Option<Box<dyn EditorDataBackend>>,
-  pub(super) data_backend_revision: u64,
+  pub(super) backend: Option<Box<dyn EditorBackend>>,
+  pub(super) backend_revision: u64,
+  pub(super) backend_snapshot: Option<Arc<dyn EditorSnapshot>>,
   pub(super) text_wrapper: TextWrapper,
   pub(super) history: History<Change>,
   pub(super) blink_cursor: Entity<BlinkCursor>,
@@ -409,8 +411,9 @@ impl InputState {
     Self {
       focus_handle: focus_handle.clone(),
       text: "".into(),
-      data_backend: None,
-      data_backend_revision: 0,
+      backend: None,
+      backend_revision: 0,
+      backend_snapshot: None,
       text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
       blink_cursor,
       history,
@@ -491,16 +494,50 @@ impl InputState {
     self
   }
 
-  /// Set a custom editor data backend.
-  pub fn data_backend(mut self, backend: impl EditorDataBackend + 'static) -> Self {
-    self.data_backend = Some(Box::new(backend));
-    self.data_backend_revision = 0;
-    if let Some(backend) = self.data_backend.as_ref() {
-      self.text = Rope::from(backend.snapshot().as_str());
-      self.data_backend_revision = backend.revision();
+  /// Set an editor backend.
+  pub fn backend(mut self, backend: impl EditorBackend + 'static) -> Self {
+    self.backend = Some(Box::new(backend));
+    self.backend_revision = 0;
+    if let Some(backend) = self.backend.as_ref() {
+      let snapshot = backend.snapshot();
+      let snapshot_text = snapshot
+        .text_for_range(0..snapshot.byte_len())
+        .unwrap_or_default();
+      self.text = Rope::from(snapshot_text.as_ref());
+      self.backend_revision = backend.revision();
+      self.backend_snapshot = Some(snapshot);
       self.text_wrapper.set_default_text(&self.text);
     }
     self
+  }
+
+  /// Replace the current editor backend.
+  pub fn set_backend(
+    &mut self, backend: impl EditorBackend + 'static, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.backend = Some(Box::new(backend));
+    self.backend_revision = 0;
+    self.backend_snapshot = None;
+    self.sync_text_with_backend(true, window, cx);
+    cx.notify();
+  }
+
+  /// Remove the current editor backend and switch back to direct rope state.
+  pub fn clear_backend(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    self.backend = None;
+    self.backend_revision = 0;
+    self.backend_snapshot = None;
+    cx.notify();
+  }
+
+  /// Whether current editor is driven by a backend.
+  pub fn has_backend(&self) -> bool {
+    self.backend.is_some()
+  }
+
+  /// Set a custom editor data backend.
+  pub fn data_backend(self, backend: impl EditorDataBackend + 'static) -> Self {
+    self.backend(LegacyEditorDataBackendAdapter::new(backend))
   }
 
   /// Replace current custom data backend.
@@ -508,30 +545,31 @@ impl InputState {
     &mut self, backend: impl EditorDataBackend + 'static, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
-    self.data_backend = Some(Box::new(backend));
-    self.data_backend_revision = 0;
-    self.sync_text_with_data_backend(true, window, cx);
-    cx.notify();
+    self.set_backend(LegacyEditorDataBackendAdapter::new(backend), window, cx);
   }
 
   /// Remove custom data backend and switch back to builtin rope backend.
-  pub fn clear_data_backend(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-    self.data_backend = None;
-    self.data_backend_revision = 0;
-    cx.notify();
+  pub fn clear_data_backend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    self.clear_backend(window, cx);
   }
 
   /// Whether current editor is driven by custom backend.
   pub fn has_custom_data_backend(&self) -> bool {
-    self.data_backend.is_some()
+    self.has_backend()
+  }
+
+  fn current_backend_snapshot(&self) -> Option<Arc<dyn EditorSnapshot>> {
+    self
+      .backend_snapshot
+      .clone()
+      .or_else(|| self.backend.as_ref().map(|backend| backend.snapshot()))
   }
 
   /// Total line count as u64, for ultra-large data sources.
   pub fn line_count_u64(&self) -> u64 {
     self
-      .data_backend
-      .as_ref()
-      .map(|backend| backend.line_count())
+      .current_backend_snapshot()
+      .map(|snapshot| snapshot.line_count())
       .unwrap_or(self.text.lines_len() as u64)
   }
 
@@ -574,25 +612,23 @@ impl InputState {
   /// Display line number text for row.
   pub fn line_number_text_for_row(&self, row: u64) -> String {
     self
-      .data_backend
-      .as_ref()
-      .and_then(|backend| backend.line_number_text(row))
+      .current_backend_snapshot()
+      .map(|snapshot| snapshot.line_number_text(row).to_string())
       .unwrap_or_else(|| row.saturating_add(1).to_string())
   }
 
   /// Largest line-number text sample used for gutter width measuring.
   pub fn max_line_number_text(&self) -> String {
     self
-      .data_backend
-      .as_ref()
-      .and_then(|backend| backend.max_line_number_text())
+      .current_backend_snapshot()
+      .map(|snapshot| snapshot.max_line_number_text().to_string())
       .unwrap_or_else(|| self.line_count_u64().max(1).to_string())
   }
 
   /// Range for row in utf-8 bytes.
   pub fn row_range_u64(&self, row: u64) -> Option<Range<u64>> {
-    if let Some(backend) = self.data_backend.as_ref() {
-      return backend.row_range(row);
+    if let Some(snapshot) = self.current_backend_snapshot() {
+      return snapshot.line_range(row);
     }
 
     let row = (row as usize).min(self.text.lines_len().saturating_sub(1));
@@ -603,8 +639,8 @@ impl InputState {
 
   /// Read text by utf-8 byte range.
   pub fn text_for_u64_range(&self, range: Range<u64>) -> Option<String> {
-    if let Some(backend) = self.data_backend.as_ref() {
-      return backend.text_for_range(range);
+    if let Some(snapshot) = self.current_backend_snapshot() {
+      return snapshot.text_for_range(range).map(|text| text.to_string());
     }
 
     let start = (range.start as usize).min(self.text.len());
@@ -615,7 +651,7 @@ impl InputState {
   pub(crate) fn extend_context_menu_from_backend(
     &self, menu: crate::PopupMenu, state: &Entity<InputState>, window: &mut Window,
   ) -> crate::PopupMenu {
-    if let Some(backend) = self.data_backend.as_ref() {
+    if let Some(backend) = self.backend.as_ref() {
       return backend.extend_context_menu(menu, state, window);
     }
 
@@ -623,26 +659,30 @@ impl InputState {
   }
 
   pub(super) fn emit_backend_action(&mut self, action: EditorUserAction) {
-    if let Some(backend) = self.data_backend.as_mut() {
+    if let Some(backend) = self.backend.as_mut() {
       backend.on_user_action(&action);
     }
   }
 
-  fn sync_text_with_data_backend(
+  fn sync_text_with_backend(
     &mut self, force: bool, window: &mut Window, cx: &mut Context<Self>,
   ) -> bool {
-    let Some(backend) = self.data_backend.as_ref() else {
+    let Some(backend) = self.backend.as_ref() else {
       return false;
     };
 
     let revision = backend.revision();
-    if !force && revision == self.data_backend_revision {
+    if !force && revision == self.backend_revision {
       return false;
     }
 
     let snapshot = backend.snapshot();
-    self.text = Rope::from(snapshot.as_str());
-    self.data_backend_revision = revision;
+    let snapshot_text = snapshot
+      .text_for_range(0..snapshot.byte_len())
+      .unwrap_or_default();
+    self.text = Rope::from(snapshot_text.as_ref());
+    self.backend_revision = revision;
+    self.backend_snapshot = Some(snapshot);
 
     if let Some(diagnostics) = self.mode.diagnostics_mut() {
       diagnostics.reset(&self.text);
@@ -667,16 +707,23 @@ impl InputState {
     &mut self, range: &Range<usize>, new_text: &str, marked: bool, window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Option<EditorBackendEditResult> {
-    let backend = self.data_backend.as_mut()?;
+    let backend = self.backend.as_mut()?;
 
     let request = EditorBackendEditRequest {
       range: (range.start as u64)..(range.end as u64),
       new_text: new_text.to_string(),
       marked,
     };
-    let response = backend.apply_edit(request);
+    let response = match backend.apply_edit(request) {
+      Ok(response) => response,
+      Err(EditorEditError::Unsupported | EditorEditError::Rejected(_)) => EditorBackendEditResult {
+        accepted: false,
+        selection: None,
+        cursor: None,
+      },
+    };
     if response.accepted {
-      self.sync_text_with_data_backend(true, window, cx);
+      self.sync_text_with_backend(true, window, cx);
     }
     Some(response)
   }
@@ -985,8 +1032,10 @@ impl InputState {
 
   /// Return the value of the input field.
   pub fn value(&self) -> SharedString {
-    if let Some(backend) = self.data_backend.as_ref() {
-      return backend.snapshot().into();
+    if let Some(snapshot) = self.current_backend_snapshot() {
+      return snapshot
+        .text_for_range(0..snapshot.byte_len())
+        .unwrap_or_default();
     }
 
     SharedString::new(self.text.to_string())
@@ -2015,7 +2064,7 @@ impl EntityInputHandler for InputState {
   ) -> Option<String> {
     let range = self.range_from_utf16(&range_utf16);
     adjusted_range.replace(self.range_to_utf16(&range));
-    if self.data_backend.is_some() {
+    if self.backend.is_some() {
       return self.text_for_u64_range((range.start as u64)..(range.end as u64));
     }
 
@@ -2451,7 +2500,7 @@ impl Focusable for InputState {
 
 impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    self.sync_text_with_data_backend(false, window, cx);
+    self.sync_text_with_backend(false, window, cx);
 
     if self._pending_update {
       self
