@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-  point, px, size, App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextAlign,
-  TextRun, Window,
+  App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextAlign, TextRun, Window,
+  point, px, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -235,8 +235,7 @@ impl TextWrapper {
   fn _update<F>(
     &mut self, changed_text: &Rope, range: &Range<usize>, new_text: &Rope, wrap_line: &mut F,
   ) where
-    F: FnMut(&str, Pixels) -> Vec<Range<usize>>,
-  {
+    F: FnMut(&str, Pixels) -> Vec<Range<usize>>, {
     // Remove the old changed lines.
     let start_row = self.text.offset_to_point(range.start).row;
     let start_row = start_row.min(self.lines.len().saturating_sub(1));
@@ -283,8 +282,8 @@ impl TextWrapper {
         prev_boundary_ix = wrapped_lines.last().map(|range| range.end).unwrap_or(0);
       }
 
-      // Reset of the line
-      if !line_str[prev_boundary_ix..].is_empty() || prev_boundary_ix == 0 {
+      // Add the remaining tail when wrapping did not already cover the full line.
+      if wrapped_lines.is_empty() || prev_boundary_ix < line.len() {
         wrapped_lines.push(prev_boundary_ix..line.len());
       }
 
@@ -385,11 +384,11 @@ pub(crate) fn break_all_ranges(
   line_str: &str, shaped_line: &ShapedLine, wrap_width: Pixels,
 ) -> Vec<Range<usize>> {
   if line_str.is_empty() {
-    return vec![0..0];
+    return std::iter::once(0..0).collect();
   }
 
   if wrap_width <= px(0.) {
-    return vec![0..line_str.len()];
+    return std::iter::once(0..line_str.len()).collect();
   }
 
   let mut ranges = Vec::new();
@@ -445,8 +444,12 @@ impl DisplayPoint {
 
 /// The layout info of a line with soft wrapped lines.
 pub(crate) struct LineLayout {
-  /// Total bytes length of this line.
+  /// Total bytes length of the logical line.
   len: usize,
+  /// Byte offset in the logical line where the visible wrapped slice starts.
+  visible_offset: usize,
+  /// Total bytes length covered by the visible wrapped slice.
+  visible_len: usize,
   /// The soft wrapped lines of this line (Include the first line).
   pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
   pub(crate) longest_width: Pixels,
@@ -459,6 +462,8 @@ impl LineLayout {
   pub(crate) fn new() -> Self {
     Self {
       len: 0,
+      visible_offset: 0,
+      visible_len: 0,
       longest_width: px(0.),
       wrapped_lines: SmallVec::new(),
       whitespace_chars: Vec::new(),
@@ -466,13 +471,31 @@ impl LineLayout {
     }
   }
 
+  #[allow(dead_code)]
   pub(crate) fn lines(mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) -> Self {
     self.set_wrapped_lines(wrapped_lines);
     self
   }
 
+  pub(crate) fn visible_slice(
+    mut self, line_len: usize, visible_offset: usize, wrapped_lines: SmallVec<[ShapedLine; 1]>,
+  ) -> Self {
+    self.set_visible_slice(line_len, visible_offset, wrapped_lines);
+    self
+  }
+
+  #[cfg_attr(not(test), allow(dead_code))]
   pub(crate) fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
-    self.len = wrapped_lines.iter().map(|l| l.len).sum();
+    let len = wrapped_lines.iter().map(|l| l.len).sum();
+    self.set_visible_slice(len, 0, wrapped_lines);
+  }
+
+  pub(crate) fn set_visible_slice(
+    &mut self, line_len: usize, visible_offset: usize, wrapped_lines: SmallVec<[ShapedLine; 1]>,
+  ) {
+    self.len = line_len;
+    self.visible_offset = visible_offset;
+    self.visible_len = wrapped_lines.iter().map(|l| l.len).sum();
     let width = wrapped_lines
       .iter()
       .map(|l| l.width)
@@ -511,8 +534,21 @@ impl LineLayout {
   }
 
   #[inline]
+  #[cfg_attr(not(test), allow(dead_code))]
   pub(super) fn len(&self) -> usize {
     self.len
+  }
+
+  pub(super) fn first_visible_position(&self, last_layout: &LastLayout) -> Point<Pixels> {
+    self
+      .position_for_index(self.visible_offset, last_layout)
+      .unwrap_or_default()
+  }
+
+  pub(super) fn last_visible_position(&self, last_layout: &LastLayout) -> Point<Pixels> {
+    self
+      .position_for_index(self.visible_offset + self.visible_len, last_layout)
+      .unwrap_or_else(|| self.first_visible_position(last_layout))
   }
 
   /// Get the position (x, y) for the given index in this line layout.
@@ -523,6 +559,11 @@ impl LineLayout {
   pub(crate) fn position_for_index(
     &self, offset: usize, last_layout: &LastLayout,
   ) -> Option<Point<Pixels>> {
+    if offset < self.visible_offset {
+      return None;
+    }
+
+    let offset = offset - self.visible_offset;
     let mut acc_len = 0;
     let mut offset_y = px(0.);
 
@@ -565,7 +606,7 @@ impl LineLayout {
           let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
           ix = ix.saturating_sub(c_len);
         }
-        return Some(offset + ix);
+        return Some(self.visible_offset + offset + ix);
       }
 
       offset += line.text.len();
@@ -585,7 +626,7 @@ impl LineLayout {
       let line_bottom = line_top + last_layout.line_height;
       if pos.y >= line_top && pos.y < line_bottom {
         let ix = line.index_for_x(pos.x - x_offset)?;
-        return Some(offset + ix);
+        return Some(self.visible_offset + offset + ix);
       }
 
       offset += line.text.len();
@@ -634,7 +675,7 @@ impl LineLayout {
 
 #[cfg(test)]
 mod tests {
-  use gpui::{px, FontFeatures, FontStyle, FontWeight};
+  use gpui::{FontFeatures, FontStyle, FontWeight, px};
 
   use super::*;
 
@@ -981,5 +1022,30 @@ mod tests {
     assert_eq!(wrapper.display_row_to_line_row(2), Some((1, 0)));
     assert_eq!(wrapper.display_row_to_line_row(3), Some((2, 0)));
     assert_eq!(wrapper.display_row_to_line_row(5), Some((2, 2)));
+  }
+
+  #[test]
+  fn test_empty_line_only_uses_one_wrapped_row() {
+    let font = gpui::Font {
+      family: "Arial".into(),
+      weight: FontWeight::default(),
+      style: FontStyle::Normal,
+      features: FontFeatures::default(),
+      fallbacks: None,
+    };
+
+    let mut wrapper = TextWrapper::new(font, px(14.), Some(px(80.)));
+    let text = Rope::from("alpha\n\nbeta");
+
+    fn fake_wrap_line(_line: &str, _wrap_width: Pixels) -> Vec<Range<usize>> {
+      vec![]
+    }
+
+    wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
+
+    assert_eq!(wrapper.lines.len(), 3);
+    assert_eq!(wrapper.lines[1].wrapped_lines, vec![0..0]);
+    assert_eq!(wrapper.lines[1].lines_len(), 1);
+    assert_eq!(wrapper.soft_lines, 3);
   }
 }

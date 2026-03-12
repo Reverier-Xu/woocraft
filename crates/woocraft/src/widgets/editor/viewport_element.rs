@@ -1,10 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-  App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity,
-  GlobalElementId, Half, HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton,
-  MouseMoveEvent, MouseUpEvent, Path, Pixels, ShapedLine, SharedString, Style, TextRun,
-  TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
+  App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
+  HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, MouseUpEvent, Path,
+  Pixels, ShapedLine, SharedString, Style, TextRun, TextStyle, UnderlineStyle, Window, fill, point,
+  px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -14,7 +14,7 @@ use super::{
   highlighter::HighlightTheme,
   mode::InputMode,
   rope_ext::RopeExt as _,
-  state::{InputState, LastLayout, WhitespaceIndicators},
+  state::{InputState, LastLayout, VisibleLine, WhitespaceIndicators},
   text_wrapper::{LineLayout, break_all_ranges},
   viewport,
 };
@@ -43,6 +43,21 @@ pub(super) struct PrepaintState {
   indent_guides_path: Option<Path<Pixels>>,
   active_indent_guide_path: Option<Path<Pixels>>,
   bounds: Bounds<Pixels>,
+}
+
+struct VisibleRowLayout {
+  lines: Vec<VisibleLine>,
+  logical_range: Range<usize>,
+  byte_range: Range<usize>,
+}
+
+struct LayoutLinesParams<'a> {
+  display_text: &'a Rope,
+  last_layout: &'a LastLayout,
+  font_size: Pixels,
+  runs: &'a [TextRun],
+  bg_segments: &'a [(Range<usize>, Hsla)],
+  whitespace_indicators: Option<WhitespaceIndicators>,
 }
 
 impl ViewportElement {
@@ -95,35 +110,76 @@ impl ViewportElement {
     });
   }
 
-  fn visible_range(
+  fn visible_layout(
     &self, state: &InputState, viewport_height: Pixels, line_height: Pixels,
-  ) -> (Range<usize>, Pixels) {
-    let total_rows = state.line_count_u64() as usize;
-    if total_rows == 0 {
-      return (0..0, px(0.));
+  ) -> VisibleRowLayout {
+    let total_logical_rows = state.line_count_u64() as usize;
+    if total_logical_rows == 0 {
+      return VisibleRowLayout {
+        lines: Vec::new(),
+        logical_range: 0..0,
+        byte_range: 0..0,
+      };
     }
 
+    let total_display_rows = state.display_row_count();
     let viewport_rows = viewport::viewport_rows(viewport_height, line_height);
-    let top_row = viewport::clamp_top_row(state.top_row, state.display_row_count(), viewport_rows);
-    let (start_row, start_local_row) = state.display_row_to_line_row(top_row);
-    let mut end_row = start_row;
-    let mut remaining_rows = start_local_row
-      .saturating_add(viewport_rows)
-      .saturating_add(OVERSCAN_ROWS);
-    while end_row < total_rows && remaining_rows > 0 {
-      let wrapped_rows = state
-        .text_wrapper
-        .line(end_row)
-        .map(|line| line.lines_len())
-        .unwrap_or(1);
-      remaining_rows = remaining_rows.saturating_sub(wrapped_rows);
-      end_row += 1;
+    let start_display_row =
+      viewport::clamp_top_row(state.top_row, total_display_rows, viewport_rows);
+    let mut remaining_display_rows = viewport_rows.saturating_add(OVERSCAN_ROWS);
+    let mut display_row = start_display_row;
+    let mut visible_lines = Vec::new();
+
+    while display_row < total_display_rows && remaining_display_rows > 0 {
+      let (row, local_row) = state.display_row_to_line_row(display_row);
+      let Some(line) = state.text_wrapper.line(row) else {
+        break;
+      };
+
+      let take = remaining_display_rows.min(line.lines_len().saturating_sub(local_row));
+      let wrap_end = local_row + take;
+      let line_start_offset = state.text.line_start_offset(row);
+      let byte_start = line
+        .wrapped_lines
+        .get(local_row)
+        .map(|range| line_start_offset + range.start)
+        .unwrap_or(line_start_offset);
+      let byte_end = line
+        .wrapped_lines
+        .get(wrap_end.saturating_sub(1))
+        .map(|range| line_start_offset + range.end)
+        .unwrap_or(line_start_offset);
+
+      visible_lines.push(VisibleLine {
+        row,
+        line_start_offset,
+        wrap_range: local_row..wrap_end,
+        byte_range: byte_start..byte_end,
+      });
+
+      display_row += take;
+      remaining_display_rows = remaining_display_rows.saturating_sub(take);
     }
 
-    (
-      start_row..end_row.max(start_row.saturating_add(1)).min(total_rows),
-      -(start_local_row as f32 * line_height),
-    )
+    let logical_start = visible_lines.first().map(|line| line.row).unwrap_or(0);
+    let logical_end = visible_lines
+      .last()
+      .map(|line| line.row + 1)
+      .unwrap_or(logical_start);
+    let byte_start = visible_lines
+      .first()
+      .map(|line| line.byte_range.start)
+      .unwrap_or(0);
+    let byte_end = visible_lines
+      .last()
+      .map(|line| line.byte_range.end)
+      .unwrap_or(byte_start);
+
+    VisibleRowLayout {
+      lines: visible_lines,
+      logical_range: logical_start..logical_end,
+      byte_range: byte_start..byte_end,
+    }
   }
 
   fn layout_cursor(
@@ -139,11 +195,13 @@ impl ViewportElement {
     }
 
     let row = state.text.offset_to_point(cursor).row;
-    if row < last_layout.visible_range.start || row >= last_layout.visible_range.end {
+    let Some(line_ix) = last_layout
+      .visible_lines
+      .iter()
+      .position(|line| line.row == row)
+    else {
       return (None, None);
-    }
-
-    let line_ix = row.saturating_sub(last_layout.visible_range.start);
+    };
     let Some(line) = last_layout.lines.get(line_ix) else {
       return (None, None);
     };
@@ -185,7 +243,6 @@ impl ViewportElement {
     }
 
     let line_height = last_layout.line_height;
-    let visible_start_offset = last_layout.visible_range_offset.start;
     let lines = &last_layout.lines;
     let line_number_width = last_layout.line_number_width;
     let path_origin = bounds.origin + point(line_number_width, px(0.));
@@ -193,31 +250,36 @@ impl ViewportElement {
     let start_ix = range.start;
     let end_ix = range.end;
 
-    let mut prev_lines_offset = visible_start_offset;
     let mut offset_y = last_layout.visible_top;
     let mut builder = gpui::PathBuilder::fill();
     let mut has_rect = false;
 
-    for line in lines.iter() {
+    for (line, visible_line) in lines.iter().zip(last_layout.visible_lines.iter()) {
       let line_size = line.size(line_height);
       let line_origin = point(px(0.), offset_y);
 
-      let line_cursor_start =
-        line.position_for_index(start_ix.saturating_sub(prev_lines_offset), last_layout);
-      let line_cursor_end =
-        line.position_for_index(end_ix.saturating_sub(prev_lines_offset), last_layout);
+      let line_cursor_start = line.position_for_index(
+        start_ix.saturating_sub(visible_line.line_start_offset),
+        last_layout,
+      );
+      let line_cursor_end = line.position_for_index(
+        end_ix.saturating_sub(visible_line.line_start_offset),
+        last_layout,
+      );
 
       if line_cursor_start.is_some() || line_cursor_end.is_some() {
-        let start =
-          line_cursor_start.unwrap_or_else(|| line.position_for_index(0, last_layout).unwrap());
-        let end = line_cursor_end
-          .unwrap_or_else(|| line.position_for_index(line.len(), last_layout).unwrap());
+        let start = line_cursor_start.unwrap_or_else(|| line.first_visible_position(last_layout));
+        let end = line_cursor_end.unwrap_or_else(|| line.last_visible_position(last_layout));
 
         let start_wrap = (start.y / line_height).floor() as usize;
         let end_wrap = (end.y / line_height).floor() as usize;
 
         for wrap_ix in start_wrap..=end_wrap {
-          let left = if wrap_ix == start_wrap { start.x } else { px(0.) };
+          let left = if wrap_ix == start_wrap {
+            start.x
+          } else {
+            px(0.)
+          };
           let right = if wrap_ix == end_wrap {
             end.x
           } else {
@@ -248,7 +310,6 @@ impl ViewportElement {
       }
 
       offset_y += line_size.height;
-      prev_lines_offset += line.len() + 1;
     }
 
     if !has_rect {
@@ -419,61 +480,82 @@ impl ViewportElement {
   }
 
   fn layout_lines(
-    state: &InputState, display_text: &Rope, last_layout: &LastLayout, font_size: Pixels,
-    runs: &[TextRun], bg_segments: &[(Range<usize>, Hsla)],
-    whitespace_indicators: Option<WhitespaceIndicators>, window: &mut Window,
+    state: &InputState, params: LayoutLinesParams<'_>, window: &mut Window,
   ) -> Vec<LineLayout> {
-    if state.text.len() == 0 {
-      return display_text
-        .to_string()
-        .split('\n')
-        .map(|line| {
-          let shaped_line =
-            window
-              .text_system()
-              .shape_line(line.to_string().into(), font_size, runs, None);
-          LineLayout::new()
-            .lines(smallvec::smallvec![shaped_line])
-            .with_whitespaces(whitespace_indicators.clone())
-        })
-        .collect();
-    }
-
-    let wrap_width = last_layout.wrap_width.unwrap_or(last_layout.content_width);
-    let visible_text = display_text
-      .slice_lines(last_layout.visible_range.start..last_layout.visible_range.end)
-      .to_string();
-
+    let LayoutLinesParams {
+      display_text,
+      last_layout,
+      font_size,
+      runs,
+      bg_segments,
+      whitespace_indicators,
+    } = params;
     let mut lines = vec![];
-    let mut offset = 0;
-    for (ix, line) in visible_text.split('\n').enumerate() {
-      let row = last_layout.visible_range.start + ix;
-      let line_runs = runs_for_range(runs, offset, &(0..line.len()));
+    let wrap_width = last_layout.wrap_width.unwrap_or(last_layout.content_width);
+    for visible_line in last_layout.visible_lines.iter() {
+      let row = visible_line.row;
+      let slice_start_offset = visible_line
+        .byte_range
+        .start
+        .saturating_sub(visible_line.line_start_offset);
+      let slice_end_offset = visible_line
+        .byte_range
+        .end
+        .saturating_sub(visible_line.line_start_offset);
+      let visible_offset = visible_line
+        .byte_range
+        .start
+        .saturating_sub(last_layout.visible_range_offset.start);
       let wrapped_ranges = if !state.masked {
         state
           .text_wrapper
           .line(row)
-          .map(|line| line.wrapped_lines.clone())
-          .unwrap_or_else(|| vec![0..line.len()])
+          .map(|line| {
+            line.wrapped_lines[visible_line.wrap_range.clone()]
+              .iter()
+              .map(|range| {
+                range.start.saturating_sub(slice_start_offset)
+                  ..range.end.saturating_sub(slice_start_offset)
+              })
+              .collect::<Vec<_>>()
+          })
+          .unwrap_or_else(|| {
+            std::iter::once(0..slice_end_offset.saturating_sub(slice_start_offset)).collect()
+          })
       } else {
-        let shaped_line =
-          window
-            .text_system()
-            .shape_line(line.to_string().into(), font_size, &line_runs, None);
-        break_all_ranges(line, &shaped_line, wrap_width)
+        let line = display_text.slice_line(row).to_string();
+        let full_line_runs = runs_for_range(runs, visible_offset, &(0..line.len()));
+        let wrapped = break_all_ranges(
+          &line,
+          &window.text_system().shape_line(
+            line.to_string().into(),
+            font_size,
+            &full_line_runs,
+            None,
+          ),
+          wrap_width,
+        );
+
+        wrapped
+          .get(visible_line.wrap_range.clone())
+          .map(ToOwned::to_owned)
+          .unwrap_or_else(|| std::iter::once(0..line.len()).collect())
       };
 
+      let line = if state.masked {
+        display_text.slice_line(row).to_string()
+      } else {
+        display_text
+          .slice(visible_line.byte_range.start..visible_line.byte_range.end)
+          .to_string()
+      };
       let mut wrapped_lines = SmallVec::with_capacity(1);
       for range in &wrapped_ranges {
-        let sub_line_runs = runs_for_range(runs, offset, range);
+        let sub_line_runs = runs_for_range(runs, visible_offset, range);
         let sub_line_runs = if bg_segments.is_empty() {
           sub_line_runs
         } else {
-          split_runs_by_bg_segments(
-            last_layout.visible_range_offset.start + offset,
-            &sub_line_runs,
-            bg_segments,
-          )
+          split_runs_by_bg_segments(visible_line.byte_range.start, &sub_line_runs, bg_segments)
         };
 
         let sub_line: SharedString = line[range.clone()].to_string().into();
@@ -486,11 +568,13 @@ impl ViewportElement {
 
       lines.push(
         LineLayout::new()
-          .lines(wrapped_lines)
+          .visible_slice(
+            display_text.slice_line(row).len(),
+            slice_start_offset,
+            wrapped_lines,
+          )
           .with_whitespaces(whitespace_indicators.clone()),
       );
-
-      offset += line.len() + 1;
     }
 
     lines
@@ -579,7 +663,7 @@ impl Element for ViewportElement {
     let line_height = window.line_height();
 
     let line_number_width =
-      Self::layout_line_numbers(&state, text_size, &window.text_style(), window);
+      Self::layout_line_numbers(state, text_size, &window.text_style(), window);
     let wrap_width = (bounds.size.width - line_number_width).max(px(1.0));
     let _ = state;
     self.state.update(cx, |state, cx| {
@@ -588,17 +672,10 @@ impl Element for ViewportElement {
     });
 
     let state = self.state.read(cx);
-    let (visible_range, visible_top) = self.visible_range(&state, bounds.size.height, line_height);
-    let visible_start_offset = visible_range
-      .start
-      .checked_sub(0)
-      .map(|row| state.text.line_start_offset(row))
-      .unwrap_or(0);
-    let visible_end_offset = visible_range
-      .end
-      .checked_sub(1)
-      .map(|row| state.text.line_end_offset(row))
-      .unwrap_or(visible_start_offset);
+    let visible_layout = self.visible_layout(state, bounds.size.height, line_height);
+    let visible_range = visible_layout.logical_range.clone();
+    let visible_start_offset = visible_layout.byte_range.start;
+    let visible_end_offset = visible_layout.byte_range.end;
 
     let is_text_empty = state.text.len() == 0;
     let ime_marked_range = state.ime_marked_range;
@@ -609,7 +686,13 @@ impl Element for ViewportElement {
       )
     } else if state.masked {
       (
-        Rope::from("*".repeat(state.text.chars().count())),
+        Rope::from(
+          state
+            .text
+            .chars()
+            .map(|ch| if matches!(ch, '\n' | '\r') { ch } else { '*' })
+            .collect::<String>(),
+        ),
         cx.theme().foreground,
       )
     } else {
@@ -621,12 +704,13 @@ impl Element for ViewportElement {
 
     let mut last_layout = LastLayout {
       visible_range: visible_range.clone(),
-      visible_top,
+      visible_top: px(0.),
       visible_range_offset: visible_start_offset..visible_end_offset,
       line_height,
       wrap_width,
       line_number_width,
       lines: Rc::new(vec![]),
+      visible_lines: Rc::new(visible_layout.lines.clone()),
       cursor_bounds: None,
       text_align: state.text_align,
       content_width: bounds.size.width - line_number_width,
@@ -657,7 +741,8 @@ impl Element for ViewportElement {
       .lsp
       .document_colors_for_range(&display_text, &last_layout.visible_range);
     let whitespace_indicators =
-      Self::layout_whitespace_indicators(&state, text_size, &text_style, window, cx);
+      Self::layout_whitespace_indicators(state, text_size, &text_style, window, cx);
+    let _ = state;
 
     let highlight_styles =
       self.highlight_lines(&visible_range, visible_start_offset..visible_end_offset, cx);
@@ -704,13 +789,15 @@ impl Element for ViewportElement {
     };
 
     let lines = Self::layout_lines(
-      &self.state.read(cx),
-      &display_text,
-      &last_layout,
-      text_size,
-      &runs,
-      &document_colors,
-      whitespace_indicators,
+      self.state.read(cx),
+      LayoutLinesParams {
+        display_text: &display_text,
+        last_layout: &last_layout,
+        font_size: text_size,
+        runs: &runs,
+        bg_segments: &document_colors,
+        whitespace_indicators,
+      },
       window,
     );
     last_layout.lines = Rc::new(lines);
@@ -724,13 +811,13 @@ impl Element for ViewportElement {
     let document_color_paths = self.layout_document_colors(&document_colors, &last_layout, &bounds);
 
     let state = self.state.read(cx);
-    let hover_definition_hitbox = self.layout_hover_definition_hitbox(&state, window, cx);
+    let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
     let (indent_guides_path, active_indent_guide_path) =
-      self.layout_indent_guides(&state, &bounds, &last_layout, &text_style, window);
+      self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
     let line_numbers = if state.mode.line_number() {
       let mut line_numbers = vec![];
       for (ix, line) in last_layout.lines.iter().enumerate() {
-        let row = last_layout.visible_range.start + ix;
+        let row = last_layout.visible_lines[ix].row;
         let line_number_text = state.line_number_text_for_row(row as u64);
         let line_no: SharedString = line_number_text.into();
         let line_no_len = line_no.len();
@@ -792,7 +879,6 @@ impl Element for ViewportElement {
     let focused = focus_handle.is_focused(window);
     let bounds = prepaint.bounds;
     let selected_range = self.state.read(cx).selected_range;
-    let visible_range_start = prepaint.last_layout.visible_range.start;
 
     window.handle_input(
       &focus_handle,
@@ -812,7 +898,7 @@ impl Element for ViewportElement {
         let mut offset_y = prepaint.last_layout.visible_top;
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
           for (ix, lines) in line_numbers.iter().enumerate() {
-            let row = visible_range_start + ix;
+            let row = prepaint.last_layout.visible_lines[ix].row;
             let is_active = prepaint.current_row == Some(row);
             let p = point(input_bounds.origin.x, origin.y + offset_y);
             let height = line_height * lines.len() as f32;
@@ -875,7 +961,7 @@ impl Element for ViewportElement {
           let mut offset_y = prepaint.last_layout.visible_top;
 
           for (ix, lines) in line_numbers.iter().enumerate() {
-            let row = visible_range_start + ix;
+            let row = prepaint.last_layout.visible_lines[ix].row;
             let row_bg_origin = point(input_bounds.origin.x, origin.y + offset_y);
             let is_active = prepaint.current_row == Some(row);
 
@@ -917,7 +1003,7 @@ impl Element for ViewportElement {
       state.last_selected_range = Some(selected_range);
       state.top_row = viewport::clamp_top_row(
         state.top_row,
-        state.line_count_u64() as usize,
+        state.display_row_count(),
         viewport::viewport_rows(input_bounds.size.height, prepaint.last_layout.line_height),
       );
     });

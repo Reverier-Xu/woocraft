@@ -1,8 +1,8 @@
 use gpui::{Half, Pixels, px};
 
-pub(crate) const VERTICAL_SCROLLBAR_WIDTH: Pixels = px(14.0);
+pub(crate) const VERTICAL_SCROLLBAR_WIDTH: Pixels = px(32.0);
 pub(crate) const DEFAULT_VIEWPORT_ROWS: usize = 24;
-const MIN_THUMB_HEIGHT: Pixels = px(16.0);
+const MIN_THUMB_HEIGHT: Pixels = px(8.0);
 
 pub(crate) fn viewport_rows(viewport_height: Pixels, line_height: Pixels) -> usize {
   if viewport_height <= px(0.0) || line_height <= px(0.0) {

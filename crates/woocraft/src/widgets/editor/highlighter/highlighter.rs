@@ -8,7 +8,10 @@ use gpui::{HighlightStyle, SharedString};
 use ropey::{ChunkCursor, Rope};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
 
-use crate::widgets::editor::highlighter::{HighlightTheme, LanguageRegistry};
+use crate::widgets::editor::{
+  RopeExt as _,
+  highlighter::{HighlightTheme, LanguageRegistry},
+};
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
@@ -395,6 +398,23 @@ impl SyntaxHighlighter {
     self.tree = Some(new_tree.clone());
     self.text = text.clone();
     self.parse_combined_injections(&new_tree);
+  }
+
+  pub fn update_text_change(&mut self, range: Range<usize>, new_text: &str, text: &Rope) {
+    let start = range.start.min(self.text.len());
+    let old_end = range.end.min(self.text.len());
+    let new_end = (start + new_text.len()).min(text.len());
+
+    let edit = InputEdit {
+      start_byte: start,
+      old_end_byte: old_end,
+      new_end_byte: new_end,
+      start_position: self.text.offset_to_point(start),
+      old_end_position: self.text.offset_to_point(old_end),
+      new_end_position: text.offset_to_point(new_end),
+    };
+
+    self.update(Some(edit), text);
   }
 
   /// Parse all combined injections after main tree is updated.

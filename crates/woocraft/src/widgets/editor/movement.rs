@@ -21,8 +21,7 @@ impl InputState {
     };
 
     let point = self.text.offset_to_point(self.cursor());
-    let row = point.row.saturating_sub(last_layout.visible_range.start);
-    let Some(line) = last_layout.lines.get(row) else {
+    let Some(line) = last_layout.line(point.row) else {
       self.preferred_column = None;
       return;
     };

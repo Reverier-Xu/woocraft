@@ -89,11 +89,17 @@ impl TreeSitterEditorHighlighter {
 }
 
 impl EditorHighlighter for TreeSitterEditorHighlighter {
-  fn sync(&mut self, snapshot: &dyn EditorSnapshot, _change: Option<&EditorTextChange>) {
-    let text = snapshot
-      .text_for_range(0..snapshot.byte_len())
-      .unwrap_or_default();
-    self.inner.update(None, &Rope::from(text.as_ref()));
+  fn sync(&mut self, snapshot: &dyn EditorSnapshot, change: Option<&EditorTextChange>) {
+    let text = snapshot.rope();
+    if let Some(change) = change {
+      self.inner.update_text_change(
+        change.range.start as usize..change.range.end as usize,
+        change.new_text.as_ref(),
+        &text,
+      );
+    } else {
+      self.inner.update(None, &text);
+    }
   }
 
   fn highlight_range(

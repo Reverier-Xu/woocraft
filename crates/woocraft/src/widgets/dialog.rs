@@ -35,18 +35,19 @@
 use std::rc::Rc;
 
 use gpui::{
-  anchored, deferred, div, point, prelude::FluentBuilder as _, px, AnyElement, App, BoxShadow,
-  Corners, Decorations, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable, Hsla,
-  InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Render, RenderOnce,
-  SharedString, StyleRefinement, Styled, Subscription, Window,
+  AnyElement, App, BoxShadow, Corners, Decorations, DismissEvent, ElementId, EventEmitter,
+  FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
+  Pixels, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
+  anchored, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
+  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconLabel, IconName, Sizable,
+  Size, StyleSized,
   actions::{Cancel, DIALOG_CONTEXT},
   h_flex, v_flex,
   widgets::window_border::WINDOW_SHADOW_SIZE,
-  window_paddings, ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconLabel,
-  IconName, Sizable, Size, StyleSized,
+  window_paddings,
 };
 
 // ─── Interaction mode ───────────────────────────────────────────────────────
@@ -263,8 +264,7 @@ impl Dialog {
   /// `this.dialog_open = false; cx.notify();`.
   pub fn on_close<F>(mut self, callback: F) -> Self
   where
-    F: Fn(&mut Window, &mut App) + 'static,
-  {
+    F: Fn(&mut Window, &mut App) + 'static, {
     self.on_close = Some(Rc::new(callback));
     self
   }
@@ -273,8 +273,7 @@ impl Dialog {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> E + 'static,
-  {
+    F: Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> E + 'static, {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));

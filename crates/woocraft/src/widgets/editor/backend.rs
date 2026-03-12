@@ -4,7 +4,7 @@ use gpui::{Entity, HighlightStyle, MouseButton, SharedString, Window};
 use lsp_types::Position;
 use ropey::Rope;
 
-use super::{highlighter::HighlightTheme, state::InputState, RopeExt as _};
+use super::{RopeExt as _, highlighter::HighlightTheme, state::InputState};
 use crate::PopupMenu;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,6 +176,15 @@ pub trait EditorSnapshot {
 
   fn text_for_range(&self, range: Range<u64>) -> Option<SharedString>;
 
+  fn rope(&self) -> Rope {
+    Rope::from(
+      self
+        .text_for_range(0..self.byte_len())
+        .unwrap_or_default()
+        .as_ref(),
+    )
+  }
+
   fn position_to_offset(&self, position: &Position) -> u64;
 
   fn offset_to_position(&self, offset: u64) -> Position;
@@ -208,8 +217,7 @@ pub trait EditorContextMenuProvider {
 }
 
 pub trait EditorBackend:
-  EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider
-{
+  EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider {
   fn revision(&self) -> u64;
 
   fn capabilities(&self) -> EditorBackendCapabilities {
@@ -278,6 +286,10 @@ impl EditorSnapshot for RopeEditorSnapshot {
     let start = (range.start as usize).min(self.text.len());
     let end = (range.end as usize).min(self.text.len());
     Some(self.text.slice(start..end).to_string().into())
+  }
+
+  fn rope(&self) -> Rope {
+    self.text.clone()
   }
 
   fn position_to_offset(&self, position: &Position) -> u64 {

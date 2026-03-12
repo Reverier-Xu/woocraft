@@ -19,8 +19,8 @@ use unicode_segmentation::*;
 
 use super::{
   EditorBackend, EditorBackendEditRequest, EditorBackendEditResult, EditorEditError,
-  EditorHighlighter, EditorPointerButton, EditorSnapshot, EditorUserAction, Position,
-  RopeBufferBackend,
+  EditorHighlighter, EditorPointerButton, EditorSnapshot, EditorTextChange, EditorUserAction,
+  Position, RopeBufferBackend,
   blink_cursor::BlinkCursor,
   change::Change,
   highlighter::DiagnosticSet,
@@ -243,6 +243,14 @@ pub(crate) struct WhitespaceIndicators {
 }
 
 #[derive(Clone)]
+pub(super) struct VisibleLine {
+  pub(super) row: usize,
+  pub(super) line_start_offset: usize,
+  pub(super) wrap_range: Range<usize>,
+  pub(super) byte_range: Range<usize>,
+}
+
+#[derive(Clone)]
 pub(super) struct LastLayout {
   /// The visible range (no wrap) of lines in the viewport, the value is row
   /// (0-based) index.
@@ -253,6 +261,8 @@ pub(super) struct LastLayout {
   pub(super) visible_range_offset: Range<usize>,
   /// The last layout lines (Only have visible lines).
   pub(super) lines: Rc<Vec<LineLayout>>,
+  /// Per-visible-line metadata, parallel to `lines`.
+  pub(super) visible_lines: Rc<Vec<VisibleLine>>,
   /// The line_height of text layout, this will change will InputElement
   /// painted.
   pub(super) line_height: Pixels,
@@ -277,11 +287,11 @@ impl LastLayout {
   /// Returns None if the row is out of range.
   #[allow(dead_code)]
   pub(crate) fn line(&self, row: usize) -> Option<&LineLayout> {
-    if row < self.visible_range.start || row >= self.visible_range.end {
-      return None;
-    }
-
-    self.lines.get(row.saturating_sub(self.visible_range.start))
+    self
+      .visible_lines
+      .iter()
+      .position(|visible| visible.row == row)
+      .and_then(|ix| self.lines.get(ix))
   }
 
   /// Get the alignment offset for the given line width.
@@ -291,6 +301,12 @@ impl LastLayout {
       TextAlign::Center => (self.content_width - line_width).half().max(px(0.)),
       TextAlign::Right => (self.content_width - line_width).max(px(0.)),
     }
+  }
+
+  pub(super) fn content_position(
+    &self, bounds: &Bounds<Pixels>, position: Point<Pixels>,
+  ) -> Point<Pixels> {
+    position - bounds.origin - point(self.line_number_width, px(0.))
   }
 }
 
@@ -505,16 +521,13 @@ impl InputState {
     self.backend_revision = 0;
     if let Some(backend) = self.backend.as_ref() {
       let snapshot = backend.snapshot();
-      let snapshot_text = snapshot
-        .text_for_range(0..snapshot.byte_len())
-        .unwrap_or_default();
-      self.text = Rope::from(snapshot_text.as_ref());
+      self.text = snapshot.rope();
       self.backend_revision = backend.revision();
       self.backend_snapshot = Some(snapshot);
       self.highlighter = backend.create_highlighter();
       self.highlighter_revision = 0;
       self.text_wrapper.set_default_text(&self.text);
-      self.refresh_backend_highlighter(true);
+      self.refresh_backend_highlighter(true, None);
     }
     self
   }
@@ -528,7 +541,7 @@ impl InputState {
     self.backend_snapshot = None;
     self.highlighter = None;
     self.highlighter_revision = 0;
-    self.sync_text_with_backend(true, window, cx);
+    self.sync_text_with_backend(true, None, window, cx);
     cx.notify();
   }
 
@@ -680,6 +693,23 @@ impl InputState {
     }
   }
 
+  fn can_apply_incremental_backend_change(
+    &self, new_text: &Rope, change: &EditorTextChange,
+  ) -> bool {
+    let start = (change.range.start as usize).min(new_text.len());
+    let expected_len = self
+      .text
+      .len()
+      .saturating_sub((change.range.end - change.range.start) as usize)
+      .saturating_add(change.new_text.len());
+    if new_text.len() != expected_len {
+      return false;
+    }
+
+    let end = (start + change.new_text.len()).min(new_text.len());
+    new_text.slice(start..end) == change.new_text.as_ref()
+  }
+
   fn install_builtin_backend_if_needed(&mut self) {
     if !self.mode.is_code_editor() || self.backend.is_some() {
       return;
@@ -698,7 +728,7 @@ impl InputState {
     self.highlighter_revision = 0;
   }
 
-  fn refresh_backend_highlighter(&mut self, force: bool) {
+  fn refresh_backend_highlighter(&mut self, force: bool, change: Option<&EditorTextChange>) {
     let Some(snapshot) = self.backend_snapshot.clone() else {
       self.highlighter = None;
       self.highlighter_revision = 0;
@@ -718,13 +748,14 @@ impl InputState {
     }
 
     if let Some(highlighter) = self.highlighter.as_mut() {
-      highlighter.sync(snapshot.as_ref(), None);
+      highlighter.sync(snapshot.as_ref(), change);
       self.highlighter_revision = snapshot.revision();
     }
   }
 
   fn sync_text_with_backend(
-    &mut self, force: bool, window: &mut Window, cx: &mut Context<Self>,
+    &mut self, force: bool, change: Option<EditorTextChange>, window: &mut Window,
+    cx: &mut Context<Self>,
   ) -> bool {
     let Some(backend) = self.backend.as_ref() else {
       return false;
@@ -736,23 +767,36 @@ impl InputState {
     }
 
     let snapshot = backend.snapshot();
-    let snapshot_text = snapshot
-      .text_for_range(0..snapshot.byte_len())
-      .unwrap_or_default();
-    self.text = Rope::from(snapshot_text.as_ref());
+    let snapshot_rope = snapshot.rope();
     self.backend_revision = revision;
     self.backend_snapshot = Some(snapshot);
 
     if let Some(diagnostics) = self.mode.diagnostics_mut() {
-      diagnostics.reset(&self.text);
+      diagnostics.reset(&snapshot_rope);
     }
 
-    if let Some(last_layout) = self.last_layout.as_ref() {
+    let change_matches_snapshot = change
+      .as_ref()
+      .is_some_and(|change| self.can_apply_incremental_backend_change(&snapshot_rope, change));
+
+    self.text = snapshot_rope;
+
+    if change_matches_snapshot {
+      if let Some(change) = change.as_ref() {
+        self.text_wrapper.update(
+          &self.text,
+          &(change.range.start as usize..change.range.end as usize),
+          &Rope::from(change.new_text.as_ref()),
+          window,
+          cx,
+        );
+      }
+    } else if let Some(last_layout) = self.last_layout.as_ref() {
       self.sync_wrap_metrics_for_view(last_layout.content_width, window, cx);
     } else {
       self.text_wrapper.set_default_text(&self.text);
     }
-    self.refresh_backend_highlighter(true);
+    self.refresh_backend_highlighter(force || change.is_some(), change.as_ref());
     self.lsp.update(&self.text, window, cx);
     self.update_search(cx);
     if !self.mode.is_code_editor() {
@@ -782,7 +826,15 @@ impl InputState {
       },
     };
     if response.accepted {
-      self.sync_text_with_backend(true, window, cx);
+      self.sync_text_with_backend(
+        true,
+        Some(EditorTextChange {
+          range: (range.start as u64)..(range.end as u64),
+          new_text: new_text.to_string().into(),
+        }),
+        window,
+        cx,
+      );
     }
     Some(response)
   }
@@ -869,10 +921,14 @@ impl InputState {
     };
     let line_height = last_layout.line_height;
 
-    let mut prev_lines_offset = last_layout.visible_range_offset.start;
     let mut y_offset = last_layout.visible_top;
-    for (line_index, line) in last_layout.lines.iter().enumerate() {
-      let local_offset = offset.saturating_sub(prev_lines_offset);
+    for (line_index, (line, visible_line)) in last_layout
+      .lines
+      .iter()
+      .zip(last_layout.visible_lines.iter())
+      .enumerate()
+    {
+      let local_offset = offset.saturating_sub(visible_line.line_start_offset);
       if let Some(pos) = line.position_for_index(local_offset, last_layout) {
         let sub_line_index = (pos.y / line_height) as usize;
         let adjusted_pos = point(pos.x + last_layout.line_number_width, pos.y + y_offset);
@@ -880,7 +936,6 @@ impl InputState {
       }
 
       y_offset += line.size(line_height).height;
-      prev_lines_offset += line.len() + 1;
     }
     (0, 0, None)
   }
@@ -1731,7 +1786,6 @@ impl InputState {
     };
 
     let line_height = last_layout.line_height;
-    let line_number_width = last_layout.line_number_width;
 
     // TIP: About the IBeam cursor
     //
@@ -1744,37 +1798,32 @@ impl InputState {
     //
     // - included the input padding.
     // - included the scroll offset.
-    let inner_position =
-      position - bounds.origin - point(line_number_width, last_layout.visible_top);
+    let inner_position = last_layout.content_position(bounds, position);
 
-    let mut index = last_layout.visible_range_offset.start;
     let mut y_offset = last_layout.visible_top;
-    for line_layout in last_layout.lines.iter() {
+    for (line_layout, visible_line) in last_layout
+      .lines
+      .iter()
+      .zip(last_layout.visible_lines.iter())
+    {
       let line_origin = point(px(0.), y_offset);
       let pos = inner_position - line_origin;
       if let Some(v) = line_layout.closest_index_for_position(pos, last_layout) {
-        index += v;
-        break;
+        return if self.masked {
+          self
+            .text
+            .char_index_to_offset(visible_line.line_start_offset + v)
+        } else {
+          visible_line.line_start_offset + v
+        };
       } else if pos.y < px(0.) {
         break;
       }
 
       y_offset += line_layout.size(line_height).height;
-      index += line_layout.len() + 1;
     }
 
-    let index = if index > self.text.len() {
-      self.text.len()
-    } else {
-      index
-    };
-
-    if self.masked {
-      // When is masked, the index is char index, need convert to byte index.
-      self.text.char_index_to_offset(index)
-    } else {
-      index
-    }
+    self.text.len()
   }
 
   /// Select the text from the current cursor position to the given offset.
@@ -2352,28 +2401,34 @@ impl EntityInputHandler for InputState {
     let mut end_origin = None;
     let line_number_origin = point(line_number_width, px(0.));
     let mut y_offset = last_layout.visible_top;
-    let mut index_offset = last_layout.visible_range_offset.start;
 
-    for line in last_layout.lines.iter() {
+    for (line, visible_line) in last_layout
+      .lines
+      .iter()
+      .zip(last_layout.visible_lines.iter())
+    {
       if start_origin.is_some() && end_origin.is_some() {
         break;
       }
 
       if start_origin.is_none()
-        && let Some(p) =
-          line.position_for_index(range.start.saturating_sub(index_offset), last_layout)
+        && let Some(p) = line.position_for_index(
+          range.start.saturating_sub(visible_line.line_start_offset),
+          last_layout,
+        )
       {
         start_origin = Some(p + point(px(0.), y_offset));
       }
 
       if end_origin.is_none()
-        && let Some(p) =
-          line.position_for_index(range.end.saturating_sub(index_offset), last_layout)
+        && let Some(p) = line.position_for_index(
+          range.end.saturating_sub(visible_line.line_start_offset),
+          last_layout,
+        )
       {
         end_origin = Some(p + point(px(0.), y_offset));
       }
 
-      index_offset += line.len() + 1;
       y_offset += line.size(line_height).height;
     }
 
@@ -2394,18 +2449,19 @@ impl EntityInputHandler for InputState {
   ) -> Option<usize> {
     let last_layout = self.last_layout.as_ref()?;
     let bounds = self.last_bounds?;
-    let inner_point =
-      position - bounds.origin - point(last_layout.line_number_width, last_layout.visible_top);
-    let mut offset = last_layout.visible_range_offset.start;
+    let inner_point = last_layout.content_position(&bounds, position);
     let mut y_offset = last_layout.visible_top;
 
-    for line in last_layout.lines.iter() {
+    for (line, visible_line) in last_layout
+      .lines
+      .iter()
+      .zip(last_layout.visible_lines.iter())
+    {
       let local_point = inner_point - point(px(0.0), y_offset);
       if let Some(utf8_index) = line.index_for_position(local_point, last_layout) {
-        return Some(self.offset_to_utf16(offset + utf8_index));
+        return Some(self.offset_to_utf16(visible_line.line_start_offset + utf8_index));
       }
 
-      offset += line.len() + 1;
       y_offset += line.size(last_layout.line_height).height;
     }
 
@@ -2435,8 +2491,6 @@ impl InputState {
   fn render_vertical_scrollbar(
     &self, window: &mut Window, cx: &mut Context<Self>,
   ) -> gpui::AnyElement {
-    const THUMB_INSET: Pixels = px(2.0);
-
     let line_height = self
       .last_layout
       .as_ref()
@@ -2497,12 +2551,13 @@ impl InputState {
       scrollbar = scrollbar.child(
         div()
           .absolute()
-          .left(THUMB_INSET)
-          .right(THUMB_INSET)
+          .left_0()
+          .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
           .top(thumb_y)
           .h(thumb_h)
           .bg(theme.primary.opacity(0.45))
-          .rounded(px(999.0)),
+          .border_1()
+          .border_color(theme.primary.opacity(0.8)),
       );
     }
 
@@ -2519,7 +2574,7 @@ impl Focusable for InputState {
 impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     self.install_builtin_backend_if_needed();
-    self.sync_text_with_backend(false, window, cx);
+    self.sync_text_with_backend(false, None, window, cx);
     if let Some((content_width, line_height)) = self
       .last_layout
       .as_ref()
@@ -2528,10 +2583,10 @@ impl Render for InputState {
       self.sync_wrap_metrics_for_view(content_width, window, cx);
       self.clamp_top_row(line_height);
     }
-    self.refresh_backend_highlighter(false);
+    self.refresh_backend_highlighter(false, None);
 
     if self._pending_update {
-      self.refresh_backend_highlighter(true);
+      self.refresh_backend_highlighter(true, None);
       self.lsp.update(&self.text, window, cx);
       self._pending_update = false;
     }

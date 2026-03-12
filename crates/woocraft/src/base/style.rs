@@ -5,8 +5,8 @@
 //! style-related traits.
 
 use gpui::{
-  div, point, px, BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks,
-  FontFeatures, Hsla, Pixels, Refineable, StyleRefinement, Styled,
+  BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks, FontFeatures, Hsla, Pixels,
+  Refineable, StyleRefinement, Styled, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
@@ -114,8 +114,7 @@ pub trait StyledExt: Styled + Sized {
 
   fn paddings<L>(self, paddings: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
-  {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
     let paddings = paddings.into();
     self
       .pt(paddings.top.into())
@@ -126,8 +125,7 @@ pub trait StyledExt: Styled + Sized {
 
   fn margins<L>(self, margins: impl Into<Edges<L>>) -> Self
   where
-    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq,
-  {
+    L: Into<DefiniteLength> + Clone + Default + std::fmt::Debug + PartialEq, {
     let margins = margins.into();
     self
       .mt(margins.top.into())

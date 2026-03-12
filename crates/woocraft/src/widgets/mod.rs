@@ -56,8 +56,8 @@ pub use editor::{
   CodeEditor, EditorActionSink, EditorBackend, EditorBackendCapabilities, EditorBackendEditRequest,
   EditorBackendEditResult, EditorContextMenuProvider, EditorEditError, EditorEvent,
   EditorHighlighter, EditorHighlighterProvider, EditorLine, EditorPointerButton, EditorSnapshot,
-  EditorState, EditorTextChange, EditorUserAction, MaskPattern, Position, Rope,
-  RopeBufferBackend, RopeEditorSnapshot, RopeExt, TabSize, highlighter::*, lsp::*,
+  EditorState, EditorTextChange, EditorUserAction, MaskPattern, Position, Rope, RopeBufferBackend,
+  RopeEditorSnapshot, RopeExt, TabSize, highlighter::*, lsp::*,
 };
 pub use form::*;
 pub use history::*;
