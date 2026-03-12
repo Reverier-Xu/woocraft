@@ -53,9 +53,11 @@ pub use dialog::*;
 pub use divider::*;
 pub use dock::*;
 pub use editor::{
-  CodeEditor, EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorEvent,
-  EditorPointerButton, EditorState, EditorUserAction, MaskPattern, Position, Rope, RopeExt,
-  TabSize, highlighter::*, lsp::*,
+  CodeEditor, EditorActionSink, EditorBackend, EditorBackendCapabilities, EditorBackendEditRequest,
+  EditorBackendEditResult, EditorContextMenuProvider, EditorDataBackend, EditorEditError,
+  EditorEvent, EditorHighlighter, EditorHighlighterProvider, EditorLine, EditorPointerButton,
+  EditorSnapshot, EditorState, EditorTextChange, EditorUserAction, LegacyEditorDataBackendAdapter,
+  MaskPattern, Position, Rope, RopeEditorSnapshot, RopeExt, TabSize, highlighter::*, lsp::*,
 };
 pub use form::*;
 pub use history::*;
