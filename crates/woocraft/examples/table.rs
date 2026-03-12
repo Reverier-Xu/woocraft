@@ -231,7 +231,7 @@ impl TableDelegate for TableDemoDelegate {
   }
 
   fn context_menu(
-    &mut self, row_ix: usize, menu: PopupMenu, _window: &mut Window,
+    &mut self, row_ix: usize, menu: PopupMenu, window: &mut Window,
     cx: &mut Context<TableState<Self>>,
   ) -> PopupMenu {
     let Some(row) = self.rows.get(row_ix) else {
@@ -240,18 +240,40 @@ impl TableDelegate for TableDemoDelegate {
 
     let row_label = format!("{} ({})", row.name, row.team);
     let row_id = row.id;
+    let row_title = row.title;
     let table = cx.entity().clone();
+    let select_table = table.clone();
+    let submenu_table = table.clone();
 
     menu
       .item(PopupMenuItem::label(format!("Row {}", row_id)))
       .separator()
       .item(
         PopupMenuItem::new(format!("Select {}", row_label)).on_click(move |_, _, cx| {
-          table.update(cx, |table, cx| {
+          select_table.update(cx, |table, cx| {
             table.set_selected_row(row_ix, cx);
           });
         }),
       )
+      .submenu("More Actions", window, cx, move |menu, window, cx| {
+        menu
+          .item(PopupMenuItem::new("Select Again").on_click({
+            let table = submenu_table.clone();
+            move |_, _, cx| {
+              table.update(cx, |table, cx| {
+                table.set_selected_row(row_ix, cx);
+              });
+            }
+          }))
+          .submenu("Diagnostics", window, cx, move |menu, _, _| {
+            menu
+              .item(PopupMenuItem::label(format!("Title: {}", row_title)))
+              .separator()
+              .item(PopupMenuItem::new("Print Row Id").on_click(move |_, _, _| {
+                println!("table example nested menu: row {}", row_id);
+              }))
+          })
+      })
       .item(PopupMenuItem::new("Print Row").on_click(move |_, _, _| {
         println!("table example: row {} selected from context menu", row_id);
       }))

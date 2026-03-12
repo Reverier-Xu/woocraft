@@ -302,10 +302,43 @@ fn lookup_rust_i18n_translation_merged(locale: &str, key: &str) -> Option<String
 }
 #[cfg(test)]
 mod tests {
+  use std::sync::{LazyLock, Mutex, MutexGuard};
+
   use super::*;
+
+  static TEST_LOCALE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+  struct LocaleTestGuard {
+    _guard: MutexGuard<'static, ()>,
+  }
+
+  impl LocaleTestGuard {
+    fn new() -> Self {
+      let guard = TEST_LOCALE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+      clear_custom_locales();
+      Self { _guard: guard }
+    }
+  }
+
+  impl Drop for LocaleTestGuard {
+    fn drop(&mut self) {
+      clear_custom_locales();
+    }
+  }
+
+  fn clear_custom_locales() {
+    CUSTOM_LOCALES
+      .write()
+      .unwrap_or_else(|poisoned| poisoned.into_inner())
+      .clear();
+  }
 
   #[test]
   fn test_incomplete_custom_translation_merges_with_builtin() {
+    let _guard = LocaleTestGuard::new();
+
     // Load only a partial Chinese (Simplified) translation
     let mut partial_translations = HashMap::new();
     partial_translations.insert("custom_key".to_string(), "自定义翻译".to_string());
@@ -329,6 +362,8 @@ mod tests {
 
   #[test]
   fn test_custom_translation_priority_over_builtin() {
+    let _guard = LocaleTestGuard::new();
+
     let mut custom_translations = HashMap::new();
     custom_translations.insert("i18n.name".to_string(), "我的自定义语言名".to_string());
     custom_translations.insert("some_key".to_string(), "自定义值".to_string());
@@ -345,6 +380,8 @@ mod tests {
 
   #[test]
   fn test_custom_locale_cannot_override_woocraft_domain_key() {
+    let _guard = LocaleTestGuard::new();
+
     let mut custom_translations = HashMap::new();
     custom_translations.insert(
       woocraft_key("common.loading"),
@@ -361,6 +398,8 @@ mod tests {
 
   #[test]
   fn test_extend_locale_preserves_builtin_translations() {
+    let _guard = LocaleTestGuard::new();
+
     // Clear and extend with just a few keys
     let mut partial_translations = HashMap::new();
     partial_translations.insert("extended_key".to_string(), "扩展翻译".to_string());

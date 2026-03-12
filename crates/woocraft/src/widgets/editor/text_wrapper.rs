@@ -1008,7 +1008,7 @@ mod tests {
       },
       LineItem {
         line: Rope::from("beta"),
-        wrapped_lines: vec![0..4],
+        wrapped_lines: std::iter::once(0..4).collect(),
       },
       LineItem {
         line: Rope::from("gamma"),

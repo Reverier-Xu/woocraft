@@ -304,6 +304,7 @@ pub struct PopupMenu {
   bounds: Bounds<Pixels>,
   size: Size,
   check_side: Side,
+  self_entity: WeakEntity<Self>,
 
   /// The parent menu of this menu, if this is a submenu
   parent_menu: Option<WeakEntity<Self>>,
@@ -319,10 +320,11 @@ pub struct PopupMenu {
 }
 
 impl PopupMenu {
-  pub(crate) fn new(cx: &mut App) -> Self {
+  pub(crate) fn new(cx: &mut Context<Self>) -> Self {
     Self {
       focus_handle: cx.focus_handle(),
       action_context: None,
+      self_entity: cx.entity().downgrade(),
       parent_menu: None,
       menu_items: Vec::new(),
       selected_index: None,
@@ -578,22 +580,25 @@ impl PopupMenu {
     self
   }
 
-  /// Add a Submenu
+  /// Add a Submenu.
+  ///
+  /// This only needs app access, so it can also be used from widget-specific
+  /// context menu builders such as table and list delegates.
   pub fn submenu(
-    self, label: impl Into<SharedString>, window: &mut Window, cx: &mut Context<Self>,
+    self, label: impl Into<SharedString>, window: &mut Window, cx: &mut App,
     f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
   ) -> Self {
     self.submenu_with_icon(None, label, window, cx, f)
   }
 
-  /// Add a Submenu item with icon
+  /// Add a Submenu item with icon.
   pub fn submenu_with_icon(
     mut self, icon: Option<Icon>, label: impl Into<SharedString>, window: &mut Window,
-    cx: &mut Context<Self>,
+    cx: &mut App,
     f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
   ) -> Self {
     let submenu = PopupMenu::build(window, cx, f);
-    let parent_menu = cx.entity().downgrade();
+    let parent_menu = self.self_entity.clone();
     submenu.update(cx, |view, _| {
       view.parent_menu = Some(parent_menu);
     });
