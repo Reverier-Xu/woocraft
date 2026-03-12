@@ -105,3 +105,66 @@ impl TextSelector {
     Some(start..end)
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use ropey::Rope;
+
+  use super::TextSelector;
+
+  #[test]
+  fn word_range_groups_unicode_words_and_combining_marks() {
+    let text = "alpha na\u{0308}ive пример";
+    let rope = Rope::from(text);
+
+    let naive_range = TextSelector::word_range(&rope, text.find("\u{0308}").unwrap()).unwrap();
+    assert_eq!(&text[naive_range], "na\u{0308}ive");
+
+    let cyrillic_offset = text.find("мер").unwrap();
+    let cyrillic_range = TextSelector::word_range(&rope, cyrillic_offset).unwrap();
+    assert_eq!(&text[cyrillic_range], "пример");
+  }
+
+  #[test]
+  fn word_range_groups_whitespace_runs() {
+    let text = "foo   bar";
+    let rope = Rope::from(text);
+    let range = TextSelector::word_range(&rope, text.find("   ").unwrap() + 1).unwrap();
+
+    assert_eq!(&text[range], "   ");
+  }
+
+  #[test]
+  fn word_range_keeps_punctuation_and_newlines_isolated() {
+    let text = "foo,\nbar";
+    let rope = Rope::from(text);
+
+    let comma = text.find(',').unwrap();
+    let comma_range = TextSelector::word_range(&rope, comma).unwrap();
+    assert_eq!(&text[comma_range], ",");
+
+    let newline = text.find('\n').unwrap();
+    let newline_range = TextSelector::word_range(&rope, newline).unwrap();
+    assert_eq!(&text[newline_range], "\n");
+  }
+
+  #[test]
+  fn word_range_returns_none_past_the_end() {
+    let rope = Rope::from("foo");
+
+    assert_eq!(TextSelector::word_range(&rope, rope.len()), None);
+  }
+
+  #[test]
+  fn line_range_clips_offsets_to_the_current_line() {
+    let text = "one\n中文\nthree";
+    let rope = Rope::from(text);
+
+    let middle_of_zhong = text.find("中文").unwrap() + 1;
+    let middle_range = TextSelector::line_range(&rope, middle_of_zhong);
+    assert_eq!(&text[middle_range], "中文");
+
+    let tail_range = TextSelector::line_range(&rope, usize::MAX);
+    assert_eq!(&text[tail_range], "three");
+  }
+}
