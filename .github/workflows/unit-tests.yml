@@ -1,0 +1,51 @@
+name: unit tests
+
+on:
+  pull_request:
+  push:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install linux dependencies
+        run: |
+          apt_get="apt-get"
+          if command -v sudo >/dev/null 2>&1; then
+            apt_get="sudo apt-get"
+          fi
+
+          $apt_get update
+          $apt_get install -y \
+            libasound2-dev \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            pkg-config
+
+      - name: setup rust toolchain
+        uses: dtolnay/rust-toolchain@1.93.1
+
+      - name: cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: run unit tests
+        run: cargo test --workspace

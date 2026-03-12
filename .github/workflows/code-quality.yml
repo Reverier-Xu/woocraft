@@ -1,0 +1,56 @@
+name: code quality
+
+on:
+  pull_request:
+  push:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  fmt-and-clippy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install linux dependencies
+        run: |
+          apt_get="apt-get"
+          if command -v sudo >/dev/null 2>&1; then
+            apt_get="sudo apt-get"
+          fi
+
+          $apt_get update
+          $apt_get install -y \
+            libasound2-dev \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxcb1-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            pkg-config
+
+      - name: setup nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - name: cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: check formatting
+        run: cargo +nightly fmt --all --check
+
+      - name: run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
