@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-  App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
-  size,
+  App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextAlign, TextRun, Window,
+  point, px, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -70,6 +70,7 @@ pub(super) struct TextWrapper {
   pub(super) longest_row: LongestRow,
   /// The lines by split \n
   pub(super) lines: Vec<LineItem>,
+  display_row_starts: Vec<usize>,
 
   _initialized: bool,
 }
@@ -85,6 +86,7 @@ impl TextWrapper {
       soft_lines: 0,
       longest_row: LongestRow::default(),
       lines: Vec::new(),
+      display_row_starts: Vec::new(),
       _initialized: false,
     }
   }
@@ -100,37 +102,95 @@ impl TextWrapper {
     self.soft_lines
   }
 
+  pub(crate) fn display_row_to_line_row(&self, display_row: usize) -> Option<(usize, usize)> {
+    if self.lines.is_empty() {
+      return Some((0, 0));
+    }
+
+    if self.display_row_starts.len() != self.lines.len() {
+      let mut start = 0;
+      let display_row = display_row.min(
+        self
+          .lines
+          .iter()
+          .map(LineItem::lines_len)
+          .sum::<usize>()
+          .saturating_sub(1),
+      );
+      for (ix, line) in self.lines.iter().enumerate() {
+        let end = start + line.lines_len();
+        if display_row < end {
+          return Some((ix, display_row.saturating_sub(start)));
+        }
+        start = end;
+      }
+
+      return Some((self.lines.len().saturating_sub(1), 0));
+    }
+
+    let display_row = display_row.min(self.soft_lines.saturating_sub(1));
+    let ix = match self.display_row_starts.binary_search(&display_row) {
+      Ok(ix) => ix,
+      Err(0) => 0,
+      Err(ix) => ix.saturating_sub(1),
+    };
+    let local_row = display_row.saturating_sub(self.display_row_starts[ix]);
+    Some((ix, local_row))
+  }
+
   /// Get the line item by row index.
   #[inline]
   pub(super) fn line(&self, row: usize) -> Option<&LineItem> {
     self.lines.get(row)
   }
 
-  pub(super) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
+  pub(super) fn sync(
+    &mut self, text: &Rope, font: Font, font_size: Pixels, wrap_width: Option<Pixels>,
+    window: &Window, cx: &mut App,
+  ) -> bool {
+    let text_changed = self.text != *text;
+    let font_changed = !self.font.eq(&font) || self.font_size != font_size;
+    let wrap_width_changed = self.wrap_width != wrap_width;
+
+    if !self._initialized || text_changed || font_changed || wrap_width_changed {
+      self._initialized = true;
+      self.font = font;
+      self.font_size = font_size;
+      self.wrap_width = wrap_width;
+      self.update_all(text, window, cx);
+      return true;
+    }
+
+    false
+  }
+
+  pub(super) fn set_wrap_width(
+    &mut self, wrap_width: Option<Pixels>, window: &Window, cx: &mut App,
+  ) {
     if wrap_width == self.wrap_width {
       return;
     }
 
     self.wrap_width = wrap_width;
-    self.update_all(&self.text.clone(), cx);
+    self.update_all(&self.text.clone(), window, cx);
   }
 
-  pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
+  pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, window: &Window, cx: &mut App) {
     if self.font.eq(&font) && self.font_size == font_size {
       return;
     }
 
     self.font = font;
     self.font_size = font_size;
-    self.update_all(&self.text.clone(), cx);
+    self.update_all(&self.text.clone(), window, cx);
   }
 
-  pub(super) fn prepare_if_need(&mut self, text: &Rope, cx: &mut App) {
+  pub(super) fn prepare_if_need(&mut self, text: &Rope, window: &Window, cx: &mut App) {
     if self._initialized {
       return;
     }
     self._initialized = true;
-    self.update_all(text, cx);
+    self.update_all(text, window, cx);
   }
 
   /// Update the text wrapper and recalculate the wrapped lines.
@@ -144,19 +204,30 @@ impl TextWrapper {
   ///   skipped if the text is the same.
   /// - `cx`: The application context.
   pub(super) fn update(
-    &mut self, changed_text: &Rope, range: &Range<usize>, new_text: &Rope, cx: &mut App,
+    &mut self, changed_text: &Rope, range: &Range<usize>, new_text: &Rope, window: &Window,
+    cx: &mut App,
   ) {
-    let mut line_wrapper = cx
-      .text_system()
-      .line_wrapper(self.font.clone(), self.font_size);
+    let font = self.font.clone();
+    let font_size = self.font_size;
     self._update(
       changed_text,
       range,
       new_text,
       &mut |line_str, wrap_width| {
-        line_wrapper
-          .wrap_line(&[LineFragment::text(line_str)], wrap_width)
-          .collect()
+        let shaped_line = window.text_system().shape_line(
+          SharedString::from(line_str.to_string()),
+          font_size,
+          &[TextRun {
+            len: line_str.len(),
+            font: font.clone(),
+            color: gpui::black(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+          }],
+          None,
+        );
+        break_all_ranges(line_str, &shaped_line, wrap_width)
       },
     );
   }
@@ -164,7 +235,7 @@ impl TextWrapper {
   fn _update<F>(
     &mut self, changed_text: &Rope, range: &Range<usize>, new_text: &Rope, wrap_line: &mut F,
   ) where
-    F: FnMut(&str, Pixels) -> Vec<gpui::Boundary>, {
+    F: FnMut(&str, Pixels) -> Vec<Range<usize>>, {
     // Remove the old changed lines.
     let start_row = self.text.offset_to_point(range.start).row;
     let start_row = start_row.min(self.lines.len().saturating_sub(1));
@@ -207,12 +278,8 @@ impl TextWrapper {
 
       // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
       if let Some(wrap_width) = wrap_width {
-        // Here only have wrapped line, if there is no wrap meet, the `line_wraps`
-        // result will empty.
-        for boundary in wrap_line(&line_str, wrap_width) {
-          wrapped_lines.push(prev_boundary_ix..boundary.ix);
-          prev_boundary_ix = boundary.ix;
-        }
+        wrapped_lines = wrap_line(&line_str, wrap_width);
+        prev_boundary_ix = wrapped_lines.last().map(|range| range.end).unwrap_or(0);
       }
 
       // Reset of the line
@@ -233,7 +300,12 @@ impl TextWrapper {
     }
 
     self.text = changed_text.clone();
-    self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
+    self.display_row_starts.clear();
+    self.soft_lines = 0;
+    for line in &self.lines {
+      self.display_row_starts.push(self.soft_lines);
+      self.soft_lines += line.lines_len();
+    }
     self.longest_row = LongestRow {
       row: longest_row_ix,
       len: longest_row_len,
@@ -243,8 +315,8 @@ impl TextWrapper {
   /// Update the text wrapper and recalculate the wrapped lines.
   ///
   /// If the `text` is the same as the current text, do nothing.
-  fn update_all(&mut self, text: &Rope, cx: &mut App) {
-    self.update(text, &(0..text.len()), text, cx);
+  fn update_all(&mut self, text: &Rope, window: &Window, cx: &mut App) {
+    self.update(text, &(0..text.len()), text, window, cx);
   }
 
   /// Return display point (with soft wrap) from the given byte offset in the
@@ -256,12 +328,11 @@ impl TextWrapper {
     let start = self.text.line_start_offset(row);
     let line = &self.lines[row];
 
-    let mut wrapped_row = self
-      .lines
-      .iter()
-      .take(row)
-      .map(|l| l.lines_len())
-      .sum::<usize>();
+    let wrapped_row = self
+      .display_row_starts
+      .get(row)
+      .copied()
+      .unwrap_or_else(|| self.lines.iter().take(row).map(LineItem::lines_len).sum());
 
     let local_offset = offset.saturating_sub(start);
     for (ix, range) in line.wrapped_lines.iter().enumerate() {
@@ -285,20 +356,14 @@ impl TextWrapper {
   ///
   /// Panics if the `point.row` is out of bounds.
   pub(crate) fn display_point_to_offset(&self, point: DisplayPoint) -> usize {
-    let mut wrapped_row = 0;
-    for (row, line) in self.lines.iter().enumerate() {
-      if wrapped_row + line.lines_len() > point.row {
-        let line_start = self.text.line_start_offset(row);
-        let local_row = point.row.saturating_sub(wrapped_row);
-        if let Some(range) = line.wrapped_lines.get(local_row) {
-          return line_start + (range.start + point.column).min(range.end);
-        } else {
-          // If not found, return the end of the line.
-          return line_start + line.len();
-        }
+    if let Some((row, local_row)) = self.display_row_to_line_row(point.row) {
+      let line_start = self.text.line_start_offset(row);
+      let line = &self.lines[row];
+      if let Some(range) = line.wrapped_lines.get(local_row) {
+        return line_start + (range.start + point.column).min(range.end);
       }
 
-      wrapped_row += line.lines_len();
+      return line_start + line.len();
     }
 
     self.text.len()
@@ -313,6 +378,41 @@ impl TextWrapper {
     let offset = self.text.point_to_offset(point);
     self.offset_to_display_point(offset)
   }
+}
+
+pub(crate) fn break_all_ranges(
+  line_str: &str, shaped_line: &ShapedLine, wrap_width: Pixels,
+) -> Vec<Range<usize>> {
+  if line_str.is_empty() {
+    return vec![0..0];
+  }
+
+  if wrap_width <= px(0.) {
+    return vec![0..line_str.len()];
+  }
+
+  let mut ranges = Vec::new();
+  let mut start = 0;
+
+  for (ix, ch) in line_str.char_indices() {
+    let next = ix + ch.len_utf8();
+    let width = shaped_line.x_for_index(next) - shaped_line.x_for_index(start);
+    if width > wrap_width {
+      let break_at = if ix > start { ix } else { next };
+      ranges.push(start..break_at);
+      start = break_at;
+    }
+  }
+
+  if start < line_str.len() {
+    ranges.push(start..line_str.len());
+  }
+
+  if ranges.is_empty() {
+    ranges.push(0..0);
+  }
+
+  ranges
 }
 
 /// The actually display point in the text.
@@ -533,7 +633,7 @@ impl LineLayout {
 
 #[cfg(test)]
 mod tests {
-  use gpui::{Boundary, FontFeatures, FontStyle, FontWeight, px};
+  use gpui::{FontFeatures, FontStyle, FontWeight, px};
 
   use super::*;
 
@@ -551,7 +651,7 @@ mod tests {
     let mut text =
       Rope::from("Hello, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。");
 
-    fn fake_wrap_line(_line: &str, _wrap_width: Pixels) -> Vec<Boundary> {
+    fn fake_wrap_line(_line: &str, _wrap_width: Pixels) -> Vec<Range<usize>> {
       vec![]
     }
 

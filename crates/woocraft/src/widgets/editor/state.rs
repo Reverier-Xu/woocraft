@@ -329,6 +329,7 @@ pub struct InputState {
   pub(super) last_bounds: Option<Bounds<Pixels>>,
   pub(super) last_selected_range: Option<Selection>,
   pub(super) selecting: bool,
+  pub(super) scrollbar_dragging: bool,
   pub(super) top_row: usize,
   pub(super) size: Size,
   pub(super) disabled: bool,
@@ -443,6 +444,7 @@ impl InputState {
       last_bounds: None,
       last_selected_range: None,
       last_cursor: None,
+      scrollbar_dragging: false,
       top_row: 0,
       preferred_column: None,
       placeholder: SharedString::default(),
@@ -560,6 +562,17 @@ impl InputState {
       .unwrap_or(self.text.lines_len() as u64)
   }
 
+  pub(crate) fn display_row_count(&self) -> usize {
+    self.text_wrapper.len().max(1)
+  }
+
+  pub(crate) fn display_row_to_line_row(&self, display_row: usize) -> (usize, usize) {
+    self
+      .text_wrapper
+      .display_row_to_line_row(display_row)
+      .unwrap_or((0, 0))
+  }
+
   pub(crate) fn viewport_rows(&self, line_height: Pixels) -> usize {
     viewport::viewport_rows(self.input_bounds.size.height, line_height)
   }
@@ -567,7 +580,7 @@ impl InputState {
   pub(crate) fn clamp_top_row(&mut self, line_height: Pixels) {
     self.top_row = viewport::clamp_top_row(
       self.top_row,
-      self.line_count_u64() as usize,
+      self.display_row_count(),
       self.viewport_rows(line_height),
     );
   }
@@ -575,7 +588,7 @@ impl InputState {
   pub(crate) fn set_top_row(&mut self, row: usize, line_height: Pixels) -> bool {
     let clamped = viewport::clamp_top_row(
       row,
-      self.line_count_u64() as usize,
+      self.display_row_count(),
       self.viewport_rows(line_height),
     );
     if clamped == self.top_row {
@@ -643,6 +656,22 @@ impl InputState {
     }
 
     menu
+  }
+
+  pub(crate) fn sync_wrap_metrics_for_view(
+    &mut self, wrap_width: Pixels, window: &Window, cx: &mut App,
+  ) {
+    let style = window.text_style();
+    let font = style.font();
+    let font_size = style.font_size.to_pixels(window.rem_size());
+    self.text_wrapper.sync(
+      &self.text,
+      font,
+      font_size,
+      Some(wrap_width.max(px(1.0))),
+      window,
+      cx,
+    );
   }
 
   pub(super) fn emit_backend_action(&mut self, action: EditorUserAction) {
@@ -718,7 +747,9 @@ impl InputState {
       diagnostics.reset(&self.text);
     }
 
-    if !self.mode.is_code_editor() {
+    if let Some(last_layout) = self.last_layout.as_ref() {
+      self.sync_wrap_metrics_for_view(last_layout.content_width, window, cx);
+    } else {
       self.text_wrapper.set_default_text(&self.text);
     }
     self.refresh_backend_highlighter(true);
@@ -1469,6 +1500,7 @@ impl InputState {
     if self.selected_range.is_empty() {
       self.selection_reversed = false;
     }
+    self.scrollbar_dragging = false;
     self.selecting = false;
     self.selected_word_range = None;
   }
@@ -1559,7 +1591,9 @@ impl InputState {
     let Some(last_layout) = self.last_layout.as_ref() else {
       return;
     };
-    let row = self.text.offset_to_point(offset).row;
+    let display_point = self
+      .text_wrapper
+      .offset_to_display_point(offset.min(self.text.len()));
     let viewport_rows = self.viewport_rows(last_layout.line_height);
     let margin_rows = if direction.is_some() && self.mode.is_code_editor() {
       3
@@ -1568,11 +1602,16 @@ impl InputState {
     };
 
     let mut new_top_row = self.top_row;
-    if row < self.top_row.saturating_add(margin_rows) {
-      new_top_row = row.saturating_sub(margin_rows);
-    } else if row.saturating_add(margin_rows) >= self.top_row.saturating_add(viewport_rows) {
+    if display_point.row < self.top_row.saturating_add(margin_rows) {
+      new_top_row = display_point.row.saturating_sub(margin_rows);
+    } else if display_point.row.saturating_add(margin_rows)
+      >= self.top_row.saturating_add(viewport_rows)
+    {
       let keep_rows = viewport_rows.saturating_sub(1);
-      new_top_row = row.saturating_add(margin_rows).saturating_sub(keep_rows);
+      new_top_row = display_point
+        .row
+        .saturating_add(margin_rows)
+        .saturating_sub(keep_rows);
     }
 
     if self.set_top_row(new_top_row, last_layout.line_height) {
@@ -1705,10 +1744,11 @@ impl InputState {
     //
     // - included the input padding.
     // - included the scroll offset.
-    let inner_position = position - bounds.origin - point(line_number_width, px(0.));
+    let inner_position =
+      position - bounds.origin - point(line_number_width, last_layout.visible_top);
 
     let mut index = last_layout.visible_range_offset.start;
-    let mut y_offset = px(0.);
+    let mut y_offset = last_layout.visible_top;
     for line_layout in last_layout.lines.iter() {
       let line_origin = point(px(0.), y_offset);
       let pos = inner_position - line_origin;
@@ -1973,10 +2013,10 @@ impl InputState {
     self.input_bounds = new_bounds;
 
     // Update text_wrapper wrap_width if changed.
-    if let Some(last_layout) = self.last_layout.as_ref()
+    if let Some(_last_layout) = self.last_layout.as_ref()
       && wrap_width_changed
     {
-      self.text_wrapper.set_wrap_width(last_layout.wrap_width, cx);
+      self.text_wrapper.set_default_text(&self.text);
       self.mode.update_auto_grow(&self.text_wrapper);
       cx.notify();
     }
@@ -2170,7 +2210,7 @@ impl EntityInputHandler for InputState {
     if !self.mode.is_code_editor() {
       self
         .text_wrapper
-        .update(&self.text, &range, &Rope::from(new_text), cx);
+        .update(&self.text, &range, &Rope::from(new_text), window, cx);
     }
     self.lsp.update(&self.text, window, cx);
     self.selected_range = (new_offset..new_offset).into();
@@ -2273,7 +2313,7 @@ impl EntityInputHandler for InputState {
     if !self.mode.is_code_editor() {
       self
         .text_wrapper
-        .update(&self.text, &range, &Rope::from(new_text), cx);
+        .update(&self.text, &range, &Rope::from(new_text), window, cx);
     }
     self.lsp.update(&self.text, window, cx);
     if new_text.is_empty() {
@@ -2367,15 +2407,35 @@ impl EntityInputHandler for InputState {
 }
 
 impl InputState {
-  fn render_vertical_scrollbar(
-    &self, window: &mut Window, cx: &mut Context<Self>,
-  ) -> gpui::AnyElement {
+  fn drag_scrollbar_to(&mut self, position: Point<Pixels>, window: &Window) -> bool {
     let line_height = self
       .last_layout
       .as_ref()
       .map(|layout| layout.line_height)
       .unwrap_or(window.line_height());
-    let total_rows = self.line_count_u64() as usize;
+    let viewport_rows = self.viewport_rows(line_height);
+    let local_y = position.y - self.input_bounds.origin.y;
+    let row = viewport::scrollbar_y_to_top_row(
+      local_y,
+      self.display_row_count(),
+      viewport_rows,
+      self.input_bounds.size.height,
+    );
+
+    self.set_top_row(row, line_height)
+  }
+
+  fn render_vertical_scrollbar(
+    &self, window: &mut Window, cx: &mut Context<Self>,
+  ) -> gpui::AnyElement {
+    const THUMB_INSET: Pixels = px(2.0);
+
+    let line_height = self
+      .last_layout
+      .as_ref()
+      .map(|layout| layout.line_height)
+      .unwrap_or(window.line_height());
+    let total_rows = self.display_row_count();
     let viewport_rows = self.viewport_rows(line_height);
     let (thumb_y, thumb_h) = viewport::compute_scrollbar_thumb(
       self.top_row,
@@ -2398,20 +2458,8 @@ impl InputState {
         MouseButton::Left,
         move |event: &MouseDownEvent, window, cx| {
           entity.update(cx, |this, cx| {
-            let line_height = this
-              .last_layout
-              .as_ref()
-              .map(|layout| layout.line_height)
-              .unwrap_or(window.line_height());
-            let viewport_rows = this.viewport_rows(line_height);
-            let local_y = event.position.y - this.input_bounds.origin.y;
-            let row = viewport::scrollbar_y_to_top_row(
-              local_y,
-              this.line_count_u64() as usize,
-              viewport_rows,
-              this.input_bounds.size.height,
-            );
-            if this.set_top_row(row, line_height) {
+            this.scrollbar_dragging = true;
+            if this.drag_scrollbar_to(event.position, window) {
               cx.notify();
             }
             cx.stop_propagation();
@@ -2426,20 +2474,11 @@ impl InputState {
           }
 
           entity.update(cx, |this, cx| {
-            let line_height = this
-              .last_layout
-              .as_ref()
-              .map(|layout| layout.line_height)
-              .unwrap_or(window.line_height());
-            let viewport_rows = this.viewport_rows(line_height);
-            let local_y = event.position.y - this.input_bounds.origin.y;
-            let row = viewport::scrollbar_y_to_top_row(
-              local_y,
-              this.line_count_u64() as usize,
-              viewport_rows,
-              this.input_bounds.size.height,
-            );
-            if this.set_top_row(row, line_height) {
+            if !this.scrollbar_dragging {
+              return;
+            }
+
+            if this.drag_scrollbar_to(event.position, window) {
               cx.notify();
             }
             cx.stop_propagation();
@@ -2451,13 +2490,12 @@ impl InputState {
       scrollbar = scrollbar.child(
         div()
           .absolute()
-          .left_0()
-          .right_0()
+          .left(THUMB_INSET)
+          .right(THUMB_INSET)
           .top(thumb_y)
           .h(thumb_h)
           .bg(theme.primary.opacity(0.45))
-          .border_1()
-          .border_color(theme.primary.opacity(0.8)),
+          .rounded(px(999.0)),
       );
     }
 
@@ -2475,6 +2513,14 @@ impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     self.install_builtin_backend_if_needed();
     self.sync_text_with_backend(false, window, cx);
+    if let Some((content_width, line_height)) = self
+      .last_layout
+      .as_ref()
+      .map(|layout| (layout.content_width, layout.line_height))
+    {
+      self.sync_wrap_metrics_for_view(content_width, window, cx);
+      self.clamp_top_row(line_height);
+    }
     self.refresh_backend_highlighter(false);
 
     if self._pending_update {
@@ -2482,6 +2528,34 @@ impl Render for InputState {
       self.lsp.update(&self.text, window, cx);
       self._pending_update = false;
     }
+
+    window.on_mouse_event({
+      let entity = cx.entity().clone();
+      move |event: &MouseMoveEvent, _, window, cx| {
+        entity.update(cx, |this, cx| {
+          if !this.scrollbar_dragging {
+            return;
+          }
+
+          if event.pressed_button != Some(MouseButton::Left) {
+            this.scrollbar_dragging = false;
+            return;
+          }
+
+          if this.drag_scrollbar_to(event.position, window) {
+            cx.notify();
+          }
+        });
+      }
+    });
+    window.on_mouse_event({
+      let entity = cx.entity().clone();
+      move |_event: &MouseUpEvent, _, _window, cx| {
+        entity.update(cx, |this, _| {
+          this.scrollbar_dragging = false;
+        });
+      }
+    });
 
     div()
       .id("input-state")
