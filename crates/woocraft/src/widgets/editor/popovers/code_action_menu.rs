@@ -273,11 +273,8 @@ impl CodeActionMenu {
     let state = self.state.read(cx);
     let last_layout = state.last_layout.as_ref()?;
     let cursor_origin = last_layout.cursor_bounds.map(|b| b.origin)?;
-
-    let scroll_origin = self.state.read(cx).scroll_handle.offset();
-
     Some(
-      scroll_origin + cursor_origin - state.input_bounds.origin
+      cursor_origin - state.input_bounds.origin
         + Point::new(-px(4.), last_layout.line_height + px(4.)),
     )
   }

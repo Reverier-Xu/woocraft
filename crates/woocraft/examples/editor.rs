@@ -218,7 +218,7 @@ struct EditorDockExample {
 impl EditorDockExample {
   fn editor_panel(
     title: impl Into<SharedString>, language: impl Into<SharedString>, source: &'static str,
-    soft_wrap: bool, show_whitespaces: bool, window: &mut Window, cx: &mut App,
+    show_whitespaces: bool, window: &mut Window, cx: &mut App,
   ) -> Entity<EditorPanel> {
     let title: SharedString = title.into();
     let language: SharedString = language.into();
@@ -228,7 +228,6 @@ impl EditorDockExample {
       EditorState::new(window, cx)
         .code_editor(language_for_editor.clone())
         .line_number(true)
-        .soft_wrap(soft_wrap)
         .show_whitespaces(show_whitespaces)
         .default_value(source)
     });
@@ -239,54 +238,21 @@ impl EditorDockExample {
   fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
     let dock_area = cx.new(|cx| DockArea::new("editor-dock-example", Some(1), window, cx));
 
-    let rust = Self::editor_panel("main.rs", "rust", RUST_SAMPLE, false, true, window, cx);
+    let rust = Self::editor_panel("main.rs", "rust", RUST_SAMPLE, true, window, cx);
     let ts = Self::editor_panel(
       "greet.ts",
       "typescript",
       TYPESCRIPT_SAMPLE,
-      false,
       true,
       window,
       cx,
     );
-    let python = Self::editor_panel(
-      "billing.py",
-      "python",
-      PYTHON_SAMPLE,
-      false,
-      true,
-      window,
-      cx,
-    );
-    let toml = Self::editor_panel("Cargo.toml", "toml", TOML_SAMPLE, false, true, window, cx);
-    let json = Self::editor_panel(
-      "settings.json",
-      "json",
-      JSON_SAMPLE,
-      false,
-      true,
-      window,
-      cx,
-    );
-    let markdown = Self::editor_panel(
-      "README.md",
-      "markdown",
-      MARKDOWN_SAMPLE,
-      true,
-      false,
-      window,
-      cx,
-    );
-    let yaml = Self::editor_panel(
-      "docker-compose.yml",
-      "yaml",
-      YAML_SAMPLE,
-      false,
-      true,
-      window,
-      cx,
-    );
-    let bash = Self::editor_panel("bootstrap.sh", "bash", BASH_SAMPLE, false, true, window, cx);
+    let python = Self::editor_panel("billing.py", "python", PYTHON_SAMPLE, true, window, cx);
+    let toml = Self::editor_panel("Cargo.toml", "toml", TOML_SAMPLE, true, window, cx);
+    let json = Self::editor_panel("settings.json", "json", JSON_SAMPLE, true, window, cx);
+    let markdown = Self::editor_panel("README.md", "markdown", MARKDOWN_SAMPLE, false, window, cx);
+    let yaml = Self::editor_panel("docker-compose.yml", "yaml", YAML_SAMPLE, true, window, cx);
+    let bash = Self::editor_panel("bootstrap.sh", "bash", BASH_SAMPLE, true, window, cx);
 
     dock_area.update(cx, |dock, cx| {
       // Add panels to center area

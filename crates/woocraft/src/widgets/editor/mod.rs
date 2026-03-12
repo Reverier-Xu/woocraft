@@ -5,7 +5,6 @@ mod blink_cursor;
 mod change;
 mod cursor;
 mod editor;
-mod element;
 pub mod highlighter;
 mod indent;
 pub mod lsp;

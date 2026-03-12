@@ -9,9 +9,8 @@ use gpui::{
   Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
   EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
   KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-  Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
-  Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
-  prelude::FluentBuilder as _, px,
+  Pixels, Point, Render, ScrollWheelEvent, ShapedLine, SharedString, Styled as _, Subscription,
+  Task, TextAlign, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -21,7 +20,7 @@ use unicode_segmentation::*;
 use super::{
   EditorBackendEditRequest, EditorBackendEditResult, EditorDataBackend, EditorPointerButton,
   EditorUserAction, Position,
-  blink_cursor::{BlinkCursor, CURSOR_WIDTH},
+  blink_cursor::BlinkCursor,
   change::Change,
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
@@ -335,13 +334,6 @@ pub struct InputState {
   pub(super) show_whitespaces: bool,
   pub(super) pattern: Option<regex::Regex>,
   pub(super) validate: Option<Box<ValidateFn<InputState>>>,
-  pub(crate) scroll_handle: ScrollHandle,
-  /// The deferred scroll offset to apply on next layout.
-  #[allow(dead_code)]
-  pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
-  /// The size of the scrollable content.
-  #[allow(dead_code)]
-  pub(crate) scroll_size: gpui::Size<Pixels>,
   pub(super) text_align: TextAlign,
 
   /// The mask pattern for formatting the input text
@@ -445,9 +437,6 @@ impl InputState {
       last_selected_range: None,
       last_cursor: None,
       top_row: 0,
-      scroll_handle: ScrollHandle::new(),
-      scroll_size: gpui::size(px(0.), px(0.)),
-      deferred_scroll_offset: None,
       preferred_column: None,
       placeholder: SharedString::default(),
       mask_pattern: MaskPattern::default(),
@@ -831,7 +820,6 @@ impl InputState {
 
     // Move scroll to top
     self.top_row = 0;
-    self.scroll_handle.set_offset(point(px(0.), px(0.)));
 
     cx.notify();
   }
@@ -925,9 +913,12 @@ impl InputState {
   }
 
   /// Set the soft wrap mode for multi-line input, default is true.
-  pub fn soft_wrap(mut self, wrap: bool) -> Self {
+  ///
+  /// The viewport renderer always wraps lines, so this flag is retained only
+  /// for API compatibility.
+  pub fn soft_wrap(mut self, _wrap: bool) -> Self {
     debug_assert!(self.mode.is_multi_line());
-    self.soft_wrap = wrap;
+    self.soft_wrap = true;
     self
   }
 
@@ -938,32 +929,12 @@ impl InputState {
   }
 
   /// Update the soft wrap mode for multi-line input, default is true.
-  pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
+  ///
+  /// The viewport renderer always wraps lines, so this setter is a no-op aside
+  /// from triggering a redraw.
+  pub fn set_soft_wrap(&mut self, _wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
     debug_assert!(self.mode.is_multi_line());
     self.soft_wrap = true;
-    if self.mode.is_code_editor() {
-      let _ = wrap;
-      cx.notify();
-      return;
-    }
-
-    self.soft_wrap = wrap;
-    if wrap {
-      let wrap_width = self
-        .last_layout
-        .as_ref()
-        .and_then(|b| b.wrap_width)
-        .unwrap_or(self.input_bounds.size.width);
-
-      self.text_wrapper.set_wrap_width(Some(wrap_width), cx);
-
-      // Reset scroll to left 0
-      let mut offset = self.scroll_handle.offset();
-      offset.x = px(0.);
-      self.scroll_handle.set_offset(offset);
-    } else {
-      self.text_wrapper.set_wrap_width(None, cx);
-    }
     cx.notify();
   }
 
@@ -1542,41 +1513,6 @@ impl InputState {
     }
 
     self.diagnostic_popover = None;
-  }
-
-  #[allow(dead_code)]
-  pub(super) fn update_scroll_offset(
-    &mut self, offset: Option<Point<Pixels>>, cx: &mut Context<Self>,
-  ) {
-    let offset = self.clamp_scroll_offset_for_viewport(
-      offset.unwrap_or(self.scroll_handle.offset()),
-      self.scroll_size,
-      self.input_bounds.size,
-    );
-    self.scroll_handle.set_offset(offset);
-    cx.notify();
-  }
-
-  #[allow(dead_code)]
-  pub(super) fn clamp_scroll_offset_for_viewport(
-    &self, mut offset: Point<Pixels>, scroll_size: gpui::Size<Pixels>,
-    viewport_size: gpui::Size<Pixels>,
-  ) -> Point<Pixels> {
-    // In addition to left alignment, a cursor position will be reserved on the
-    // right side
-    let safe_x_offset = if self.text_align == TextAlign::Left {
-      px(0.)
-    } else {
-      -CURSOR_WIDTH
-    };
-
-    let safe_y_range = (-scroll_size.height + viewport_size.height).min(px(0.0))..px(0.);
-    let safe_x_range =
-      (-scroll_size.width + viewport_size.width + safe_x_offset).min(safe_x_offset)..px(0.);
-
-    offset.y = offset.y.clamp(safe_y_range.start, safe_y_range.end);
-    offset.x = offset.x.clamp(safe_x_range.start, safe_x_range.end);
-    offset
   }
 
   /// Scroll to make the given offset visible.

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use gpui::{
   Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString, TextRun,
   TextStyle, Window, point, px,
@@ -7,9 +5,9 @@ use gpui::{
 use ropey::RopeSlice;
 
 use super::{
-  element::TextElement,
   mode::InputMode,
   state::{Indent, IndentInline, InputState, LastLayout, Outdent, OutdentInline},
+  viewport_element::ViewportElement,
 };
 use crate::widgets::editor::RopeExt;
 
@@ -96,7 +94,7 @@ impl InputMode {
   }
 }
 
-impl TextElement {
+impl ViewportElement {
   #[inline]
   fn is_open_bracket(ch: char) -> bool {
     matches!(ch, '(' | '[' | '{')

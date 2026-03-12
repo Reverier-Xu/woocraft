@@ -7,10 +7,10 @@ use gpui::{
 use ropey::Rope;
 
 use super::super::{
-  element::TextElement,
   highlighter::HighlightTheme,
   rope_ext::RopeExt,
   state::{GoToDefinition, InputState},
+  viewport_element::ViewportElement,
 };
 use crate::ActiveTheme;
 
@@ -164,8 +164,7 @@ impl InputState {
   }
 }
 
-#[allow(dead_code)]
-impl TextElement {
+impl ViewportElement {
   pub(crate) fn layout_hover_definition(&self, cx: &App) -> Option<(Range<usize>, HighlightStyle)> {
     let editor = self.state.read(cx);
     if !editor.mode.is_code_editor() {

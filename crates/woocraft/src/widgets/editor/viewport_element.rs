@@ -39,6 +39,9 @@ pub(super) struct PrepaintState {
   hover_highlight_path: Option<Path<Pixels>>,
   search_match_paths: Vec<(Path<Pixels>, bool)>,
   document_color_paths: Vec<(Path<Pixels>, Hsla)>,
+  hover_definition_hitbox: Option<gpui::Hitbox>,
+  indent_guides_path: Option<Path<Pixels>>,
+  active_indent_guide_path: Option<Path<Pixels>>,
   bounds: Bounds<Pixels>,
 }
 
@@ -518,6 +521,9 @@ impl ViewportElement {
     }
 
     let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
+    if let Some(hover_style) = self.layout_hover_definition(cx) {
+      styles.push(hover_style);
+    }
     styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
     Some(styles)
   }
@@ -718,6 +724,9 @@ impl Element for ViewportElement {
     let document_color_paths = self.layout_document_colors(&document_colors, &last_layout, &bounds);
 
     let state = self.state.read(cx);
+    let hover_definition_hitbox = self.layout_hover_definition_hitbox(&state, window, cx);
+    let (indent_guides_path, active_indent_guide_path) =
+      self.layout_indent_guides(&state, &bounds, &last_layout, &text_style, window);
     let line_numbers = if state.mode.line_number() {
       let mut line_numbers = vec![];
       for (ix, line) in last_layout.lines.iter().enumerate() {
@@ -763,6 +772,9 @@ impl Element for ViewportElement {
       hover_highlight_path,
       search_match_paths,
       document_color_paths,
+      hover_definition_hitbox,
+      indent_guides_path,
+      active_indent_guide_path,
       bounds,
     }
   }
@@ -830,6 +842,12 @@ impl Element for ViewportElement {
         }
         for (path, color) in prepaint.document_color_paths.drain(..) {
           window.paint_path(path, color.opacity(0.45));
+        }
+        if let Some(path) = prepaint.indent_guides_path.take() {
+          window.paint_path(path, cx.theme().foreground.opacity(0.2));
+        }
+        if let Some(path) = prepaint.active_indent_guide_path.take() {
+          window.paint_path(path, cx.theme().foreground.opacity(0.3));
         }
 
         let mut offset_y = px(0.);
@@ -903,6 +921,10 @@ impl Element for ViewportElement {
         viewport::viewport_rows(input_bounds.size.height, prepaint.last_layout.line_height),
       );
     });
+
+    if let Some(hitbox) = prepaint.hover_definition_hitbox.as_ref() {
+      window.set_cursor_style(gpui::CursorStyle::PointingHand, hitbox);
+    }
 
     self.paint_mouse_listeners(window, cx);
   }

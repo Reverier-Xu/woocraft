@@ -647,7 +647,6 @@ impl CodeEditorApp {
       EditorState::new(window, cx)
         .code_editor(lang_for_editor.clone())
         .line_number(true)
-        .soft_wrap(false)
         .show_whitespaces(true)
         .default_value(content)
     });
