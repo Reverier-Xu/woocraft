@@ -731,7 +731,7 @@ impl InputState {
     };
 
     let revision = backend.revision();
-    if !force && revision == self.backend_revision {
+    if !force && revision == self.backend_revision && self.backend_snapshot.is_some() {
       return false;
     }
 
@@ -2414,7 +2414,7 @@ impl EntityInputHandler for InputState {
 }
 
 impl InputState {
-  fn drag_scrollbar_to(&mut self, position: Point<Pixels>, window: &Window) -> bool {
+  pub(crate) fn drag_scrollbar_to(&mut self, position: Point<Pixels>, window: &Window) -> bool {
     let line_height = self
       .last_layout
       .as_ref()
@@ -2535,35 +2535,6 @@ impl Render for InputState {
       self.lsp.update(&self.text, window, cx);
       self._pending_update = false;
     }
-
-    window.on_mouse_event({
-      let entity = cx.entity().clone();
-      move |event: &MouseMoveEvent, _, window, cx| {
-        entity.update(cx, |this, cx| {
-          if !this.scrollbar_dragging {
-            return;
-          }
-
-          if event.pressed_button != Some(MouseButton::Left) {
-            this.scrollbar_dragging = false;
-            return;
-          }
-
-          if this.drag_scrollbar_to(event.position, window) {
-            cx.notify();
-          }
-          cx.stop_propagation();
-        });
-      }
-    });
-    window.on_mouse_event({
-      let entity = cx.entity().clone();
-      move |_event: &MouseUpEvent, _, _window, cx| {
-        entity.update(cx, |this, _| {
-          this.scrollbar_dragging = false;
-        });
-      }
-    });
 
     div()
       .id("input-state")

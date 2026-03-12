@@ -1,10 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-  App, Bounds, ContentMask, Corners, Element, ElementId, ElementInputHandler, Entity,
-  GlobalElementId, Half, HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent,
-  Path, Pixels, ShapedLine, SharedString, Style, TextRun, TextStyle, UnderlineStyle, Window, fill,
-  point, px, relative, size,
+  App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity,
+  GlobalElementId, Half, HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton,
+  MouseMoveEvent, MouseUpEvent, Path, Pixels, ShapedLine, SharedString, Style, TextRun,
+  TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -63,11 +63,34 @@ impl ViewportElement {
       let state = self.state.clone();
 
       move |event: &MouseMoveEvent, _, window, cx| {
-        if event.pressed_button == Some(MouseButton::Left) {
-          state.update(cx, |state, cx| {
+        state.update(cx, |state, cx| {
+          if state.scrollbar_dragging {
+            if event.pressed_button != Some(MouseButton::Left) {
+              state.scrollbar_dragging = false;
+              return;
+            }
+
+            if state.drag_scrollbar_to(event.position, window) {
+              cx.notify();
+            }
+            cx.stop_propagation();
+            return;
+          }
+
+          if event.pressed_button == Some(MouseButton::Left) {
             state.on_drag_move(event, window, cx);
-          });
-        }
+          }
+        });
+      }
+    });
+
+    window.on_mouse_event({
+      let state = self.state.clone();
+
+      move |_event: &MouseUpEvent, _, _window, cx| {
+        state.update(cx, |state, _| {
+          state.scrollbar_dragging = false;
+        });
       }
     });
   }
@@ -165,17 +188,18 @@ impl ViewportElement {
     let visible_start_offset = last_layout.visible_range_offset.start;
     let lines = &last_layout.lines;
     let line_number_width = last_layout.line_number_width;
+    let path_origin = bounds.origin + point(line_number_width, px(0.));
 
     let start_ix = range.start;
     let end_ix = range.end;
 
     let mut prev_lines_offset = visible_start_offset;
     let mut offset_y = last_layout.visible_top;
-    let mut line_corners = vec![];
+    let mut builder = gpui::PathBuilder::fill();
+    let mut has_rect = false;
 
     for line in lines.iter() {
       let line_size = line.size(line_height);
-      let line_wrap_width = line_size.width;
       let line_origin = point(px(0.), offset_y);
 
       let line_cursor_start =
@@ -189,36 +213,33 @@ impl ViewportElement {
         let end = line_cursor_end
           .unwrap_or_else(|| line.position_for_index(line.len(), last_layout).unwrap());
 
-        let wrapped_lines =
-          (end.y / line_height).ceil() as usize - (start.y / line_height).ceil() as usize;
+        let start_wrap = (start.y / line_height).floor() as usize;
+        let end_wrap = (end.y / line_height).floor() as usize;
 
-        let mut end_x = end.x;
-        if wrapped_lines > 0 {
-          end_x = line_wrap_width;
-        }
-
-        end_x = end_x.max(start.x + px(6.));
-
-        line_corners.push(Corners {
-          top_left: line_origin + point(start.x, start.y),
-          top_right: line_origin + point(end_x, start.y),
-          bottom_left: line_origin + point(start.x, start.y + line_height),
-          bottom_right: line_origin + point(end_x, start.y + line_height),
-        });
-
-        for i in 1..=wrapped_lines {
-          let start = point(px(0.), start.y + i as f32 * line_height);
-          let mut end = point(end.x, end.y + i as f32 * line_height);
-          if i < wrapped_lines {
-            end.x = line_size.width;
+        for wrap_ix in start_wrap..=end_wrap {
+          let left = if wrap_ix == start_wrap { start.x } else { px(0.) };
+          let right = if wrap_ix == end_wrap {
+            end.x
+          } else {
+            line
+              .wrapped_lines
+              .get(wrap_ix)
+              .map(|wrapped| wrapped.width)
+              .unwrap_or(line_size.width)
           }
+          .max(left + px(6.));
+          let top = line_origin.y + wrap_ix as f32 * line_height;
+          let rect_top_left = path_origin + point(left, top);
+          let rect_top_right = path_origin + point(right, top);
+          let rect_bottom_right = rect_top_right + point(px(0.), line_height);
+          let rect_bottom_left = rect_top_left + point(px(0.), line_height);
 
-          line_corners.push(Corners {
-            top_left: line_origin + point(start.x, start.y),
-            top_right: line_origin + point(end.x, start.y),
-            bottom_left: line_origin + point(start.x, start.y + line_height),
-            bottom_right: line_origin + point(end.x, start.y + line_height),
-          });
+          builder.move_to(rect_top_left);
+          builder.line_to(rect_top_right);
+          builder.line_to(rect_bottom_right);
+          builder.line_to(rect_bottom_left);
+          builder.close();
+          has_rect = true;
         }
       }
 
@@ -230,40 +251,8 @@ impl ViewportElement {
       prev_lines_offset += line.len() + 1;
     }
 
-    let mut points = vec![];
-    if line_corners.is_empty() {
+    if !has_rect {
       return None;
-    }
-
-    for corners in &mut line_corners {
-      if corners.top_left.x > corners.top_right.x {
-        std::mem::swap(&mut corners.top_left, &mut corners.top_right);
-        std::mem::swap(&mut corners.bottom_left, &mut corners.bottom_right);
-      }
-    }
-
-    for corners in &line_corners {
-      points.push(corners.top_right);
-      points.push(corners.bottom_right);
-      points.push(corners.bottom_left);
-    }
-
-    let mut rev_line_corners = line_corners.iter().rev().peekable();
-    while let Some(corners) = rev_line_corners.next() {
-      points.push(corners.top_left);
-      if let Some(next) = rev_line_corners.peek()
-        && next.top_left.x > corners.top_left.x
-      {
-        points.push(point(next.top_left.x, corners.top_left.y));
-      }
-    }
-
-    let path_origin = bounds.origin + point(line_number_width, px(0.));
-    let first_p = *points.first().unwrap();
-    let mut builder = gpui::PathBuilder::fill();
-    builder.move_to(path_origin + first_p);
-    for p in points.iter().skip(1) {
-      builder.line_to(path_origin + *p);
     }
 
     builder.build().ok()
