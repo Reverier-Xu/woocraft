@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6
 
       - name: install linux dependencies
         run: |
@@ -47,7 +47,7 @@ jobs:
           toolchain: 1.93.1
 
       - name: cache cargo artifacts
-        uses: Swatinem/rust-cache@v2.9.0
+        uses: Swatinem/rust-cache@v2
 
       - name: run unit tests
         run: cargo test --workspace
