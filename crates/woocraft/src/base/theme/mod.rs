@@ -188,6 +188,18 @@ impl Theme {
     };
   }
 
+  /// Returns a fully opaque color for `hue` using the active theme primary
+  /// OKLCH lightness and chroma.
+  ///
+  /// # Example
+  /// ```rust,ignore
+  /// let accent = cx.theme().color_for_hue(130.0);
+  /// ```
+  #[inline]
+  pub fn color_for_hue(&self, hue: f32) -> gpui::Hsla {
+    self.tokens.syntax_color(hue)
+  }
+
   /// Gets the editor background color.
   #[inline]
   pub fn editor_background(&self) -> gpui::Hsla {
@@ -202,4 +214,28 @@ pub fn init(cx: &mut App) {
   }
   Theme::sync_scrollbar_appearance(cx);
   Theme::sync_system_appearance(cx);
+}
+
+#[cfg(test)]
+mod tests {
+  use super::Theme;
+
+  fn almost_eq(a: f32, b: f32) -> bool {
+    (a - b).abs() < 1e-4
+  }
+
+  fn same_color(a: gpui::Hsla, b: gpui::Hsla) -> bool {
+    almost_eq(a.h, b.h) && almost_eq(a.s, b.s) && almost_eq(a.l, b.l) && almost_eq(a.a, b.a)
+  }
+
+  #[test]
+  fn color_for_hue_uses_theme_primary_lightness_and_chroma() {
+    let theme = Theme::default();
+    let hue = 130.0;
+
+    assert!(same_color(
+      theme.color_for_hue(hue),
+      theme.tokens.syntax_color(hue)
+    ));
+  }
 }
