@@ -36,6 +36,7 @@ thiserror                     = { workspace = true }
 toml                          = { workspace = true }
 tracing                       = { workspace = true }
 tree-sitter                   = { workspace = true }
+tree-sitter-agda              = { workspace = true, optional = true }
 tree-sitter-astro-next        = { workspace = true, optional = true }
 tree-sitter-bash              = { workspace = true, optional = true }
 tree-sitter-c                 = { workspace = true, optional = true }
@@ -48,18 +49,25 @@ tree-sitter-elixir            = { workspace = true, optional = true }
 tree-sitter-embedded-template = { workspace = true, optional = true }
 tree-sitter-go                = { workspace = true, optional = true }
 tree-sitter-graphql           = { workspace = true, optional = true }
+tree-sitter-haskell           = { workspace = true, optional = true }
 tree-sitter-html              = { workspace = true, optional = true }
 tree-sitter-java              = { workspace = true, optional = true }
 tree-sitter-javascript        = { workspace = true, optional = true }
 tree-sitter-jsdoc             = { workspace = true, optional = true }
+tree-sitter-julia             = { workspace = true, optional = true }
 tree-sitter-json              = { workspace = true }
 tree-sitter-kotlin-sg         = { workspace = true, optional = true }
 tree-sitter-lua               = { workspace = true, optional = true }
 tree-sitter-make              = { workspace = true, optional = true }
 tree-sitter-md                = { workspace = true, optional = true }
+tree-sitter-ocaml             = { workspace = true, optional = true }
 tree-sitter-php               = { workspace = true, optional = true }
 tree-sitter-proto             = { workspace = true, optional = true }
 tree-sitter-python            = { workspace = true, optional = true }
+tree-sitter-ql                = { workspace = true, optional = true }
+tree-sitter-ql-dbscheme       = { workspace = true, optional = true }
+tree-sitter-razor             = { workspace = true, optional = true }
+tree-sitter-regex             = { workspace = true, optional = true }
 tree-sitter-ruby              = { workspace = true, optional = true }
 tree-sitter-rust              = { workspace = true, optional = true }
 tree-sitter-scala             = { workspace = true, optional = true }
@@ -68,6 +76,7 @@ tree-sitter-svelte-next       = { workspace = true, optional = true }
 tree-sitter-swift             = { workspace = true, optional = true }
 tree-sitter-toml-ng           = { workspace = true, optional = true }
 tree-sitter-typescript        = { workspace = true, optional = true }
+tree-sitter-verilog           = { workspace = true, optional = true }
 tree-sitter-yaml              = { workspace = true, optional = true }
 tree-sitter-zig               = { workspace = true, optional = true }
 unicode-segmentation          = { workspace = true }
@@ -81,6 +90,7 @@ zstd       = { workspace = true, optional = true }
 default = ["resources", "tree-sitter-languages"]
 resources = ["dep:rust-embed", "dep:zstd"]
 tree-sitter-languages = [
+  "dep:tree-sitter-agda",
   "dep:tree-sitter-astro-next",
   "dep:tree-sitter-bash",
   "dep:tree-sitter-c",
@@ -93,17 +103,24 @@ tree-sitter-languages = [
   "dep:tree-sitter-embedded-template",
   "dep:tree-sitter-go",
   "dep:tree-sitter-graphql",
+  "dep:tree-sitter-haskell",
   "dep:tree-sitter-html",
   "dep:tree-sitter-java",
   "dep:tree-sitter-javascript",
   "dep:tree-sitter-jsdoc",
+  "dep:tree-sitter-julia",
   "dep:tree-sitter-kotlin-sg",
   "dep:tree-sitter-lua",
   "dep:tree-sitter-make",
   "dep:tree-sitter-md",
+  "dep:tree-sitter-ocaml",
   "dep:tree-sitter-php",
   "dep:tree-sitter-proto",
   "dep:tree-sitter-python",
+  "dep:tree-sitter-ql",
+  "dep:tree-sitter-ql-dbscheme",
+  "dep:tree-sitter-razor",
+  "dep:tree-sitter-regex",
   "dep:tree-sitter-ruby",
   "dep:tree-sitter-rust",
   "dep:tree-sitter-scala",
@@ -112,6 +129,7 @@ tree-sitter-languages = [
   "dep:tree-sitter-swift",
   "dep:tree-sitter-toml-ng",
   "dep:tree-sitter-typescript",
+  "dep:tree-sitter-verilog",
   "dep:tree-sitter-yaml",
   "dep:tree-sitter-zig",
 ]

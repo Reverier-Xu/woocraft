@@ -450,6 +450,10 @@ impl SyntaxHighlighter {
       let Some(language_name) = language_name else {
         continue;
       };
+      let language_name = LanguageRegistry::singleton()
+        .language(&language_name)
+        .map(|config| config.name)
+        .unwrap_or(language_name);
 
       for capture in query_match
         .captures
