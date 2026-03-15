@@ -939,12 +939,16 @@ impl TabPanel {
               .overflow_hidden()
               .when(state.droppable, |this| {
                 this
-                  .drag_over::<DragPanel>(|this, _, _, cx| {
-                    this
-                      .rounded_l_none()
-                      .border_l_2()
-                      .border_r_0()
-                      .border_color(cx.theme().drag_border)
+                  .drag_over::<DragPanel>({
+                    let view = view.clone();
+                    move |this, _, _, cx| {
+                      view.update(cx, |view, cx| view.clear_split_preview(cx));
+                      this
+                        .rounded_l_none()
+                        .border_l_2()
+                        .border_r_0()
+                        .border_color(cx.theme().drag_border)
+                    }
                   })
                   .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
                     this.clear_split_preview(cx);
@@ -1011,12 +1015,16 @@ impl TabPanel {
             })
             .when(state.droppable, |this| {
               this
-                .drag_over::<DragPanel>(|this, _, _, cx| {
-                  this
-                    .rounded_l_none()
-                    .border_l_2()
-                    .border_r_0()
-                    .border_color(cx.theme().drag_border)
+                .drag_over::<DragPanel>({
+                  let view = view.clone();
+                  move |this, _, _, cx| {
+                    view.update(cx, |view, cx| view.clear_split_preview(cx));
+                    this
+                      .rounded_l_none()
+                      .border_l_2()
+                      .border_r_0()
+                      .border_color(cx.theme().drag_border)
+                  }
                 })
                 .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
                   this.clear_split_preview(cx);
@@ -1095,12 +1103,16 @@ impl TabPanel {
             })
             .when(state.droppable, |this| {
               this
-                .drag_over::<DragPanel>(|this, _, _, cx| {
-                  this
-                    .rounded_l_none()
-                    .border_l_2()
-                    .border_r_0()
-                    .border_color(cx.theme().drag_border)
+                .drag_over::<DragPanel>({
+                  let view = view.clone();
+                  move |this, _, _, cx| {
+                    view.update(cx, |view, cx| view.clear_split_preview(cx));
+                    this
+                      .rounded_l_none()
+                      .border_l_2()
+                      .border_r_0()
+                      .border_color(cx.theme().drag_border)
+                  }
                 })
                 .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
                   this.clear_split_preview(cx);
@@ -1118,7 +1130,13 @@ impl TabPanel {
           .min_w_16()
           .when(state.droppable, |this| {
             this
-              .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
+              .drag_over::<DragPanel>({
+                let view = view.clone();
+                move |this, _, _, cx| {
+                  view.update(cx, |view, cx| view.clear_split_preview(cx));
+                  this.bg(cx.theme().drop_target)
+                }
+              })
               .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
                 this.clear_split_preview(cx);
 
@@ -1215,7 +1233,13 @@ impl TabPanel {
             })
             .when(state.droppable, |this| {
               this
-                .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
+                .drag_over::<DragPanel>({
+                  let view = view.clone();
+                  move |this, _, _, cx| {
+                    view.update(cx, |view, cx| view.clear_split_preview(cx));
+                    this.bg(cx.theme().drop_target)
+                  }
+                })
                 .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
                   this.clear_split_preview(cx);
                   this.on_drop(drag, Some(ix), true, window, cx);
@@ -1231,7 +1255,13 @@ impl TabPanel {
           .min_h_16()
           .when(state.droppable, |this| {
             this
-              .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
+              .drag_over::<DragPanel>({
+                let view = view.clone();
+                move |this, _, _, cx| {
+                  view.update(cx, |view, cx| view.clear_split_preview(cx));
+                  this.bg(cx.theme().drop_target)
+                }
+              })
               .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
                 this.clear_split_preview(cx);
 
@@ -1251,7 +1281,13 @@ impl TabPanel {
       .child(tab_bar)
       .when(state.droppable, |this| {
         this
-          .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
+          .drag_over::<DragPanel>({
+            let view = view.clone();
+            move |this, _, _, cx| {
+              view.update(cx, |view, cx| view.clear_split_preview(cx));
+              this.bg(cx.theme().drop_target)
+            }
+          })
           .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
             this.clear_split_preview(cx);
 
@@ -1367,9 +1403,12 @@ impl TabPanel {
               .top_0()
               .left_0()
               .size_full()
-              .when(!allows_split_drop, |this| this.bg(cx.theme().drop_target))
-              .when(allows_split_drop, |this| {
-                this.bg(cx.theme().drop_target.opacity(0.01))
+              .map(|this| {
+                if !allows_split_drop || self.will_split_placement.is_none() {
+                  this.bg(cx.theme().drop_target)
+                } else {
+                  this.bg(cx.theme().drop_target.opacity(0.01))
+                }
               })
               .group_drag_over::<DragPanel>("", |this| this.visible())
               .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {

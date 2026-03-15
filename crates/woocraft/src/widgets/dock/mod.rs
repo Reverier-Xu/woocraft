@@ -13,9 +13,9 @@ use anyhow::Result;
 use dock::ResizePanel;
 pub use dock::*;
 use gpui::{
-  AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
-  EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
-  Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
+  AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, DragMoveEvent, Edges, Entity,
+  EntityId, EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _,
+  Pixels, Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
   prelude::FluentBuilder, px,
 };
 pub use panel::*;
@@ -1243,13 +1243,7 @@ impl DockArea {
         .h(bounds.size.height * 0.5),
     };
 
-    Some(
-      overlay
-        .absolute()
-        .bg(cx.theme().drop_target)
-        .border_1()
-        .border_color(cx.theme().drag_border),
-    )
+    Some(overlay.absolute().bg(cx.theme().drop_target))
   }
 }
 impl EventEmitter<DockEvent> for DockArea {}
@@ -1262,6 +1256,13 @@ impl Render for DockArea {
       .relative()
       .size_full()
       .overflow_hidden()
+      .on_drag_move(cx.listener(|this, drag: &DragMoveEvent<DragPanel>, _, cx| {
+        if let Some(preview) = this.split_preview
+          && !preview.bounds.contains(&drag.event.position)
+        {
+          this.clear_split_preview(cx);
+        }
+      }))
       .on_mouse_up(
         MouseButton::Left,
         cx.listener(|this, _, _, cx| this.clear_split_preview(cx)),

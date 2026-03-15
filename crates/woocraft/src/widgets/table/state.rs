@@ -1319,6 +1319,11 @@ where
     }
 
     let group_id = SharedString::from(format!("resizable-handle:{}", ix));
+    let handle_color = if self.resizing_col == Some(ix) {
+      cx.theme().primary
+    } else {
+      cx.theme().border
+    };
 
     h_flex()
       .id(("resizable-handle", ix))
@@ -1334,8 +1339,8 @@ where
         div()
           .h_full()
           .justify_center()
-          .bg(cx.theme().border)
-          .group_hover(&group_id, |this| this.bg(cx.theme().border).h_full())
+          .bg(handle_color)
+          .group_hover(&group_id, |this| this.bg(handle_color).h_full())
           .w(px(1.)),
       )
       .on_drag_move(
