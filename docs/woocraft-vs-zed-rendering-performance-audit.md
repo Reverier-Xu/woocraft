@@ -46,7 +46,7 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - Dock resize interactions now keep a preview size during drag and only commit the real dock size when the resize gesture ends.
 - Dock resize handles now follow the preview size at the `DockArea` overlay level, which avoids live layout churn in sibling content while the pointer is moving.
 
-### Next focus
+### Future opportunities
 
 - Reduce resize-time editor work further, especially by replacing full-document wrap updates with more viewport-oriented behavior.
 - Continue separating editor synchronization from paint-heavy paths, especially backend and wrap work tied to width changes.
