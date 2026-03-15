@@ -1,8 +1,6 @@
 use std::ops::Range;
 
-use gpui::{
-  Along, App, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px,
-};
+use gpui::{Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px};
 
 use crate::PixelsExt;
 
@@ -50,6 +48,10 @@ impl Default for ResizableState {
 impl ResizableState {
   pub fn sizes(&self) -> &Vec<Pixels> {
     &self.sizes
+  }
+
+  fn committed_size(&self, ix: usize) -> Option<Pixels> {
+    self.sizes.get(ix).copied()
   }
 
   #[allow(dead_code)]
@@ -157,7 +159,14 @@ impl ResizableState {
   }
 
   pub(crate) fn done_resizing(&mut self, cx: &mut Context<Self>) {
+    for (ix, panel) in self.panels.iter().enumerate() {
+      if let Some(size) = panel.size {
+        self.sizes[ix] = size;
+      }
+    }
+
     self.resizing_panel_ix = None;
+    cx.notify();
     cx.emit(ResizablePanelEvent::Resized);
   }
 
@@ -169,14 +178,17 @@ impl ResizableState {
     panel.size_range.clone()
   }
 
-  fn sync_real_panel_sizes(&mut self, _: &App) {
-    for (i, panel) in self.panels.iter().enumerate() {
-      self.sizes[i] = panel.bounds.size.along(self.axis);
-    }
+  fn display_sizes(&self) -> Vec<Pixels> {
+    self
+      .panels
+      .iter()
+      .enumerate()
+      .map(|(ix, panel)| panel.size.unwrap_or(self.sizes[ix]))
+      .collect()
   }
 
   fn resize_panel(&mut self, ix: usize, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
-    let old_sizes = self.sizes.clone();
+    let old_sizes = self.display_sizes();
     let mut ix = ix;
 
     if ix >= old_sizes.len() - 1 {
@@ -184,7 +196,6 @@ impl ResizableState {
     }
 
     let container_size = self.container_size();
-    self.sync_real_panel_sizes(cx);
 
     let move_changed = size - old_sizes[ix];
     if move_changed == px(0.) {
@@ -236,7 +247,6 @@ impl ResizableState {
       let size = new_sizes[i];
       self.panels[i].size = Some(size);
     }
-    self.sizes = new_sizes;
     cx.notify();
   }
 

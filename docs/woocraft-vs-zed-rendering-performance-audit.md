@@ -52,6 +52,7 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - Active panel drag targets now restore their drag-over visibility path, which fixes split drops and side-dock content previews without reintroducing the old heavy preview rendering path.
 - Split previews now clear when the drag leaves the active split target, center drops restore the full-area preview fill, and split overlays no longer paint a special border.
 - Table resize handles now switch to the theme primary color while actively dragging, aligning them with the dock resize handle interaction feedback.
+- Split-panel resize handles now follow the same preview-then-commit model as dock resize handles, and the resize handle rendering path has been centralized at the resizable group level instead of being embedded into each child panel.
 
 ### Future opportunities
 

@@ -7,6 +7,7 @@ use gpui::{
   Along, AnyElement, App, AppContext, Axis, Bounds, Context, Element, ElementId, Empty, Entity,
   EventEmitter, InteractiveElement as _, IntoElement, IsZero as _, MouseMoveEvent, MouseUpEvent,
   ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window, div, prelude::FluentBuilder,
+  px,
 };
 
 use super::{PANEL_MIN_SIZE, ResizableState, resizable_panel, resize_handle};
@@ -116,9 +117,64 @@ impl RenderOnce for ResizablePanelGroup {
     state.update(cx, |state, cx| {
       state.sync_panels_count(self.axis, panels_count, cx);
     });
+    let resize_handles = {
+      let display_sizes = state.read(cx).display_sizes();
+      let mut offset = px(0.);
+
+      display_sizes
+        .into_iter()
+        .take(panels_count.saturating_sub(1))
+        .enumerate()
+        .map(|(ix, size)| {
+          offset += size;
+
+          match self.axis {
+            Axis::Horizontal => div()
+              .absolute()
+              .left(offset)
+              .top_0()
+              .bottom_0()
+              .w(px(0.))
+              .child(
+                resize_handle(("resizable-handle", ix), self.axis).on_drag(DragPanel, {
+                  let state = state.clone();
+                  move |drag_panel, _, _, cx| {
+                    cx.stop_propagation();
+                    state.update(cx, |state, _| {
+                      state.resizing_panel_ix = Some(ix);
+                    });
+                    cx.new(|_| drag_panel.deref().clone())
+                  }
+                }),
+              )
+              .into_any_element(),
+            Axis::Vertical => div()
+              .absolute()
+              .top(offset)
+              .left_0()
+              .right_0()
+              .h(px(0.))
+              .child(
+                resize_handle(("resizable-handle", ix), self.axis).on_drag(DragPanel, {
+                  let state = state.clone();
+                  move |drag_panel, _, _, cx| {
+                    cx.stop_propagation();
+                    state.update(cx, |state, _| {
+                      state.resizing_panel_ix = Some(ix);
+                    });
+                    cx.new(|_| drag_panel.deref().clone())
+                  }
+                }),
+              )
+              .into_any_element(),
+          }
+        })
+        .collect::<Vec<_>>()
+    };
 
     container
       .id(self.id)
+      .relative()
       .size_full()
       .when_some(self.size, |this, size| match self.axis {
         Axis::Horizontal => this.h(size),
@@ -155,6 +211,7 @@ impl RenderOnce for ResizablePanelGroup {
         axis: self.axis,
         on_resize: self.on_resize.clone(),
       })
+      .children(resize_handles)
   }
 }
 
@@ -213,11 +270,7 @@ impl RenderOnce for ResizablePanel {
     let state = self
       .state
       .expect("BUG: The `state` in ResizablePanel should be present.");
-    let panel_state = state
-      .read(cx)
-      .panels
-      .get(self.panel_ix)
-      .expect("BUG: The `index` of ResizablePanel should be one of in `state`.");
+    let committed_size = state.read(cx).committed_size(self.panel_ix);
     let size_range = self.size_range.clone();
     let content = div().flex_1().size_full().children(self.children);
 
@@ -238,12 +291,12 @@ impl RenderOnce for ResizablePanel {
       .when_some(self.initial_size, |this, initial_size| {
         this
           .when(
-            panel_state.size.is_none() && !initial_size.is_zero(),
+            committed_size.is_none() && !initial_size.is_zero(),
             |this| this.flex_none(),
           )
           .flex_basis(initial_size)
       })
-      .map(|this| match panel_state.size {
+      .map(|this| match committed_size {
         Some(size) => this.flex_basis(size.min(size_range.end).max(size_range.start)),
         None => this,
       })
@@ -254,19 +307,6 @@ impl RenderOnce for ResizablePanel {
             state.update_panel_size(self.panel_ix, bounds, self.size_range, cx)
           })
         }
-      })
-      .when(self.panel_ix > 0, |this| {
-        let ix = self.panel_ix - 1;
-        this.child(resize_handle(("resizable-handle", ix), self.axis).on_drag(
-          DragPanel,
-          move |drag_panel, _, _, cx| {
-            cx.stop_propagation();
-            state.update(cx, |state, _| {
-              state.resizing_panel_ix = Some(ix);
-            });
-            cx.new(|_| drag_panel.deref().clone())
-          },
-        ))
       })
       .child(content)
   }
