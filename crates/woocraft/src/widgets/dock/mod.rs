@@ -7,7 +7,7 @@ mod state;
 mod tab_panel;
 mod tiles;
 
-use std::{ops::Deref, sync::Arc};
+use std::{collections::HashSet, ops::Deref, sync::Arc};
 
 use anyhow::Result;
 use dock::ResizePanel;
@@ -85,6 +85,8 @@ pub struct DockArea {
   pub(crate) center_placeholder: Option<AnyView>,
 
   _subscriptions: Vec<Subscription>,
+  subscribed_panel_ids: HashSet<EntityId>,
+  subscribed_tile_drop_ids: HashSet<EntityId>,
 }
 
 /// DockItem is a tree structure that represents the layout of the dock.
@@ -237,12 +239,6 @@ impl DockItem {
       let mut stack_panel = StackPanel::new(axis, window, cx);
       stack_panel.set_dock_area(dock_area.clone());
       for (i, item) in items.iter_mut().enumerate() {
-        let view = item.view();
-        let size = sizes.get(i).copied().flatten();
-        stack_panel.add_panel(view.clone(), size, dock_area.clone(), window, cx)
-      }
-
-      for (i, item) in items.iter().enumerate() {
         let view = item.view();
         let size = sizes.get(i).copied().flatten();
         stack_panel.add_panel(view.clone(), size, dock_area.clone(), window, cx)
@@ -600,6 +596,8 @@ impl DockArea {
       tab_bar_direction: TabBarDirection::default(),
       center_placeholder: None,
       _subscriptions: vec![],
+      subscribed_panel_ids: HashSet::new(),
+      subscribed_tile_drop_ids: HashSet::new(),
     };
 
     this.subscribe_panel(&stack_panel, window, cx);
@@ -617,6 +615,10 @@ impl DockArea {
   fn subscribe_tiles_item_drop(
     &mut self, tile_panel: &Entity<Tiles>, _: &mut Window, cx: &mut Context<Self>,
   ) {
+    if !self.subscribed_tile_drop_ids.insert(tile_panel.entity_id()) {
+      return;
+    }
+
     self
       ._subscriptions
       .push(cx.subscribe(tile_panel, move |_, _, evt: &DragDrop, cx| {
@@ -1020,6 +1022,9 @@ impl DockArea {
   pub fn load(
     &mut self, state: DockAreaState, window: &mut Window, cx: &mut Context<Self>,
   ) -> Result<()> {
+    self._subscriptions.clear();
+    self.subscribed_panel_ids.clear();
+    self.subscribed_tile_drop_ids.clear();
     self.version = state.version;
     self.center_enabled = state.center_enabled;
     let weak_self = cx.entity().downgrade();
@@ -1105,6 +1110,10 @@ impl DockArea {
   pub(crate) fn subscribe_panel<P: Panel>(
     &mut self, view: &Entity<P>, window: &mut Window, cx: &mut Context<DockArea>,
   ) {
+    if !self.subscribed_panel_ids.insert(view.entity_id()) {
+      return;
+    }
+
     let subscription = cx.subscribe_in(
       view,
       window,

@@ -326,7 +326,6 @@ impl TabPanel {
     })
     .detach();
 
-    cx.emit(PanelEvent::LayoutChanged);
     cx.notify();
   }
 
@@ -1367,28 +1366,30 @@ impl TabPanel {
     &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
   ) {
     if !self.allows_split_drop() {
-      self.will_split_placement = None;
-      cx.notify();
+      if self.will_split_placement.take().is_some() {
+        cx.notify();
+      }
       return;
     }
 
     let bounds = drag.bounds;
     let position = drag.event.position;
-
-    // Check the mouse position to determine the split direction
-    if position.x < bounds.left() + bounds.size.width * 0.35 {
-      self.will_split_placement = Some(Placement::Left);
+    let new_placement = if position.x < bounds.left() + bounds.size.width * 0.35 {
+      Some(Placement::Left)
     } else if position.x > bounds.left() + bounds.size.width * 0.65 {
-      self.will_split_placement = Some(Placement::Right);
+      Some(Placement::Right)
     } else if position.y < bounds.top() + bounds.size.height * 0.35 {
-      self.will_split_placement = Some(Placement::Top);
+      Some(Placement::Top)
     } else if position.y > bounds.top() + bounds.size.height * 0.65 {
-      self.will_split_placement = Some(Placement::Bottom);
+      Some(Placement::Bottom)
     } else {
-      // center to merge into the current tab
-      self.will_split_placement = None;
+      None
+    };
+
+    if self.will_split_placement != new_placement {
+      self.will_split_placement = new_placement;
+      cx.notify();
     }
-    cx.notify()
   }
 
   /// Handle the drop event when dragging a panel
@@ -1465,7 +1466,6 @@ impl TabPanel {
     }
 
     self.remove_self_if_empty(window, cx);
-    cx.emit(PanelEvent::LayoutChanged);
   }
 
   /// Add panel with split placement
