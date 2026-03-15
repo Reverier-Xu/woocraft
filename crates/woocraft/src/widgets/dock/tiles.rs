@@ -216,10 +216,15 @@ impl Tiles {
     &self.panels
   }
 
-  fn sorted_panels(&self) -> Vec<TileItem> {
-    let mut items: Vec<(usize, TileItem)> = self.panels.iter().cloned().enumerate().collect();
-    items.sort_by(|a, b| a.1.z_index.cmp(&b.1.z_index).then_with(|| a.0.cmp(&b.0)));
-    items.into_iter().map(|(_, item)| item).collect()
+  fn normalize_z_order(&mut self) {
+    for (z_index, item) in self.panels.iter_mut().enumerate() {
+      item.z_index = z_index;
+    }
+  }
+
+  fn sort_panels_by_z_index(&mut self) {
+    self.panels.sort_by_key(|item| item.z_index);
+    self.normalize_z_order();
   }
 
   /// Return the index of the panel.
@@ -503,7 +508,13 @@ impl Tiles {
       tab_panel.set_in_tiles(true);
     });
 
+    let mut item = item;
+    if !self.panels.is_empty() && item.z_index == 0 {
+      item.z_index = self.panels.len();
+    }
+
     self.panels.push(item.clone());
+    self.sort_panels_by_z_index();
     window.defer(cx, {
       let panel = item.panel.clone();
       let dock_area = dock_area.clone();
@@ -539,6 +550,7 @@ impl Tiles {
     if old_ix < self.panels.len() {
       let item = self.panels.remove(old_ix);
       self.panels.push(item);
+      self.normalize_z_order();
       let new_ix = self.panels.len() - 1;
       let new_id = self.panels[new_ix].id;
       self.history.push(TileChange {
@@ -572,6 +584,7 @@ impl Tiles {
           if let Some(old_order) = change.old_order {
             let item = self.panels.remove(index);
             self.panels.insert(old_order, item);
+            self.normalize_z_order();
           }
         }
       }
@@ -599,6 +612,7 @@ impl Tiles {
           if let Some(new_order) = change.new_order {
             let item = self.panels.remove(index);
             self.panels.insert(new_order, item);
+            self.normalize_z_order();
           }
         }
       }
@@ -1144,7 +1158,11 @@ impl EventEmitter<DismissEvent> for Tiles {}
 impl Render for Tiles {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let view = cx.entity().clone();
-    let panels = self.sorted_panels();
+    let panel_ids = self.panels.iter().map(|item| item.id).collect::<Vec<_>>();
+    let panels = panel_ids
+      .into_iter()
+      .filter_map(|item_id| self.panel(&item_id).cloned())
+      .collect::<Vec<_>>();
     let scroll_bounds = self
       .panels
       .iter()

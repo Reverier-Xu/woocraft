@@ -332,8 +332,17 @@ impl ViewportElement {
       return vec![];
     };
 
+    let visible_start = last_layout.visible_range_offset.start;
+    let visible_end = last_layout.visible_range_offset.end;
+    let visible_match_start = ranges.partition_point(|range| range.end <= visible_start);
+    let visible_match_end = ranges.partition_point(|range| range.start < visible_end);
+
     let mut paths = Vec::new();
-    for (index, range) in ranges.as_ref().iter().enumerate() {
+    for (offset, range) in ranges[visible_match_start..visible_match_end]
+      .iter()
+      .enumerate()
+    {
+      let index = visible_match_start + offset;
       if let Some(path) = Self::layout_match_range(range.clone(), last_layout, bounds) {
         paths.push((path, current_match_ix == index));
       }

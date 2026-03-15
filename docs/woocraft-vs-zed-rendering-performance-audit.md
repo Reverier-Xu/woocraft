@@ -45,12 +45,15 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - The custom `VirtualList` now derives visible ranges with binary-search-style origin lookups instead of repeated linear scans through every item size.
 - Dock resize interactions now keep a preview size during drag and only commit the real dock size when the resize gesture ends.
 - Dock resize handles now follow the preview size at the `DockArea` overlay level, which avoids live layout churn in sibling content while the pointer is moving.
+- Tiles now keep panel z-order normalized at mutation time, removing the old per-frame clone-and-sort render path.
+- Search highlight overlay layout now filters directly to the visible match slice instead of scanning every match on every prepaint.
 
 ### Future opportunities
 
 - Reduce resize-time editor work further, especially by replacing full-document wrap updates with more viewport-oriented behavior.
 - Continue separating editor synchronization from paint-heavy paths, especially backend and wrap work tied to width changes.
 - Revisit wide-table horizontal work to reduce repeated per-row horizontal virtualization overhead.
+- Consider adding a more incremental wrap model so width changes do not require full-document rewraps even outside dock-preview mode.
 
 ### Verification
 
