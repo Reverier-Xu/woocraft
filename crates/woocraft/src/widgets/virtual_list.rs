@@ -19,11 +19,10 @@ use std::{
 };
 
 use gpui::{
-  div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context,
-  DeferredScrollToItem, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox,
-  InteractiveElement, IntoElement, IsZero as _, ListSizingBehavior, Pixels, Point, Render,
-  ScrollHandle, ScrollStrategy, Size, Stateful, StatefulInteractiveElement, StyleRefinement,
-  Styled, Window,
+  Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context, DeferredScrollToItem,
+  Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox, InteractiveElement, IntoElement,
+  IsZero as _, ListSizingBehavior, Pixels, Point, Render, ScrollHandle, ScrollStrategy, Size,
+  Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div, point, px, size,
 };
 use smallvec::SmallVec;
 
@@ -146,8 +145,7 @@ pub fn v_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render,
-{
+  V: Render, {
   virtual_list(view, id, Axis::Vertical, item_sizes, f)
 }
 
@@ -165,8 +163,7 @@ pub fn h_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render,
-{
+  V: Render, {
   virtual_list(view, id, Axis::Horizontal, item_sizes, f)
 }
 
@@ -176,8 +173,7 @@ pub(crate) fn virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render,
-{
+  V: Render, {
   let id: ElementId = id.into();
   let scroll_handle = VirtualListScrollHandle::new();
   let render_range = move |visible_range, window: &mut Window, cx: &mut App| {

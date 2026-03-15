@@ -1142,7 +1142,11 @@ where
       return;
     }
 
-    let new_widths = self.col_groups.iter().map(ColGroup::current_width).collect();
+    let new_widths = self
+      .col_groups
+      .iter()
+      .map(ColGroup::current_width)
+      .collect();
     cx.emit(TableEvent::ColumnWidthsChanged(new_widths));
     cx.notify();
   }

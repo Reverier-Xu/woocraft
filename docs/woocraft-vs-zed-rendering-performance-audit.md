@@ -52,6 +52,11 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - Continue separating editor synchronization from paint-heavy paths, especially backend and wrap work tied to width changes.
 - Revisit wide-table horizontal work to reduce repeated per-row horizontal virtualization overhead.
 
+### Verification
+
+- `cargo +nightly fmt` passes after the refactor series.
+- `cargo clippy` passes after the refactor series.
+
 ## What Zed Does Differently
 
 ### 1. Cache boundaries are coarse, not everywhere

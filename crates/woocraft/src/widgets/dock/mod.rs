@@ -1260,7 +1260,10 @@ impl Render for DockArea {
       .relative()
       .size_full()
       .overflow_hidden()
-      .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.clear_split_preview(cx)))
+      .on_mouse_up(
+        MouseButton::Left,
+        cx.listener(|this, _, _, cx| this.clear_split_preview(cx)),
+      )
       .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
       .map(|this| {
         if let Some(zoom_view) = self.zoom_view.clone() {

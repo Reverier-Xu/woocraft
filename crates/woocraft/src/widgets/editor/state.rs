@@ -660,7 +660,11 @@ impl InputState {
     let enabled = self.mode.line_number();
     let sample_text = if enabled {
       let sample = self.max_line_number_text();
-      if sample.is_empty() { "1".to_string() } else { sample }
+      if sample.is_empty() {
+        "1".to_string()
+      } else {
+        sample
+      }
     } else {
       String::new()
     };
