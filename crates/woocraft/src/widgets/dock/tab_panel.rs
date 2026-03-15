@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use gpui::{
-  AnyElement, App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
-  EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-  Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, WeakEntity,
-  Window, div, prelude::FluentBuilder, relative,
+  AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty,
+  Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+  ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
+  WeakEntity, Window, div, prelude::FluentBuilder,
 };
 
 use super::{
@@ -555,6 +555,33 @@ impl TabPanel {
     self.panels.is_empty()
   }
 
+  fn clear_split_preview(&mut self, cx: &mut Context<Self>) {
+    self.will_split_placement = None;
+    if let Some(dock_area) = self.dock_area.upgrade() {
+      dock_area.update(cx, |dock_area, cx| dock_area.clear_split_preview(cx));
+    }
+  }
+
+  fn update_split_preview(
+    &mut self, bounds: Bounds<Pixels>, placement: Option<Placement>, cx: &mut Context<Self>,
+  ) {
+    if self.will_split_placement == placement {
+      return;
+    }
+
+    self.will_split_placement = placement;
+
+    if let Some(dock_area) = self.dock_area.upgrade() {
+      dock_area.update(cx, |dock_area, cx| {
+        if let Some(placement) = placement {
+          dock_area.set_split_preview(bounds, placement, cx);
+        } else {
+          dock_area.clear_split_preview(cx);
+        }
+      });
+    }
+  }
+
   fn closable_by_layout(&self, cx: &App) -> bool {
     self.closable_by_layout_with_dock_area_locked(self.dock_area_locked(cx), cx)
   }
@@ -920,7 +947,7 @@ impl TabPanel {
                       .border_color(cx.theme().drag_border)
                   })
                   .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
-                    this.will_split_placement = None;
+                    this.clear_split_preview(cx);
                     this.on_drop(drag, Some(0), true, window, cx)
                   }))
               }),
@@ -992,7 +1019,7 @@ impl TabPanel {
                     .border_color(cx.theme().drag_border)
                 })
                 .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                  this.will_split_placement = None;
+                  this.clear_split_preview(cx);
                   this.on_drop(drag, Some(0), true, window, cx)
                 }))
             }),
@@ -1076,7 +1103,7 @@ impl TabPanel {
                     .border_color(cx.theme().drag_border)
                 })
                 .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                  this.will_split_placement = None;
+                  this.clear_split_preview(cx);
                   this.on_drop(drag, Some(ix), true, window, cx)
                 }))
             }),
@@ -1093,7 +1120,7 @@ impl TabPanel {
             this
               .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
               .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                this.will_split_placement = None;
+                this.clear_split_preview(cx);
 
                 let ix = if drag.tab_panel == view {
                   Some(tabs_count - 1)
@@ -1190,7 +1217,7 @@ impl TabPanel {
               this
                 .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
                 .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                  this.will_split_placement = None;
+                  this.clear_split_preview(cx);
                   this.on_drop(drag, Some(ix), true, window, cx);
                 }))
             }),
@@ -1206,7 +1233,7 @@ impl TabPanel {
             this
               .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
               .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                this.will_split_placement = None;
+                this.clear_split_preview(cx);
 
                 let ix = if drag.tab_panel == view_for_tab_drops {
                   Some(tabs_count.saturating_sub(1))
@@ -1226,7 +1253,7 @@ impl TabPanel {
         this
           .drag_over::<DragPanel>(|this, _, _, cx| this.bg(cx.theme().drop_target))
           .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-            this.will_split_placement = None;
+            this.clear_split_preview(cx);
 
             let ix = if drag.tab_panel == view_for_bar_drop {
               fallback_drop_ix
@@ -1300,7 +1327,7 @@ impl TabPanel {
               .bg(cx.theme().drop_target)
               .group_drag_over::<DragPanel>("", |this| this.visible())
               .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
-                this.will_split_placement = None;
+                this.clear_split_preview(cx);
                 this.on_drop(drag, None, true, window, cx)
               })),
           )
@@ -1337,22 +1364,10 @@ impl TabPanel {
             div()
               .invisible()
               .absolute()
+              .top_0()
+              .left_0()
+              .size_full()
               .bg(cx.theme().drop_target)
-              .map(
-                |this| match (allows_split_drop, self.will_split_placement) {
-                  (true, Some(placement)) => {
-                    let size = relative(0.5);
-                    match placement {
-                      Placement::Left => this.left_0().top_0().bottom_0().w(size),
-                      Placement::Right => this.right_0().top_0().bottom_0().w(size),
-                      Placement::Top => this.top_0().left_0().right_0().h(size),
-                      Placement::Bottom => this.bottom_0().left_0().right_0().h(size),
-                    }
-                  }
-                  _ => this.top_0().left_0().size_full(),
-                },
-              )
-              .group_drag_over::<DragPanel>("", |this| this.visible())
               .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
                 this.on_drop(drag, None, true, window, cx)
               })),
@@ -1366,9 +1381,7 @@ impl TabPanel {
     &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
   ) {
     if !self.allows_split_drop() {
-      if self.will_split_placement.take().is_some() {
-        cx.notify();
-      }
+      self.clear_split_preview(cx);
       return;
     }
 
@@ -1386,10 +1399,7 @@ impl TabPanel {
       None
     };
 
-    if self.will_split_placement != new_placement {
-      self.will_split_placement = new_placement;
-      cx.notify();
-    }
+    self.update_split_preview(bounds, new_placement, cx);
   }
 
   /// Handle the drop event when dragging a panel
@@ -1406,7 +1416,7 @@ impl TabPanel {
     } else {
       None
     };
-    self.will_split_placement = None;
+    self.clear_split_preview(cx);
 
     // If target is same tab, and it is only one panel, do nothing.
     if is_same_tab && ix.is_none() && (split_placement.is_none() || self.panels.len() == 1) {

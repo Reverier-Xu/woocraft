@@ -27,17 +27,22 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 ### Completed work
 
 - Phase 1 invalidation cleanup is now implemented.
+- Phase 2 interaction-isolation work is now partially implemented for dock split previews and tiles.
 - `TabPanel::set_active_ix` no longer emits `LayoutChanged` for pure tab activation.
 - `TabPanel::on_panel_drag_move` now notifies only when the derived split placement actually changes.
 - `TabPanel::on_drop` no longer emits a redundant trailing `LayoutChanged` after add/insert/split helpers already emitted their structural event.
 - `DockArea` now clears and rebuilds its panel subscriptions on `load(...)`, and deduplicates panel and tile drop subscriptions to avoid repeated listeners.
 - `DockItem::split_with_sizes` no longer walks the same items twice during split construction.
+- Split-preview rendering now lives at the `DockArea` overlay level instead of inside the active tab content subtree.
+- `TabPanel` now updates split-preview state through `DockArea`, which keeps drag-hover redraws focused on the overlay layer.
+- `Tiles` now swap the actively dragged or resized tile body for a lightweight placeholder frame instead of rerendering live panel content on every pointer move.
 
 ### Next focus
 
-- Move split-preview rendering out of `TabPanel` content and into a lighter overlay path.
 - Reduce resize-time editor work, especially full-document rewraps during dock drags.
 - Stage drag/resize interactions so live content does less work while the pointer is moving.
+- Separate editor synchronization from paint-heavy paths and reduce pointer-driven invalidation.
+- Introduce preview-vs-commit sizing for dock and table resize paths.
 
 ## What Zed Does Differently
 

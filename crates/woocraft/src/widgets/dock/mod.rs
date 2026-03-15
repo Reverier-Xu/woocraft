@@ -14,8 +14,9 @@ use dock::ResizePanel;
 pub use dock::*;
 use gpui::{
   AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
-  EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
-  SharedString, Styled, Subscription, WeakEntity, Window, actions, div, prelude::FluentBuilder, px,
+  EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
+  Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
+  prelude::FluentBuilder, px,
 };
 pub use panel::*;
 pub use stack_panel::*;
@@ -24,7 +25,7 @@ pub use tab_panel::*;
 pub use tiles::{AnyDrag, DragDrop, DragMoving, DragResizing, TileItem, Tiles};
 
 use super::resizable::resize_handle;
-use crate::{DockPlacement, ElementExt, TabBarDirection};
+use crate::{ActiveTheme, DockPlacement, ElementExt, Placement, TabBarDirection};
 
 pub(crate) fn init(cx: &mut App) {
   PanelRegistry::init(cx);
@@ -41,6 +42,12 @@ pub enum DockEvent {
 
   /// The drag item drop event.
   DragDrop(AnyDrag),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SplitPreview {
+  bounds: Bounds<Pixels>,
+  placement: Placement,
 }
 
 /// The main area of the dock.
@@ -87,6 +94,7 @@ pub struct DockArea {
   _subscriptions: Vec<Subscription>,
   subscribed_panel_ids: HashSet<EntityId>,
   subscribed_tile_drop_ids: HashSet<EntityId>,
+  split_preview: Option<SplitPreview>,
 }
 
 /// DockItem is a tree structure that represents the layout of the dock.
@@ -598,6 +606,7 @@ impl DockArea {
       _subscriptions: vec![],
       subscribed_panel_ids: HashSet::new(),
       subscribed_tile_drop_ids: HashSet::new(),
+      split_preview: None,
     };
 
     this.subscribe_panel(&stack_panel, window, cx);
@@ -1025,6 +1034,7 @@ impl DockArea {
     self._subscriptions.clear();
     self.subscribed_panel_ids.clear();
     self.subscribed_tile_drop_ids.clear();
+    self.split_preview = None;
     self.version = state.version;
     self.center_enabled = state.center_enabled;
     let weak_self = cx.entity().downgrade();
@@ -1185,6 +1195,60 @@ impl DockArea {
       .left_top_tab_panel(cx)
       .map(|view| view.entity_id());
   }
+
+  pub(crate) fn set_split_preview(
+    &mut self, bounds: Bounds<Pixels>, placement: Placement, cx: &mut Context<Self>,
+  ) {
+    let next_preview = Some(SplitPreview { bounds, placement });
+    if self.split_preview == next_preview {
+      return;
+    }
+
+    self.split_preview = next_preview;
+    cx.notify();
+  }
+
+  pub(crate) fn clear_split_preview(&mut self, cx: &mut Context<Self>) {
+    if self.split_preview.take().is_some() {
+      cx.notify();
+    }
+  }
+
+  fn render_split_preview(&self, cx: &App) -> Option<impl IntoElement> {
+    let preview = self.split_preview?;
+    let bounds = preview.bounds;
+
+    let overlay = match preview.placement {
+      Placement::Left => div()
+        .left(bounds.left())
+        .top(bounds.top())
+        .w(bounds.size.width * 0.5)
+        .h(bounds.size.height),
+      Placement::Right => div()
+        .left(bounds.left() + bounds.size.width * 0.5)
+        .top(bounds.top())
+        .w(bounds.size.width * 0.5)
+        .h(bounds.size.height),
+      Placement::Top => div()
+        .left(bounds.left())
+        .top(bounds.top())
+        .w(bounds.size.width)
+        .h(bounds.size.height * 0.5),
+      Placement::Bottom => div()
+        .left(bounds.left())
+        .top(bounds.top() + bounds.size.height * 0.5)
+        .w(bounds.size.width)
+        .h(bounds.size.height * 0.5),
+    };
+
+    Some(
+      overlay
+        .absolute()
+        .bg(cx.theme().drop_target)
+        .border_1()
+        .border_color(cx.theme().drag_border),
+    )
+  }
 }
 impl EventEmitter<DockEvent> for DockArea {}
 impl Render for DockArea {
@@ -1196,6 +1260,7 @@ impl Render for DockArea {
       .relative()
       .size_full()
       .overflow_hidden()
+      .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.clear_split_preview(cx)))
       .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
       .map(|this| {
         if let Some(zoom_view) = self.zoom_view.clone() {
@@ -1242,6 +1307,9 @@ impl Render for DockArea {
                     // Right Dock (always present)
                     .child(div().flex().flex_none().child(right_dock.clone())),
                 )
+                .when_some(self.render_split_preview(cx), |this, overlay| {
+                  this.child(overlay)
+                })
                 // Dock resize handle overlays — rendered last so they paint on
                 // top of all dock content and center area, ensuring the
                 // symmetric hit areas are not obscured by siblings.

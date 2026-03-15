@@ -1000,6 +1000,27 @@ impl Tiles {
     let entity_id = cx.entity_id();
     let item_id = item.id;
     let panel_view = item.panel.view();
+    let interacting = self.dragging_id == Some(item_id) || self.resizing_id == Some(item_id);
+    let panel_content = if interacting {
+      let title = item.panel.title(cx);
+      let icon = item.panel.icon(cx);
+      v_flex()
+        .size_full()
+        .justify_center()
+        .items_center()
+        .gap_2()
+        .bg(cx.theme().tiles)
+        .text_color(cx.theme().muted_foreground)
+        .child(Icon::new(icon).size_5())
+        .child(title)
+        .into_any_element()
+    } else {
+      h_flex()
+        .overflow_hidden()
+        .size_full()
+        .child(panel_view)
+        .into_any_element()
+    };
 
     v_flex()
       .occlude()
@@ -1013,7 +1034,7 @@ impl Tiles {
       .w(item.bounds.size.width + px(1.))
       .h(item.bounds.size.height + px(1.))
       .rounded(cx.theme().tile_radius)
-      .child(h_flex().overflow_hidden().size_full().child(panel_view))
+      .child(panel_content)
       .children(self.render_resize_handles(window, cx, entity_id, item))
       .child(self.render_drag_bar(window, cx, entity_id, item))
       .on_mouse_down(
