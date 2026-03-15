@@ -1318,7 +1318,7 @@ impl Render for DockArea {
                   if dock_read.collapsed {
                     return this;
                   }
-                  let size = dock_read.size;
+                  let size = dock_read.display_size();
                   let dock_clone = left_dock.clone();
                   this.child(
                     div()
@@ -1345,7 +1345,7 @@ impl Render for DockArea {
                   if dock_read.collapsed {
                     return this;
                   }
-                  let size = dock_read.size;
+                  let size = dock_read.display_size();
                   let dock_clone = right_dock.clone();
                   this.child(
                     div()
@@ -1372,19 +1372,19 @@ impl Render for DockArea {
                   if dock_read.collapsed {
                     return this;
                   }
-                  let size = dock_read.size;
+                  let size = dock_read.display_size();
                   let dock_clone = bottom_dock.clone();
                   let left_d = left_dock.read(cx);
                   let left_size = if left_d.collapsed {
                     px(41.)
                   } else {
-                    left_d.size
+                    left_d.display_size()
                   };
                   let right_d = right_dock.read(cx);
                   let right_size = if right_d.collapsed {
                     px(41.)
                   } else {
-                    right_d.size
+                    right_d.display_size()
                   };
                   this.child(
                     div()

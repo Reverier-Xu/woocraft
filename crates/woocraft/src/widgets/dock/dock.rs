@@ -39,6 +39,7 @@ pub struct Dock {
   pub(super) collapsed: bool,
   /// The tab bar direction for this dock
   pub(super) tab_bar_direction: TabBarDirection,
+  preview_size: Option<Pixels>,
 
   // Runtime state
   /// Whether the Dock is resizing
@@ -57,6 +58,11 @@ impl Dock {
   #[inline]
   fn min_size(&self) -> Pixels {
     Self::min_size_for_placement(self.placement)
+  }
+
+  #[inline]
+  pub(super) fn display_size(&self) -> Pixels {
+    self.preview_size.unwrap_or(self.size)
   }
 
   pub(crate) fn new(
@@ -92,6 +98,7 @@ impl Dock {
       collapsed: false,
       size: px(200.0),
       tab_bar_direction,
+      preview_size: None,
       resizing: false,
     };
 
@@ -163,6 +170,7 @@ impl Dock {
       collapsed,
       size: size.max(min_size),
       tab_bar_direction,
+      preview_size: None,
       resizing: false,
     };
 
@@ -260,12 +268,14 @@ impl Dock {
   /// Set the size of the Dock.
   pub fn set_size(&mut self, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
     self.size = size.max(self.min_size());
+    self.preview_size = None;
     cx.notify();
   }
 
   /// Set the collapsed state of the Dock.
   pub fn set_collapsed(&mut self, collapsed: bool, window: &mut Window, cx: &mut Context<Self>) {
     self.collapsed = collapsed;
+    self.preview_size = None;
     let item = self.panel.clone();
     cx.defer_in(window, move |_, window, cx| {
       item.set_collapsed(collapsed, window, cx);
@@ -339,24 +349,40 @@ impl Dock {
     match self.placement {
       DockPlacement::Left => {
         let max_size = area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size;
-        self.size = size.clamp(self.min_size(), max_size);
+        let next_size = size.clamp(self.min_size(), max_size);
+        if self.preview_size != Some(next_size) {
+          self.preview_size = Some(next_size);
+          cx.notify();
+        }
       }
       DockPlacement::Right => {
         let max_size = area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size;
-        self.size = size.clamp(self.min_size(), max_size);
+        let next_size = size.clamp(self.min_size(), max_size);
+        if self.preview_size != Some(next_size) {
+          self.preview_size = Some(next_size);
+          cx.notify();
+        }
       }
       DockPlacement::Bottom => {
         let max_size = area_bounds.size.height - PANEL_MIN_SIZE;
-        self.size = size.clamp(self.min_size(), max_size);
+        let next_size = size.clamp(self.min_size(), max_size);
+        if self.preview_size != Some(next_size) {
+          self.preview_size = Some(next_size);
+          cx.notify();
+        }
       }
       DockPlacement::Center => unreachable!(),
     }
-
-    cx.notify();
   }
 
-  fn done_resizing(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+  fn done_resizing(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
     self.resizing = false;
+    if let Some(preview_size) = self.preview_size.take()
+      && self.size != preview_size
+    {
+      self.size = preview_size;
+      cx.notify();
+    }
   }
 }
 

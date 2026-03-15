@@ -43,13 +43,13 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - Line-number width and whitespace indicator shaping now use persistent caches instead of rebuilding those glyph metrics on every editor prepaint.
 - Table column resizing now uses preview widths during drag and only commits the real widths when the resize interaction completes.
 - The custom `VirtualList` now derives visible ranges with binary-search-style origin lookups instead of repeated linear scans through every item size.
+- Dock resize interactions now keep a preview size during drag and only commit the real dock size when the resize gesture ends.
+- Dock resize handles now follow the preview size at the `DockArea` overlay level, which avoids live layout churn in sibling content while the pointer is moving.
 
 ### Next focus
 
-- Reduce resize-time editor work, especially full-document rewraps during dock drags.
-- Stage drag/resize interactions so live content does less work while the pointer is moving.
+- Reduce resize-time editor work further, especially by replacing full-document wrap updates with more viewport-oriented behavior.
 - Continue separating editor synchronization from paint-heavy paths, especially backend and wrap work tied to width changes.
-- Introduce preview-vs-commit sizing for dock and table resize paths.
 - Revisit wide-table horizontal work to reduce repeated per-row horizontal virtualization overhead.
 
 ## What Zed Does Differently
