@@ -1,10 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-  App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
+  App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, GlobalElementId,
   HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, MouseUpEvent, Path,
-  Pixels, ShapedLine, SharedString, Style, TextRun, TextStyle, UnderlineStyle, Window, fill, point,
-  px, relative, size,
+  Pixels, ShapedLine, SharedString, Style, TextRun, UnderlineStyle, Window, fill, point, px,
+  relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -400,85 +400,6 @@ impl ViewportElement {
     Self::layout_match_range(range, last_layout, bounds)
   }
 
-  fn layout_line_numbers(
-    state: &InputState, font_size: Pixels, style: &TextStyle, window: &mut Window,
-  ) -> Pixels {
-    let sample_text = state.max_line_number_text();
-    let sample_text = if sample_text.is_empty() {
-      "1".to_string()
-    } else {
-      sample_text
-    };
-    let sample_len = sample_text.len();
-
-    if !state.mode.line_number() {
-      return px(0.);
-    }
-
-    let sample_line = window.text_system().shape_line(
-      sample_text.into(),
-      font_size,
-      &[TextRun {
-        len: sample_len,
-        font: style.font(),
-        color: gpui::black(),
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-      }],
-      None,
-    );
-
-    sample_line.width
-      + LINE_NUMBER_LEFT_MARGIN
-      + LINE_NUMBER_GUTTER_RIGHT_PADDING
-      + LINE_NUMBER_TEXT_GAP
-  }
-
-  fn layout_whitespace_indicators(
-    state: &InputState, text_size: Pixels, style: &TextStyle, window: &mut Window, cx: &App,
-  ) -> Option<WhitespaceIndicators> {
-    if !state.show_whitespaces {
-      return None;
-    }
-
-    let invisible_color = cx.theme().editor_invisible;
-    let space_font_size = text_size.half();
-    let tab_font_size = text_size;
-
-    let space_text = SharedString::new_static("\u{2022}");
-    let space = window.text_system().shape_line(
-      space_text.clone(),
-      space_font_size,
-      &[TextRun {
-        len: space_text.len(),
-        font: style.font(),
-        color: invisible_color,
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-      }],
-      None,
-    );
-
-    let tab_text = SharedString::new_static("\u{2192}");
-    let tab = window.text_system().shape_line(
-      tab_text.clone(),
-      tab_font_size,
-      &[TextRun {
-        len: tab_text.len(),
-        font: style.font(),
-        color: invisible_color,
-        background_color: None,
-        underline: None,
-        strikethrough: None,
-      }],
-      None,
-    );
-
-    Some(WhitespaceIndicators { space, tab })
-  }
-
   fn layout_lines(
     state: &InputState, params: LayoutLinesParams<'_>, window: &mut Window,
   ) -> Vec<LineLayout> {
@@ -659,11 +580,16 @@ impl Element for ViewportElement {
   ) -> Self::PrepaintState {
     let style = window.text_style();
     let text_size = style.font_size.to_pixels(window.rem_size());
+    let font = style.font();
+    let invisible_color = cx.theme().editor_invisible;
+    let (line_number_width, whitespace_indicators) = self.state.update(cx, |state, _| {
+      (
+        state.cached_line_number_width(font.clone(), text_size, window),
+        state.cached_whitespace_indicators(font.clone(), text_size, invisible_color, window),
+      )
+    });
     let state = self.state.read(cx);
     let line_height = window.line_height();
-
-    let line_number_width =
-      Self::layout_line_numbers(state, text_size, &window.text_style(), window);
     let wrap_width = (bounds.size.width - line_number_width).max(px(1.0));
     let _ = state;
     self.state.update(cx, |state, cx| {
@@ -740,8 +666,6 @@ impl Element for ViewportElement {
     let document_colors = state
       .lsp
       .document_colors_for_range(&display_text, &last_layout.visible_range);
-    let whitespace_indicators =
-      Self::layout_whitespace_indicators(state, text_size, &text_style, window, cx);
     let _ = state;
 
     let highlight_styles =

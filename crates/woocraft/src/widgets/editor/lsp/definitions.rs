@@ -64,13 +64,13 @@ impl HoverDefinition {
 impl InputState {
   pub(crate) fn handle_hover_definition(
     &mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>,
-  ) {
+  ) -> bool {
     let Some(provider) = self.lsp.definition_provider.clone() else {
-      return;
+      return self.clear_hover_definition_if_needed();
     };
 
     if self.hover_definition.is_same(offset) {
-      return;
+      return false;
     }
 
     // Currently not implemented.
@@ -81,8 +81,12 @@ impl InputState {
       let locations = task.await?;
 
       _ = editor.update(cx, |editor, cx| {
+        let had_hover_definition = !editor.hover_definition.is_empty();
+        let was_same_hover_definition = editor.hover_definition.is_same(offset);
         if locations.is_empty() {
-          editor.hover_definition.clear();
+          if editor.clear_hover_definition_if_needed() {
+            cx.notify();
+          }
         } else {
           if let Some(location) = locations.first()
             && let Some(range) = location.origin_selection_range
@@ -95,12 +99,16 @@ impl InputState {
           editor
             .hover_definition
             .update(symbol_range.clone(), locations.clone());
+          if !had_hover_definition || !was_same_hover_definition {
+            cx.notify();
+          }
         }
-        cx.notify();
       });
 
       Ok(())
     });
+
+    false
   }
 
   pub(crate) fn on_action_go_to_definition(

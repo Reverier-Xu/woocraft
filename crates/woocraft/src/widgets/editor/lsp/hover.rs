@@ -22,19 +22,19 @@ impl InputState {
   /// Handle hover trigger LSP request.
   pub(super) fn handle_hover_popover(
     &mut self, offset: usize, window: &mut Window, cx: &mut Context<InputState>,
-  ) {
+  ) -> bool {
     if self.selecting {
-      return;
+      return false;
     }
 
     let Some(provider) = self.lsp.hover_provider.clone() else {
-      return;
+      return self.clear_hover_popover_if_needed();
     };
 
     if let Some(hover_popover) = self.hover_popover.as_ref()
       && hover_popover.read(cx).is_same(offset)
     {
-      return;
+      return false;
     }
 
     // Currently not implemented.
@@ -58,15 +58,26 @@ impl InputState {
             let end = editor.text.position_to_offset(&range.end);
             symbol_range = start..end;
           }
+          let changed = editor
+            .hover_popover
+            .as_ref()
+            .is_none_or(|popover| !popover.read(cx).is_same(offset));
           let hover_popover = HoverPopover::new(cx.entity(), symbol_range, &hover, cx);
           editor.hover_popover = Some(hover_popover);
+          if changed {
+            cx.notify();
+          }
         }
         None => {
-          editor.hover_popover = None;
+          if editor.clear_hover_popover_if_needed() {
+            cx.notify();
+          }
         }
       });
 
       Ok(())
     });
+
+    false
   }
 }

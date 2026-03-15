@@ -7,10 +7,11 @@ use std::{ops::Range, rc::Rc, sync::Arc};
 use anyhow::Result;
 use gpui::{
   Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
-  EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
-  KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-  Pixels, Point, Render, ScrollWheelEvent, ShapedLine, SharedString, Styled as _, Subscription,
-  Task, TextAlign, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
+  EventEmitter, FocusHandle, Focusable, Font, Half, Hsla, InteractiveElement as _, IntoElement,
+  KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+  ParentElement as _, Pixels, Point, Render, ScrollWheelEvent, ShapedLine, SharedString,
+  Styled as _, Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
+  prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -243,6 +244,23 @@ pub(crate) struct WhitespaceIndicators {
 }
 
 #[derive(Clone)]
+struct LineNumberWidthCache {
+  enabled: bool,
+  sample_text: String,
+  font: Font,
+  font_size: Pixels,
+  width: Pixels,
+}
+
+#[derive(Clone)]
+struct WhitespaceIndicatorCache {
+  font: Font,
+  text_size: Pixels,
+  invisible_color: Hsla,
+  indicators: WhitespaceIndicators,
+}
+
+#[derive(Clone)]
 pub(super) struct VisibleLine {
   pub(super) row: usize,
   pub(super) line_start_offset: usize,
@@ -375,11 +393,6 @@ pub struct InputState {
 
   pub lsp: Lsp,
 
-  /// A flag to indicate if we have a pending update to the text.
-  ///
-  /// If true, will call some update (for example LSP, Syntax Highlight) before
-  /// render.
-  _pending_update: bool,
   /// A flag to indicate if we should ignore the next completion event.
   pub(super) silent_replace_text: bool,
 
@@ -389,6 +402,8 @@ pub struct InputState {
   /// The first element is the x-coordinate (Pixels), preferred to use this.
   /// The second element is the column (usize), fallback to use this.
   pub(super) preferred_column: Option<(Pixels, usize)>,
+  line_number_width_cache: Option<LineNumberWidthCache>,
+  whitespace_indicator_cache: Option<WhitespaceIndicatorCache>,
   _subscriptions: Vec<Subscription>,
 
   pub(super) _context_menu_task: Task<Result<()>>,
@@ -463,6 +478,8 @@ impl InputState {
       scrollbar_dragging: false,
       top_row: 0,
       preferred_column: None,
+      line_number_width_cache: None,
+      whitespace_indicator_cache: None,
       placeholder: SharedString::default(),
       mask_pattern: MaskPattern::default(),
       text_align: TextAlign::Left,
@@ -477,7 +494,6 @@ impl InputState {
       size: Size::default(),
       _subscriptions,
       _context_menu_task: Task::ready(Ok(())),
-      _pending_update: false,
       inline_completion: InlineCompletion::default(),
     }
   }
@@ -636,6 +652,117 @@ impl InputState {
       .current_backend_snapshot()
       .map(|snapshot| snapshot.max_line_number_text().to_string())
       .unwrap_or_else(|| self.line_count_u64().max(1).to_string())
+  }
+
+  pub(super) fn cached_line_number_width(
+    &mut self, font: Font, font_size: Pixels, window: &Window,
+  ) -> Pixels {
+    let enabled = self.mode.line_number();
+    let sample_text = if enabled {
+      let sample = self.max_line_number_text();
+      if sample.is_empty() { "1".to_string() } else { sample }
+    } else {
+      String::new()
+    };
+
+    if let Some(cache) = self.line_number_width_cache.as_ref()
+      && cache.enabled == enabled
+      && cache.sample_text == sample_text
+      && cache.font.eq(&font)
+      && cache.font_size == font_size
+    {
+      return cache.width;
+    }
+
+    let width = if !enabled {
+      px(0.)
+    } else {
+      let sample_len = sample_text.len();
+      let sample_line = window.text_system().shape_line(
+        sample_text.clone().into(),
+        font_size,
+        &[gpui::TextRun {
+          len: sample_len,
+          font: font.clone(),
+          color: gpui::black(),
+          background_color: None,
+          underline: None,
+          strikethrough: None,
+        }],
+        None,
+      );
+
+      sample_line.width + px(24.) + px(8.) + px(16.)
+    };
+
+    self.line_number_width_cache = Some(LineNumberWidthCache {
+      enabled,
+      sample_text,
+      font,
+      font_size,
+      width,
+    });
+
+    width
+  }
+
+  pub(super) fn cached_whitespace_indicators(
+    &mut self, font: Font, text_size: Pixels, invisible_color: Hsla, window: &Window,
+  ) -> Option<WhitespaceIndicators> {
+    if !self.show_whitespaces {
+      return None;
+    }
+
+    if let Some(cache) = self.whitespace_indicator_cache.as_ref()
+      && cache.font.eq(&font)
+      && cache.text_size == text_size
+      && cache.invisible_color == invisible_color
+    {
+      return Some(cache.indicators.clone());
+    }
+
+    let space_font_size = text_size.half();
+    let tab_font_size = text_size;
+
+    let space_text = SharedString::new_static("\u{2022}");
+    let space = window.text_system().shape_line(
+      space_text.clone(),
+      space_font_size,
+      &[gpui::TextRun {
+        len: space_text.len(),
+        font: font.clone(),
+        color: invisible_color,
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+      }],
+      None,
+    );
+
+    let tab_text = SharedString::new_static("\u{2192}");
+    let tab = window.text_system().shape_line(
+      tab_text.clone(),
+      tab_font_size,
+      &[gpui::TextRun {
+        len: tab_text.len(),
+        font: font.clone(),
+        color: invisible_color,
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+      }],
+      None,
+    );
+
+    let indicators = WhitespaceIndicators { space, tab };
+    self.whitespace_indicator_cache = Some(WhitespaceIndicatorCache {
+      font,
+      text_size,
+      invisible_color,
+      indicators: indicators.clone(),
+    });
+
+    Some(indicators)
   }
 
   /// Range for row in utf-8 bytes.
@@ -954,7 +1081,6 @@ impl InputState {
     self.selected_range.clear();
 
     if self.mode.is_code_editor() {
-      self._pending_update = true;
       self.lsp.reset();
     }
 
@@ -1098,7 +1224,6 @@ impl InputState {
     if !self.mode.is_code_editor() {
       self.text_wrapper.set_default_text(&self.text);
     }
-    self._pending_update = true;
     self
   }
 
@@ -1966,6 +2091,19 @@ impl InputState {
     cx.notify();
   }
 
+  pub(super) fn clear_hover_popover_if_needed(&mut self) -> bool {
+    self.hover_popover.take().is_some()
+  }
+
+  pub(super) fn clear_hover_definition_if_needed(&mut self) -> bool {
+    if self.hover_definition.is_empty() {
+      return false;
+    }
+
+    self.hover_definition.clear();
+    true
+  }
+
   pub(super) fn pause_blink_cursor(&mut self, cx: &mut Context<Self>) {
     self.blink_cursor.update(cx, |cursor, cx| {
       cursor.pause(cx);
@@ -2583,14 +2721,6 @@ impl Render for InputState {
       self.sync_wrap_metrics_for_view(content_width, window, cx);
       self.clamp_top_row(line_height);
     }
-    self.refresh_backend_highlighter(false, None);
-
-    if self._pending_update {
-      self.refresh_backend_highlighter(true, None);
-      self.lsp.update(&self.text, window, cx);
-      self._pending_update = false;
-    }
-
     div()
       .id("input-state")
       .flex_1()

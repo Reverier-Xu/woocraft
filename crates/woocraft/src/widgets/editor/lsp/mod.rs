@@ -127,12 +127,18 @@ impl InputState {
     &mut self, offset: usize, event: &MouseMoveEvent, window: &mut Window,
     cx: &mut Context<InputState>,
   ) {
+    let mut needs_notify = false;
+
     if event.modifiers.secondary() {
-      self.handle_hover_definition(offset, window, cx);
+      needs_notify |= self.clear_hover_popover_if_needed();
+      needs_notify |= self.handle_hover_definition(offset, window, cx);
     } else {
-      self.hover_definition.clear();
-      self.handle_hover_popover(offset, window, cx);
+      needs_notify |= self.clear_hover_definition_if_needed();
+      needs_notify |= self.handle_hover_popover(offset, window, cx);
     }
-    cx.notify();
+
+    if needs_notify {
+      cx.notify();
+    }
   }
 }
