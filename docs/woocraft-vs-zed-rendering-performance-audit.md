@@ -47,6 +47,9 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - Dock resize handles now follow the preview size at the `DockArea` overlay level, which avoids live layout churn in sibling content while the pointer is moving.
 - Tiles now keep panel z-order normalized at mutation time, removing the old per-frame clone-and-sort render path.
 - Search highlight overlay layout now filters directly to the visible match slice instead of scanning every match on every prepaint.
+- The editor highlighter bootstrap path now forces an initial sync when a backend-backed highlighter is created, restoring syntax highlighting after the render-path cleanup.
+- Dock split preview coordinates are now translated from window space back into `DockArea` local space before the overlay is painted.
+- Active panel drag targets now restore their drag-over visibility path, which fixes split drops and side-dock content previews without reintroducing the old heavy preview rendering path.
 
 ### Future opportunities
 

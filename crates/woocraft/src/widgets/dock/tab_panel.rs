@@ -1367,7 +1367,11 @@ impl TabPanel {
               .top_0()
               .left_0()
               .size_full()
-              .bg(cx.theme().drop_target)
+              .when(!allows_split_drop, |this| this.bg(cx.theme().drop_target))
+              .when(allows_split_drop, |this| {
+                this.bg(cx.theme().drop_target.opacity(0.01))
+              })
+              .group_drag_over::<DragPanel>("", |this| this.visible())
               .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
                 this.on_drop(drag, None, true, window, cx)
               })),

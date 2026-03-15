@@ -1217,26 +1217,28 @@ impl DockArea {
   fn render_split_preview(&self, cx: &App) -> Option<impl IntoElement> {
     let preview = self.split_preview?;
     let bounds = preview.bounds;
+    let left = bounds.left() - self.bounds.left();
+    let top = bounds.top() - self.bounds.top();
 
     let overlay = match preview.placement {
       Placement::Left => div()
-        .left(bounds.left())
-        .top(bounds.top())
+        .left(left)
+        .top(top)
         .w(bounds.size.width * 0.5)
         .h(bounds.size.height),
       Placement::Right => div()
-        .left(bounds.left() + bounds.size.width * 0.5)
-        .top(bounds.top())
+        .left(left + bounds.size.width * 0.5)
+        .top(top)
         .w(bounds.size.width * 0.5)
         .h(bounds.size.height),
       Placement::Top => div()
-        .left(bounds.left())
-        .top(bounds.top())
+        .left(left)
+        .top(top)
         .w(bounds.size.width)
         .h(bounds.size.height * 0.5),
       Placement::Bottom => div()
-        .left(bounds.left())
-        .top(bounds.top() + bounds.size.height * 0.5)
+        .left(left)
+        .top(top + bounds.size.height * 0.5)
         .w(bounds.size.width)
         .h(bounds.size.height * 0.5),
     };

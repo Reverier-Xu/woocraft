@@ -866,15 +866,17 @@ impl InputState {
       return;
     };
 
+    let mut created_highlighter = false;
     if self.highlighter.is_none() {
       self.highlighter = self
         .backend
         .as_ref()
         .and_then(|backend| backend.create_highlighter());
       self.highlighter_revision = 0;
+      created_highlighter = self.highlighter.is_some();
     }
 
-    if !force && self.highlighter_revision == snapshot.revision() {
+    if !force && !created_highlighter && self.highlighter_revision == snapshot.revision() {
       return;
     }
 
