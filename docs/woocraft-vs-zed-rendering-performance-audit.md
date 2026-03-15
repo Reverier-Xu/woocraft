@@ -29,6 +29,7 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - Phase 1 invalidation cleanup is now implemented.
 - Phase 2 interaction-isolation work is now partially implemented for dock split previews and tiles.
 - Phase 3 editor hot-path cleanup is now partially implemented.
+- Phase 4 table and list interaction work is now partially implemented.
 - `TabPanel::set_active_ix` no longer emits `LayoutChanged` for pure tab activation.
 - `TabPanel::on_panel_drag_move` now notifies only when the derived split placement actually changes.
 - `TabPanel::on_drop` no longer emits a redundant trailing `LayoutChanged` after add/insert/split helpers already emitted their structural event.
@@ -40,6 +41,8 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - The editor no longer carries the old `_pending_update` render-time refresh path for code-editor state.
 - Hover handling no longer triggers an unconditional repaint on every mouse move; it now repaints only when hover definition or hover popover state actually changes.
 - Line-number width and whitespace indicator shaping now use persistent caches instead of rebuilding those glyph metrics on every editor prepaint.
+- Table column resizing now uses preview widths during drag and only commits the real widths when the resize interaction completes.
+- The custom `VirtualList` now derives visible ranges with binary-search-style origin lookups instead of repeated linear scans through every item size.
 
 ### Next focus
 
@@ -47,6 +50,7 @@ The important conclusion is that Zed is not magically immune to the upstream GPU
 - Stage drag/resize interactions so live content does less work while the pointer is moving.
 - Continue separating editor synchronization from paint-heavy paths, especially backend and wrap work tied to width changes.
 - Introduce preview-vs-commit sizing for dock and table resize paths.
+- Revisit wide-table horizontal work to reduce repeated per-row horizontal virtualization overhead.
 
 ## What Zed Does Differently
 

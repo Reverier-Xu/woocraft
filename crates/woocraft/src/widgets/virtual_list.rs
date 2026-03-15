@@ -19,10 +19,11 @@ use std::{
 };
 
 use gpui::{
-  Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context, DeferredScrollToItem,
-  Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox, InteractiveElement, IntoElement,
-  IsZero as _, ListSizingBehavior, Pixels, Point, Render, ScrollHandle, ScrollStrategy, Size,
-  Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div, point, px, size,
+  div, point, px, size, Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context,
+  DeferredScrollToItem, Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox,
+  InteractiveElement, IntoElement, IsZero as _, ListSizingBehavior, Pixels, Point, Render,
+  ScrollHandle, ScrollStrategy, Size, Stateful, StatefulInteractiveElement, StyleRefinement,
+  Styled, Window,
 };
 use smallvec::SmallVec;
 
@@ -145,7 +146,8 @@ pub fn v_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render, {
+  V: Render,
+{
   virtual_list(view, id, Axis::Vertical, item_sizes, f)
 }
 
@@ -163,7 +165,8 @@ pub fn h_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render, {
+  V: Render,
+{
   virtual_list(view, id, Axis::Horizontal, item_sizes, f)
 }
 
@@ -173,7 +176,8 @@ pub(crate) fn virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render, {
+  V: Render,
+{
   let id: ElementId = id.into();
   let scroll_handle = VirtualListScrollHandle::new();
   let render_range = move |visible_range, window: &mut Window, cx: &mut App| {
@@ -212,6 +216,32 @@ pub struct VirtualList {
   item_sizes: Rc<Vec<Size<Pixels>>>,
   render_items: Box<RenderItemsCallback>,
   sizing_behavior: ListSizingBehavior,
+}
+
+fn first_visible_index(origins: &[Pixels], sizes: &[Pixels], visible_start: Pixels) -> usize {
+  let mut left = 0;
+  let mut right = sizes.len();
+
+  while left < right {
+    let mid = (left + right) / 2;
+    let item_end = origins[mid] + sizes[mid];
+    if item_end <= visible_start {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+
+  left
+}
+
+fn last_visible_index(origins: &[Pixels], visible_end: Pixels, items_count: usize) -> usize {
+  cmp::min(
+    origins
+      .partition_point(|origin| *origin < visible_end)
+      .saturating_add(1),
+    items_count,
+  )
 }
 
 impl Styled for VirtualList {
@@ -596,62 +626,21 @@ impl Element for VirtualList {
             }
           }
 
-          let (first_visible_element_ix, last_visible_element_ix) = match self.axis {
-            Axis::Horizontal => {
-              let mut cumulative_size = px(0.);
-              let mut first_visible_element_ix = 0;
-              for (i, &size) in item_sizes.iter().enumerate() {
-                cumulative_size += size;
-                if cumulative_size > -(scroll_offset.x + paddings.left) {
-                  first_visible_element_ix = i;
-                  break;
-                }
-              }
-
-              cumulative_size = px(0.);
-              let mut last_visible_element_ix = 0;
-              for (i, &size) in item_sizes.iter().enumerate() {
-                cumulative_size += size;
-                if cumulative_size > (-scroll_offset.x + content_bounds.size.width) {
-                  last_visible_element_ix = i + 1;
-                  break;
-                }
-              }
-              if last_visible_element_ix == 0 {
-                last_visible_element_ix = self.items_count;
-              } else {
-                last_visible_element_ix += 1;
-              }
-              (first_visible_element_ix, last_visible_element_ix)
-            }
-            Axis::Vertical => {
-              let mut cumulative_size = px(0.);
-              let mut first_visible_element_ix = 0;
-              for (i, &size) in item_sizes.iter().enumerate() {
-                cumulative_size += size;
-                if cumulative_size > -(scroll_offset.y + paddings.top) {
-                  first_visible_element_ix = i;
-                  break;
-                }
-              }
-
-              cumulative_size = px(0.);
-              let mut last_visible_element_ix = 0;
-              for (i, &size) in item_sizes.iter().enumerate() {
-                cumulative_size += size;
-                if cumulative_size > (-scroll_offset.y + content_bounds.size.height) {
-                  last_visible_element_ix = i + 1;
-                  break;
-                }
-              }
-              if last_visible_element_ix == 0 {
-                last_visible_element_ix = self.items_count;
-              } else {
-                last_visible_element_ix += 1;
-              }
-              (first_visible_element_ix, last_visible_element_ix)
-            }
+          let (visible_start, visible_end) = match self.axis {
+            Axis::Horizontal => (
+              -(scroll_offset.x + paddings.left),
+              -scroll_offset.x + content_bounds.size.width,
+            ),
+            Axis::Vertical => (
+              -(scroll_offset.y + paddings.top),
+              -scroll_offset.y + content_bounds.size.height,
+            ),
           };
+
+          let first_visible_element_ix =
+            first_visible_index(item_origins, item_sizes, visible_start);
+          let last_visible_element_ix =
+            last_visible_index(item_origins, visible_end, self.items_count);
 
           let visible_range =
             first_visible_element_ix..cmp::min(last_visible_element_ix, self.items_count);

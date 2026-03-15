@@ -1,8 +1,8 @@
 use std::f32;
 
 use gpui::{
-  Bounds, Context, Edges, Empty, EntityId, IntoElement, ParentElement as _, Pixels, Render,
-  SharedString, Styled as _, TextAlign, Window, div, prelude::FluentBuilder, px,
+  div, prelude::FluentBuilder, px, Bounds, Context, Edges, Empty, EntityId, IntoElement,
+  ParentElement as _, Pixels, Render, SharedString, Styled as _, TextAlign, Window,
 };
 
 use crate::{ActiveTheme as _, TableThemeExt};
@@ -241,6 +241,7 @@ pub(crate) struct ColGroup {
   ///
   /// Including the width with next columns by col_span.
   pub(crate) width: Pixels,
+  pub(crate) preview_width: Option<Pixels>,
   /// The bounds of the column in the table after it renders.
   pub(crate) bounds: Bounds<Pixels>,
 }
@@ -248,6 +249,23 @@ pub(crate) struct ColGroup {
 impl ColGroup {
   pub(crate) fn is_resizable(&self) -> bool {
     self.column.resizable
+  }
+
+  pub(crate) fn current_width(&self) -> Pixels {
+    self.preview_width.unwrap_or(self.width)
+  }
+
+  pub(crate) fn commit_preview_width(&mut self) -> bool {
+    let Some(preview_width) = self.preview_width.take() else {
+      return false;
+    };
+
+    if self.width == preview_width {
+      return false;
+    }
+
+    self.width = preview_width;
+    true
   }
 }
 

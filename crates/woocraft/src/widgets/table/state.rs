@@ -637,6 +637,7 @@ where
         };
         ColGroup {
           width,
+          preview_width: None,
           bounds: Bounds::default(),
           column,
         }
@@ -706,13 +707,16 @@ where
       let column = self.col_groups[col_ix].column.clone();
       if let Some(width) = self.manual_col_widths.get(&column.key).copied() {
         self.col_groups[col_ix].width = width;
+        self.col_groups[col_ix].preview_width = None;
         continue;
       }
       if let Some(width) = column.auto_width {
         self.col_groups[col_ix].width = width;
+        self.col_groups[col_ix].preview_width = None;
         continue;
       }
       self.col_groups[col_ix].width = self.estimate_column_width(col_ix, &column, window, cx);
+      self.col_groups[col_ix].preview_width = None;
     }
 
     self.pending_auto_detect_col_width = false;
@@ -1115,15 +1119,32 @@ where
     let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
 
     // Only update if it actually changed
-    if col_group.width != new_width {
-      col_group.width = new_width;
-      if self.options.auto_detect_col_width {
-        self
-          .manual_col_widths
-          .insert(col_group.column.key.clone(), new_width);
-      }
+    if col_group.current_width() != new_width {
+      col_group.preview_width = Some(new_width);
       cx.notify();
     }
+  }
+
+  fn commit_resized_columns(&mut self, cx: &mut Context<Self>) {
+    let mut changed = false;
+    for col_group in &mut self.col_groups {
+      if col_group.commit_preview_width() {
+        if self.options.auto_detect_col_width {
+          self
+            .manual_col_widths
+            .insert(col_group.column.key.clone(), col_group.width);
+        }
+        changed = true;
+      }
+    }
+
+    if !changed {
+      return;
+    }
+
+    let new_widths = self.col_groups.iter().map(ColGroup::current_width).collect();
+    cx.emit(TableEvent::ColumnWidthsChanged(new_widths));
+    cx.notify();
   }
 
   fn perform_sort(&mut self, col_ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -1226,7 +1247,7 @@ where
       return h_flex();
     };
 
-    let col_width = col_group.width;
+    let col_width = col_group.current_width();
     let col_padding = col_group.column.paddings;
     let align = col_group.column.align;
 
@@ -1361,10 +1382,7 @@ where
           }
 
           view.resizing_col = None;
-
-          let new_widths = view.col_groups.iter().map(|g| g.width).collect();
-          cx.emit(TableEvent::ColumnWidthsChanged(new_widths));
-          cx.notify();
+          view.commit_resized_columns(cx);
         }),
       )
       .into_any_element()
@@ -1471,7 +1489,7 @@ where
                   entity_id,
                   col_ix,
                   name,
-                  width: col_group.width,
+                  width: col_group.current_width(),
                 },
                 |drag, _, _, cx| {
                   cx.stop_propagation();
