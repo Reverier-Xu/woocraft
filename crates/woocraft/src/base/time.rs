@@ -5,7 +5,7 @@
 //! formatting utilities.
 
 use chrono::{Datelike, Duration, Local, NaiveDate};
-use gpui::SharedString;
+use gpuim::SharedString;
 
 #[cfg(test)]
 trait NaiveDateExt {

@@ -1,4 +1,4 @@
-use gpui::{Bounds, Hsla, PathBuilder, Pixels, Point, Window, px};
+use gpuim::{Bounds, Hsla, PathBuilder, Pixels, Point, Window, px};
 
 use super::origin_point;
 

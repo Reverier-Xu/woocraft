@@ -1,4 +1,4 @@
-use gpui::{App, Bounds, Hsla, PaintQuad, Pixels, Point, Window, fill, point, px};
+use gpuim::{App, Bounds, Hsla, PaintQuad, Pixels, Point, Window, fill, point, px};
 
 use crate::base::plot::{
   label::{PlotLabel, TEXT_GAP, TEXT_HEIGHT, Text},
@@ -24,7 +24,7 @@ impl<T> Default for Bar<T> {
       band_width: 0.,
       y0: Box::new(|_| 0.),
       y1: Box::new(|_| None),
-      fill: Box::new(|_| gpui::black()),
+      fill: Box::new(|_| gpuim::black()),
       label: None,
     }
   }

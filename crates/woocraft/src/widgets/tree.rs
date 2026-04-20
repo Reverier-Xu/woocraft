@@ -1,6 +1,6 @@
 use std::{ops::Range, rc::Rc};
 
-use gpui::{
+use gpuim::{
   AnyElement, App, AppContext, ClickEvent, Context, ElementId, Entity, EntityId, EventEmitter,
   FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, ListSizingBehavior,
   MouseButton, MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, SharedString,
@@ -225,12 +225,12 @@ impl TreeState {
     self.model.selected_entry()
   }
 
-  pub fn scroll_to_item(&mut self, ix: usize, strategy: gpui::ScrollStrategy) {
+  pub fn scroll_to_item(&mut self, ix: usize, strategy: gpuim::ScrollStrategy) {
     self.scroll_handle.scroll_to_item(ix, strategy);
   }
 
-  pub fn focus(&mut self, window: &mut Window, _: &mut App) {
-    self.focus_handle.focus(window);
+  pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
+    self.focus_handle.focus(window, cx);
   }
 
   /// Returns the underlying tree model.
@@ -411,7 +411,7 @@ impl TreeState {
     end < entries.len() && entries[end].depth() == depth
   }
 
-  fn guide_x(depth: usize) -> gpui::Pixels {
+  fn guide_x(depth: usize) -> gpuim::Pixels {
     px(2.) + px(14.) * depth as f32
   }
 
@@ -475,7 +475,7 @@ impl TreeState {
     self.model.set_selected_index(Some(selected_ix));
     self
       .scroll_handle
-      .scroll_to_item(selected_ix, gpui::ScrollStrategy::Top);
+      .scroll_to_item(selected_ix, gpuim::ScrollStrategy::Top);
     cx.notify();
   }
 
@@ -494,7 +494,7 @@ impl TreeState {
     self.model.set_selected_index(Some(selected_ix));
     self
       .scroll_handle
-      .scroll_to_item(selected_ix, gpui::ScrollStrategy::Bottom);
+      .scroll_to_item(selected_ix, gpuim::ScrollStrategy::Bottom);
     cx.notify();
   }
 
@@ -674,7 +674,7 @@ impl Render for TreeState {
     )
     .flex_grow()
     .size_full()
-    .track_scroll(self.scroll_handle.clone())
+    .track_scroll(&self.scroll_handle.clone())
     .with_sizing_behavior(ListSizingBehavior::Auto)
   }
 }

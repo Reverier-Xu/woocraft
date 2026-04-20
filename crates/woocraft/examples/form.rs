@@ -1,5 +1,5 @@
-use gpui::{
-  App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
+use gpuim::{
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
@@ -261,7 +261,7 @@ impl Render for FormWindow {
 }
 
 fn main() {
-  let app = Application::new().with_assets(woocraft::Assets);
+  let app = gpuim_platform::application().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     woocraft::init(cx);
@@ -274,9 +274,9 @@ fn main() {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
           titlebar: Some(TitleBar::title_bar_options()),
           #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
+          window_background: gpuim::WindowBackgroundAppearance::Transparent,
           #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
+          window_decorations: Some(gpuim::WindowDecorations::Client),
           ..Default::default()
         },
         FormWindow::view,

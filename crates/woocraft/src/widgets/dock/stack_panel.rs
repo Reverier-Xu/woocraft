@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{
+use gpuim::{
   App, AppContext as _, Axis, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
   IntoElement, ParentElement, Pixels, Render, SharedString, Styled, Subscription, WeakEntity,
   Window,

@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use gpui::{HighlightStyle, SharedString};
+use gpuim::{HighlightStyle, SharedString};
 use ropey::{ChunkCursor, Rope};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
 
@@ -780,7 +780,7 @@ fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
 
 #[cfg(test)]
 mod tests {
-  use gpui::Hsla;
+  use gpuim::Hsla;
 
   use super::*;
 
@@ -799,11 +799,11 @@ mod tests {
     fn color_name(c: Option<Hsla>) -> String {
       match c {
         Some(c) => {
-          if c == gpui::red() {
+          if c == gpuim::red() {
             "red".to_string()
-          } else if c == gpui::green() {
+          } else if c == gpuim::green() {
             "green".to_string()
-          } else if c == gpui::blue() {
+          } else if c == gpuim::blue() {
             "blue".to_string()
           } else {
             c.to_string()
@@ -886,9 +886,9 @@ $x = 1;
 
   #[test]
   fn test_unique_styles() {
-    let red = color_style(gpui::red());
-    let green = color_style(gpui::green());
-    let blue = color_style(gpui::blue());
+    let red = color_style(gpuim::red());
+    let green = color_style(gpuim::green());
+    let blue = color_style(gpuim::blue());
     let clean = HighlightStyle::default();
 
     assert_unique_styles(

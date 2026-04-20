@@ -4,8 +4,8 @@
 //!
 //! Only visible range are rendered for performance reasons.
 //!
-//! Inspired by `gpui::uniform_list`.
-//! https://github.com/zed-industries/zed/blob/0ae1603610ab6b265bdfbee7b8dbc23c5ab06edc/crates/gpui/src/elements/uniform_list.rs
+//! Inspired by `gpuim::uniform_list`.
+//! https://github.com/zed-industries/zed/blob/0ae1603610ab6b265bdfbee7b8dbc23c5ab06edc/crates/gpuim/src/elements/uniform_list.rs
 //!
 //! Unlike the `uniform_list`, the each item can have different size.
 //!
@@ -18,7 +18,7 @@ use std::{
   rc::Rc,
 };
 
-use gpui::{
+use gpuim::{
   Along, AnyElement, App, AvailableSpace, Axis, Bounds, ContentMask, Context, DeferredScrollToItem,
   Div, Element, ElementId, Entity, GlobalElementId, Half, Hitbox, InteractiveElement, IntoElement,
   IsZero as _, ListSizingBehavior, Pixels, Point, Render, ScrollHandle, ScrollStrategy, Size,
@@ -295,7 +295,7 @@ impl VirtualList {
         }
       }
       _ => {
-        // Ref: https://github.com/zed-industries/zed/blob/0d145289e0867a8d5d63e5e1397a5ca69c9d49c3/crates/gpui/src/elements/div.rs#L3026
+        // Ref: https://github.com/zed-industries/zed/blob/0d145289e0867a8d5d63e5e1397a5ca69c9d49c3/crates/gpuim/src/elements/div.rs#L3026
         if matches!(self.axis, Axis::Vertical) {
           if bounds.top() + scroll_offset.y < content_bounds.top() {
             scroll_offset.y = content_bounds.top() - bounds.top()
@@ -313,7 +313,7 @@ impl VirtualList {
     scroll_offset
   }
 
-  /// Ref from: https://github.com/zed-industries/zed/blob/83f9f9d9e3f5914392cab9a09e3472711a1d7b38/crates/gpui/src/elements/uniform_list.rs#L660
+  /// Ref from: https://github.com/zed-industries/zed/blob/83f9f9d9e3f5914392cab9a09e3472711a1d7b38/crates/gpuim/src/elements/uniform_list.rs#L660
   fn measure_item(
     &self, list_width: Option<Pixels>, window: &mut Window, cx: &mut App,
   ) -> Size<Pixels> {
@@ -374,8 +374,8 @@ impl Element for VirtualList {
 
   fn request_layout(
     &mut self, global_id: Option<&GlobalElementId>,
-    inspector_id: Option<&gpui::InspectorElementId>, window: &mut Window, cx: &mut App,
-  ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+    inspector_id: Option<&gpuim::InspectorElementId>, window: &mut Window, cx: &mut App,
+  ) -> (gpuim::LayoutId, Self::RequestLayoutState) {
     let rem_size = window.rem_size();
     let font_size = window.text_style().font_size.to_pixels(rem_size);
     let mut size_layout = ItemSizeLayout::default();
@@ -519,7 +519,7 @@ impl Element for VirtualList {
 
   fn prepaint(
     &mut self, global_id: Option<&GlobalElementId>,
-    inspector_id: Option<&gpui::InspectorElementId>, bounds: Bounds<Pixels>,
+    inspector_id: Option<&gpuim::InspectorElementId>, bounds: Bounds<Pixels>,
     layout: &mut Self::RequestLayoutState, window: &mut Window, cx: &mut App,
   ) -> Self::PrepaintState {
     layout.size_layout.last_layout_bounds = bounds;
@@ -680,7 +680,7 @@ impl Element for VirtualList {
 
   fn paint(
     &mut self, global_id: Option<&GlobalElementId>,
-    inspector_id: Option<&gpui::InspectorElementId>, bounds: Bounds<Pixels>,
+    inspector_id: Option<&gpuim::InspectorElementId>, bounds: Bounds<Pixels>,
     layout: &mut Self::RequestLayoutState, hitbox: &mut Self::PrepaintState, window: &mut Window,
     cx: &mut App,
   ) {

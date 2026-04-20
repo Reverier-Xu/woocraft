@@ -1,4 +1,4 @@
-use gpui::{
+use gpuim::{
   App, Axis, BorderStyle, Bounds, ContentMask, Corners, Edges, Element, ElementId, GlobalElementId,
   Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point, Position,
   ScrollHandle, ScrollWheelEvent, Style, Window, px, relative,
@@ -49,7 +49,7 @@ impl ScrollableMask {
 
   #[allow(dead_code)]
   pub fn debug(mut self) -> Self {
-    self.debug = Some(gpui::yellow());
+    self.debug = Some(gpuim::yellow());
     self
   }
 }
@@ -75,7 +75,7 @@ impl Element for ScrollableMask {
   }
 
   fn request_layout(
-    &mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     window: &mut Window, cx: &mut App,
   ) -> (LayoutId, Self::RequestLayoutState) {
     let mut style = Style {
@@ -91,7 +91,7 @@ impl Element for ScrollableMask {
   }
 
   fn prepaint(
-    &mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     bounds: Bounds<Pixels>, _: &mut Self::RequestLayoutState, window: &mut Window, _: &mut App,
   ) -> Self::PrepaintState {
     let cover_bounds = Bounds {
@@ -102,11 +102,11 @@ impl Element for ScrollableMask {
       size: bounds.size,
     };
 
-    window.insert_hitbox(cover_bounds, gpui::HitboxBehavior::Normal)
+    window.insert_hitbox(cover_bounds, gpuim::HitboxBehavior::Normal)
   }
 
   fn paint(
-    &mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     _: Bounds<Pixels>, _: &mut Self::RequestLayoutState, hitbox: &mut Self::PrepaintState,
     window: &mut Window, _: &mut App,
   ) {
@@ -120,7 +120,7 @@ impl Element for ScrollableMask {
           bounds,
           border_widths: Edges::all(px(1.0)),
           border_color: color,
-          background: gpui::transparent_white().into(),
+          background: gpuim::transparent_white().into(),
           corner_radii: Corners::all(px(0.)),
           border_style: BorderStyle::default(),
         });

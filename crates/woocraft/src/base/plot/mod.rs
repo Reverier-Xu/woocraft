@@ -8,11 +8,9 @@ pub mod tooltip;
 use std::{fmt::Debug, ops::Add};
 
 pub use axis::{AXIS_GAP, AxisText, PlotAxis};
-use gpui::{App, Bounds, Path, PathBuilder, Pixels, Point, Window, point, px};
+use gpuim::{App, Bounds, Path, PathBuilder, Pixels, Point, Window, point, px};
 pub use grid::Grid;
 pub use label::PlotLabel;
-
-use crate::PixelsExt;
 
 pub trait Plot {
   fn paint(&self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App);

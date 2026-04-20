@@ -1,4 +1,4 @@
-use gpui::SharedString;
+use gpuim::SharedString;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum MaskToken {

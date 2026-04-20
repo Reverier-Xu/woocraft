@@ -21,7 +21,7 @@
 //! let custom_tag = Tag::custom(red, white, red).child("Critical");
 //! ```
 
-use gpui::{
+use gpuim::{
   AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
   StyleRefinement, Styled, Window, div, px,
 };
@@ -248,7 +248,7 @@ impl RenderOnce for Tag {
       .flex()
       .items_center()
       .border_1()
-      .line_height(gpui::relative(1.0))
+      .line_height(gpuim::relative(1.0))
       .text_xs()
       .component_padding(size)
       .bg(bg)

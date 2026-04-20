@@ -3,7 +3,7 @@ use std::{
   ops::{Deref, Range},
 };
 
-use gpui::{App, HighlightStyle, Hsla, SharedString, UnderlineStyle, px};
+use gpuim::{App, HighlightStyle, Hsla, SharedString, UnderlineStyle, px};
 use ropey::Rope;
 use sum_tree::{Bias, SeekTarget, SumTree};
 

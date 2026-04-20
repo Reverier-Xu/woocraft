@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   App, AppContext as _, Bounds, Context, Empty, Entity, IntoElement, Pixels, Point, Render, Styled,
   Window, prelude::FluentBuilder as _, px,
 };

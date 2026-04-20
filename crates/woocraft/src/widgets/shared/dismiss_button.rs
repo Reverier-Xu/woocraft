@@ -1,4 +1,4 @@
-use gpui::{App, ClickEvent, IntoElement, RenderOnce, Window};
+use gpuim::{App, ClickEvent, IntoElement, RenderOnce, Window};
 
 use crate::{Button, ButtonVariants, Icon, IconName, Sizable, Size};
 

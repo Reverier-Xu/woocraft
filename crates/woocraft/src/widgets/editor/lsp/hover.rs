@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use gpui::{App, Context, Task, Window};
+use gpuim::{App, Context, Task, Window};
 use ropey::Rope;
 
 use crate::widgets::editor::{InputState, RopeExt, popovers::HoverPopover};
@@ -51,7 +51,7 @@ impl InputState {
 
       let result = task.await?;
 
-      _ = editor.update(cx, |editor, cx| match result {
+      editor.update(cx, |editor, cx| match result {
         Some(hover) => {
           if let Some(range) = hover.range {
             let start = editor.text.position_to_offset(&range.start);

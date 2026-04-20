@@ -1,6 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
-use gpui::{Entity, HighlightStyle, MouseButton, SharedString, Window};
+use gpuim::{Entity, HighlightStyle, MouseButton, SharedString, Window};
 use lsp_types::Position;
 use ropey::Rope;
 

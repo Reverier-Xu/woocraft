@@ -1,4 +1,4 @@
-use gpui::{Action, App, KeyBinding, actions};
+use gpuim::{Action, App, KeyBinding, actions};
 use serde::Deserialize;
 
 pub const POPOVER_CONTEXT: &str = "Popover";

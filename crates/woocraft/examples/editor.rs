@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use gpui::{
-  App, AppContext, Application, Bounds, Context, Entity, FocusHandle, Focusable, IntoElement,
+use gpuim::{
+  App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, IntoElement,
   ParentElement, Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds,
   WindowOptions, div, px,
 };
@@ -171,7 +171,7 @@ impl Panel for EditorPanel {
   }
 }
 
-impl gpui::EventEmitter<PanelEvent> for EditorPanel {}
+impl gpuim::EventEmitter<PanelEvent> for EditorPanel {}
 
 impl Focusable for EditorPanel {
   fn focus_handle(&self, _cx: &App) -> FocusHandle {
@@ -347,7 +347,7 @@ impl Render for EditorDockExample {
 }
 
 fn main() {
-  let app = Application::new().with_assets(woocraft::Assets);
+  let app = gpuim_platform::application().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     woocraft::init(cx);
@@ -360,9 +360,9 @@ fn main() {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
           titlebar: Some(TitleBar::title_bar_options()),
           #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
+          window_background: gpuim::WindowBackgroundAppearance::Transparent,
           #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
+          window_decorations: Some(gpuim::WindowDecorations::Client),
           ..Default::default()
         },
         EditorDockExample::view,

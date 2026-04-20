@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use gpui::{
+use gpuim::{
   AnyElement, AnyView, App, AppContext as _, Context, Entity, EntityId, EventEmitter, FocusHandle,
   Focusable, Global, Hsla, IntoElement, Render, SharedString, WeakEntity, Window,
 };
@@ -105,7 +105,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
   fn title_suffix(
     &mut self, window: &mut Window, cx: &mut Context<Self>,
   ) -> Option<impl IntoElement> {
-    None::<gpui::Div>
+    None::<gpuim::Div>
   }
 
   /// Whether the panel can be closed, default is `true`.

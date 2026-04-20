@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
   Half as _, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point,
   Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
@@ -134,7 +134,7 @@ impl EventEmitter<DismissEvent> for ContextMenuDelegate {}
 impl ListDelegate for ContextMenuDelegate {
   type Item = CompletionMenuItem;
 
-  fn items_count(&self, _: usize, _: &gpui::App) -> usize {
+  fn items_count(&self, _: usize, _: &gpuim::App) -> usize {
     self.items.len()
   }
 

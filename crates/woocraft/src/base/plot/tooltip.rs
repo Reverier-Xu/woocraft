@@ -1,4 +1,4 @@
-use gpui::{
+use gpuim::{
   AnyElement, App, Div, Half as _, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
 };
@@ -119,8 +119,8 @@ impl Dot {
     Self {
       point,
       size: px(6.),
-      stroke: gpui::transparent_black(),
-      fill: gpui::transparent_black(),
+      stroke: gpuim::transparent_black(),
+      fill: gpuim::transparent_black(),
     }
   }
 

@@ -1,5 +1,5 @@
-use gpui::{
-  App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
+use gpuim::{
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
@@ -155,7 +155,7 @@ impl Render for ChartWindow {
 }
 
 fn main() {
-  let app = Application::new().with_assets(woocraft::Assets);
+  let app = gpuim_platform::application().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     init(cx);

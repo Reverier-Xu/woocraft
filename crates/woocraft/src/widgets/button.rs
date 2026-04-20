@@ -57,7 +57,7 @@
 
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   AnimationExt as _, AnyElement, AnyView, App, ClickEvent, Corners, ElementId, Hsla,
   InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Transformation, Window, percentage,

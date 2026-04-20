@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gpui::{
+use gpuim::{
   App, HighlightStyle, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement,
   Styled, StyledText, Window, div, prelude::FluentBuilder as _,
 };
@@ -162,7 +162,7 @@ impl Label {
       ));
     }
 
-    Some(gpui::combine_highlights(vec![], highlights).collect())
+    Some(gpuim::combine_highlights(vec![], highlights).collect())
   }
 }
 
@@ -177,7 +177,7 @@ impl RenderOnce for Label {
     }
 
     div()
-      .line_height(gpui::relative(1.25))
+      .line_height(gpuim::relative(1.25))
       .text_color(cx.theme().foreground)
       .refine_style(&self.style)
       .child(

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
-use gpui::{
-  App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
+use gpuim::{
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
   Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, div,
   prelude::FluentBuilder as _, px,
 };
@@ -57,7 +57,7 @@ impl TableCol {
     }
   }
 
-  fn default_width(self) -> gpui::Pixels {
+  fn default_width(self) -> gpuim::Pixels {
     match self {
       TableCol::Id => px(72.),
       TableCol::Name => px(180.),
@@ -596,7 +596,7 @@ impl Render for TableWindow {
 }
 
 fn main() {
-  let app = Application::new().with_assets(woocraft::Assets);
+  let app = gpuim_platform::application().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     init(cx);

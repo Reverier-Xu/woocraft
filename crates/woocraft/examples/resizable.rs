@@ -1,5 +1,5 @@
-use gpui::{
-  AnyElement, App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement,
+use gpuim::{
+  AnyElement, App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement,
   Pixels, Render, Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
@@ -107,7 +107,7 @@ impl Render for ResizableWindow {
 }
 
 fn main() {
-  let app = Application::new().with_assets(woocraft::Assets);
+  let app = gpuim_platform::application().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     init(cx);

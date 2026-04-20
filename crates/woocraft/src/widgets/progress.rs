@@ -6,7 +6,7 @@
 
 use std::f32::consts::TAU;
 
-use gpui::{
+use gpuim::{
   AnyElement, App, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
   StyleRefinement, Styled, Window, canvas, div, point, px, relative,
 };

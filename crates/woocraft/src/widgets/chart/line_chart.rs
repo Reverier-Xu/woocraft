@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   App, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, TextAlign, Window, canvas, px,
 };
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
-  AXIS_GAP, ActiveTheme, AxisText, Grid, PixelsExt, Plot, PlotAxis, StrokeStyle,
+  AXIS_GAP, ActiveTheme, AxisText, Grid, Plot, PlotAxis, StrokeStyle,
   scale::{Scale, ScaleLinear, ScalePoint, Sealed},
   shape::Line,
 };
@@ -23,7 +23,7 @@ where
   data: Vec<T>,
   x: Option<XAccessor<T, X>>,
   y: Option<YAccessor<T, Y>>,
-  stroke: Option<gpui::Hsla>,
+  stroke: Option<gpuim::Hsla>,
   stroke_style: StrokeStyle,
   dot: bool,
   tick_margin: usize,
@@ -58,7 +58,7 @@ where
     self
   }
 
-  pub fn stroke(mut self, stroke: impl Into<gpui::Hsla>) -> Self {
+  pub fn stroke(mut self, stroke: impl Into<gpuim::Hsla>) -> Self {
     self.stroke = Some(stroke.into());
     self
   }

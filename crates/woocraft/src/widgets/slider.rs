@@ -37,7 +37,7 @@
 //! });
 //! ```
 
-use gpui::{
+use gpuim::{
   App, AppContext as _, Axis, Bounds, Context, DragMoveEvent, Empty, Entity, EntityId,
   EventEmitter, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
   ParentElement, Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
@@ -308,7 +308,7 @@ impl SliderState {
     }
   }
 
-  fn choose_active_thumb(&mut self, axis: Axis, position: gpui::Point<Pixels>) {
+  fn choose_active_thumb(&mut self, axis: Axis, position: gpuim::Point<Pixels>) {
     if !self.value.is_range() {
       self.active_thumb_start = false;
       return;
@@ -337,7 +337,7 @@ impl SliderState {
   }
 
   fn update_by_position(
-    &mut self, axis: Axis, position: gpui::Point<Pixels>, is_start: bool, cx: &mut Context<Self>,
+    &mut self, axis: Axis, position: gpuim::Point<Pixels>, is_start: bool, cx: &mut Context<Self>,
   ) {
     let total = if matches!(axis, Axis::Horizontal) {
       self.bounds.size.width

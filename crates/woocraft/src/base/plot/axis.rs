@@ -1,4 +1,4 @@
-use gpui::{
+use gpuim::{
   App, Bounds, FontWeight, Hsla, PathBuilder, Pixels, Point, SharedString, TextAlign, Window,
   point, px,
 };

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{
+use gpuim::{
   AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty,
   Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
   ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
@@ -1640,7 +1640,7 @@ impl TabPanel {
 
   fn focus_active_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(active_panel) = self.active_panel(cx) {
-      active_panel.focus_handle(cx).focus(window);
+      active_panel.focus_handle(cx).focus(window, cx);
     }
   }
 
@@ -1703,7 +1703,7 @@ impl TabPanel {
 }
 
 impl Focusable for TabPanel {
-  fn focus_handle(&self, cx: &App) -> gpui::FocusHandle {
+  fn focus_handle(&self, cx: &App) -> gpuim::FocusHandle {
     if let Some(active_panel) = self.active_panel(cx) {
       active_panel.focus_handle(cx)
     } else {
@@ -1714,7 +1714,7 @@ impl Focusable for TabPanel {
 impl EventEmitter<DismissEvent> for TabPanel {}
 impl EventEmitter<PanelEvent> for TabPanel {}
 impl Render for TabPanel {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpuim::IntoElement {
     let focus_handle = self.focus_handle(cx);
     let active_panel = self.active_panel(cx);
     let state = TabState {

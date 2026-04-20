@@ -27,7 +27,7 @@
 
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, MouseButton,
   ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder as _,

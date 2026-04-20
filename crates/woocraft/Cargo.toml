@@ -18,8 +18,8 @@ aho-corasick                  = { workspace = true }
 anyhow                        = { workspace = true }
 chrono                        = { workspace = true }
 enum-iterator                 = { workspace = true }
-gpui                          = { workspace = true }
-gpui-macros                   = { workspace = true }
+gpuim                         = { workspace = true }
+gpuim-macros                  = { workspace = true }
 lsp-types                     = { workspace = true }
 num-traits                    = { workspace = true }
 palette                       = { workspace = true }
@@ -85,6 +85,9 @@ unicode-segmentation          = { workspace = true }
 rust-embed = { workspace = true, optional = true }
 rust-i18n  = { workspace = true }
 zstd       = { workspace = true, optional = true }
+
+[dev-dependencies]
+gpuim-platform = { workspace = true }
 
 [features]
 default = ["resources", "tree-sitter-languages"]

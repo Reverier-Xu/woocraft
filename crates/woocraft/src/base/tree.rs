@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
 
-use gpui::SharedString;
+use gpuim::SharedString;
 
 use crate::IconName;
 

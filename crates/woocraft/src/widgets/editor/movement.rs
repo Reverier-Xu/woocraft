@@ -1,4 +1,4 @@
-use gpui::{Context, Window};
+use gpuim::{Context, Window};
 
 use crate::widgets::editor::{
   EditorUserAction, InputState, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp,

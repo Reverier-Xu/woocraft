@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use gpui::{
+use gpuim::{
   Animation, AnimationExt as _, AnyElement, Bounds, Hsla, IntoElement, Pixels, Styled as _, Window,
   div, fill, linear, px,
 };

@@ -3,7 +3,7 @@ use std::{
   rc::Rc,
 };
 
-use gpui::{
+use gpuim::{
   Along, AnyElement, App, AppContext, Axis, Bounds, Context, Element, ElementId, Empty, Entity,
   EventEmitter, InteractiveElement as _, IntoElement, IsZero as _, MouseMoveEvent, MouseUpEvent,
   ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window, div, prelude::FluentBuilder,
@@ -330,7 +330,7 @@ impl Element for ResizePanelGroupElement {
   type RequestLayoutState = ();
   type PrepaintState = ();
 
-  fn id(&self) -> Option<gpui::ElementId> {
+  fn id(&self) -> Option<gpuim::ElementId> {
     None
   }
 
@@ -339,20 +339,20 @@ impl Element for ResizePanelGroupElement {
   }
 
   fn request_layout(
-    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     window: &mut Window, cx: &mut App,
-  ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+  ) -> (gpuim::LayoutId, Self::RequestLayoutState) {
     (window.request_layout(Style::default(), None, cx), ())
   }
 
   fn prepaint(
-    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     _: Bounds<Pixels>, _: &mut Self::RequestLayoutState, _: &mut Window, _: &mut App,
   ) {
   }
 
   fn paint(
-    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     _: Bounds<Pixels>, _: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState,
     window: &mut Window, _cx: &mut App,
   ) {

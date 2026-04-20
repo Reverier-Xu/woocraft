@@ -1,5 +1,5 @@
-use gpui::{
-  App, AppContext, Application, Bounds, Context, Entity, IntoElement, ParentElement, Render,
+use gpuim::{
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use rust_embed::RustEmbed;
@@ -78,7 +78,7 @@ fn main() {
     .with(woocraft::Assets)
     .with(EmbeddedSource::<ExternalAssets>::new());
 
-  let app = Application::new().with_assets(assets);
+  let app = gpuim_platform::application().with_assets(assets);
 
   app.run(|cx: &mut App| {
     init(cx);

@@ -1,4 +1,4 @@
-use gpui::Axis;
+use gpuim::Axis;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

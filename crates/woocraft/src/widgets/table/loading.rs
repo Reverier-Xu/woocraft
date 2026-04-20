@@ -1,4 +1,4 @@
-use gpui::{
+use gpuim::{
   IntoElement, ParentElement as _, RenderOnce, Styled, div, prelude::FluentBuilder as _, px,
 };
 
@@ -48,7 +48,7 @@ impl LoadingRow {
 }
 
 impl RenderOnce for LoadingRow {
-  fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
+  fn render(self, _: &mut gpuim::Window, cx: &mut gpuim::App) -> impl IntoElement {
     let paddings = self.size.table_cell_padding();
     let height = self.size.table_row_height() * 0.5;
     let placeholder_color = if self.header {
@@ -83,7 +83,7 @@ impl RenderOnce for LoadingRow {
 }
 
 impl RenderOnce for Loading {
-  fn render(self, _window: &mut gpui::Window, _cx: &mut gpui::App) -> impl IntoElement {
+  fn render(self, _window: &mut gpuim::Window, _cx: &mut gpuim::App) -> impl IntoElement {
     v_flex()
       .gap_0()
       .child(LoadingRow::header().size(self.size))

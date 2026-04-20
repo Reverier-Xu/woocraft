@@ -1,6 +1,6 @@
 use chrono::{Datelike, Duration, Local, NaiveDate};
-use gpui::{
-  App, AppContext, Application, Bounds, Context, Entity, IntoElement, Menu, ParentElement, Render,
+use gpuim::{
+  App, AppContext, Bounds, Context, Entity, IntoElement, Menu, ParentElement, Render,
   ScrollStrategy, Size as GpuiSize, Styled, Subscription, Task, Window, WindowBounds,
   WindowOptions, div, px,
 };
@@ -694,7 +694,7 @@ impl Render for ControlsWindow {
                         .tooltip(|window, cx| {
                           Tooltip::new("Tooltip from woocraft::Tooltip")
                             .key_binding(Some(
-                              Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")),
+                              Kbd::new(gpuim::Keystroke::parse("ctrl-k").expect("valid keystroke")),
                             ))
                             .build(window, cx)
                         }),
@@ -725,9 +725,9 @@ impl Render for ControlsWindow {
                     .items_center()
                     .gap_2()
                     .child(div().text_sm().child("Shortcut:"))
-                    .child(Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")))
+                    .child(Kbd::new(gpuim::Keystroke::parse("ctrl-k").expect("valid keystroke")))
                     .child(
-                      Kbd::new(gpui::Keystroke::parse("shift-enter").expect("valid keystroke"))
+                      Kbd::new(gpuim::Keystroke::parse("shift-enter").expect("valid keystroke"))
                         .outline(),
                     ),
                 ),
@@ -1346,21 +1346,24 @@ impl Render for ControlsWindow {
 }
 
 fn main() {
-  let app = Application::new().with_assets(woocraft::Assets);
+  let app = gpuim_platform::application().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     init(cx);
     cx.activate(true);
     cx.set_menus(vec![
       Menu {
+        disabled: false,
         name: "File".into(),
         items: Vec::new(),
       },
       Menu {
+        disabled: false,
         name: "Edit".into(),
         items: Vec::new(),
       },
       Menu {
+        disabled: false,
         name: "View".into(),
         items: Vec::new(),
       },
@@ -1373,9 +1376,9 @@ fn main() {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
           titlebar: Some(TitleBar::title_bar_options()),
           #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
+          window_background: gpuim::WindowBackgroundAppearance::Transparent,
           #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
+          window_decorations: Some(gpuim::WindowDecorations::Client),
           ..Default::default()
         },
         ControlsWindow::view,

@@ -51,7 +51,7 @@
 
 use std::{ops::Range, rc::Rc, time::Instant};
 
-use gpui::{
+use gpuim::{
   Action, AnyElement, App, Bounds, ClipboardItem, Context, Corners, Element, ElementInputHandler,
   Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, GlobalElementId,
   InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, LayoutId,
@@ -376,8 +376,7 @@ impl InputState {
 
   /// Programmatically focus this input field.
   pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-    let _ = cx;
-    self.focus_handle.focus(window);
+    self.focus_handle.focus(window, cx);
   }
 
   /// Clear all text from the input. Pushes undo snapshot.
@@ -453,7 +452,7 @@ impl InputState {
     }
   }
 
-  fn shape_line_for_display(&self, display: &str, window: &Window) -> gpui::ShapedLine {
+  fn shape_line_for_display(&self, display: &str, window: &Window) -> gpuim::ShapedLine {
     let text_style = self.layout_text_style(window);
     let font_size = text_style.font_size.to_pixels(window.rem_size());
     let runs = [text_style.to_run(display.len())];
@@ -490,7 +489,7 @@ impl InputState {
   }
 
   fn byte_offset_for_mouse_position(
-    &self, position: gpui::Point<Pixels>, window: &Window,
+    &self, position: gpuim::Point<Pixels>, window: &Window,
   ) -> usize {
     let display = self.display_text();
     if display.is_empty() {
@@ -989,8 +988,8 @@ impl OtpState {
     cx.notify();
   }
 
-  pub fn focus(&self, window: &mut Window, _: &mut Context<Self>) {
-    self.focus_handle.focus(window);
+  pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+    self.focus_handle.focus(window, cx);
   }
 
   fn hold_caret_visible(&mut self) {
@@ -1004,7 +1003,7 @@ impl OtpState {
   }
 
   fn on_input_mouse_down(
-    &mut self, _: &gpui::MouseDownEvent, window: &mut Window, cx: &mut Context<Self>,
+    &mut self, _: &gpuim::MouseDownEvent, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.hold_caret_visible();
     self.focus(window, cx);
@@ -1439,9 +1438,9 @@ impl EntityInputHandler for InputState {
   }
 
   fn bounds_for_range(
-    &mut self, range_utf16: Range<usize>, bounds: gpui::Bounds<gpui::Pixels>, window: &mut Window,
+    &mut self, range_utf16: Range<usize>, bounds: gpuim::Bounds<gpuim::Pixels>, window: &mut Window,
     _cx: &mut Context<Self>,
-  ) -> Option<gpui::Bounds<gpui::Pixels>> {
+  ) -> Option<gpuim::Bounds<gpuim::Pixels>> {
     if bounds.size.width <= px(0.) {
       return Some(bounds);
     }
@@ -1469,7 +1468,7 @@ impl EntityInputHandler for InputState {
   }
 
   fn character_index_for_point(
-    &mut self, point: gpui::Point<gpui::Pixels>, window: &mut Window, _cx: &mut Context<Self>,
+    &mut self, point: gpuim::Point<gpuim::Pixels>, window: &mut Window, _cx: &mut Context<Self>,
   ) -> Option<usize> {
     let byte = self.byte_offset_for_mouse_position(point, window);
     Some(Self::byte_to_utf16_offset(&self.text, byte))
@@ -1743,7 +1742,7 @@ impl Element for InputPaintBindings {
   type RequestLayoutState = ();
   type PrepaintState = ();
 
-  fn id(&self) -> Option<gpui::ElementId> {
+  fn id(&self) -> Option<gpuim::ElementId> {
     None
   }
 

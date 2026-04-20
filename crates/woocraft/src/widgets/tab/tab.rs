@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   AnyElement, App, ClickEvent, Div, InteractiveElement, IntoElement, MouseButton, ParentElement,
   RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
   prelude::FluentBuilder as _,
@@ -180,7 +180,7 @@ impl Selectable for Tab {
 }
 
 impl InteractiveElement for Tab {
-  fn interactivity(&mut self) -> &mut gpui::Interactivity {
+  fn interactivity(&mut self) -> &mut gpuim::Interactivity {
     self.base.interactivity()
   }
 }
@@ -188,7 +188,7 @@ impl InteractiveElement for Tab {
 impl StatefulInteractiveElement for Tab {}
 
 impl Styled for Tab {
-  fn style(&mut self) -> &mut gpui::StyleRefinement {
+  fn style(&mut self) -> &mut gpuim::StyleRefinement {
     self.base.style()
   }
 }

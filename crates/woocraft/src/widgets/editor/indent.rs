@@ -1,4 +1,4 @@
-use gpui::{
+use gpuim::{
   Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString, TextRun,
   TextStyle, Window, point, px,
 };

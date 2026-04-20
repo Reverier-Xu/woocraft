@@ -1,9 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
-use gpui::{
+use gpuim::{
   App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, GlobalElementId,
   HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, MouseUpEvent, Path,
-  Pixels, ShapedLine, SharedString, Style, TextRun, UnderlineStyle, Window, fill, point, px,
+  Pixels, ShapedLine, SharedString, Style, TextAlign, TextRun, UnderlineStyle, Window, fill, point,
+  px,
   relative, size,
 };
 use ropey::Rope;
@@ -39,7 +40,7 @@ pub(super) struct PrepaintState {
   hover_highlight_path: Option<Path<Pixels>>,
   search_match_paths: Vec<(Path<Pixels>, bool)>,
   document_color_paths: Vec<(Path<Pixels>, Hsla)>,
-  hover_definition_hitbox: Option<gpui::Hitbox>,
+  hover_definition_hitbox: Option<gpuim::Hitbox>,
   indent_guides_path: Option<Path<Pixels>>,
   active_indent_guide_path: Option<Path<Pixels>>,
   bounds: Bounds<Pixels>,
@@ -251,7 +252,7 @@ impl ViewportElement {
     let end_ix = range.end;
 
     let mut offset_y = last_layout.visible_top;
-    let mut builder = gpui::PathBuilder::fill();
+    let mut builder = gpuim::PathBuilder::fill();
     let mut has_rect = false;
 
     for (line, visible_line) in lines.iter().zip(last_layout.visible_lines.iter()) {
@@ -534,7 +535,7 @@ impl ViewportElement {
     if let Some(hover_style) = self.layout_hover_definition(cx) {
       styles.push(hover_style);
     }
-    styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
+    styles = gpuim::combine_highlights(diagnostic_styles, styles).collect();
     Some(styles)
   }
 }
@@ -560,7 +561,7 @@ impl Element for ViewportElement {
   }
 
   fn request_layout(
-    &mut self, _id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _id: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     window: &mut Window, cx: &mut App,
   ) -> (LayoutId, Self::RequestLayoutState) {
     let state = self.state.read(cx);
@@ -581,7 +582,7 @@ impl Element for ViewportElement {
   }
 
   fn prepaint(
-    &mut self, _id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _id: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     bounds: Bounds<Pixels>, _request_layout: &mut Self::RequestLayoutState, window: &mut Window,
     cx: &mut App,
   ) -> Self::PrepaintState {
@@ -798,7 +799,7 @@ impl Element for ViewportElement {
   }
 
   fn paint(
-    &mut self, _id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _id: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     input_bounds: Bounds<Pixels>, _request_layout: &mut Self::RequestLayoutState,
     prepaint: &mut Self::PrepaintState, window: &mut Window, cx: &mut App,
   ) {
@@ -911,7 +912,7 @@ impl Element for ViewportElement {
                 - line.width)
                 .max(input_bounds.origin.x + LINE_NUMBER_LEFT_MARGIN);
               let p = point(line_x, origin.y + offset_y);
-              _ = line.paint(p, line_height, window, cx);
+              _ = line.paint(p, line_height, TextAlign::Right, None, window, cx);
               offset_y += line_height;
             }
           }
@@ -940,7 +941,7 @@ impl Element for ViewportElement {
     });
 
     if let Some(hitbox) = prepaint.hover_definition_hitbox.as_ref() {
-      window.set_cursor_style(gpui::CursorStyle::PointingHand, hitbox);
+      window.set_cursor_style(gpuim::CursorStyle::PointingHand, hitbox);
     }
 
     self.paint_mouse_listeners(window, cx);
@@ -1005,9 +1006,9 @@ fn split_runs_by_bg_segments(
       let overlap_start = run_start.max(bg_range.start);
       let overlap_end = run_end.min(bg_range.end);
       let text_color = if bg_color.l >= 0.5 {
-        gpui::black()
+        gpuim::black()
       } else {
-        gpui::white()
+        gpuim::white()
       };
 
       let run_len = overlap_end.saturating_sub(overlap_start);

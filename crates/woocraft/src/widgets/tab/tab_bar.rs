@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   AnyElement, App, Corner, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
   RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
   Window, div, prelude::FluentBuilder as _,

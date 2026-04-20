@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-use gpui::{App, Context, Hsla, MouseMoveEvent, Task, Window};
+use gpuim::{App, Context, Hsla, MouseMoveEvent, Task, Window};
 use ropey::Rope;
 
 use crate::widgets::editor::{InputState, RopeExt, popovers::ContextMenu};
@@ -86,7 +86,7 @@ impl InputState {
   ///
   /// Return true if the action was handled, otherwise false.
   pub fn handle_action_for_context_menu(
-    &mut self, action: Box<dyn gpui::Action>, window: &mut Window, cx: &mut Context<Self>,
+    &mut self, action: Box<dyn gpuim::Action>, window: &mut Window, cx: &mut Context<Self>,
   ) -> bool {
     let Some(menu) = self.context_menu.as_ref() else {
       return false;

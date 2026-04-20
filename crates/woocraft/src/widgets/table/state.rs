@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Range, rc::Rc, time::Duration};
 
-use gpui::{
+use gpuim::{
   App, AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter,
   FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
   MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
@@ -652,7 +652,7 @@ where
     text_style
   }
 
-  fn shape_line_for_display(&self, text: &str, window: &Window) -> gpui::ShapedLine {
+  fn shape_line_for_display(&self, text: &str, window: &Window) -> gpuim::ShapedLine {
     let text_style = self.table_text_style(window);
     let font_size = text_style.font_size.to_pixels(window.rem_size());
     let runs = [text_style.to_run(text.len())];
@@ -1262,9 +1262,9 @@ where
       .overflow_hidden()
       .whitespace_nowrap()
       .map(|this| match align {
-        gpui::TextAlign::Right => this.justify_end(),
-        gpui::TextAlign::Center => this.justify_center(),
-        gpui::TextAlign::Left => this.justify_start(),
+        gpuim::TextAlign::Right => this.justify_end(),
+        gpuim::TextAlign::Center => this.justify_center(),
+        gpuim::TextAlign::Left => this.justify_start(),
       })
       .component_size(self.options.size)
       .map(|this| match col_padding {
@@ -1485,9 +1485,9 @@ where
               .size_full()
               .items_center()
               .map(|this| match align {
-                gpui::TextAlign::Right => this.justify_end(),
-                gpui::TextAlign::Center => this.justify_center(),
-                gpui::TextAlign::Left => this.justify_start(),
+                gpuim::TextAlign::Right => this.justify_end(),
+                gpuim::TextAlign::Center => this.justify_center(),
+                gpuim::TextAlign::Left => this.justify_start(),
               })
               .child(th_label),
           )
@@ -1619,7 +1619,7 @@ where
   #[allow(clippy::too_many_arguments)]
   fn render_table_row(
     &mut self, row_ix: usize, rows_count: usize, left_columns_count: usize,
-    col_sizes: Rc<Vec<gpui::Size<Pixels>>>, columns_count: usize, _is_filled: bool,
+    col_sizes: Rc<Vec<gpuim::Size<Pixels>>>, columns_count: usize, _is_filled: bool,
     window: &mut Window, cx: &mut Context<Self>,
   ) -> Stateful<Div> {
     let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
@@ -1866,7 +1866,7 @@ impl<D> Focusable for TableState<D>
 where
   D: TableDelegate,
 {
-  fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+  fn focus_handle(&self, _cx: &gpuim::App) -> FocusHandle {
     self.focus_handle.clone()
   }
 }
@@ -2007,7 +2007,7 @@ where
               "table-uniform-list",
               render_rows_count,
               cx.processor(move |table, visible_range: Range<usize>, window, cx| {
-                let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
+                let col_sizes: Rc<Vec<gpuim::Size<Pixels>>> = Rc::new(
                   table
                     .col_groups
                     .iter()
@@ -2065,7 +2065,7 @@ where
             .flex_grow()
             .size_full()
             .with_sizing_behavior(ListSizingBehavior::Auto)
-            .track_scroll(self.vertical_scroll_handle.clone())
+            .track_scroll(&self.vertical_scroll_handle.clone())
             .into_any_element(),
           )
         }

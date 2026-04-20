@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{App, Context, Entity, IntoElement, KeyBinding, Pixels, RenderOnce, Window};
+use gpuim::{App, Context, Entity, IntoElement, KeyBinding, Pixels, RenderOnce, Window};
 
 use crate::{
   Sizable, Size, TableDelegate, TableState,
@@ -216,7 +216,7 @@ where
       state.options.stripe = self.stripe;
       state.options.size = self.size;
       state.options.auto_detect_col_width = self.auto_detect_col_width;
-      state.options.scrollbar_visible = gpui::Edges {
+      state.options.scrollbar_visible = gpuim::Edges {
         right: self.scrollbar_visible_vertical,
         bottom: self.scrollbar_visible_horizontal,
         ..Default::default()

@@ -35,6 +35,6 @@ pub use ropey::Rope;
 pub(crate) use state::*;
 pub use state::{InputEvent as EditorEvent, InputState as EditorState};
 
-pub(crate) fn init(cx: &mut gpui::App) {
+pub(crate) fn init(cx: &mut gpuim::App) {
   state::init(cx);
 }

@@ -4,7 +4,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use gpui::{
+use gpuim::{
   App, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render, RenderOnce,
   SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder as _, px, relative,
@@ -65,7 +65,7 @@ impl NotificationType {
     }
   }
 
-  fn color(&self, cx: &App) -> gpui::Hsla {
+  fn color(&self, cx: &App) -> gpuim::Hsla {
     match self {
       Self::Info => cx.theme().primary,
       Self::Success => cx.theme().success,
@@ -308,7 +308,7 @@ impl NotificationState {
   }
 
   fn spawn_timer(
-    state: gpui::WeakEntity<Self>, id: usize, duration: Duration, epoch: u64, window: &mut Window,
+    state: gpuim::WeakEntity<Self>, id: usize, duration: Duration, epoch: u64, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     cx.spawn_in(window, async move |_, cx| {
@@ -341,7 +341,7 @@ impl NotificationState {
               cx.notify();
               true
             })
-            .unwrap_or(false)
+
         } else {
           false
         };
@@ -422,11 +422,11 @@ pub struct NotificationCenter {
   state: Entity<NotificationState>,
   style: StyleRefinement,
   placement: NotificationPlacement,
-  margin_top: gpui::Pixels,
-  margin_right: gpui::Pixels,
-  margin_bottom: gpui::Pixels,
-  margin_left: gpui::Pixels,
-  width: gpui::Pixels,
+  margin_top: gpuim::Pixels,
+  margin_right: gpuim::Pixels,
+  margin_bottom: gpuim::Pixels,
+  margin_left: gpuim::Pixels,
+  width: gpuim::Pixels,
   size: Size,
 }
 
@@ -451,7 +451,7 @@ impl NotificationCenter {
   }
 
   pub fn margins(
-    mut self, top: gpui::Pixels, right: gpui::Pixels, bottom: gpui::Pixels, left: gpui::Pixels,
+    mut self, top: gpuim::Pixels, right: gpuim::Pixels, bottom: gpuim::Pixels, left: gpuim::Pixels,
   ) -> Self {
     self.margin_top = top;
     self.margin_right = right;
@@ -460,7 +460,7 @@ impl NotificationCenter {
     self
   }
 
-  pub fn width(mut self, width: gpui::Pixels) -> Self {
+  pub fn width(mut self, width: gpuim::Pixels) -> Self {
     self.width = width;
     self
   }

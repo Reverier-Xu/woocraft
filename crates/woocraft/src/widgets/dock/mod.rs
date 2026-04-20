@@ -12,7 +12,7 @@ use std::{collections::HashSet, ops::Deref, sync::Arc};
 use anyhow::Result;
 use dock::ResizePanel;
 pub use dock::*;
-use gpui::{
+use gpuim::{
   AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, DragMoveEvent, Edges, Entity,
   EntityId, EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _,
   Pixels, Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
@@ -994,7 +994,7 @@ impl DockArea {
     }
 
     if let Some(panel) = self.panel_by_id(panel_id, cx) {
-      panel.focus_handle(cx).focus(window);
+      panel.focus_handle(cx).focus(window, cx);
       return true;
     }
 

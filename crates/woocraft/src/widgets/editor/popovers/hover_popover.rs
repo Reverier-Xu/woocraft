@@ -1,6 +1,6 @@
 use std::{ops::Range, rc::Rc};
 
-use gpui::{
+use gpuim::{
   AnyElement, App, AppContext as _, AvailableSpace, Bounds, Element, ElementId, Entity,
   InteractiveElement, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Render,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Window, deferred, div, point,
@@ -38,7 +38,7 @@ impl HoverPopover {
 }
 
 impl Render for HoverPopover {
-  fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _: &mut Window, _: &mut gpuim::Context<Self>) -> impl IntoElement {
     let contents = match self.hover.contents.clone() {
       lsp_types::HoverContents::Scalar(scalar) => match scalar {
         lsp_types::MarkedString::String(s) => s,
@@ -143,9 +143,9 @@ impl Element for Popover {
   }
 
   fn request_layout(
-    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     window: &mut Window, cx: &mut App,
-  ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+  ) -> (gpuim::LayoutId, Self::RequestLayoutState) {
     let open_state = window.use_keyed_state("popover-open", cx, |_, _| true);
     let trigger_bounds = match self.trigger_bounds(cx) {
       Some(bounds) => bounds,
@@ -220,7 +220,7 @@ impl Element for Popover {
   }
 
   fn prepaint(
-    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     _: Bounds<Pixels>, request_layout: &mut Self::RequestLayoutState, window: &mut Window,
     cx: &mut App,
   ) -> Self::PrepaintState {
@@ -235,7 +235,7 @@ impl Element for Popover {
   }
 
   fn paint(
-    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     _: Bounds<Pixels>, request_layout: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState,
     window: &mut Window, cx: &mut App,
   ) {

@@ -6,7 +6,7 @@
 //! (Enter, Escape, etc.) with platform-specific symbols (e.g., ⌘ on macOS, Ctrl
 //! on Linux/Windows).
 
-use gpui::{
+use gpuim::{
   Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, ParentElement as _,
   RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative,
 };
@@ -224,7 +224,7 @@ impl Kbd {
 impl_styled!(Kbd);
 
 impl RenderOnce for Kbd {
-  fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
+  fn render(self, _: &mut gpuim::Window, cx: &mut gpuim::App) -> impl gpuim::IntoElement {
     if !self.appearance {
       return Self::format(&self.stroke).into_any_element();
     }

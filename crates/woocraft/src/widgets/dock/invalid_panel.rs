@@ -1,4 +1,4 @@
-use gpui::{
+use gpuim::{
   App, EventEmitter, FocusHandle, Focusable, ParentElement as _, Render, SharedString, Styled as _,
   Window,
 };
@@ -38,9 +38,9 @@ impl Focusable for InvalidPanel {
 }
 impl Render for InvalidPanel {
   fn render(
-    &mut self, _: &mut gpui::Window, cx: &mut gpui::Context<Self>,
-  ) -> impl gpui::IntoElement {
-    gpui::div()
+    &mut self, _: &mut gpuim::Window, cx: &mut gpuim::Context<Self>,
+  ) -> impl gpuim::IntoElement {
+    gpuim::div()
       .size_full()
       .my_6()
       .flex()

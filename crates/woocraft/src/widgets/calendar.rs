@@ -39,7 +39,7 @@
 use std::rc::Rc;
 
 use chrono::{Datelike, NaiveDate};
-use gpui::{
+use gpuim::{
   App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
   InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
   StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,

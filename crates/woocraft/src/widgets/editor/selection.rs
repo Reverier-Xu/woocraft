@@ -1,6 +1,6 @@
 use std::{char, ops::Range};
 
-use gpui::{Context, Window};
+use gpuim::{Context, Window};
 use ropey::Rope;
 use sum_tree::Bias;
 

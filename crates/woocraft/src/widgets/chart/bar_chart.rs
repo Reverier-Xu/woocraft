@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
-use gpui::{
+use gpuim::{
   App, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, TextAlign, Window, canvas, px,
 };
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
-  AXIS_GAP, ActiveTheme, AxisText, Grid, PixelsExt, Plot, PlotAxis,
+  AXIS_GAP, ActiveTheme, AxisText, Grid, Plot, PlotAxis,
   label::Text,
   scale::{Scale, ScaleBand, ScaleLinear, Sealed},
   shape::Bar,
@@ -14,7 +14,7 @@ use crate::{
 
 type XAccessor<T, X> = Rc<dyn Fn(&T) -> X>;
 type YAccessor<T, Y> = Rc<dyn Fn(&T) -> Y>;
-type FillAccessor<T> = Rc<dyn Fn(&T) -> gpui::Hsla>;
+type FillAccessor<T> = Rc<dyn Fn(&T) -> gpuim::Hsla>;
 type LabelAccessor<T> = Rc<dyn Fn(&T) -> SharedString>;
 
 #[derive(IntoElement)]
@@ -61,7 +61,7 @@ where
 
   pub fn fill<H>(mut self, fill: impl Fn(&T) -> H + 'static) -> Self
   where
-    H: Into<gpui::Hsla> + 'static, {
+    H: Into<gpuim::Hsla> + 'static, {
     self.fill = Some(Rc::new(move |t| fill(t).into()));
     self
   }

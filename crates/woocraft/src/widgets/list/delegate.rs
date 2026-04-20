@@ -1,4 +1,4 @@
-use gpui::{AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Task, Window};
+use gpuim::{AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Task, Window};
 
 use super::{ListState, loading::Loading};
 use crate::{ActiveTheme as _, Icon, IconName, IndexPath, Selectable, Sizable, h_flex};

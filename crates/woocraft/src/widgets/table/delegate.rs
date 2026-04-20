@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gpui::{
+use gpuim::{
   App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Stateful,
   Styled as _, Window,
 };

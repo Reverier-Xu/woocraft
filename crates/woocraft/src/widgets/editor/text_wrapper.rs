@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gpui::{
+use gpuim::{
   App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextAlign, TextRun, Window,
   point, px, size,
 };
@@ -220,7 +220,7 @@ impl TextWrapper {
           &[TextRun {
             len: line_str.len(),
             font: font.clone(),
-            color: gpui::black(),
+            color: gpuim::black(),
             background_color: None,
             underline: None,
             strikethrough: None,
@@ -646,6 +646,8 @@ impl LineLayout {
       _ = line.paint(
         pos + point(px(0.), ix * line_height),
         line_height,
+        _text_align,
+        _align_width,
         window,
         cx,
       );
@@ -665,7 +667,7 @@ impl LineLayout {
           pos.y + *line_index as f32 * line_height,
         );
 
-        _ = invisible.paint(origin, line_height, window, cx);
+        _ = invisible.paint(origin, line_height, _text_align, _align_width, window, cx);
       }
     }
   }
@@ -673,13 +675,13 @@ impl LineLayout {
 
 #[cfg(test)]
 mod tests {
-  use gpui::{FontFeatures, FontStyle, FontWeight, px};
+  use gpuim::{FontFeatures, FontStyle, FontWeight, px};
 
   use super::*;
 
   #[test]
   fn test_update() {
-    let font = gpui::Font {
+    let font = gpuim::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,
@@ -888,7 +890,7 @@ mod tests {
 
   #[test]
   fn test_offset_to_display_point() {
-    let font = gpui::Font {
+    let font = gpuim::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,
@@ -990,7 +992,7 @@ mod tests {
 
   #[test]
   fn test_display_row_to_line_row() {
-    let font = gpui::Font {
+    let font = gpuim::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,
@@ -1024,7 +1026,7 @@ mod tests {
 
   #[test]
   fn test_empty_line_only_uses_one_wrapped_row() {
-    let font = gpui::Font {
+    let font = gpuim::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,

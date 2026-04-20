@@ -1,4 +1,4 @@
-/// Implements `gpui::Styled` for a type with a `style: StyleRefinement` field.
+/// Implements `gpuim::Styled` for a type with a `style: StyleRefinement` field.
 ///
 /// ```ignore
 /// impl_styled!(MyWidget);            // uses self.style
@@ -6,15 +6,15 @@
 /// ```
 macro_rules! impl_styled {
   ($ty:ty) => {
-    impl gpui::Styled for $ty {
-      fn style(&mut self) -> &mut gpui::StyleRefinement {
+    impl gpuim::Styled for $ty {
+      fn style(&mut self) -> &mut gpuim::StyleRefinement {
         &mut self.style
       }
     }
   };
   ($ty:ty, $field:ident) => {
-    impl gpui::Styled for $ty {
-      fn style(&mut self) -> &mut gpui::StyleRefinement {
+    impl gpuim::Styled for $ty {
+      fn style(&mut self) -> &mut gpuim::StyleRefinement {
         &mut self.$field
       }
     }
@@ -86,7 +86,7 @@ macro_rules! impl_selectable {
   };
 }
 
-/// Implements `gpui::ParentElement` for a type with a `children:
+/// Implements `gpuim::ParentElement` for a type with a `children:
 /// Vec<AnyElement>` field.
 ///
 /// ```ignore
@@ -94,8 +94,8 @@ macro_rules! impl_selectable {
 /// ```
 macro_rules! impl_parent_element {
   ($ty:ty) => {
-    impl gpui::ParentElement for $ty {
-      fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
+    impl gpuim::ParentElement for $ty {
+      fn extend(&mut self, elements: impl IntoIterator<Item = gpuim::AnyElement>) {
         self.children.extend(elements);
       }
     }

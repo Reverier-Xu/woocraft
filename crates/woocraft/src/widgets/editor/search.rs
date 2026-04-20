@@ -1,7 +1,7 @@
 use std::{ops::Range, rc::Rc};
 
 use aho_corasick::AhoCorasick;
-use gpui::{
+use gpuim::{
   App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
   InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, ParentElement as _, Pixels,
   Render, Styled, Subscription, Window, div, prelude::FluentBuilder as _,
@@ -305,7 +305,7 @@ impl SearchPanel {
 
   pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     self.open = false;
-    self.editor.focus_handle(cx).focus(window);
+    self.editor.focus_handle(cx).focus(window, cx);
     cx.notify();
   }
 
@@ -323,7 +323,7 @@ impl SearchPanel {
       return;
     }
 
-    self.editor.focus_handle(cx).focus(window);
+    self.editor.focus_handle(cx).focus(window, cx);
     window.prevent_default();
     cx.stop_propagation();
   }

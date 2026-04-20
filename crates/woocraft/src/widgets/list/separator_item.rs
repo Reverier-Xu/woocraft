@@ -1,4 +1,4 @@
-use gpui::{AnyElement, ParentElement, RenderOnce, StyleRefinement};
+use gpuim::{AnyElement, ParentElement, RenderOnce, StyleRefinement};
 use smallvec::SmallVec;
 
 use super::ListItem;
@@ -41,7 +41,7 @@ impl Selectable for ListSeparatorItem {
 }
 
 impl RenderOnce for ListSeparatorItem {
-  fn render(self, _: &mut gpui::Window, _: &mut gpui::App) -> impl gpui::IntoElement {
+  fn render(self, _: &mut gpuim::Window, _: &mut gpuim::App) -> impl gpuim::IntoElement {
     ListItem::new("separator")
       .separator()
       .refine_style(&self.style)
