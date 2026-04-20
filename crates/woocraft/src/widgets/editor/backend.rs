@@ -273,11 +273,7 @@ impl EditorSnapshot for RopeEditorSnapshot {
     Some(EditorLine {
       row: row as u64,
       byte_range: start..end,
-      text: self
-        .text
-        .slice(start as usize..end as usize)
-        .to_string()
-        .into(),
+      text: SharedString::from(self.text.slice(start as usize..end as usize).to_string()),
       line_number: self.line_number_text(row as u64),
     })
   }
@@ -285,7 +281,7 @@ impl EditorSnapshot for RopeEditorSnapshot {
   fn text_for_range(&self, range: Range<u64>) -> Option<SharedString> {
     let start = (range.start as usize).min(self.text.len());
     let end = (range.end as usize).min(self.text.len());
-    Some(self.text.slice(start..end).to_string().into())
+    Some(SharedString::from(self.text.slice(start..end).to_string()))
   }
 
   fn rope(&self) -> Rope {

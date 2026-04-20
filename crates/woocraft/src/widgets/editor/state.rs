@@ -919,7 +919,7 @@ impl InputState {
         self.text_wrapper.update(
           &self.text,
           &(change.range.start as usize..change.range.end as usize),
-          &Rope::from(change.new_text.as_ref()),
+          change.new_text.as_ref(),
           window,
           cx,
         );
@@ -1131,7 +1131,7 @@ impl InputState {
     let was_disabled = self.disabled;
     self.disabled = false;
     let text: SharedString = text.into();
-    let range = 0..self.text.chars().map(|c| c.len_utf16()).sum();
+    let range = 0..self.text.len_utf16();
     self.replace_text_in_range_silent(Some(range), &text, window, cx);
     self.disabled = was_disabled;
   }
@@ -1353,7 +1353,6 @@ impl InputState {
   pub(super) fn previous_start_of_word(&mut self) -> usize {
     let offset = self.selected_range.start;
     let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
-    // FIXME: Avoid to_string
     let left_part = self.text.slice(0..offset).to_string();
 
     UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
@@ -2380,18 +2379,20 @@ impl EntityInputHandler for InputState {
     let mut new_offset = (range.start + new_text.len()).min(self.text.len());
 
     if !self.mode.is_code_editor() {
-      let pending_text = self.text.to_string();
-      // Check if the new text is valid
-      if !self.is_valid_input(&pending_text, cx) {
-        self.text = old_text;
-        return;
-      }
+      let needs_validation =
+        self.validate.is_some() || !self.mask_pattern.is_none() || self.pattern.is_some();
+      if needs_validation {
+        let pending_text = self.text.to_string();
+        if !self.is_valid_input(&pending_text, cx) {
+          self.text = old_text;
+          return;
+        }
 
-      if !self.mask_pattern.is_none() {
-        let mask_text = self.mask_pattern.mask(&pending_text);
-        self.text = Rope::from(mask_text.as_str());
-        let new_text_len = (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
-        new_offset = (range.start + new_text_len).min(mask_text.len());
+        if !self.mask_pattern.is_none() {
+          let mask_text = self.mask_pattern.mask(&pending_text);
+          self.text = Rope::from(mask_text.as_str());
+          new_offset = (range.start + new_text.len()).min(self.text.len());
+        }
       }
     }
 
@@ -2403,7 +2404,7 @@ impl EntityInputHandler for InputState {
     if !self.mode.is_code_editor() {
       self
         .text_wrapper
-        .update(&self.text, &range, &Rope::from(new_text), window, cx);
+        .update(&self.text, &range, new_text, window, cx);
     }
     self.lsp.update(&self.text, window, cx);
     self.selected_range = (new_offset..new_offset).into();
@@ -2493,10 +2494,14 @@ impl EntityInputHandler for InputState {
     self.text.replace(range.clone(), new_text);
 
     if !self.mode.is_code_editor() {
-      let pending_text = self.text.to_string();
-      if !self.is_valid_input(&pending_text, cx) {
-        self.text = old_text;
-        return;
+      let needs_validation =
+        self.validate.is_some() || !self.mask_pattern.is_none() || self.pattern.is_some();
+      if needs_validation {
+        let pending_text = self.text.to_string();
+        if !self.is_valid_input(&pending_text, cx) {
+          self.text = old_text;
+          return;
+        }
       }
     }
 
@@ -2506,7 +2511,7 @@ impl EntityInputHandler for InputState {
     if !self.mode.is_code_editor() {
       self
         .text_wrapper
-        .update(&self.text, &range, &Rope::from(new_text), window, cx);
+        .update(&self.text, &range, new_text, window, cx);
     }
     self.lsp.update(&self.text, window, cx);
     if new_text.is_empty() {

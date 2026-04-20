@@ -379,7 +379,8 @@ impl MaskPattern {
           }
 
           if result.contains('.') {
-            result = result.trim_end_matches('0').to_string();
+            let trimmed_len = result.trim_end_matches('0').len();
+            result.truncate(trimmed_len);
           }
           return result;
         }

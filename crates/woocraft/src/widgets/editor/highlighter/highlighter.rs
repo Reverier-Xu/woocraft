@@ -683,65 +683,67 @@ pub(crate) fn unique_styles(
     return styles;
   }
 
-  let mut intervals = BTreeSet::new();
-  let mut significant_intervals = BTreeSet::new();
-
-  // For example
-  //
-  // from: [(6..11), (6..11), (11..17), (17..25), (16..19), (25..59))]
-  // to:   [6, 11, 16, 17, 19, 25, 59]
-  intervals.insert(total_range.start);
-  intervals.insert(total_range.end);
-  for (range, _) in &styles {
-    intervals.insert(range.start);
-    intervals.insert(range.end);
-    significant_intervals.insert(range.end); // End points are significant for merging decisions
-  }
-
-  let intervals: Vec<usize> = intervals.into_iter().collect();
-  let mut result = Vec::with_capacity(intervals.len().saturating_sub(1));
-
-  // For each interval between boundaries, find the top-most style
-  //
-  // Result e.g.:
-  //
-  // [(6..11, red), (11..16, green), (16..17, blue), (17..19, red), (19..25,
-  // clean), (25..59, blue)]
-  for i in 0..intervals.len().saturating_sub(1) {
-    let interval = intervals[i]..intervals[i + 1];
-    if interval.start >= interval.end {
-      continue;
+  let mut events: Vec<(usize, bool, usize)> = Vec::with_capacity(styles.len() * 2);
+  for (idx, (range, _)) in styles.iter().enumerate() {
+    if range.start < range.end {
+      events.push((range.start, true, idx));
+      events.push((range.end, false, idx));
     }
+  }
+  events.sort_by_key(|(pos, is_start, _)| (*pos, !*is_start));
 
-    // Find the last (top-most) style that covers this interval
-    let mut top_style: Option<HighlightStyle> = None;
-    for (range, style) in &styles {
-      if range.start <= interval.start && interval.end <= range.end {
-        if let Some(top_style) = &mut top_style {
-          merge_highlight_style(top_style, style);
+  let significant_endpoints: BTreeSet<usize> = styles.iter().map(|(r, _)| r.end).collect();
+
+  let mut result: Vec<(Range<usize>, HighlightStyle)> = Vec::new();
+  let mut active: Vec<(usize, HighlightStyle)> = Vec::new();
+  let mut prev_pos = total_range.start;
+  let mut event_idx = 0;
+
+  while event_idx < events.len() {
+    let current_pos = events[event_idx].0;
+    let clamped_prev = prev_pos.max(total_range.start);
+    let clamped_curr = current_pos.min(total_range.end);
+
+    if clamped_prev < clamped_curr {
+      let interval = clamped_prev..clamped_curr;
+      let mut top_style: Option<HighlightStyle> = None;
+      for (_, style) in &active {
+        if let Some(ref mut ts) = top_style {
+          merge_highlight_style(ts, style);
         } else {
           top_style = Some(*style);
         }
       }
+      result.push((interval, top_style.unwrap_or_default()));
     }
 
-    if let Some(style) = top_style {
-      result.push((interval, style));
-    } else {
-      result.push((interval, HighlightStyle::default()));
+    let pos = current_pos;
+    while event_idx < events.len() && events[event_idx].0 == pos {
+      let (_, is_start, style_idx) = events[event_idx];
+      if is_start {
+        active.push((style_idx, styles[style_idx].1));
+      } else {
+        active.retain(|(idx, _)| *idx != style_idx);
+      }
+      event_idx += 1;
+    }
+    prev_pos = pos;
+  }
+
+  if prev_pos < total_range.end {
+    let clamped_prev = prev_pos.max(total_range.start);
+    if clamped_prev < total_range.end {
+      result.push((clamped_prev..total_range.end, HighlightStyle::default()));
     }
   }
 
-  // Merge adjacent ranges with the same style, but not across significant
-  // boundaries
   let mut merged: Vec<(Range<usize>, HighlightStyle)> = Vec::with_capacity(result.len());
   for (range, style) in result {
     if let Some((last_range, last_style)) = merged.last_mut()
       && last_range.end == range.start
       && *last_style == style
-      && !significant_intervals.contains(&range.start)
+      && !significant_endpoints.contains(&range.start)
     {
-      // Merge adjacent ranges with same style, but not across significant boundaries
       last_range.end = range.end;
       continue;
     }

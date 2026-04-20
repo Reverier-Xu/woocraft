@@ -454,15 +454,13 @@ impl ViewportElement {
           })
       } else {
         let line = display_text.slice_line(row).to_string();
+        let line_shared: SharedString = SharedString::from(line.clone());
         let full_line_runs = runs_for_range(runs, visible_offset, &(0..line.len()));
         let wrapped = break_all_ranges(
           &line,
-          &window.text_system().shape_line(
-            line.to_string().into(),
-            font_size,
-            &full_line_runs,
-            None,
-          ),
+          &window
+            .text_system()
+            .shape_line(line_shared, font_size, &full_line_runs, None),
           wrap_width,
         );
 

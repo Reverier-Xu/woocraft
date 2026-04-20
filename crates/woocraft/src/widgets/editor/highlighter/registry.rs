@@ -1,7 +1,7 @@
 use std::{
   collections::HashMap,
   ops::Deref,
-  sync::{Arc, LazyLock, Mutex},
+  sync::{Arc, LazyLock, RwLock},
 };
 
 use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
@@ -583,7 +583,7 @@ impl HighlightTheme {
 
 /// Registry for code highlighter languages.
 pub struct LanguageRegistry {
-  languages: Mutex<HashMap<SharedString, LanguageConfig>>,
+  languages: RwLock<HashMap<SharedString, LanguageConfig>>,
 }
 
 impl LanguageRegistry {
@@ -591,7 +591,7 @@ impl LanguageRegistry {
   /// languages and themes.
   pub fn singleton() -> &'static LazyLock<LanguageRegistry> {
     static INSTANCE: LazyLock<LanguageRegistry> = LazyLock::new(|| LanguageRegistry {
-      languages: Mutex::new(
+      languages: RwLock::new(
         languages::Language::all()
           .map(|language| {
             (
@@ -609,14 +609,14 @@ impl LanguageRegistry {
   pub fn register(&self, lang: &str, config: &LanguageConfig) {
     self
       .languages
-      .lock()
+      .write()
       .unwrap()
       .insert(lang.to_string().into(), config.clone());
   }
 
   /// Returns a list of all registered language names.
   pub fn languages(&self) -> Vec<SharedString> {
-    self.languages.lock().unwrap().keys().cloned().collect()
+    self.languages.read().unwrap().keys().cloned().collect()
   }
 
   /// Returns the language configuration for the given language name.
@@ -624,7 +624,7 @@ impl LanguageRegistry {
     // Try to get by name first, there may have a custom language registered
     // Then try to get built-in language to support short language names, e.g. "js"
     // for "javascript"
-    let languages = self.languages.lock().unwrap();
+    let languages = self.languages.read().unwrap();
     languages
       .get(name)
       .or_else(|| languages.get(Language::from_name(name).name()))

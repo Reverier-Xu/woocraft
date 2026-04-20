@@ -156,7 +156,9 @@ impl TreeItem {
 
     for child in &self.children {
       if let Some(mut path) = child.find_ancestors(target_id) {
-        path.push(self.clone());
+        let mut ancestor = self.clone();
+        ancestor.children = Vec::new();
+        path.push(ancestor);
         return Some(path);
       }
     }
@@ -252,15 +254,23 @@ impl TreeModel {
     }
     self.rebuild_entries();
 
+    // Build an ID→index map for O(1) lookups
+    let id_to_ix: std::collections::HashMap<SharedString, usize> = self
+      .entries
+      .iter()
+      .enumerate()
+      .map(|(ix, e)| (e.item.id.clone(), ix))
+      .collect();
+
     // Restore selection by ID.
     self.selected_ix = selected_id
       .as_ref()
-      .and_then(|id| self.entries.iter().position(|e| e.item.id == *id));
+      .and_then(|id| id_to_ix.get(id).copied());
 
     self.selected_indices.clear();
     if self.multi_selectable {
       for id in &multi_selected_ids {
-        if let Some(ix) = self.entries.iter().position(|e| e.item.id == *id) {
+        if let Some(&ix) = id_to_ix.get(id) {
           self.selected_indices.insert(ix);
         }
       }
@@ -301,7 +311,13 @@ impl TreeModel {
     self.selected_ix = self.entries.iter().position(|entry| entry.item.id == id);
     if self.selected_ix.is_none() {
       self.expand_ancestors(id.clone());
-      self.selected_ix = self.entries.iter().position(|entry| entry.item.id == id);
+      let id_to_ix: std::collections::HashMap<SharedString, usize> = self
+        .entries
+        .iter()
+        .enumerate()
+        .map(|(ix, e)| (e.item.id.clone(), ix))
+        .collect();
+      self.selected_ix = id_to_ix.get(&id).copied();
     }
   }
 
