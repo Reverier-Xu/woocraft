@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use gpuim::{
-  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
-  Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, div, px,
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
+  Styled, Subscription, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
   ActiveTheme, Button, ButtonVariants as _, ContextMenuExt as _, IconName, ListItem, PopupMenuItem,

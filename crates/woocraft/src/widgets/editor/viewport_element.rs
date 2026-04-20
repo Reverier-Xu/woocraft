@@ -4,8 +4,7 @@ use gpuim::{
   App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, GlobalElementId,
   HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, MouseUpEvent, Path,
   Pixels, ShapedLine, SharedString, Style, TextAlign, TextRun, UnderlineStyle, Window, fill, point,
-  px,
-  relative, size,
+  px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;

@@ -318,30 +318,28 @@ impl NotificationState {
           .await;
 
         let keep_running = if let Some(state) = state.upgrade() {
-          state
-            .update(cx, |state, cx| {
-              let Some(item) = state.items.iter_mut().find(|item| item.id == id) else {
-                return false;
-              };
+          state.update(cx, |state, cx| {
+            let Some(item) = state.items.iter_mut().find(|item| item.id == id) else {
+              return false;
+            };
 
-              if !item.autohide || item.timer_epoch != epoch {
-                return false;
-              }
+            if !item.autohide || item.timer_epoch != epoch {
+              return false;
+            }
 
-              let Some(started_at) = item.started_at else {
-                return false;
-              };
+            let Some(started_at) = item.started_at else {
+              return false;
+            };
 
-              if started_at.elapsed() >= duration {
-                state.close(id);
-                cx.notify();
-                return false;
-              }
-
+            if started_at.elapsed() >= duration {
+              state.close(id);
               cx.notify();
-              true
-            })
+              return false;
+            }
 
+            cx.notify();
+            true
+          })
         } else {
           false
         };

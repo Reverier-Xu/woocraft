@@ -1438,8 +1438,8 @@ impl EntityInputHandler for InputState {
   }
 
   fn bounds_for_range(
-    &mut self, range_utf16: Range<usize>, bounds: gpuim::Bounds<gpuim::Pixels>, window: &mut Window,
-    _cx: &mut Context<Self>,
+    &mut self, range_utf16: Range<usize>, bounds: gpuim::Bounds<gpuim::Pixels>,
+    window: &mut Window, _cx: &mut Context<Self>,
   ) -> Option<gpuim::Bounds<gpuim::Pixels>> {
     if bounds.size.width <= px(0.) {
       return Some(bounds);

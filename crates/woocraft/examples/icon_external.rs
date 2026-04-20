@@ -1,6 +1,6 @@
 use gpuim::{
-  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
-  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
+  Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use rust_embed::RustEmbed;
 use woocraft::{

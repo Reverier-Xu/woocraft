@@ -292,9 +292,9 @@ impl Sizable for Icon {
 }
 
 impl RenderOnce for Icon {
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
     #[cfg(debug_assertions)]
-    debug_validate_icon_path(&self.path, cx);
+    debug_validate_icon_path(&self.path, _cx);
 
     let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
     let text_size = window.text_style().font_size.to_pixels(window.rem_size());
@@ -331,9 +331,9 @@ impl From<Icon> for AnyElement {
 }
 
 impl Render for Icon {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
     #[cfg(debug_assertions)]
-    debug_validate_icon_path(&self.path, cx);
+    debug_validate_icon_path(&self.path, _cx);
 
     let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
     let text_size = window.text_style().font_size.to_pixels(window.rem_size());

@@ -1,6 +1,6 @@
 use gpuim::{
-  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
-  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
+  Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
   ActiveTheme, AreaChart, LineChart, Selectable, StyledExt, Theme, ThemeMode, h_flex, init, v_flex,

@@ -52,7 +52,10 @@ impl ScrollbarHandle for ScrollHandle {
   }
 
   fn content_size(&self) -> Size<Pixels> {
-    size(self.max_offset().x + self.bounds().size.width, self.max_offset().y + self.bounds().size.height)
+    size(
+      self.max_offset().x + self.bounds().size.width,
+      self.max_offset().y + self.bounds().size.height,
+    )
   }
 }
 
@@ -67,7 +70,10 @@ impl ScrollbarHandle for UniformListScrollHandle {
 
   fn content_size(&self) -> Size<Pixels> {
     let base = &self.0.borrow().base_handle;
-    size(base.max_offset().x + base.bounds().size.width, base.max_offset().y + base.bounds().size.height)
+    size(
+      base.max_offset().x + base.bounds().size.width,
+      base.max_offset().y + base.bounds().size.height,
+    )
   }
 }
 

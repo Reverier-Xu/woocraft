@@ -1,9 +1,8 @@
 use std::cmp::Ordering;
 
 use gpuim::{
-  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render,
-  Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions, div,
-  prelude::FluentBuilder as _, px,
+  App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
+  Styled, Subscription, Window, WindowBounds, WindowOptions, div, prelude::FluentBuilder as _, px,
 };
 use woocraft::{
   ActiveTheme, Button, ButtonVariants as _, Column, ColumnFixed, ColumnSort, Input, InputState,

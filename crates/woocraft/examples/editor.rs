@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use gpuim::{
-  App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, IntoElement,
-  ParentElement, Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds,
-  WindowOptions, div, px,
+  App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+  Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
   ActiveTheme, Button, ButtonVariants as _, CodeEditor, DockArea, DockPlacement, EditorState,

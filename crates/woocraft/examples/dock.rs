@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use gpuim::{
-  App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable,
-  InteractiveElement as _, IntoElement, Menu, MenuItem, ParentElement, Render, SharedString,
-  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, actions, div, px,
+  App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+  IntoElement, Menu, MenuItem, ParentElement, Render, SharedString, Size as GpuiSize, Styled,
+  Window, WindowBounds, WindowOptions, actions, div, px,
 };
 use woocraft::{
   ActiveTheme, AppMenuBar, DockArea, DockPlacement, IconName, Panel, PanelEvent, PopupMenuItem,

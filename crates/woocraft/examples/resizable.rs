@@ -1,6 +1,6 @@
 use gpuim::{
-  AnyElement, App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement,
-  Pixels, Render, Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
+  AnyElement, App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Pixels, Render,
+  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
   ActiveTheme, Selectable, StyledExt, Theme, ThemeMode, h_flex, h_resizable, init, resizable_panel,

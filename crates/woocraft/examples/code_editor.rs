@@ -1,10 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 
 use gpuim::{
-  App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable,
-  InteractiveElement as _, IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render,
-  SharedString, Size as GpuiSize, Styled, Subscription, Window, WindowBounds, WindowOptions,
-  actions, div, px,
+  App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+  IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, SharedString, Size as GpuiSize,
+  Styled, Subscription, Window, WindowBounds, WindowOptions, actions, div, px,
 };
 use woocraft::{
   ActiveTheme, AppMenuBar, CodeEditor, DockArea, DockPlacement, EditorEvent, EditorState, IconName,
