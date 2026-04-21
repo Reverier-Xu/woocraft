@@ -95,6 +95,7 @@ pub struct DockArea {
   subscribed_panel_ids: HashSet<EntityId>,
   subscribed_tile_drop_ids: HashSet<EntityId>,
   split_preview: Option<SplitPreview>,
+  pending_layout_change: bool,
 }
 
 /// DockItem is a tree structure that represents the layout of the dock.
@@ -607,6 +608,7 @@ impl DockArea {
       subscribed_panel_ids: HashSet::new(),
       subscribed_tile_drop_ids: HashSet::new(),
       split_preview: None,
+      pending_layout_change: false,
     };
 
     this.subscribe_panel(&stack_panel, window, cx);
@@ -1092,13 +1094,24 @@ impl DockArea {
         self._subscriptions.push(
           cx.subscribe_in(view, window, move |_, _, event, window, cx| {
             if let PanelEvent::LayoutChanged = event {
-              cx.spawn_in(window, async move |view, window| {
-                _ = view.update_in(window, |view, window, cx| {
-                  view.update_toggle_button_tab_panels(window, cx)
-                });
-              })
-              .detach();
-              cx.emit(DockEvent::LayoutChanged);
+              let dock_entity = cx.entity().clone();
+              let mut should_emit = false;
+              dock_entity.update(cx, |dock, _cx| {
+                if !dock.pending_layout_change {
+                  dock.pending_layout_change = true;
+                  should_emit = true;
+                }
+              });
+              if should_emit {
+                cx.spawn_in(window, async move |view, window| {
+                  _ = view.update_in(window, |view, window, cx| {
+                    view.pending_layout_change = false;
+                    view.update_toggle_button_tab_panels(window, cx);
+                  });
+                })
+                .detach();
+                cx.emit(DockEvent::LayoutChanged);
+              }
             }
           }),
         );
@@ -1146,13 +1159,25 @@ impl DockArea {
           })
           .detach(),
         PanelEvent::LayoutChanged => {
-          cx.spawn_in(window, async move |view, window| {
-            _ = view.update_in(window, |view, window, cx| {
-              view.update_toggle_button_tab_panels(window, cx)
-            });
-          })
-          .detach();
-          cx.emit(DockEvent::LayoutChanged);
+          let dock_entity = cx.entity().clone();
+          let mut should_emit = false;
+          dock_entity.update(cx, |dock, _cx| {
+            if !dock.pending_layout_change {
+              dock.pending_layout_change = true;
+              should_emit = true;
+            }
+          });
+          if should_emit {
+            cx
+              .spawn_in(window, async move |view, window| {
+                _ = view.update_in(window, |view, window, cx| {
+                  view.pending_layout_change = false;
+                  view.update_toggle_button_tab_panels(window, cx);
+                });
+              })
+              .detach();
+            cx.emit(DockEvent::LayoutChanged);
+          }
         }
       },
     );

@@ -93,6 +93,8 @@ pub struct TabPanel {
   zoomed: bool,
   /// When drag move, will get the placement of the panel to be split
   will_split_placement: Option<Placement>,
+  /// Computed drop index from on_drag_move on the tab bar container
+  pending_drop_index: Option<usize>,
   /// Is TabPanel used in Tiles.
   in_tiles: bool,
 }
@@ -194,6 +196,7 @@ impl TabPanel {
       active_ix: 0,
       tab_bar_scroll_handle: ScrollHandle::new(),
       will_split_placement: None,
+      pending_drop_index: None,
       zoomed: false,
       closable: true,
       in_tiles: false,
@@ -907,10 +910,10 @@ impl TabPanel {
 
     let panel_style = dock_area.read(cx).panel_style;
     let tab_bar_direction = self.get_tab_bar_direction(cx);
-    let visible_panels = self.visible_panels(cx).collect::<Vec<_>>();
+    let visible_panel_count = self.visible_panels(cx).count();
 
     let show_single_title = tab_bar_direction.is_vertical()
-      || (visible_panels.len() <= 1 && panel_style == PanelStyle::default());
+      || (visible_panel_count <= 1 && panel_style == PanelStyle::default());
 
     let show_bottom_divider = !is_bottom_dock_collapsed || tab_bar_direction.is_bottom();
 
@@ -1049,123 +1052,102 @@ impl TabPanel {
         .into_any_element();
     }
 
-    let tabs_count = self.panels.len();
-    let tab_bar = TabBar::new("tab-bar")
-      .track_scroll(&self.tab_bar_scroll_handle)
-      .when_some(bottom_dock_button, |this, btn| {
-        this.prefix(h_flex().items_center().top_0().right_0().child(btn))
+    let tab_bar = div()
+      .when(state.droppable, |this| {
+        this
+          .on_drag_move(cx.listener(Self::on_tab_bar_drag_move))
+          .drag_over::<DragPanel>({
+            let view = view.clone();
+            move |this, _, _, cx| {
+              view.update(cx, |view, cx| view.clear_split_preview(cx));
+              this.bg(cx.theme().drop_target)
+            }
+          })
+          .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+            this.clear_split_preview(cx);
+            let ix = this.pending_drop_index.take();
+            this.on_drop(drag, ix, false, window, cx)
+          }))
       })
-      .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
-        let mut active = state.active_panel.as_ref() == Some(panel);
-        let is_collapsed = self.is_dock_collapsed(cx);
+      .child(
+        TabBar::new("tab-bar")
+          .track_scroll(&self.tab_bar_scroll_handle)
+          .when_some(bottom_dock_button, |this, btn| {
+            this.prefix(h_flex().items_center().top_0().right_0().child(btn))
+          })
+          .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
+            let mut active = state.active_panel.as_ref() == Some(panel);
+            let is_collapsed = self.is_dock_collapsed(cx);
 
-        if !panel.visible(cx) {
-          return None;
-        }
+            if !panel.visible(cx) {
+              return None;
+            }
 
-        // Always not show active tab style, if the panel is collapsed
-        if is_collapsed {
-          active = false;
-        }
+            // Always not show active tab style, if the panel is collapsed
+            if is_collapsed {
+              active = false;
+            }
 
-        Some(
-          Tab::new()
-            .ix(ix)
-            .map(|this| {
-              if let Some(tab_name) = panel.tab_name(cx) {
-                this.icon(panel.icon(cx)).label(tab_name)
-              } else {
-                this.icon(panel.icon(cx)).label(panel.title(cx))
-              }
-            })
-            .selected(active)
-            .when(panel.closable(cx), |this| {
-              let panel = panel.clone();
-              this.closable(true).on_close(cx.listener({
-                move |this, _, window, cx| {
-                  this.remove_panel(panel.clone(), window, cx);
-                }
-              }))
-            })
-            .on_click(cx.listener({
-              move |view, _, window, cx| {
-                view.handle_tab_click(ix, window, cx);
-              }
-            }))
-            .when(state.draggable, |this| {
-              this.on_drag(
-                DragPanel::new(panel.clone(), view.clone()),
-                |drag, _, _, cx| {
-                  cx.stop_propagation();
-                  cx.new(|_| drag.clone())
-                },
-              )
-            })
-            .when(state.droppable, |this| {
-              this
-                .drag_over::<DragPanel>({
-                  let view = view.clone();
-                  move |this, _, _, cx| {
-                    view.update(cx, |view, cx| view.clear_split_preview(cx));
-                    this
-                      .rounded_l_none()
-                      .border_l_2()
-                      .border_r_0()
-                      .border_color(cx.theme().drag_border)
+            Some(
+              Tab::new()
+                .ix(ix)
+                .map(|this| {
+                  if let Some(tab_name) = panel.tab_name(cx) {
+                    this.icon(panel.icon(cx)).label(tab_name)
+                  } else {
+                    this.icon(panel.icon(cx)).label(panel.title(cx))
                   }
                 })
-                .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                  this.clear_split_preview(cx);
-                  this.on_drop(drag, Some(ix), true, window, cx)
+                .selected(active)
+                .when(panel.closable(cx), |this| {
+                  let panel = panel.clone();
+                  this.closable(true).on_close(cx.listener({
+                    move |this, _, window, cx| {
+                      this.remove_panel(panel.clone(), window, cx);
+                    }
+                  }))
+                })
+                .on_click(cx.listener({
+                  move |view, _, window, cx| {
+                    view.handle_tab_click(ix, window, cx);
+                  }
                 }))
-            }),
-        )
-      }))
-      .last_empty_space(
-        // empty space to allow move to last tab right
-        div()
-          .id("tab-bar-empty-space")
-          .h_full()
-          .flex_grow()
-          .min_w_16()
-          .when(state.droppable, |this| {
-            this
-              .drag_over::<DragPanel>({
-                let view = view.clone();
-                move |this, _, _, cx| {
-                  view.update(cx, |view, cx| view.clear_split_preview(cx));
-                  this.bg(cx.theme().drop_target)
-                }
-              })
-              .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                this.clear_split_preview(cx);
-
-                let ix = if drag.tab_panel == view {
-                  Some(tabs_count - 1)
-                } else {
-                  None
-                };
-
-                this.on_drop(drag, ix, false, window, cx)
-              }))
-          }),
-      )
-      .when(!self.is_dock_collapsed(cx), |this| {
-        this.suffix(
-          h_flex()
-            .flex_none()
-            .flex_shrink_0()
-            .items_center()
-            .top_0()
-            .right_0()
-            .children(
-              self
-                .active_panel(cx)
-                .and_then(|panel| panel.title_suffix(window, cx)),
+                .when(state.draggable, |this| {
+                  this.on_drag(
+                    DragPanel::new(panel.clone(), view.clone()),
+                    |drag, _, _, cx| {
+                      cx.stop_propagation();
+                      cx.new(|_| drag.clone())
+                    },
+                  )
+                }),
             )
-            .child(self.render_toolbar(state, window, cx)),
-        )
-      });
+          }))
+          .last_empty_space(
+            // empty space to allow move to last tab right
+            div()
+              .id("tab-bar-empty-space")
+              .h_full()
+              .flex_grow()
+              .min_w_16(),
+          )
+          .when(!self.is_dock_collapsed(cx), |this| {
+            this.suffix(
+              h_flex()
+                .flex_none()
+                .flex_shrink_0()
+                .items_center()
+                .top_0()
+                .right_0()
+                .children(
+                  self
+                    .active_panel(cx)
+                    .and_then(|panel| panel.title_suffix(window, cx)),
+                )
+                .child(self.render_toolbar(state, window, cx)),
+            )
+          }),
+      );
 
     v_flex()
       .w_full()
@@ -1185,14 +1167,6 @@ impl TabPanel {
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
     let view = cx.entity().clone();
-    let tabs_count = self.panels.len();
-    let fallback_drop_ix = if tabs_count > 0 {
-      Some(tabs_count.saturating_sub(1))
-    } else {
-      None
-    };
-    let view_for_tab_drops = view.clone();
-    let view_for_bar_drop = view.clone();
 
     let collapse_button = self.render_dock_collapse_button(window, cx);
 
@@ -1230,20 +1204,6 @@ impl TabPanel {
                   cx.new(|_| drag.clone())
                 },
               )
-            })
-            .when(state.droppable, |this| {
-              this
-                .drag_over::<DragPanel>({
-                  let view = view.clone();
-                  move |this, _, _, cx| {
-                    view.update(cx, |view, cx| view.clear_split_preview(cx));
-                    this.bg(cx.theme().drop_target)
-                  }
-                })
-                .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                  this.clear_split_preview(cx);
-                  this.on_drop(drag, Some(ix), true, window, cx);
-                }))
             }),
         )
       }))
@@ -1252,28 +1212,7 @@ impl TabPanel {
           .id("vertical-tab-bar-empty-space")
           .w_full()
           .flex_grow()
-          .min_h_16()
-          .when(state.droppable, |this| {
-            this
-              .drag_over::<DragPanel>({
-                let view = view.clone();
-                move |this, _, _, cx| {
-                  view.update(cx, |view, cx| view.clear_split_preview(cx));
-                  this.bg(cx.theme().drop_target)
-                }
-              })
-              .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-                this.clear_split_preview(cx);
-
-                let ix = if drag.tab_panel == view_for_tab_drops {
-                  Some(tabs_count.saturating_sub(1))
-                } else {
-                  None
-                };
-
-                this.on_drop(drag, ix, false, window, cx);
-              }))
-          }),
+          .min_h_16(),
       );
 
     let tab_bar = div()
@@ -1281,6 +1220,7 @@ impl TabPanel {
       .child(tab_bar)
       .when(state.droppable, |this| {
         this
+          .on_drag_move(cx.listener(Self::on_vertical_tab_bar_drag_move))
           .drag_over::<DragPanel>({
             let view = view.clone();
             move |this, _, _, cx| {
@@ -1290,13 +1230,7 @@ impl TabPanel {
           })
           .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
             this.clear_split_preview(cx);
-
-            let ix = if drag.tab_panel == view_for_bar_drop {
-              fallback_drop_ix
-            } else {
-              None
-            };
-
+            let ix = this.pending_drop_index.take();
             this.on_drop(drag, ix, false, window, cx);
           }))
       })
@@ -1443,6 +1377,48 @@ impl TabPanel {
     };
 
     self.update_split_preview(bounds, new_placement, cx);
+  }
+
+  fn on_tab_bar_drag_move(
+    &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.clear_split_preview(cx);
+    let bounds = drag.bounds;
+    let position = drag.event.position;
+    let relative_x = position.x - bounds.left();
+
+    let visible_tabs = self.visible_panels(cx).count();
+    if visible_tabs == 0 {
+      self.pending_drop_index = Some(0);
+      cx.notify();
+      return;
+    }
+
+    let slot_width = bounds.size.width / (visible_tabs + 1) as f32;
+    let ix = ((relative_x / slot_width) as usize).min(visible_tabs);
+    self.pending_drop_index = Some(ix);
+    cx.notify();
+  }
+
+  fn on_vertical_tab_bar_drag_move(
+    &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
+  ) {
+    self.clear_split_preview(cx);
+    let bounds = drag.bounds;
+    let position = drag.event.position;
+    let relative_y = position.y - bounds.top();
+
+    let visible_tabs = self.visible_panels(cx).count();
+    if visible_tabs == 0 {
+      self.pending_drop_index = Some(0);
+      cx.notify();
+      return;
+    }
+
+    let slot_height = bounds.size.height / (visible_tabs + 1) as f32;
+    let ix = ((relative_y / slot_height) as usize).min(visible_tabs);
+    self.pending_drop_index = Some(ix);
+    cx.notify();
   }
 
   /// Handle the drop event when dragging a panel
