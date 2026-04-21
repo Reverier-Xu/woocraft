@@ -1467,7 +1467,7 @@ mod tests {
   async fn test_pending_layout_change_prevents_reentrant_update(cx: &mut TestAppContext) {
     cx.skip_drawing();
     cx.set_global(Theme::default());
-    cx.update(|cx| PanelRegistry::init(cx));
+    cx.update(PanelRegistry::init);
 
     let panel = cx.new(|cx| TestPanel {
       focus_handle: cx.focus_handle(),
