@@ -368,6 +368,8 @@ impl SliderState {
       SliderValue::Range(..) => value,
     };
 
+    let old_value = self.value;
+
     if is_start {
       self.value.set_start(value);
     } else {
@@ -375,8 +377,10 @@ impl SliderState {
     }
     self.value = self.snap_and_clamp(self.value);
     self.sync_percentage();
-    cx.emit(SliderEvent::Change(self.value));
-    cx.notify();
+    if self.value != old_value {
+      cx.emit(SliderEvent::Change(self.value));
+      cx.notify();
+    }
   }
 }
 
@@ -527,7 +531,7 @@ impl RenderOnce for Slider {
                       let state = self.state.clone();
                       move |e: &DragMoveEvent<DragThumb>, _, cx| {
                         let DragThumb((id, is_start)) = e.drag(cx).clone();
-                        if id != entity_id {
+                        if id != entity_id || !is_start {
                           return;
                         }
 
@@ -575,7 +579,7 @@ impl RenderOnce for Slider {
                     let state = self.state.clone();
                     move |e: &DragMoveEvent<DragThumb>, _, cx| {
                       let DragThumb((id, is_start)) = e.drag(cx).clone();
-                      if id != entity_id {
+                      if id != entity_id || is_start {
                         return;
                       }
 

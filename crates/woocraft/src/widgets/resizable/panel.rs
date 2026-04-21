@@ -380,7 +380,6 @@ impl Element for ResizePanelGroupElement {
               state.resize_panel(ix, e.position.y - panel.bounds.top(), window, cx);
             }
           }
-          cx.notify();
         })
       }
     });

@@ -471,16 +471,15 @@ impl Element for DockElement {
   fn paint(
     &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
     _: gpuim::Bounds<Pixels>, _: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState,
-    window: &mut gpuim::Window, cx: &mut App,
+    window: &mut gpuim::Window, _cx: &mut App,
   ) {
     window.on_mouse_event({
       let view = self.view.clone();
-      let resizing = view.read(cx).resizing;
       move |e: &MouseMoveEvent, phase, window, cx| {
-        if !resizing {
+        if !phase.bubble() {
           return;
         }
-        if !phase.bubble() {
+        if !view.read(cx).resizing {
           return;
         }
 
@@ -492,9 +491,13 @@ impl Element for DockElement {
     window.on_mouse_event({
       let view = self.view.clone();
       move |_: &MouseUpEvent, phase, window, cx| {
-        if phase.bubble() {
-          view.update(cx, |view, cx| view.done_resizing(window, cx));
+        if !phase.bubble() {
+          return;
         }
+        if !view.read(cx).resizing {
+          return;
+        }
+        view.update(cx, |view, cx| view.done_resizing(window, cx));
       }
     })
   }

@@ -491,9 +491,8 @@ impl Tiles {
           version: 0,
         });
       }
+      cx.notify();
     }
-
-    cx.notify();
   }
 
   pub fn add_item(
