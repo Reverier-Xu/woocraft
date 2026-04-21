@@ -11,7 +11,7 @@ publish      = true
 readme       = "README.md"
 repository   = "https://github.com/Reverier-Xu/woocraft"
 rust-version = "1.95"
-version      = "0.5.4"
+version      = "0.5.5"
 
 [profile.release]
 codegen-units = 1
@@ -25,9 +25,9 @@ aho-corasick                  = "1.1"
 anyhow                        = "1.0"
 chrono                        = "0.4"
 enum-iterator                 = "2.1"
-gpuim                         = { git = "https://github.com/Reverier-Xu/gpuim.git", rev = "3b44c02df73f0a7ff11f42fbf1e9a2a969676477" }
-gpuim-macros                  = { git = "https://github.com/Reverier-Xu/gpuim.git", rev = "3b44c02df73f0a7ff11f42fbf1e9a2a969676477" }
-gpuim-platform                = { git = "https://github.com/Reverier-Xu/gpuim.git", rev = "3b44c02df73f0a7ff11f42fbf1e9a2a969676477" }
+gpuim                         = { git = "https://github.com/Reverier-Xu/gpuim.git" }
+gpuim-macros                  = { git = "https://github.com/Reverier-Xu/gpuim.git" }
+gpuim-platform                = { git = "https://github.com/Reverier-Xu/gpuim.git" }
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
 palette                       = "0.7"
@@ -38,7 +38,7 @@ serde_json                    = "1.0"
 serde_repr                    = "0.1"
 smallvec                      = "1.15"
 smol                          = "2.0"
-sum-tree                      = { git = "https://github.com/Reverier-Xu/gpuim.git", rev = "3b44c02df73f0a7ff11f42fbf1e9a2a969676477" }
+sum-tree                      = { git = "https://github.com/Reverier-Xu/gpuim.git" }
 thiserror                     = "2.0"
 toml                          = "1.0"
 tracing                       = "0.1"

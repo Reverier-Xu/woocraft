@@ -530,7 +530,7 @@ dependencies = [
  "bitflags 2.11.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -543,12 +543,27 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
+dependencies = [
+ "bit-vec 0.8.0",
+]
+
+[[package]]
+name = "bit-set"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34ddef2995421ab6a5c779542c81ee77c115206f4ad9d5a8e05f4ff49716a3dd"
 dependencies = [
- "bit-vec",
+ "bit-vec 0.9.1",
 ]
+
+[[package]]
+name = "bit-vec"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bit-vec"
@@ -918,7 +933,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "indexmap",
  "rustc-hash 2.1.2",
@@ -1003,6 +1018,15 @@ name = "convert_case"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
+dependencies = [
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "convert_case"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "affbf0190ed2caf063e3def54ff444b449371d55c58e513a95ab98eca50adb49"
 dependencies = [
  "unicode-segmentation",
 ]
@@ -1275,7 +1299,7 @@ checksum = "ac6b926516df9c60bfa16e107b21086399f8285a44ca9711344b9e553c5146e2"
 [[package]]
 name = "derive-refineable"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1297,7 +1321,7 @@ version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "799a97264921d8623a957f6c3b9011f3b5492f557bbb7a5a19b7fa6d06ba8dcb"
 dependencies = [
- "convert_case",
+ "convert_case 0.10.0",
  "proc-macro2",
  "quote",
  "rustc_version",
@@ -1741,6 +1765,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fnv"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2143,11 +2173,12 @@ dependencies = [
 [[package]]
 name = "gpuim"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "async-channel 2.5.0",
  "async-task",
+ "backtrace",
  "bindgen",
  "bitflags 2.11.1",
  "block",
@@ -2191,6 +2222,7 @@ dependencies = [
  "pollster 0.4.0",
  "postage",
  "profiling",
+ "proptest",
  "rand 0.10.1",
  "raw-window-handle",
  "refineable",
@@ -2224,7 +2256,7 @@ dependencies = [
 [[package]]
 name = "gpuim-linux"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2273,7 +2305,7 @@ dependencies = [
 [[package]]
 name = "gpuim-macos"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "async-task",
@@ -2316,7 +2348,7 @@ dependencies = [
 [[package]]
 name = "gpuim-macros"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2327,7 +2359,7 @@ dependencies = [
 [[package]]
 name = "gpuim-platform"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "console_error_panic_hook",
  "gpuim",
@@ -2340,7 +2372,7 @@ dependencies = [
 [[package]]
 name = "gpuim-shared-string"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "derive_more",
  "gpuim-util",
@@ -2351,7 +2383,7 @@ dependencies = [
 [[package]]
 name = "gpuim-util"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "log",
@@ -2360,7 +2392,7 @@ dependencies = [
 [[package]]
 name = "gpuim-web"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -2384,7 +2416,7 @@ dependencies = [
 [[package]]
 name = "gpuim-wgpu"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2412,7 +2444,7 @@ dependencies = [
 [[package]]
 name = "gpuim-windows"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "collections",
@@ -2581,7 +2613,7 @@ dependencies = [
 [[package]]
 name = "http-client"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2784,7 +2816,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
 dependencies = [
  "byteorder-lite",
- "quick-error",
+ "quick-error 2.0.1",
 ]
 
 [[package]]
@@ -2877,15 +2909,6 @@ name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -3236,7 +3259,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -3320,7 +3343,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa2630921705b9b01dcdd0b6864b9562ca3c1951eecd0f0c4f5f04f61e412647"
 dependencies = [
  "arrayvec",
- "bit-set",
+ "bit-set 0.9.1",
  "bitflags 2.11.1",
  "cfg-if",
  "cfg_aliases",
@@ -3836,7 +3859,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "perf"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "collections",
  "serde",
@@ -4124,6 +4147,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "proptest"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b45fcc2344c680f5025fe57779faef368840d0bd1f42f216291f0dc4ace4744"
+dependencies = [
+ "bit-set 0.8.0",
+ "bit-vec 0.8.0",
+ "bitflags 2.11.1",
+ "num-traits",
+ "proptest-macro",
+ "rand 0.9.4",
+ "rand_chacha 0.9.0",
+ "rand_xorshift",
+ "regex-syntax",
+ "rusty-fork",
+ "tempfile",
+ "unarray",
+]
+
+[[package]]
+name = "proptest-macro"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efaa288b896cb2b345da7b7f2110ab19e51565b83495b56fcec98a62f8b1f33e"
+dependencies = [
+ "convert_case 0.11.0",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "psm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4147,6 +4202,12 @@ checksum = "7f6d64c71eb498fe9eae14ce4ec935c555749aef511cca85b5568910d6e48001"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "quick-error"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-error"
@@ -4270,6 +4331,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
+name = "rand_xorshift"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
+dependencies = [
+ "rand_core 0.9.5",
+]
+
+[[package]]
 name = "range-alloc"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4325,7 +4395,7 @@ dependencies = [
  "avif-serialize",
  "imgref",
  "loop9",
- "quick-error",
+ "quick-error 2.0.1",
  "rav1e",
  "rayon",
  "rgb",
@@ -4432,7 +4502,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "derive-refineable",
 ]
@@ -4650,6 +4720,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
+name = "rusty-fork"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
+dependencies = [
+ "fnv",
+ "quick-error 1.2.3",
+ "tempfile",
+ "wait-timeout",
+]
+
+[[package]]
 name = "rustybuzz"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4685,7 +4767,7 @@ dependencies = [
 [[package]]
 name = "scheduler"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "async-task",
  "backtrace",
@@ -5171,7 +5253,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum-tree"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "heapless",
  "log",
@@ -5440,7 +5522,7 @@ dependencies = [
  "fax",
  "flate2",
  "half",
- "quick-error",
+ "quick-error 2.0.1",
  "weezl",
  "zune-jpeg 0.5.15",
 ]
@@ -6147,6 +6229,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "unarray"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
+
+[[package]]
 name = "unicase"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6278,7 +6366,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "anyhow",
  "async-fs",
@@ -6317,7 +6405,7 @@ dependencies = [
 [[package]]
 name = "util-macros"
 version = "0.1.3"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=3b44c02df73f0a7ff11f42fbf1e9a2a969676477#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
+source = "git+https://github.com/Reverier-Xu/gpuim.git#3b44c02df73f0a7ff11f42fbf1e9a2a969676477"
 dependencies = [
  "perf",
  "quote",
@@ -6407,6 +6495,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb067e4cbd1ff067d1df46c9194b5de0e98efd2810bbc95c5d5e5f25a3231150"
 dependencies = [
  "cc",
+ "libc",
+]
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
  "libc",
 ]
 
@@ -6712,8 +6809,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e80ac6cf1895df6342f87d975162108f9d98772a0d74bc404ab7304ac29469e"
 dependencies = [
  "arrayvec",
- "bit-set",
- "bit-vec",
+ "bit-set 0.9.1",
+ "bit-vec 0.9.1",
  "bitflags 2.11.1",
  "bytemuck",
  "cfg_aliases",
@@ -6774,7 +6871,7 @@ dependencies = [
  "android_system_properties",
  "arrayvec",
  "ash",
- "bit-set",
+ "bit-set 0.9.1",
  "bitflags 2.11.1",
  "block2",
  "bytemuck",

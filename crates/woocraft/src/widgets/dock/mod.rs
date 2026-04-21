@@ -1091,30 +1091,25 @@ impl DockArea {
           self.subscribe_item(item, window, cx);
         }
 
-        self._subscriptions.push(
-          cx.subscribe_in(view, window, move |_, _, event, window, cx| {
-            if let PanelEvent::LayoutChanged = event {
-              let dock_entity = cx.entity().clone();
-              let mut should_emit = false;
-              dock_entity.update(cx, |dock, _cx| {
-                if !dock.pending_layout_change {
-                  dock.pending_layout_change = true;
-                  should_emit = true;
-                }
-              });
-              if should_emit {
-                cx.spawn_in(window, async move |view, window| {
-                  _ = view.update_in(window, |view, window, cx| {
-                    view.pending_layout_change = false;
-                    view.update_toggle_button_tab_panels(window, cx);
-                  });
-                })
-                .detach();
-                cx.emit(DockEvent::LayoutChanged);
-              }
+        self._subscriptions.push(cx.subscribe_in(
+          view,
+          window,
+          move |this, _, event, window, cx| {
+            if let PanelEvent::LayoutChanged = event
+              && !this.pending_layout_change
+            {
+              this.pending_layout_change = true;
+              cx.spawn_in(window, async move |view, window| {
+                _ = view.update_in(window, |view, window, cx| {
+                  view.pending_layout_change = false;
+                  view.update_toggle_button_tab_panels(window, cx);
+                });
+              })
+              .detach();
+              cx.emit(DockEvent::LayoutChanged);
             }
-          }),
-        );
+          },
+        ));
       }
       DockItem::Tabs { .. } => {
         // We subscribe to the tab panel event in StackPanel's insert_panel
@@ -1137,49 +1132,43 @@ impl DockArea {
       return;
     }
 
-    let subscription = cx.subscribe_in(
-      view,
-      window,
-      move |_, panel, event, window, cx| match event {
-        PanelEvent::ZoomIn => {
-          let panel = panel.clone();
-          cx.spawn_in(window, async move |view, window| {
-            _ = view.update_in(window, |view, window, cx| {
-              view.set_zoomed_in(panel, window, cx);
-              cx.notify();
-            });
-          })
-          .detach();
-        }
-        PanelEvent::ZoomOut => cx
-          .spawn_in(window, async move |view, window| {
-            _ = view.update_in(window, |view, window, cx| {
-              view.set_zoomed_out(window, cx);
-            });
-          })
-          .detach(),
-        PanelEvent::LayoutChanged => {
-          let dock_entity = cx.entity().clone();
-          let mut should_emit = false;
-          dock_entity.update(cx, |dock, _cx| {
-            if !dock.pending_layout_change {
-              dock.pending_layout_change = true;
-              should_emit = true;
-            }
-          });
-          if should_emit {
+    let subscription =
+      cx.subscribe_in(
+        view,
+        window,
+        move |this, panel, event, window, cx| match event {
+          PanelEvent::ZoomIn => {
+            let panel = panel.clone();
             cx.spawn_in(window, async move |view, window| {
               _ = view.update_in(window, |view, window, cx| {
-                view.pending_layout_change = false;
-                view.update_toggle_button_tab_panels(window, cx);
+                view.set_zoomed_in(panel, window, cx);
+                cx.notify();
               });
             })
             .detach();
-            cx.emit(DockEvent::LayoutChanged);
           }
-        }
-      },
-    );
+          PanelEvent::ZoomOut => cx
+            .spawn_in(window, async move |view, window| {
+              _ = view.update_in(window, |view, window, cx| {
+                view.set_zoomed_out(window, cx);
+              });
+            })
+            .detach(),
+          PanelEvent::LayoutChanged => {
+            if !this.pending_layout_change {
+              this.pending_layout_change = true;
+              cx.spawn_in(window, async move |view, window| {
+                _ = view.update_in(window, |view, window, cx| {
+                  view.pending_layout_change = false;
+                  view.update_toggle_button_tab_panels(window, cx);
+                });
+              })
+              .detach();
+              cx.emit(DockEvent::LayoutChanged);
+            }
+          }
+        },
+      );
 
     self._subscriptions.push(subscription);
   }
@@ -1440,5 +1429,89 @@ impl Render for DockArea {
           }
         }
       })
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use gpuim::{FocusHandle, Focusable, TestAppContext};
+
+  use super::*;
+  use crate::Theme;
+
+  struct TestPanel {
+    focus_handle: FocusHandle,
+  }
+
+  impl EventEmitter<PanelEvent> for TestPanel {}
+
+  impl Focusable for TestPanel {
+    fn focus_handle(&self, _cx: &App) -> FocusHandle {
+      self.focus_handle.clone()
+    }
+  }
+
+  impl Render for TestPanel {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+      div()
+    }
+  }
+
+  impl Panel for TestPanel {
+    fn panel_name(&self) -> &'static str {
+      "test_panel"
+    }
+  }
+
+  #[gpuim::test]
+  async fn test_pending_layout_change_prevents_reentrant_update(cx: &mut TestAppContext) {
+    cx.skip_drawing();
+    cx.set_global(Theme::default());
+    cx.update(|cx| PanelRegistry::init(cx));
+
+    let panel = cx.new(|cx| TestPanel {
+      focus_handle: cx.focus_handle(),
+    });
+
+    let window = cx
+      .update(|app| {
+        app.open_window(Default::default(), |window, cx| {
+          cx.new(|cx| DockArea::new("test", None, window, cx))
+        })
+      })
+      .unwrap();
+
+    window
+      .update(cx, |this, window, cx| {
+        this.subscribe_panel(&panel, window, cx);
+      })
+      .unwrap();
+
+    let initial = window
+      .read_with(cx, |dock, _| dock.pending_layout_change)
+      .unwrap();
+    assert!(!initial, "pending_layout_change should be false initially");
+
+    panel.update(cx, |_, cx| {
+      cx.emit(PanelEvent::LayoutChanged);
+    });
+
+    let after = window
+      .read_with(cx, |dock, _| dock.pending_layout_change)
+      .unwrap();
+    assert!(
+      after,
+      "pending_layout_change should be true after LayoutChanged event"
+    );
+
+    cx.run_until_parked();
+
+    let after_parked = window
+      .read_with(cx, |dock, _| dock.pending_layout_change)
+      .unwrap();
+    assert!(
+      !after_parked,
+      "pending_layout_change should be reset after spawned task completes"
+    );
   }
 }

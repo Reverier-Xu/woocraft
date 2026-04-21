@@ -87,6 +87,7 @@ rust-i18n  = { workspace = true }
 zstd       = { workspace = true, optional = true }
 
 [dev-dependencies]
+gpuim          = { workspace = true, features = ["test-support"] }
 gpuim-platform = { workspace = true }
 
 [features]
