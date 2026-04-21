@@ -469,16 +469,10 @@ impl_styled!(NotificationCenter);
 
 impl RenderOnce for NotificationCenter {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-    let items = self
-      .state
-      .read(cx)
-      .items
-      .iter()
-      .cloned()
-      .collect::<Vec<_>>();
+    let item_count = self.state.read(cx).items.len();
     let placement = self.placement;
 
-    v_flex()
+    let container = v_flex()
       .id("notification-center")
       .absolute()
       .when(
@@ -514,10 +508,23 @@ impl RenderOnce for NotificationCenter {
       .max_h(px(560.0))
       .container_gap(self.size)
       .when(placement.is_bottom(), |this| this.flex_col_reverse())
-      .children(items.into_iter().map(|item| {
-        NotificationCard::new(item.id, item.data, &self.state, self.size).into_any_element()
-      }))
-      .refine_style(&self.style)
+      .refine_style(&self.style);
+
+    if item_count == 0 {
+      return container.into_any_element();
+    }
+
+    let cards: Vec<_> = self
+      .state
+      .read(cx)
+      .items
+      .iter()
+      .map(|item| {
+        NotificationCard::new(item.id, item.data.clone(), &self.state, self.size).into_any_element()
+      })
+      .collect();
+
+    container.children(cards).into_any_element()
   }
 }
 

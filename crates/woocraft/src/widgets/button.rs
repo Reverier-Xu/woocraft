@@ -451,131 +451,172 @@ impl_sizable!(Button);
 impl_styled!(Button);
 impl_parent_element!(Button);
 
+struct ButtonColors {
+  bg: Hsla,
+  fg: Hsla,
+  border: Hsla,
+  hover_bg: Hsla,
+  active_bg: Hsla,
+  selected_bg: Hsla,
+  selected_fg: Hsla,
+  selected_border: Hsla,
+  is_flat: bool,
+}
+
+fn compute_button_colors(
+  variant: ButtonVariant, outline: bool, disabled: bool, theme: &crate::Theme,
+) -> ButtonColors {
+  let is_flat = matches!(variant, ButtonVariant::Flat | ButtonVariant::Link);
+
+  let interaction_colors = match variant {
+    ButtonVariant::Primary => InteractionColors::solid(theme.primary, theme.primary_foreground),
+    ButtonVariant::Success => InteractionColors::solid(theme.success, theme.primary_foreground),
+    ButtonVariant::Warning => InteractionColors::solid(theme.warning, theme.primary_foreground),
+    ButtonVariant::Info => InteractionColors::solid(theme.ring, theme.primary_foreground),
+    ButtonVariant::Danger => InteractionColors::solid(theme.danger, theme.primary_foreground),
+    ButtonVariant::Default => {
+      InteractionColors::transparent(theme.foreground).with_border(theme.border)
+    }
+    ButtonVariant::Link => InteractionColors::transparent(theme.primary),
+    ButtonVariant::Flat => InteractionColors::transparent(theme.foreground),
+  };
+
+  let transparent = Hsla::transparent_black();
+  let (bg, fg, border) = if outline {
+    if variant == ButtonVariant::Default {
+      (transparent, theme.foreground, theme.foreground)
+    } else {
+      (
+        transparent,
+        interaction_colors.base,
+        interaction_colors.base,
+      )
+    }
+  } else {
+    (
+      interaction_colors.base,
+      interaction_colors.foreground,
+      interaction_colors.border,
+    )
+  };
+
+  let background_hover = theme.background.darken(0.04);
+  let background_active = theme.background.darken(0.08);
+
+  let hover_bg = if outline {
+    background_hover
+  } else {
+    interaction_colors.hover
+  };
+  let active_bg = if outline {
+    background_active
+  } else {
+    interaction_colors.active
+  };
+
+  let selected_bg = if is_flat {
+    theme.foreground.opacity(opacity::transparent::ACTIVE)
+  } else if outline {
+    background_hover
+  } else {
+    active_bg
+  };
+  let selected_fg = if is_flat {
+    theme.primary
+  } else if outline {
+    if variant == ButtonVariant::Default {
+      theme.foreground
+    } else {
+      interaction_colors.base
+    }
+  } else {
+    fg
+  };
+  let selected_border = if is_flat {
+    border
+  } else if outline {
+    if variant == ButtonVariant::Default {
+      theme.foreground
+    } else {
+      interaction_colors.base
+    }
+  } else {
+    border
+  };
+
+  let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) = if disabled
+  {
+    (
+      bg.opacity(opacity::DISABLED),
+      fg.opacity(opacity::DISABLED),
+      border.opacity(opacity::DISABLED),
+      hover_bg.opacity(opacity::DISABLED),
+      active_bg.opacity(opacity::DISABLED),
+      selected_bg.opacity(opacity::DISABLED),
+      selected_fg.opacity(opacity::DISABLED),
+      selected_border.opacity(opacity::DISABLED),
+    )
+  } else {
+    (
+      bg,
+      fg,
+      border,
+      hover_bg,
+      active_bg,
+      selected_bg,
+      selected_fg,
+      selected_border,
+    )
+  };
+
+  let (bg, border) = if disabled && matches!(variant, ButtonVariant::Link | ButtonVariant::Default)
+  {
+    (theme.foreground.opacity(0.1), transparent)
+  } else {
+    (bg, border)
+  };
+
+  let (bg, border, hover_bg, active_bg, selected_bg) = if disabled && variant == ButtonVariant::Flat
+  {
+    (
+      transparent,
+      transparent,
+      theme.foreground.opacity(0.05),
+      theme.foreground.opacity(0.05),
+      theme.foreground.opacity(0.05),
+    )
+  } else {
+    (bg, border, hover_bg, active_bg, selected_bg)
+  };
+
+  ButtonColors {
+    bg,
+    fg,
+    border,
+    hover_bg,
+    active_bg,
+    selected_bg,
+    selected_fg,
+    selected_border,
+    is_flat,
+  }
+}
+
 impl RenderOnce for Button {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let theme = cx.theme();
-    let is_flat = matches!(self.variant, ButtonVariant::Flat | ButtonVariant::Link);
-
-    let interaction_colors = match self.variant {
-      ButtonVariant::Primary => InteractionColors::solid(theme.primary, theme.primary_foreground),
-      ButtonVariant::Success => InteractionColors::solid(theme.success, theme.primary_foreground),
-      ButtonVariant::Warning => InteractionColors::solid(theme.warning, theme.primary_foreground),
-      ButtonVariant::Info => InteractionColors::solid(theme.ring, theme.primary_foreground),
-      ButtonVariant::Danger => InteractionColors::solid(theme.danger, theme.primary_foreground),
-      ButtonVariant::Default => {
-        InteractionColors::transparent(theme.foreground).with_border(theme.border)
-      }
-      ButtonVariant::Link => InteractionColors::transparent(theme.primary),
-      ButtonVariant::Flat => InteractionColors::transparent(theme.foreground),
-    };
-
-    let transparent = Hsla::transparent_black();
-    let (bg, fg, border) = if self.outline {
-      if self.variant == ButtonVariant::Default {
-        (transparent, theme.foreground, theme.foreground)
-      } else {
-        (
-          transparent,
-          interaction_colors.base,
-          interaction_colors.base,
-        )
-      }
-    } else {
-      (
-        interaction_colors.base,
-        interaction_colors.foreground,
-        interaction_colors.border,
-      )
-    };
-
-    let background_hover = theme.background.darken(0.04);
-    let background_active = theme.background.darken(0.08);
-
-    let hover_bg = if self.outline {
-      background_hover
-    } else {
-      interaction_colors.hover
-    };
-    let active_bg = if self.outline {
-      background_active
-    } else {
-      interaction_colors.active
-    };
-
-    let selected_bg = if is_flat {
-      theme.foreground.opacity(opacity::transparent::ACTIVE)
-    } else if self.outline {
-      background_hover
-    } else {
-      active_bg
-    };
-    let selected_fg = if is_flat {
-      theme.primary
-    } else if self.outline {
-      if self.variant == ButtonVariant::Default {
-        theme.foreground
-      } else {
-        interaction_colors.base
-      }
-    } else {
-      fg
-    };
-    let selected_border = if is_flat {
-      border
-    } else if self.outline {
-      if self.variant == ButtonVariant::Default {
-        theme.foreground
-      } else {
-        interaction_colors.base
-      }
-    } else {
-      border
-    };
-
-    let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) =
-      if self.disabled {
-        (
-          bg.opacity(opacity::DISABLED),
-          fg.opacity(opacity::DISABLED),
-          border.opacity(opacity::DISABLED),
-          hover_bg.opacity(opacity::DISABLED),
-          active_bg.opacity(opacity::DISABLED),
-          selected_bg.opacity(opacity::DISABLED),
-          selected_fg.opacity(opacity::DISABLED),
-          selected_border.opacity(opacity::DISABLED),
-        )
-      } else {
-        (
-          bg,
-          fg,
-          border,
-          hover_bg,
-          active_bg,
-          selected_bg,
-          selected_fg,
-          selected_border,
-        )
-      };
-
-    let (bg, border) =
-      if self.disabled && matches!(self.variant, ButtonVariant::Link | ButtonVariant::Default) {
-        (theme.foreground.opacity(0.1), transparent)
-      } else {
-        (bg, border)
-      };
-
-    let (bg, border, hover_bg, active_bg, selected_bg) =
-      if self.disabled && self.variant == ButtonVariant::Flat {
-        (
-          transparent,
-          transparent,
-          theme.foreground.opacity(0.05),
-          theme.foreground.opacity(0.05),
-          theme.foreground.opacity(0.05),
-        )
-      } else {
-        (bg, border, hover_bg, active_bg, selected_bg)
-      };
+    let colors = compute_button_colors(self.variant, self.outline, self.disabled, theme);
+    let ButtonColors {
+      bg,
+      fg,
+      border,
+      hover_bg,
+      active_bg,
+      selected_bg,
+      selected_fg,
+      selected_border,
+      is_flat,
+    } = colors;
 
     let has_only_icon = self.label.is_none() && self.children.is_empty() && self.icon.is_some();
     let clickable = self.clickable();
