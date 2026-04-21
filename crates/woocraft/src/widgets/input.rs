@@ -481,11 +481,10 @@ impl InputState {
     Self::char_to_byte_offset(&self.text, char_offset)
   }
 
-  fn cursor_x(&self, window: &Window) -> Pixels {
+  fn ensure_cursor_visible(&mut self, window: &Window) {
     let display = self.display_text();
     let shaped = self.shape_line_for_display(&display, window);
-    let display_index = self.text_byte_to_display_index(&display, self.cursor());
-    shaped.x_for_index(display_index)
+    self.ensure_cursor_visible_with_shaped(&shaped, &display);
   }
 
   fn byte_offset_for_mouse_position(
@@ -510,15 +509,18 @@ impl InputState {
     self.display_index_to_text_byte(&display, display_index)
   }
 
-  fn ensure_cursor_visible(&mut self, window: &Window) {
+  fn cursor_x_with_shaped(&self, shaped: &gpuim::ShapedLine, display: &str) -> Pixels {
+    let display_index = self.text_byte_to_display_index(display, self.cursor());
+    shaped.x_for_index(display_index)
+  }
+
+  fn ensure_cursor_visible_with_shaped(&mut self, shaped: &gpuim::ShapedLine, display: &str) {
     let viewport_width = self.input_bounds.size.width;
     if viewport_width <= px(0.) {
       return;
     }
 
-    let display = self.display_text();
-    let shaped = self.shape_line_for_display(&display, window);
-    let cursor_display_index = self.text_byte_to_display_index(&display, self.cursor());
+    let cursor_display_index = self.text_byte_to_display_index(display, self.cursor());
     let cursor_x = shaped.x_for_index(cursor_display_index);
     let horizontal_padding = px(4.);
     let left_edge = self.horizontal_scroll + horizontal_padding;
@@ -1486,7 +1488,14 @@ impl Render for InputState {
     let mut text_style = window.text_style();
     text_style.font_size = self.size.text_size().into();
     self.text_style = Some(text_style.clone());
-    self.ensure_cursor_visible(window);
+
+    let display = if self.masked {
+      "•".repeat(self.text.chars().count())
+    } else {
+      self.text.clone()
+    };
+    let shaped = self.shape_line_for_display(&display, window);
+    self.ensure_cursor_visible_with_shaped(&shaped, &display);
 
     let cursor = self.cursor();
     let is_focused = self.focus_handle.is_focused(window) && !self.disabled;
@@ -1496,11 +1505,6 @@ impl Render for InputState {
     let keep_caret_highlight = self.shared_context_menu_open;
     let selection = self.selected_range_normalized();
     let has_selection = !selection.is_empty();
-    let display = if self.masked {
-      "•".repeat(self.text.chars().count())
-    } else {
-      self.text.clone()
-    };
 
     let text_color = text_style.color;
     let caret_color = cx.theme().primary;
@@ -1518,7 +1522,8 @@ impl Render for InputState {
     let selected_text = &display[left_byte.min(display.len())..selected_byte.min(display.len())];
     let right_text = &display[selected_byte.min(display.len())..];
 
-    let caret_left = (self.cursor_x(window) - self.horizontal_scroll).max(px(0.));
+    let caret_left =
+      (self.cursor_x_with_shaped(&shaped, &display) - self.horizontal_scroll).max(px(0.));
     let show_caret = (is_focused || keep_caret_highlight) && !has_selection;
     let animate_caret = show_caret && !keep_caret_highlight && self.should_animate_caret();
 

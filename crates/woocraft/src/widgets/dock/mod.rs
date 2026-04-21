@@ -1168,14 +1168,13 @@ impl DockArea {
             }
           });
           if should_emit {
-            cx
-              .spawn_in(window, async move |view, window| {
-                _ = view.update_in(window, |view, window, cx| {
-                  view.pending_layout_change = false;
-                  view.update_toggle_button_tab_panels(window, cx);
-                });
-              })
-              .detach();
+            cx.spawn_in(window, async move |view, window| {
+              _ = view.update_in(window, |view, window, cx| {
+                view.pending_layout_change = false;
+                view.update_toggle_button_tab_panels(window, cx);
+              });
+            })
+            .detach();
             cx.emit(DockEvent::LayoutChanged);
           }
         }

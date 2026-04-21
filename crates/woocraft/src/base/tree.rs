@@ -198,6 +198,12 @@ pub struct TreeModel {
   selected_indices: BTreeSet<usize>,
   /// Whether multi-selection is enabled.
   multi_selectable: bool,
+  /// Precomputed parent index for each entry (O(1) lookup).
+  parent_indices: Vec<Option<usize>>,
+  /// Precomputed subtree end index (exclusive) for each entry.
+  subtree_ends: Vec<usize>,
+  /// Precomputed next-sibling flag for each entry.
+  has_next_sibling_flags: Vec<bool>,
 }
 
 impl TreeModel {
@@ -400,6 +406,29 @@ impl TreeModel {
 
   // -- Expand / Collapse ----------------------------------------------------
 
+  /// Returns the precomputed parent index for an entry (O(1)).
+  pub fn parent_index(&self, ix: usize) -> Option<usize> {
+    self.parent_indices.get(ix).copied().flatten()
+  }
+
+  /// Returns the precomputed subtree end index (exclusive) for an entry (O(1)).
+  pub fn subtree_end(&self, ix: usize) -> usize {
+    self
+      .subtree_ends
+      .get(ix)
+      .copied()
+      .unwrap_or(self.entries.len())
+  }
+
+  /// Returns whether an entry has a next sibling (O(1)).
+  pub fn has_next_sibling(&self, ix: usize) -> bool {
+    self
+      .has_next_sibling_flags
+      .get(ix)
+      .copied()
+      .unwrap_or(false)
+  }
+
   pub fn toggle_expand(&mut self, ix: usize) {
     let Some(entry) = self.entries.get_mut(ix) else {
       return;
@@ -439,6 +468,11 @@ impl TreeModel {
       self.add_entry(root, 0);
     }
 
+    self.parent_indices = vec![None; self.entries.len()];
+    self.subtree_ends = vec![0; self.entries.len()];
+    self.has_next_sibling_flags = vec![false; self.entries.len()];
+    self.compute_structural_cache();
+
     if let Some(ix) = self.selected_ix
       && ix >= self.entries.len()
     {
@@ -447,6 +481,40 @@ impl TreeModel {
     // Prune out-of-range multi-selection indices.
     let len = self.entries.len();
     self.selected_indices.retain(|&ix| ix < len);
+  }
+
+  fn compute_structural_cache(&mut self) {
+    let n = self.entries.len();
+    if n == 0 {
+      return;
+    }
+
+    let mut stack: Vec<usize> = Vec::new();
+
+    for i in 0..n {
+      let depth = self.entries[i].depth;
+
+      while let Some(&top) = stack.last()
+        && self.entries[top].depth >= depth
+      {
+        self.subtree_ends[stack.pop().unwrap()] = i;
+      }
+
+      if let Some(&parent) = stack.last() {
+        self.parent_indices[i] = Some(parent);
+      }
+
+      stack.push(i);
+    }
+
+    while let Some(idx) = stack.pop() {
+      self.subtree_ends[idx] = n;
+    }
+
+    for i in 0..n {
+      let end = self.subtree_ends[i];
+      self.has_next_sibling_flags[i] = end < n && self.entries[end].depth == self.entries[i].depth;
+    }
   }
 
   fn add_entry(&mut self, item: TreeItem, depth: usize) {

@@ -247,6 +247,16 @@ impl Styled for VirtualList {
 }
 
 impl VirtualList {
+  fn compute_size_hash(sizes: &[Size<Pixels>]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for size in sizes {
+      (size.width.as_f32().to_bits() as u64).hash(&mut hasher);
+      (size.height.as_f32().to_bits() as u64).hash(&mut hasher);
+    }
+    hasher.finish()
+  }
+
   pub fn track_scroll(mut self, scroll_handle: &VirtualListScrollHandle) -> Self {
     self.base = self.base.track_scroll(scroll_handle);
     self.scroll_handle = scroll_handle.clone();
@@ -345,7 +355,7 @@ pub struct VirtualListFrameState {
 
 #[derive(Default, Clone)]
 pub struct ItemSizeLayout {
-  items_sizes: Rc<Vec<Size<Pixels>>>,
+  size_hash: u64,
   content_size: Size<Pixels>,
   sizes: Vec<Pixels>,
   origins: Vec<Pixels>,
@@ -398,8 +408,9 @@ impl Element for VirtualList {
               .along(self.axis)
               .to_pixels(font_size.into(), rem_size);
 
-            if state.items_sizes != self.item_sizes {
-              state.items_sizes = self.item_sizes.clone();
+            let current_hash = Self::compute_size_hash(&self.item_sizes);
+            if state.size_hash != current_hash {
+              state.size_hash = current_hash;
               // Prepare each item's size by axis
               state.sizes = self
                 .item_sizes

@@ -308,18 +308,22 @@ impl TreeState {
     const BRANCH_LEN: f32 = 12.0;
 
     let mut layers = Vec::new();
-    let entries = self.model.entries();
     let depth = entry.depth();
-    let has_children = ix + 1 < entries.len() && entries[ix + 1].depth() > depth;
+    let has_children = self.model.subtree_end(ix) > ix + 1;
     let color = cx.theme().foreground.opacity(0.2);
-    let immediate_parent_ix = Self::parent_index(entries, ix);
+    let immediate_parent_ix = self.model.parent_index(ix);
 
     // Ancestor continuation lines (VS Code style).
     let mut cursor_ix = ix;
-    while let Some(parent_ix) = Self::parent_index(entries, cursor_ix) {
-      let parent_depth = entries[parent_ix].depth();
+    while let Some(parent_ix) = self.model.parent_index(cursor_ix) {
+      let parent_depth = self
+        .model
+        .entries()
+        .get(parent_ix)
+        .map(|e| e.depth())
+        .unwrap_or(0);
       let is_immediate_parent = Some(parent_ix) == immediate_parent_ix;
-      if !is_immediate_parent && Self::has_next_sibling(entries, parent_ix) {
+      if !is_immediate_parent && self.model.has_next_sibling(parent_ix) {
         layers.push(
           div()
             .absolute()
@@ -338,11 +342,14 @@ impl TreeState {
     if depth > 0
       && let Some(parent_ix) = immediate_parent_ix
     {
-      let branch_depth = entries[parent_ix].depth();
+      let branch_depth = self
+        .model
+        .entries()
+        .get(parent_ix)
+        .map(|e| e.depth())
+        .unwrap_or(0);
       let x = Self::guide_x(branch_depth) + px(8.);
-      let current_has_next_sibling = Self::has_next_sibling(entries, ix);
-      // let parent_has_next_sibling = Self::has_next_sibling(entries, parent_ix);
-      // let should_full_height = current_has_next_sibling || parent_has_next_sibling;
+      let current_has_next_sibling = self.model.has_next_sibling(ix);
 
       layers.push(
         div()
@@ -382,33 +389,6 @@ impl TreeState {
     }
 
     layers
-  }
-
-  fn subtree_end(entries: &[TreeEntry], root_ix: usize) -> usize {
-    let root_depth = entries[root_ix].depth();
-    let mut end = root_ix + 1;
-    while end < entries.len() && entries[end].depth() > root_depth {
-      end += 1;
-    }
-    end
-  }
-
-  fn parent_index(entries: &[TreeEntry], ix: usize) -> Option<usize> {
-    let depth = entries.get(ix)?.depth();
-    if depth == 0 {
-      return None;
-    }
-
-    let target_depth = depth - 1;
-    (0..ix).rev().find(|&candidate_ix| {
-      entries[candidate_ix].depth() == target_depth && Self::subtree_end(entries, candidate_ix) > ix
-    })
-  }
-
-  fn has_next_sibling(entries: &[TreeEntry], ix: usize) -> bool {
-    let depth = entries[ix].depth();
-    let end = Self::subtree_end(entries, ix);
-    end < entries.len() && entries[end].depth() == depth
   }
 
   fn guide_x(depth: usize) -> gpuim::Pixels {
