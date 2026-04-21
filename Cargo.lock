@@ -372,6 +372,7 @@ dependencies = [
  "async-global-executor",
  "async-io",
  "async-lock",
+ "async-process",
  "crossbeam-utils",
  "futures-channel",
  "futures-core",
@@ -529,7 +530,7 @@ dependencies = [
  "bitflags 2.11.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -916,8 +917,8 @@ dependencies = [
 
 [[package]]
 name = "collections"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "indexmap",
  "rustc-hash 2.1.2",
@@ -1050,19 +1051,6 @@ name = "core-graphics"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa95a34622365fa5bbf40b20b75dba8dfa8c94c734aea8ac9a5ca38af14316f1"
-dependencies = [
- "bitflags 2.11.1",
- "core-foundation 0.10.1",
- "core-graphics-types 0.2.0",
- "foreign-types",
- "libc",
-]
-
-[[package]]
-name = "core-graphics"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "064badf302c3194842cf2c5d61f56cc88e54a759313879cdf03abdd27d0c3b97"
 dependencies = [
  "bitflags 2.11.1",
  "core-foundation 0.10.1",
@@ -1286,8 +1274,8 @@ checksum = "ac6b926516df9c60bfa16e107b21086399f8285a44ca9711344b9e553c5146e2"
 
 [[package]]
 name = "derive-refineable"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2154,8 +2142,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "async-channel 2.5.0",
@@ -2170,7 +2158,7 @@ dependencies = [
  "collections",
  "core-foundation 0.10.1",
  "core-foundation-sys",
- "core-graphics 0.25.0",
+ "core-graphics 0.24.0",
  "core-text",
  "core-video",
  "ctor",
@@ -2235,8 +2223,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-linux"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2284,8 +2272,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-macos"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "async-task",
@@ -2295,7 +2283,7 @@ dependencies = [
  "collections",
  "core-foundation 0.10.1",
  "core-foundation-sys",
- "core-graphics 0.25.0",
+ "core-graphics 0.24.0",
  "core-text",
  "core-video",
  "ctor",
@@ -2327,8 +2315,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-macros"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2338,8 +2326,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-platform"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "console_error_panic_hook",
  "gpuim",
@@ -2351,8 +2339,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-shared-string"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "derive_more",
  "gpuim-util",
@@ -2362,8 +2350,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-util"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "log",
@@ -2371,8 +2359,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-web"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
@@ -2395,8 +2383,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-wgpu"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2423,8 +2411,8 @@ dependencies = [
 
 [[package]]
 name = "gpuim-windows"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "collections",
@@ -2448,9 +2436,9 @@ dependencies = [
 
 [[package]]
 name = "grid"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9e2d4c0a8296178d8802098410ca05d86b17a10bb5ab559b3fb404c1f948220"
+checksum = "b40ca9252762c466af32d0b1002e91e4e1bc5398f77455e55474deb466355ff5"
 
 [[package]]
 name = "half"
@@ -2592,12 +2580,13 @@ dependencies = [
 
 [[package]]
 name = "http-client"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "async-compression",
  "async-fs",
+ "async-std",
  "async-tar",
  "bytes",
  "derive_more",
@@ -2888,6 +2877,15 @@ name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -3237,8 +3235,8 @@ dependencies = [
 
 [[package]]
 name = "media"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -3837,8 +3835,8 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "perf"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "collections",
  "serde",
@@ -4433,8 +4431,8 @@ dependencies = [
 
 [[package]]
 name = "refineable"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "derive-refineable",
 ]
@@ -4686,8 +4684,8 @@ dependencies = [
 
 [[package]]
 name = "scheduler"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "async-task",
  "backtrace",
@@ -5172,8 +5170,8 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "sum-tree"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "heapless",
  "log",
@@ -6279,8 +6277,8 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "util"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "anyhow",
  "async-fs",
@@ -6318,8 +6316,8 @@ dependencies = [
 
 [[package]]
 name = "util-macros"
-version = "0.1.1"
-source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=2ada1ac#2ada1ac459a701ca2ba574e571a7141f5d59e02f"
+version = "0.1.2"
+source = "git+https://github.com/Reverier-Xu/gpuim.git?rev=d24efa347294e4c45494978afc6d6b4c000219ae#d24efa347294e4c45494978afc6d6b4c000219ae"
 dependencies = [
  "perf",
  "quote",
@@ -7375,7 +7373,7 @@ dependencies = [
 
 [[package]]
 name = "woocraft"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aho-corasick",
  "anyhow",
