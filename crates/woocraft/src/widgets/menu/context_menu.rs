@@ -300,7 +300,10 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                   let _subscription = window.subscribe(&menu, cx, {
                     let shared_state = shared_state.clone();
                     move |_, _: &DismissEvent, window, _cx| {
-                      shared_state.borrow_mut().open = false;
+                      let mut state = shared_state.borrow_mut();
+                      state.open = false;
+                      state.menu_view = None;
+                      state._subscription = None;
                       window.refresh();
                     }
                   });
