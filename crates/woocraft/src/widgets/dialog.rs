@@ -119,7 +119,7 @@ impl DialogState {
     self.open = open;
 
     if open {
-      self.focus_handle.focus(window);
+      self.focus_handle.focus(window, cx);
 
       // Subscribe to `DismissEvent` so external code can close us via the
       // event bus (same pattern as `PopoverState`).
@@ -466,6 +466,7 @@ impl RenderOnce for Dialog {
         blur_radius: px(24.),
         spread_radius: px(0.),
         offset: point(px(0.), px(4.)),
+        inset: false,
       }])
       .when_some(header_el, |this, hdr| this.child(hdr))
       .child(body_el)

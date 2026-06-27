@@ -50,6 +50,10 @@ pub struct SearchMatcher {
 }
 
 impl SearchMatcher {
+  pub(crate) fn matched_ranges_ptr(&self) -> *const Vec<Range<usize>> {
+    Rc::as_ptr(&self.matched_ranges)
+  }
+
   pub fn new() -> Self {
     Self {
       text: "".into(),
@@ -220,6 +224,10 @@ impl InputState {
 }
 
 impl SearchPanel {
+  pub(crate) fn matched_ranges_ptr(&self) -> *const Vec<Range<usize>> {
+    self.matcher.matched_ranges_ptr()
+  }
+
   pub fn new(editor: Entity<InputState>, cx: &mut App) -> Entity<Self> {
     let search_input = cx.new(TextInputState::new);
     let replace_input = cx.new(TextInputState::new);
@@ -305,7 +313,7 @@ impl SearchPanel {
 
   pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     self.open = false;
-    self.editor.focus_handle(cx).focus(window);
+    self.editor.focus_handle(cx).focus(window, cx);
     cx.notify();
   }
 
@@ -323,7 +331,7 @@ impl SearchPanel {
       return;
     }
 
-    self.editor.focus_handle(cx).focus(window);
+    self.editor.focus_handle(cx).focus(window, cx);
     window.prevent_default();
     cx.stop_propagation();
   }

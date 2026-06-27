@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use gpui::{
-  AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty,
-  Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-  ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
-  WeakEntity, Window, div, prelude::FluentBuilder,
+  Anchor, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, Empty, Entity,
+  EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
+  Pixels, Point, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
+  Styled, WeakEntity, Window, div, prelude::FluentBuilder,
 };
 
 use super::{
@@ -17,8 +17,9 @@ use super::{
   PanelView, StackPanel, ToggleZoom,
 };
 use crate::{
-  ActiveTheme, AxisExt, Disableable, Divider, DockPlacement, Icon, IconLabel, IconName, Placement,
-  Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate_woocraft, v_flex,
+  ActiveTheme, AxisExt, Disableable, Divider, DockPlacement, ElementExt, Icon, IconLabel, IconName,
+  Placement, Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate_woocraft,
+  v_flex,
 };
 
 #[derive(Clone)]
@@ -48,6 +49,15 @@ impl DragPanel {
 }
 
 impl_sizable!(DragPanel);
+
+/// Identifies which drop zone of a [`TabPanel`] the mouse is currently over
+/// during a drag operation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum TabPanelDropZone {
+  TabBar,
+  VerticalTabBar,
+  PanelContent,
+}
 
 impl Render for DragPanel {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -99,6 +109,13 @@ pub struct TabPanel {
   center_drop_active: bool,
   /// Is TabPanel used in Tiles.
   in_tiles: bool,
+
+  /// Drop-zone bounds recorded during the last prepaint so that the parent
+  /// [`DockArea`] can perform a single global drag-move dispatch instead of
+  /// registering per-panel listeners.
+  pub(crate) tab_bar_bounds: Option<Bounds<Pixels>>,
+  pub(crate) vertical_tab_bar_bounds: Option<Bounds<Pixels>>,
+  pub(crate) panel_content_bounds: Option<Bounds<Pixels>>,
 }
 
 impl Panel for TabPanel {
@@ -203,6 +220,9 @@ impl TabPanel {
       zoomed: false,
       closable: true,
       in_tiles: false,
+      tab_bar_bounds: None,
+      vertical_tab_bar_bounds: None,
+      panel_content_bounds: None,
     }
   }
 
@@ -546,7 +566,13 @@ impl TabPanel {
     self.stack_panel.is_none() && self.dock.is_none()
   }
 
-  fn allows_split_drop(&self) -> bool {
+  /// Same as [`TabPanel::is_locked`] but accepts the parent [`DockArea`]'s
+  /// locked value directly so callers can avoid re-entering the DockArea read.
+  pub(crate) fn is_locked_with_dock_area(&self, dock_area_locked: bool) -> bool {
+    self.is_locked_with_dock_area_locked(dock_area_locked)
+  }
+
+  pub(crate) fn allows_split_drop(&self) -> bool {
     self.dock.is_none()
       && !self.panels.is_empty()
       && self
@@ -561,35 +587,33 @@ impl TabPanel {
     self.panels.is_empty()
   }
 
-  fn clear_split_preview(&mut self, cx: &mut Context<Self>) {
+  pub(crate) fn clear_split_preview(&mut self, cx: &mut Context<Self>) {
     if self.will_split_placement.is_none() && !self.center_drop_active {
       return;
     }
     self.will_split_placement = None;
     self.center_drop_active = false;
-    if let Some(dock_area) = self.dock_area.upgrade() {
-      dock_area.update(cx, |dock_area, cx| dock_area.clear_split_preview(cx));
+    cx.notify();
+  }
+
+  pub(crate) fn set_center_drop_active(&mut self, active: bool, cx: &mut Context<Self>) {
+    if self.center_drop_active == active {
+      return;
     }
+    self.center_drop_active = active;
+    cx.notify();
   }
 
   fn update_split_preview(
-    &mut self, bounds: Bounds<Pixels>, placement: Option<Placement>, cx: &mut Context<Self>,
+    &mut self, _bounds: Bounds<Pixels>, placement: Option<Placement>, cx: &mut Context<Self>,
   ) {
-    if self.will_split_placement == placement {
+    if self.will_split_placement == placement && self.center_drop_active == placement.is_none() {
       return;
     }
 
     self.will_split_placement = placement;
-
-    if let Some(dock_area) = self.dock_area.upgrade() {
-      dock_area.update(cx, |dock_area, cx| {
-        if let Some(placement) = placement {
-          dock_area.set_split_preview(bounds, placement, cx);
-        } else {
-          dock_area.clear_split_preview(cx);
-        }
-      });
-    }
+    self.center_drop_active = placement.is_none();
+    cx.notify();
   }
 
   fn closable_by_layout(&self, cx: &App) -> bool {
@@ -653,7 +677,7 @@ impl TabPanel {
   /// Return true if the tab panel is droppable.
   ///
   /// E.g. if the tab panel is locked, it is not droppable.
-  fn droppable(&self, cx: &App) -> bool {
+  pub(crate) fn droppable(&self, cx: &App) -> bool {
     !self.is_locked(cx)
   }
 
@@ -749,7 +773,7 @@ impl TabPanel {
               })
             }
           })
-          .anchor(Corner::TopRight),
+          .anchor(Anchor::TopRight),
       )
   }
 
@@ -903,6 +927,7 @@ impl TabPanel {
   fn render_title_bar(
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
+    self.tab_bar_bounds = None;
     let view = cx.entity().clone();
 
     let Some(dock_area) = self.dock_area.upgrade() else {
@@ -1053,14 +1078,18 @@ impl TabPanel {
 
     let tab_bar = div()
       .relative()
+      .on_prepaint({
+        let view = view.clone();
+        move |bounds, _, cx| {
+          view.update(cx, |this, _| this.tab_bar_bounds = Some(bounds));
+        }
+      })
       .when(state.droppable, |this| {
-        this
-          .on_drag_move(cx.listener(Self::on_tab_bar_drag_move))
-          .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-            this.clear_split_preview(cx);
-            let ix = this.pending_drop_index.take();
-            this.on_drop(drag, ix, false, window, cx)
-          }))
+        this.on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+          this.clear_split_preview(cx);
+          let ix = this.pending_drop_index.take();
+          this.on_drop(drag, ix, false, window, cx)
+        }))
       })
       .when(self.pending_drop_index.is_some(), |this| {
         this.child(
@@ -1131,7 +1160,7 @@ impl TabPanel {
             div()
               .id("tab-bar-empty-space")
               .h_full()
-              .flex_grow()
+              .flex_grow(1.)
               .min_w_16(),
           )
           .when(!self.is_dock_collapsed(cx), |this| {
@@ -1169,6 +1198,7 @@ impl TabPanel {
   fn render_vertical_tab_bar(
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
+    self.vertical_tab_bar_bounds = None;
     let view = cx.entity().clone();
 
     let collapse_button = self.render_dock_collapse_button(window, cx);
@@ -1214,7 +1244,7 @@ impl TabPanel {
         div()
           .id("vertical-tab-bar-empty-space")
           .w_full()
-          .flex_grow()
+          .flex_grow(1.)
           .min_h_16(),
       );
 
@@ -1222,14 +1252,18 @@ impl TabPanel {
       .h_full()
       .relative()
       .child(tab_bar)
+      .on_prepaint({
+        let view = view.clone();
+        move |bounds, _, cx| {
+          view.update(cx, |this, _| this.vertical_tab_bar_bounds = Some(bounds));
+        }
+      })
       .when(state.droppable, |this| {
-        this
-          .on_drag_move(cx.listener(Self::on_vertical_tab_bar_drag_move))
-          .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
-            this.clear_split_preview(cx);
-            let ix = this.pending_drop_index.take();
-            this.on_drop(drag, ix, false, window, cx);
-          }))
+        this.on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+          this.clear_split_preview(cx);
+          let ix = this.pending_drop_index.take();
+          this.on_drop(drag, ix, false, window, cx);
+        }))
       })
       .when(self.pending_drop_index.is_some(), |this| {
         this.child(
@@ -1260,9 +1294,24 @@ impl TabPanel {
     }
   }
 
+  fn render_split_preview_overlay(&self, cx: &App) -> Option<Div> {
+    let placement = self.will_split_placement?;
+
+    let overlay = match placement {
+      Placement::Left => div().top_0().left_0().bottom_0().w_1_2(),
+      Placement::Right => div().top_0().right_0().bottom_0().w_1_2(),
+      Placement::Top => div().top_0().left_0().right_0().h_1_2(),
+      Placement::Bottom => div().bottom_0().left_0().right_0().h_1_2(),
+    };
+
+    Some(overlay.absolute().bg(cx.theme().drop_target))
+  }
+
   fn render_active_panel(
-    &self, state: &TabState, _: &mut Window, cx: &mut Context<Self>,
+    &mut self, state: &TabState, _: &mut Window, cx: &mut Context<Self>,
   ) -> AnyElement {
+    self.panel_content_bounds = None;
+    let view = cx.entity().clone();
     let is_dock_collapsed = self.is_dock_collapsed(cx);
     let is_vertical = self.get_tab_bar_direction(cx).is_vertical();
     let allows_split_drop = self.allows_split_drop();
@@ -1320,6 +1369,12 @@ impl TabPanel {
       .min_w_0()
       .overflow_hidden()
       .when(is_render_in_tabs, |this| this.pt_2())
+      .on_prepaint({
+        let view = view.clone();
+        move |bounds, _, cx| {
+          view.update(cx, |this, _| this.panel_content_bounds = Some(bounds));
+        }
+      })
       .child(
         div()
           .id("tab-content")
@@ -1328,14 +1383,13 @@ impl TabPanel {
           .overflow_x_hidden()
           .flex_1()
           .child(
-            active_panel.view(), // .cached(StyleRefinement::default().absolute().size_full()),
+            active_panel
+              .view()
+              .cached(StyleRefinement::default().size_full()),
           ),
       )
       .when(state.droppable, |this| {
         this
-          .when(allows_split_drop, |this| {
-            this.on_drag_move(cx.listener(Self::on_panel_drag_move))
-          })
           .child(
             div()
               .absolute()
@@ -1356,23 +1410,21 @@ impl TabPanel {
                 this.on_drop(drag, None, true, window, cx)
               })),
           )
+          .when_some(self.render_split_preview_overlay(cx), |this, overlay| {
+            this.child(overlay)
+          })
       })
       .into_any_element()
   }
 
-  /// Calculate the split direction based on the current mouse position
-  fn on_panel_drag_move(
-    &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
+  /// Calculate the split direction based on the current mouse position.
+  ///
+  /// The caller (the parent [`DockArea`]) is responsible for ensuring the
+  /// position is inside `bounds`.
+  pub(crate) fn on_panel_drag_move(
+    &mut self, position: Point<Pixels>, bounds: Bounds<Pixels>, cx: &mut Context<Self>,
   ) {
     if !self.allows_split_drop() {
-      self.clear_split_preview(cx);
-      return;
-    }
-
-    let bounds = drag.bounds;
-    let position = drag.event.position;
-
-    if !bounds.contains(&position) {
       self.clear_split_preview(cx);
       return;
     }
@@ -1389,56 +1441,53 @@ impl TabPanel {
       None
     };
 
-    self.center_drop_active = new_placement.is_none();
     self.update_split_preview(bounds, new_placement, cx);
   }
 
-  fn on_tab_bar_drag_move(
-    &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
+  pub(crate) fn on_tab_bar_drag_move(
+    &mut self, position: Point<Pixels>, bounds: Bounds<Pixels>, cx: &mut Context<Self>,
   ) {
-    let bounds = drag.bounds;
-    let position = drag.event.position;
-
-    if !bounds.contains(&position) {
-      self.pending_drop_index = None;
-      return;
-    }
-
     self.clear_split_preview(cx);
     let relative_x = position.x - bounds.left();
     let visible_tabs = self.visible_panels(cx).count();
     if visible_tabs == 0 {
-      self.pending_drop_index = Some(0);
+      if self.pending_drop_index != Some(0) {
+        self.pending_drop_index = Some(0);
+      }
       return;
     }
 
     let slot_width = bounds.size.width / (visible_tabs + 1) as f32;
     let ix = ((relative_x / slot_width) as usize).min(visible_tabs);
-    self.pending_drop_index = Some(ix);
+    if self.pending_drop_index != Some(ix) {
+      self.pending_drop_index = Some(ix);
+    }
   }
 
-  fn on_vertical_tab_bar_drag_move(
-    &mut self, drag: &DragMoveEvent<DragPanel>, _: &mut Window, cx: &mut Context<Self>,
+  pub(crate) fn on_vertical_tab_bar_drag_move(
+    &mut self, position: Point<Pixels>, bounds: Bounds<Pixels>, cx: &mut Context<Self>,
   ) {
-    let bounds = drag.bounds;
-    let position = drag.event.position;
-
-    if !bounds.contains(&position) {
-      self.pending_drop_index = None;
-      return;
-    }
-
     self.clear_split_preview(cx);
     let relative_y = position.y - bounds.top();
     let visible_tabs = self.visible_panels(cx).count();
     if visible_tabs == 0 {
-      self.pending_drop_index = Some(0);
+      if self.pending_drop_index != Some(0) {
+        self.pending_drop_index = Some(0);
+      }
       return;
     }
 
     let slot_height = bounds.size.height / (visible_tabs + 1) as f32;
     let ix = ((relative_y / slot_height) as usize).min(visible_tabs);
-    self.pending_drop_index = Some(ix);
+    if self.pending_drop_index != Some(ix) {
+      self.pending_drop_index = Some(ix);
+    }
+  }
+
+  pub(crate) fn clear_tab_drop_preview(&mut self) {
+    if self.pending_drop_index.is_some() {
+      self.pending_drop_index = None;
+    }
   }
 
   /// Handle the drop event when dragging a panel
@@ -1519,7 +1568,7 @@ impl TabPanel {
 
   /// Add panel with split placement
   fn split_panel(
-    &self, panel: Arc<dyn PanelView>, placement: Placement, size: Option<Pixels>,
+    &mut self, panel: Arc<dyn PanelView>, placement: Placement, size: Option<Pixels>,
     window: &mut Window, cx: &mut Context<Self>,
   ) {
     let dock_area = self.dock_area.clone();
@@ -1542,9 +1591,10 @@ impl TabPanel {
       .unwrap_or_default();
 
     if parent_axis.is_vertical() && placement.is_vertical() {
+      let stack_panel_weak = stack_panel.downgrade();
       stack_panel.update(cx, |view, cx| {
         view.insert_panel_at(
-          Arc::new(new_tab_panel),
+          Arc::new(new_tab_panel.clone()),
           ix,
           placement,
           size,
@@ -1553,10 +1603,12 @@ impl TabPanel {
           cx,
         );
       });
+      new_tab_panel.update(cx, |view, _| view.set_parent(stack_panel_weak));
     } else if parent_axis.is_horizontal() && placement.is_horizontal() {
+      let stack_panel_weak = stack_panel.downgrade();
       stack_panel.update(cx, |view, cx| {
         view.insert_panel_at(
-          Arc::new(new_tab_panel),
+          Arc::new(new_tab_panel.clone()),
           ix,
           placement,
           size,
@@ -1565,11 +1617,16 @@ impl TabPanel {
           cx,
         );
       });
+      new_tab_panel.update(cx, |view, _| view.set_parent(stack_panel_weak));
     } else {
       // 1. Create new StackPanel with new axis
       // 2. Move cx.entity() from parent StackPanel to the new StackPanel
       // 3. Add the new TabPanel to the new StackPanel at the correct index
       // 4. Add new StackPanel to the parent StackPanel at the correct index
+      //
+      // We set both TabPanels' parent references synchronously here so the new
+      // panel is immediately able to split again, instead of relying on the
+      // deferred parent update inside add_panel.
       let tab_panel = cx.entity().clone();
 
       // Try to use the old stack panel, not just create a new one, to avoid too many
@@ -1588,6 +1645,10 @@ impl TabPanel {
           panel
         })
       };
+
+      let new_stack_panel_weak = new_stack_panel.downgrade();
+      self.stack_panel = Some(new_stack_panel_weak.clone());
+      new_tab_panel.update(cx, |view, _| view.set_parent(new_stack_panel_weak.clone()));
 
       new_stack_panel.update(cx, |view, cx| match placement {
         Placement::Left | Placement::Top => {
@@ -1636,7 +1697,7 @@ impl TabPanel {
 
   fn focus_active_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
     if let Some(active_panel) = self.active_panel(cx) {
-      active_panel.focus_handle(cx).focus(window);
+      active_panel.focus_handle(cx).focus(window, cx);
     }
   }
 

@@ -1346,47 +1346,50 @@ impl Render for ControlsWindow {
 }
 
 fn main() {
-  let app = gpui::Application::new().with_assets(woocraft::Assets);
-
-  app.run(|cx: &mut App| {
-    init(cx);
-    cx.activate(true);
-    cx.set_menus(vec![
-      Menu {
-        name: "File".into(),
-        items: Vec::new(),
-      },
-      Menu {
-        name: "Edit".into(),
-        items: Vec::new(),
-      },
-      Menu {
-        name: "View".into(),
-        items: Vec::new(),
-      },
-    ]);
-
-    let bounds = Bounds::centered(None, GpuiSize::new(px(980.), px(680.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          titlebar: Some(TitleBar::title_bar_options()),
-          #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
-          #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
-          ..Default::default()
+  gpui_platform::application()
+    .with_assets(woocraft::Assets)
+    .run(|cx: &mut App| {
+      init(cx);
+      cx.activate(true);
+      cx.set_menus(vec![
+        Menu {
+          name: "File".into(),
+          disabled: false,
+          items: Vec::new(),
         },
-        ControlsWindow::view,
-      )
-      .expect("open controls demo window failed");
+        Menu {
+          name: "Edit".into(),
+          disabled: false,
+          items: Vec::new(),
+        },
+        Menu {
+          name: "View".into(),
+          disabled: false,
+          items: Vec::new(),
+        },
+      ]);
 
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Woocraft Controls Example");
-      })
-      .expect("update controls demo window failed");
-  });
+      let bounds = Bounds::centered(None, GpuiSize::new(px(980.), px(680.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+          },
+          ControlsWindow::view,
+        )
+        .expect("open controls demo window failed");
+
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Woocraft Controls Example");
+        })
+        .expect("update controls demo window failed");
+    });
 }

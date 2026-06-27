@@ -1,14 +1,17 @@
 //! Dock is a fixed container that places at left, bottom, right of the Windows.
 
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use gpui::{
-  App, AppContext, Context, Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent,
-  ParentElement as _, Pixels, Point, Render, Style, StyleRefinement, Styled as _, WeakEntity,
-  Window, div, prelude::FluentBuilder as _, px,
+  AnyView, App, AppContext, Context, Element, Empty, Entity, InteractiveElement, IntoElement,
+  MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Style, StyleRefinement,
+  Styled as _, WeakEntity, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
 
-use super::{super::resizable::PANEL_MIN_SIZE, DockArea, DockItem, PanelView, TabPanel};
+use super::{
+  super::resizable::{PANEL_MIN_SIZE, resize_handle},
+  DockArea, DockItem, PanelView, TabPanel,
+};
 use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 
 /// Side docks (left/right) include a vertical tab rail plus title-bar controls.
@@ -44,6 +47,13 @@ pub struct Dock {
   // Runtime state
   /// Whether the Dock is resizing
   resizing: bool,
+  /// Last mouse position processed during a resize, used to skip duplicate
+  /// events when the mouse has not moved.
+  last_resize_position: Option<Point<Pixels>>,
+  /// Mouse position captured from the latest resize event. The actual
+  /// preview-size computation is deferred to the next frame render so that
+  /// high-frequency mouse reports are coalesced into one layout pass.
+  pending_resize_position: Option<Point<Pixels>>,
 }
 
 impl Dock {
@@ -100,6 +110,8 @@ impl Dock {
       tab_bar_direction,
       preview_size: None,
       resizing: false,
+      last_resize_position: None,
+      pending_resize_position: None,
     };
 
     let dock_entity = cx.entity().clone();
@@ -172,6 +184,8 @@ impl Dock {
       tab_bar_direction,
       preview_size: None,
       resizing: false,
+      last_resize_position: None,
+      pending_resize_position: None,
     };
 
     let dock_entity = cx.entity().clone();
@@ -303,12 +317,35 @@ impl Dock {
 
   pub(super) fn set_resizing(&mut self, resizing: bool) {
     self.resizing = resizing;
+    if resizing {
+      self.last_resize_position = None;
+    }
   }
 
-  fn resize(&mut self, mouse_position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+  fn resize(
+    &mut self, mouse_position: Point<Pixels>, _window: &mut Window, _cx: &mut Context<Self>,
+  ) {
     if !self.resizing {
       return;
     }
+
+    if self.last_resize_position == Some(mouse_position) {
+      return;
+    }
+    self.last_resize_position = Some(mouse_position);
+    self.pending_resize_position = Some(mouse_position);
+    // The drag is active, so dispatch_mouse_event will call window.refresh()
+    // for every MouseMoveEvent. Rely on that to drive the next frame instead
+    // of notifying this entity on every high-frequency mouse report.
+  }
+
+  /// Compute the dock preview size from the latest captured mouse position.
+  /// Called once per frame during render so that high-frequency mouse events
+  /// are coalesced into a single layout pass.
+  fn apply_pending_resize(&mut self, cx: &mut Context<Self>) {
+    let Some(mouse_position) = self.pending_resize_position.take() else {
+      return;
+    };
 
     let dock_area = self
       .dock_area
@@ -349,34 +386,35 @@ impl Dock {
     match self.placement {
       DockPlacement::Left => {
         let max_size = area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size;
-        let next_size = size.clamp(self.min_size(), max_size);
+        let next_size = size.clamp(self.min_size(), max_size).round();
         if self.preview_size != Some(next_size) {
           self.preview_size = Some(next_size);
-          window.refresh();
         }
       }
       DockPlacement::Right => {
         let max_size = area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size;
-        let next_size = size.clamp(self.min_size(), max_size);
+        let next_size = size.clamp(self.min_size(), max_size).round();
         if self.preview_size != Some(next_size) {
           self.preview_size = Some(next_size);
-          window.refresh();
         }
       }
       DockPlacement::Bottom => {
         let max_size = area_bounds.size.height - PANEL_MIN_SIZE;
-        let next_size = size.clamp(self.min_size(), max_size);
+        let next_size = size.clamp(self.min_size(), max_size).round();
         if self.preview_size != Some(next_size) {
           self.preview_size = Some(next_size);
-          window.refresh();
         }
       }
       DockPlacement::Center => unreachable!(),
     }
+    // This runs during render; the current frame already picks up the new
+    // preview_size, so do not schedule another notification here.
   }
 
   fn done_resizing(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
     self.resizing = false;
+    self.last_resize_position = None;
+    self.pending_resize_position = None;
     if let Some(preview_size) = self.preview_size.take()
       && self.size != preview_size
     {
@@ -388,9 +426,57 @@ impl Dock {
 
 impl Render for Dock {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
-    let cache_style = StyleRefinement::default().absolute().size_full();
+    self.apply_pending_resize(cx);
+
+    let panel_cache_style = StyleRefinement::default().size_full();
+    let single_panel_cache_style = StyleRefinement::default().absolute().size_full();
 
     let collapsed_width = px(40.0);
+    let view = cx.entity().clone();
+
+    let create_resize_handle = || {
+      let dock = view.clone();
+      let handle = resize_handle::<ResizePanel, ResizePanel>("dock-resize", self.placement.axis())
+        .on_drag(ResizePanel, move |info, _, _, cx| {
+          cx.stop_propagation();
+          dock.update(cx, |dock, _| dock.set_resizing(true));
+          cx.new(|_| info.deref().clone())
+        });
+
+      match self.placement {
+        DockPlacement::Left => deferred(
+          div()
+            .absolute()
+            .right(px(0.))
+            .top_0()
+            .bottom_0()
+            .w(px(0.))
+            .child(handle)
+            .occlude(),
+        ),
+        DockPlacement::Right => deferred(
+          div()
+            .absolute()
+            .left(px(0.))
+            .top_0()
+            .bottom_0()
+            .w(px(0.))
+            .child(handle)
+            .occlude(),
+        ),
+        DockPlacement::Bottom => deferred(
+          div()
+            .absolute()
+            .top(px(0.))
+            .left_0()
+            .right_0()
+            .h(px(0.))
+            .child(handle)
+            .occlude(),
+        ),
+        DockPlacement::Center => unreachable!(),
+      }
+    };
 
     div()
       .relative()
@@ -414,16 +500,21 @@ impl Render for Dock {
             DockPlacement::Center => this,
           })
           .map(|this| match self.panel.clone() {
-            DockItem::Split { view, .. } => this.child(view),
-            DockItem::Tabs { view, .. } => this.child(view),
-            DockItem::Panel { view, .. } => this.child(view.view().cached(cache_style)),
+            DockItem::Split { view, .. } => {
+              this.child(AnyView::from(view).cached(panel_cache_style.clone()))
+            }
+            DockItem::Tabs { view, .. } => {
+              this.child(AnyView::from(view).cached(panel_cache_style.clone()))
+            }
+            DockItem::Panel { view, .. } => {
+              this.child(view.view().cached(single_panel_cache_style.clone()))
+            }
             DockItem::Tiles { .. } => this,
           });
 
-        // Resize handles are rendered at the DockArea level as overlays
-        // to ensure correct paint order across sibling dock containers.
         this.child(panel)
       })
+      .when(!self.collapsed, |this| this.child(create_resize_handle()))
       .child(DockElement {
         view: cx.entity().clone(),
       })
@@ -471,8 +562,15 @@ impl Element for DockElement {
   fn paint(
     &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
     _: gpui::Bounds<Pixels>, _: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState,
-    window: &mut gpui::Window, _cx: &mut App,
+    window: &mut gpui::Window, cx: &mut App,
   ) {
+    // Only install the global dock-resize listeners while a resize handle is
+    // actively being dragged, so side docks do not accumulate always-on window
+    // listeners.
+    if !self.view.read(cx).resizing {
+      return;
+    }
+
     window.on_mouse_event({
       let view = self.view.clone();
       move |e: &MouseMoveEvent, phase, window, cx| {

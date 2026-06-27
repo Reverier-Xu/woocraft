@@ -286,82 +286,88 @@ impl Render for DockExample {
 }
 
 fn main() {
-  let app = gpui::Application::new().with_assets(woocraft::Assets);
-
-  app.run(|cx: &mut App| {
-    woocraft::init(cx);
-    cx.activate(true);
-    cx.set_menus(vec![
-      Menu {
-        name: "Layout".into(),
-        items: vec![
-          MenuItem::action("Toggle Left Dock", ToggleLeftDock),
-          MenuItem::action("Toggle Bottom Dock", ToggleBottomDock),
-          MenuItem::action("Toggle Right Dock", ToggleRightDock),
-          MenuItem::separator(),
-          MenuItem::action("Expand All Docks", ExpandAllDocks),
-          MenuItem::action("Collapse All Docks", CollapseAllDocks),
-          MenuItem::submenu(Menu {
-            name: "Resize Presets".into(),
-            items: vec![
-              MenuItem::action("Reset to Default Sizes", ResetDockSizes),
-              MenuItem::submenu(Menu {
-                name: "Read Modes".into(),
-                items: vec![
-                  MenuItem::action("Focus Mode (Collapse All Docks)", CollapseAllDocks),
-                  MenuItem::action("Balanced Mode (Expand All Docks)", ExpandAllDocks),
-                ],
-              }),
-            ],
-          }),
-        ],
-      },
-      Menu {
-        name: "About".into(),
-        items: vec![
-          MenuItem::action("About Woocraft Dock Example", AboutWoocraft),
-          MenuItem::action("Version", AboutVersion),
-          MenuItem::action("License", AboutLicense),
-          MenuItem::separator(),
-          MenuItem::submenu(Menu {
-            name: "Changelog".into(),
-            items: vec![
-              MenuItem::action("v0.1 Highlights", AboutChangelogHighlights),
-              MenuItem::action("Roadmap", AboutChangelogRoadmap),
-            ],
-          }),
-          MenuItem::submenu(Menu {
-            name: "Credits".into(),
-            items: vec![
-              MenuItem::action("Core Team", AboutCreditsCore),
-              MenuItem::action("Community Contributors", AboutCreditsCommunity),
-            ],
-          }),
-        ],
-      },
-    ]);
-
-    let bounds = Bounds::centered(None, GpuiSize::new(px(1200.), px(820.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          titlebar: Some(TitleBar::title_bar_options()),
-          #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
-          #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
-          ..Default::default()
+  gpui_platform::application()
+    .with_assets(woocraft::Assets)
+    .run(|cx: &mut App| {
+      woocraft::init(cx);
+      cx.activate(true);
+      cx.set_menus(vec![
+        Menu {
+          name: "Layout".into(),
+          disabled: false,
+          items: vec![
+            MenuItem::action("Toggle Left Dock", ToggleLeftDock),
+            MenuItem::action("Toggle Bottom Dock", ToggleBottomDock),
+            MenuItem::action("Toggle Right Dock", ToggleRightDock),
+            MenuItem::separator(),
+            MenuItem::action("Expand All Docks", ExpandAllDocks),
+            MenuItem::action("Collapse All Docks", CollapseAllDocks),
+            MenuItem::submenu(Menu {
+              name: "Resize Presets".into(),
+              disabled: false,
+              items: vec![
+                MenuItem::action("Reset to Default Sizes", ResetDockSizes),
+                MenuItem::submenu(Menu {
+                  name: "Read Modes".into(),
+                  disabled: false,
+                  items: vec![
+                    MenuItem::action("Focus Mode (Collapse All Docks)", CollapseAllDocks),
+                    MenuItem::action("Balanced Mode (Expand All Docks)", ExpandAllDocks),
+                  ],
+                }),
+              ],
+            }),
+          ],
         },
-        DockExample::view,
-      )
-      .expect("open dock example window failed");
+        Menu {
+          name: "About".into(),
+          disabled: false,
+          items: vec![
+            MenuItem::action("About Woocraft Dock Example", AboutWoocraft),
+            MenuItem::action("Version", AboutVersion),
+            MenuItem::action("License", AboutLicense),
+            MenuItem::separator(),
+            MenuItem::submenu(Menu {
+              name: "Changelog".into(),
+              disabled: false,
+              items: vec![
+                MenuItem::action("v0.1 Highlights", AboutChangelogHighlights),
+                MenuItem::action("Roadmap", AboutChangelogRoadmap),
+              ],
+            }),
+            MenuItem::submenu(Menu {
+              name: "Credits".into(),
+              disabled: false,
+              items: vec![
+                MenuItem::action("Core Team", AboutCreditsCore),
+                MenuItem::action("Community Contributors", AboutCreditsCommunity),
+              ],
+            }),
+          ],
+        },
+      ]);
 
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Woocraft Dock Example");
-      })
-      .expect("update dock example window failed");
-  });
+      let bounds = Bounds::centered(None, GpuiSize::new(px(1200.), px(820.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+          },
+          DockExample::view,
+        )
+        .expect("open dock example window failed");
+
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Woocraft Dock Example");
+        })
+        .expect("update dock example window failed");
+    });
 }

@@ -76,7 +76,7 @@ impl InputState {
       }
 
       if code_actions.is_empty() {
-        let _ = menu.update(cx, |menu, cx| {
+        menu.update(cx, |menu, cx| {
           menu.hide(cx);
           cx.notify();
         });

@@ -228,7 +228,7 @@ impl PopoverState {
         .tracked_focus_handle
         .clone()
         .unwrap_or_else(|| self.focus_handle.clone());
-      focus_handle.focus(window);
+      focus_handle.focus(window, cx);
 
       self.dismiss_subscription =
         Some(

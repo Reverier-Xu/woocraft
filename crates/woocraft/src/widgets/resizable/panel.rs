@@ -116,6 +116,7 @@ impl RenderOnce for ResizablePanelGroup {
     let panels_count = self.children.len();
     state.update(cx, |state, cx| {
       state.sync_panels_count(self.axis, panels_count, cx);
+      state.apply_pending_resize(cx);
     });
     let resize_handles = {
       let display_sizes = state.read(cx).display_sizes();
@@ -142,6 +143,7 @@ impl RenderOnce for ResizablePanelGroup {
                     cx.stop_propagation();
                     state.update(cx, |state, _| {
                       state.resizing_panel_ix = Some(ix);
+                      state.last_resize_position = None;
                     });
                     cx.new(|_| drag_panel.deref().clone())
                   }
@@ -161,6 +163,7 @@ impl RenderOnce for ResizablePanelGroup {
                     cx.stop_propagation();
                     state.update(cx, |state, _| {
                       state.resizing_panel_ix = Some(ix);
+                      state.last_resize_position = None;
                     });
                     cx.new(|_| drag_panel.deref().clone())
                   }
@@ -277,7 +280,7 @@ impl RenderOnce for ResizablePanel {
     div()
       .id(("resizable-panel", self.panel_ix))
       .flex()
-      .flex_grow()
+      .flex_grow(1.)
       .size_full()
       .relative()
       .when(matches!(self.axis, Axis::Vertical), |this| this.flex_col())
@@ -287,7 +290,7 @@ impl RenderOnce for ResizablePanel {
       .when(matches!(self.axis, Axis::Horizontal), |this| {
         this.min_w(size_range.start).max_w(size_range.end)
       })
-      .when(self.initial_size.is_none(), |this| this.flex_shrink())
+      .when(self.initial_size.is_none(), |this| this.flex_shrink(1.))
       .when_some(self.initial_size, |this, initial_size| {
         this
           .when(display_size.is_none() && !initial_size.is_zero(), |this| {
@@ -353,8 +356,14 @@ impl Element for ResizePanelGroupElement {
   fn paint(
     &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
     _: Bounds<Pixels>, _: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState,
-    window: &mut Window, _cx: &mut App,
+    window: &mut Window, cx: &mut App,
   ) {
+    // Only keep the global resize listeners active while the user is actually
+    // dragging a resize handle in this group.
+    if self.state.read(cx).resizing_panel_ix.is_none() {
+      return;
+    }
+
     window.on_mouse_event({
       let state = self.state.clone();
       let axis = self.axis;
@@ -369,6 +378,11 @@ impl Element for ResizePanelGroupElement {
         };
 
         state.update(cx, |state, cx| {
+          if state.last_resize_position == Some(e.position) {
+            return;
+          }
+          state.last_resize_position = Some(e.position);
+
           let panel = state.panels.get(ix).expect("BUG: invalid panel index");
 
           match axis {

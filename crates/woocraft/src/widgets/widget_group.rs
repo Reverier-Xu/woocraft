@@ -138,7 +138,12 @@ impl WidgetGroup {
     let is_first = ix == 0;
     let is_last = ix + 1 == len;
     if len == 1 {
-      return Corners::all(true);
+      return Corners {
+        top_left: true,
+        top_right: true,
+        bottom_left: true,
+        bottom_right: true,
+      };
     }
 
     if matches!(layout, Axis::Horizontal) {

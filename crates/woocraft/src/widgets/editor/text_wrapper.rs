@@ -1,7 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-  App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextRun, Window, point, px, size,
+  App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
+  size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -93,6 +94,14 @@ impl TextWrapper {
   #[inline]
   pub(super) fn set_default_text(&mut self, text: &Rope) {
     self.text = text.clone();
+  }
+
+  pub(super) fn text(&self) -> &Rope {
+    &self.text
+  }
+
+  pub(super) fn wrap_width(&self) -> Option<Pixels> {
+    self.wrap_width
   }
 
   /// Get the total number of lines including wrapped lines.
@@ -208,25 +217,21 @@ impl TextWrapper {
   ) {
     let font = self.font.clone();
     let font_size = self.font_size;
+    let mut line_wrapper = window.text_system().line_wrapper(font.clone(), font_size);
     self._update(
       changed_text,
       range,
       new_text.len(),
       &mut |line_str, wrap_width| {
-        let shaped_line = window.text_system().shape_line(
-          SharedString::from(line_str.to_string()),
-          font_size,
-          &[TextRun {
-            len: line_str.len(),
-            font: font.clone(),
-            color: gpui::black(),
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-          }],
-          None,
-        );
-        break_all_ranges(line_str, &shaped_line, wrap_width)
+        let fragment = LineFragment::Text { text: line_str };
+        let mut start = 0;
+        let mut wrapped_lines = Vec::new();
+        for boundary in line_wrapper.wrap_line(&[fragment], wrap_width) {
+          wrapped_lines.push(start..boundary.ix);
+          start = boundary.ix;
+        }
+        wrapped_lines.push(start..line_str.len());
+        wrapped_lines
       },
     );
   }
@@ -313,7 +318,27 @@ impl TextWrapper {
   ///
   /// If the `text` is the same as the current text, do nothing.
   fn update_all(&mut self, text: &Rope, window: &Window, cx: &mut App) {
-    self.update(text, &(0..text.len()), &text.to_string(), window, cx);
+    // Avoid the full-text String allocation in `self.update`; we only need the
+    // text length for a whole-document re-wrap.
+    let font = self.font.clone();
+    let font_size = self.font_size;
+    let mut line_wrapper = window.text_system().line_wrapper(font.clone(), font_size);
+    self._update(
+      text,
+      &(0..text.len()),
+      text.len(),
+      &mut |line_str, wrap_width| {
+        let fragment = LineFragment::Text { text: line_str };
+        let mut start = 0;
+        let mut wrapped_lines = Vec::new();
+        for boundary in line_wrapper.wrap_line(&[fragment], wrap_width) {
+          wrapped_lines.push(start..boundary.ix);
+          start = boundary.ix;
+        }
+        wrapped_lines.push(start..line_str.len());
+        wrapped_lines
+      },
+    );
   }
 
   /// Return display point (with soft wrap) from the given byte offset in the
@@ -377,41 +402,6 @@ impl TextWrapper {
   }
 }
 
-pub(crate) fn break_all_ranges(
-  line_str: &str, shaped_line: &ShapedLine, wrap_width: Pixels,
-) -> Vec<Range<usize>> {
-  if line_str.is_empty() {
-    return std::iter::once(0..0).collect();
-  }
-
-  if wrap_width <= px(0.) {
-    return std::iter::once(0..line_str.len()).collect();
-  }
-
-  let mut ranges = Vec::new();
-  let mut start = 0;
-
-  for (ix, ch) in line_str.char_indices() {
-    let next = ix + ch.len_utf8();
-    let width = shaped_line.x_for_index(next) - shaped_line.x_for_index(start);
-    if width > wrap_width {
-      let break_at = if ix > start { ix } else { next };
-      ranges.push(start..break_at);
-      start = break_at;
-    }
-  }
-
-  if start < line_str.len() {
-    ranges.push(start..line_str.len());
-  }
-
-  if ranges.is_empty() {
-    ranges.push(0..0);
-  }
-
-  ranges
-}
-
 /// The actually display point in the text.
 ///
 /// This is usually used to describe the
@@ -440,6 +430,7 @@ impl DisplayPoint {
 }
 
 /// The layout info of a line with soft wrapped lines.
+#[derive(Clone)]
 pub(crate) struct LineLayout {
   /// Total bytes length of the logical line.
   len: usize,
@@ -644,6 +635,8 @@ impl LineLayout {
       _ = line.paint(
         pos + point(px(0.), ix * line_height),
         line_height,
+        TextAlign::Left,
+        None,
         window,
         cx,
       );
@@ -663,7 +656,7 @@ impl LineLayout {
           pos.y + *line_index as f32 * line_height,
         );
 
-        _ = invisible.paint(origin, line_height, window, cx);
+        _ = invisible.paint(origin, line_height, TextAlign::Left, None, window, cx);
       }
     }
   }

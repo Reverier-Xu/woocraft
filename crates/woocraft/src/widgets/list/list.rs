@@ -167,7 +167,7 @@ where
 
   /// Focus the list. If searchable, focus search input.
   pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
-    self.focus_handle(cx).focus(window);
+    self.focus_handle(cx).focus(window, cx);
   }
 
   /// Set selected index and scroll to it.
@@ -462,7 +462,7 @@ where
     let scroll_handle = self.scroll_handle.clone();
 
     v_flex()
-      .flex_grow()
+      .flex_grow(1.)
       .relative()
       .size_full()
       .when_some(self.options.max_height, |this, h| this.max_h(h))

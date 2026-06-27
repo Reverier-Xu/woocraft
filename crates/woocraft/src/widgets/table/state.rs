@@ -2062,10 +2062,10 @@ where
                 items
               }),
             )
-            .flex_grow()
+            .flex_grow(1.)
             .size_full()
             .with_sizing_behavior(ListSizingBehavior::Auto)
-            .track_scroll(self.vertical_scroll_handle.clone())
+            .track_scroll(&self.vertical_scroll_handle.clone())
             .into_any_element(),
           )
         }

@@ -1,6 +1,8 @@
 use std::ops::Range;
 
-use gpui::{Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px};
+use gpui::{
+  Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Point, Window, px,
+};
 
 use crate::PixelsExt;
 
@@ -31,6 +33,14 @@ pub struct ResizableState {
   sizes: Vec<Pixels>,
   pub(crate) resizing_panel_ix: Option<usize>,
   bounds: Bounds<Pixels>,
+  /// Last mouse position processed during a resize, used to skip duplicate
+  /// drag events.
+  last_resize_position: Option<Point<Pixels>>,
+  /// Resize target captured from the latest mouse-move event. The actual
+  /// size redistribution is deferred to the next frame render so that many
+  /// mouse events within one display interval are coalesced into a single
+  /// layout pass.
+  pending_resize: Option<(usize, Pixels)>,
 }
 
 impl Default for ResizableState {
@@ -41,6 +51,8 @@ impl Default for ResizableState {
       sizes: vec![],
       resizing_panel_ix: None,
       bounds: Bounds::default(),
+      last_resize_position: None,
+      pending_resize: None,
     }
   }
 }
@@ -125,8 +137,14 @@ impl ResizableState {
       self.sizes[panel_ix] = size;
       self.panels[panel_ix].size = Some(size);
     }
-    self.panels[panel_ix].bounds = bounds;
-    self.panels[panel_ix].size_range = size_range;
+
+    let panel = &mut self.panels[panel_ix];
+    if panel.bounds == bounds && panel.size_range == size_range {
+      return;
+    }
+
+    panel.bounds = bounds;
+    panel.size_range = size_range;
     cx.notify();
   }
 
@@ -172,6 +190,7 @@ impl ResizableState {
     }
 
     self.resizing_panel_ix = None;
+    self.last_resize_position = None;
     cx.notify();
     cx.emit(ResizablePanelEvent::Resized);
   }
@@ -194,17 +213,38 @@ impl ResizableState {
   }
 
   fn resize_panel(
-    &mut self, ix: usize, size: Pixels, window: &mut Window, _cx: &mut Context<Self>,
+    &mut self, ix: usize, size: Pixels, _window: &mut Window, _cx: &mut Context<Self>,
   ) {
-    let old_sizes = self.display_sizes();
-    let mut ix = ix;
+    if ix >= self.panels.len().saturating_sub(1) {
+      return;
+    }
 
+    let size_range = self.panel_size_range(ix);
+    let size = size.clamp(size_range.start, size_range.end);
+    if self.pending_resize == Some((ix, size)) {
+      return;
+    }
+
+    self.pending_resize = Some((ix, size));
+    // The drag is active, so dispatch_mouse_event will call window.refresh()
+    // for every MouseMoveEvent. Rely on that instead of notifying this entity
+    // on every high-frequency mouse report.
+  }
+
+  /// Apply the resize target captured by the latest mouse-move event. This
+  /// is called once per frame during render, so many mouse events coalesce
+  /// into a single redistribution pass.
+  pub(crate) fn apply_pending_resize(&mut self, _cx: &mut Context<Self>) {
+    let Some((mut ix, size)) = self.pending_resize.take() else {
+      return;
+    };
+
+    let old_sizes = self.display_sizes();
     if ix >= old_sizes.len() - 1 {
       return;
     }
 
     let container_size = self.container_size();
-
     let move_changed = size - old_sizes[ix];
     if move_changed == px(0.) {
       return;
@@ -255,7 +295,8 @@ impl ResizableState {
       let size = new_sizes[i];
       self.panels[i].size = Some(size);
     }
-    window.refresh();
+    // This runs during render; the current frame already picks up the new
+    // sizes, so do not schedule another notification here.
   }
 
   fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {

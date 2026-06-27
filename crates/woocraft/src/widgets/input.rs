@@ -52,12 +52,12 @@
 use std::{ops::Range, rc::Rc, time::Instant};
 
 use gpui::{
-  Action, AnyElement, App, Bounds, ClipboardItem, Context, Corners, Element, ElementInputHandler,
-  Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable, GlobalElementId,
-  InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, LayoutId,
-  MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Render,
-  RenderOnce, SharedString, StyleRefinement, Styled, TextStyle, UTF16Selection, Window, actions,
-  div, point, prelude::FluentBuilder as _, px, relative,
+  Action, AnyElement, App, Bounds, ClipboardItem, Context, Corners, DispatchPhase, Element,
+  ElementInputHandler, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+  GlobalElementId, InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding,
+  KeyDownEvent, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+  ParentElement as _, Pixels, Render, RenderOnce, SharedString, StyleRefinement, Styled, TextStyle,
+  UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px, relative,
 };
 use regex::Regex;
 use serde::Deserialize;
@@ -375,8 +375,8 @@ impl InputState {
   }
 
   /// Programmatically focus this input field.
-  pub fn focus(&self, window: &mut Window, _cx: &mut Context<Self>) {
-    self.focus_handle.focus(window);
+  pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+    self.focus_handle.focus(window, cx);
   }
 
   /// Clear all text from the input. Pushes undo snapshot.
@@ -990,8 +990,8 @@ impl OtpState {
     cx.notify();
   }
 
-  pub fn focus(&self, window: &mut Window, _cx: &mut Context<Self>) {
-    self.focus_handle.focus(window);
+  pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+    self.focus_handle.focus(window, cx);
   }
 
   fn hold_caret_visible(&mut self) {
@@ -1596,7 +1596,12 @@ impl Input {
       state: state.clone(),
       style: StyleRefinement::default(),
       size: Size::default(),
-      border_corners: Corners::all(true),
+      border_corners: Corners {
+        top_left: true,
+        top_right: true,
+        bottom_left: true,
+        bottom_right: true,
+      },
       appearance: true,
       cleanable: false,
       mask_toggle: false,
@@ -1787,9 +1792,19 @@ impl Element for InputPaintBindings {
       cx,
     );
 
+    // Avoid keeping 2N global window listeners alive when N inputs are rendered
+    // but not being dragged.
+    let needs_listeners = self.state.read(cx).selecting;
+    if !needs_listeners {
+      return;
+    }
+
     window.on_mouse_event({
       let state = self.state.clone();
-      move |event: &MouseMoveEvent, _, window, cx| {
+      move |event: &MouseMoveEvent, phase, window, cx| {
+        if phase != DispatchPhase::Bubble {
+          return;
+        }
         if event.pressed_button != Some(MouseButton::Left) {
           return;
         }
@@ -1812,7 +1827,10 @@ impl Element for InputPaintBindings {
 
     window.on_mouse_event({
       let state = self.state.clone();
-      move |event: &MouseUpEvent, _, window, cx| {
+      move |event: &MouseUpEvent, phase, window, cx| {
+        if phase != DispatchPhase::Bubble {
+          return;
+        }
         if state.read(cx).selecting {
           state.update(cx, |state, cx| {
             state.on_mouse_up(event, window, cx);

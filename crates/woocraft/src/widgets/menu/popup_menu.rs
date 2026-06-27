@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-  Action, AnchoredPositionMode, AnyElement, App, AppContext, Bounds, ClickEvent, Context, Corner,
+  Action, Anchor, AnchoredPositionMode, AnyElement, App, AppContext, Bounds, ClickEvent, Context,
   DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
   IntoElement, KeyBinding, MouseDownEvent, OwnedMenuItem, ParentElement, Pixels, Point, Render,
   ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
@@ -312,7 +312,7 @@ pub struct PopupMenu {
   external_link_icon: bool,
   scroll_handle: ScrollHandle,
   // This will update on render
-  submenu_anchor: (Corner, Point<Pixels>),
+  submenu_anchor: (Anchor, Point<Pixels>),
   // Item bounds in window coordinates, updated on prepaint.
   item_bounds: Vec<Bounds<Pixels>>,
 
@@ -337,7 +337,7 @@ impl PopupMenu {
       scroll_handle: ScrollHandle::default(),
       external_link_icon: true,
       size: Size::default(),
-      submenu_anchor: (Corner::TopLeft, Point::default()),
+      submenu_anchor: (Anchor::TopLeft, Point::default()),
       item_bounds: vec![],
       _subscriptions: vec![],
     }
@@ -732,7 +732,7 @@ impl PopupMenu {
     &self, action: &dyn Action, window: &mut Window, cx: &mut Context<Self>,
   ) {
     if let Some(context) = self.action_context.as_ref() {
-      context.focus(window);
+      context.focus(window, cx);
       context.dispatch_action(action, window, cx);
       return;
     }
@@ -788,7 +788,7 @@ impl PopupMenu {
   }
 
   fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
-    let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
+    let handled = if matches!(self.submenu_anchor.0, Anchor::TopLeft | Anchor::BottomLeft) {
       self.unselect_submenu(window, cx)
     } else {
       self.select_submenu(window, cx)
@@ -809,7 +809,7 @@ impl PopupMenu {
   }
 
   fn select_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
-    let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
+    let handled = if matches!(self.submenu_anchor.0, Anchor::TopLeft | Anchor::BottomLeft) {
       self.select_submenu(window, cx)
     } else {
       self.unselect_submenu(window, cx)
@@ -834,7 +834,7 @@ impl PopupMenu {
       // Focus the submenu, so that can be handle the action.
       active_submenu.update(cx, |view, cx| {
         view.set_selected_index(0, cx);
-        view.focus_handle.focus(window);
+        view.focus_handle.focus(window, cx);
       });
       cx.notify();
       return true;
@@ -865,7 +865,7 @@ impl PopupMenu {
 
     self.selected_index = None;
     parent.update(cx, |view, cx| {
-      view.focus_handle.focus(window);
+      view.focus_handle.focus(window, cx);
       cx.notify();
     });
   }
@@ -880,8 +880,9 @@ impl PopupMenu {
     };
 
     match parent.read(cx).submenu_anchor.0 {
-      Corner::TopLeft | Corner::BottomLeft => Side::Left,
-      Corner::TopRight | Corner::BottomRight => Side::Right,
+      Anchor::TopLeft | Anchor::BottomLeft | Anchor::LeftCenter => Side::Left,
+      Anchor::TopRight | Anchor::BottomRight | Anchor::RightCenter => Side::Right,
+      Anchor::TopCenter | Anchor::BottomCenter => Side::Left,
     }
   }
 
@@ -894,7 +895,7 @@ impl PopupMenu {
 
     // Focus back to the previous focused handle.
     if let Some(action_context) = self.action_context.as_ref() {
-      window.focus(action_context);
+      window.focus(action_context, cx);
     }
 
     let Some(parent_menu) = self.parent_menu.clone() else {
@@ -973,7 +974,7 @@ impl PopupMenu {
 
     let (anchor, mut offset) = if max_width + bounds.origin.x > window.bounds().size.width {
       (
-        Corner::TopRight,
+        Anchor::TopRight,
         Point {
           x: -horizontal_gap,
           y: Pixels::ZERO,
@@ -981,7 +982,7 @@ impl PopupMenu {
       )
     } else {
       (
-        Corner::TopLeft,
+        Anchor::TopLeft,
         Point {
           x: bounds.size.width + horizontal_gap,
           y: Pixels::ZERO,
@@ -1143,7 +1144,7 @@ impl PopupMenu {
 
               let (anchor, mut offset) = if open_left {
                 (
-                  Corner::TopRight,
+                  Anchor::TopRight,
                   Point {
                     x: -horizontal_gap,
                     y: Pixels::ZERO,
@@ -1151,7 +1152,7 @@ impl PopupMenu {
                 )
               } else {
                 (
-                  Corner::TopLeft,
+                  Anchor::TopLeft,
                   Point {
                     x: item_bounds.size.width + horizontal_gap,
                     y: Pixels::ZERO,

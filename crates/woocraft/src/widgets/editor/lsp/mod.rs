@@ -59,6 +59,10 @@ impl Lsp {
     self.update_document_colors(text, window, cx);
   }
 
+  pub(crate) fn document_colors(&self) -> &Vec<(lsp_types::Range, Hsla)> {
+    &self.document_colors
+  }
+
   /// Reset all LSP states.
   pub(crate) fn reset(&mut self) {
     self.document_colors.clear();

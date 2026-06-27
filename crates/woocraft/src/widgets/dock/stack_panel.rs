@@ -328,6 +328,17 @@ impl StackPanel {
     cx.notify();
   }
 
+  /// Recursively collect every [`TabPanel`] contained in this stack.
+  pub(super) fn collect_tab_panels(&self, out: &mut Vec<Entity<TabPanel>>, cx: &App) {
+    for panel in &self.panels {
+      if let Ok(tab_panel) = panel.view().downcast::<TabPanel>() {
+        out.push(tab_panel);
+      } else if let Ok(stack_panel) = panel.view().downcast::<StackPanel>() {
+        stack_panel.read(cx).collect_tab_panels(out, cx);
+      }
+    }
+  }
+
   /// Find the first top left in the stack.
   pub(super) fn left_top_tab_panel(
     &self, check_parent: bool, cx: &App,

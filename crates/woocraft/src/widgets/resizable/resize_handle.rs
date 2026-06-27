@@ -1,9 +1,9 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-  AnyElement, App, Axis, Element, ElementId, Entity, GlobalElementId, InteractiveElement,
-  IntoElement, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
-  StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
+  AnyElement, App, Axis, DispatchPhase, Element, ElementId, Entity, GlobalElementId,
+  InteractiveElement, IntoElement, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point,
+  Render, StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::ActiveTheme as _;
@@ -189,7 +189,10 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
 
       window.on_mouse_event({
         let state = state.clone();
-        move |_: &MouseUpEvent, _, window, _| {
+        move |_: &MouseUpEvent, phase, window, _| {
+          if phase != DispatchPhase::Bubble {
+            return;
+          }
           if state.is_active() {
             state.set_active(false);
             window.refresh();

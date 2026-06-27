@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, Corner, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
+  Anchor, AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
   RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
   Window, div, prelude::FluentBuilder as _,
 };
@@ -231,7 +231,7 @@ impl RenderOnce for TabBar {
 
                 this
               })
-              .anchor(Corner::TopRight),
+              .anchor(Anchor::TopRight),
           )
         })
         .when_some(self.suffix, |this, suffix| this.child(suffix))

@@ -176,7 +176,7 @@ impl DatePickerState {
       |this, _, event: &CalendarEvent, window, cx| match event {
         CalendarEvent::Selected(date) => {
           this.update_date(*date, true, window, cx);
-          this.focus_handle.focus(window);
+          this.focus_handle.focus(window, cx);
         }
       },
     )];
@@ -265,7 +265,7 @@ impl DatePickerState {
   // If focus stays inside date picker when closing popover, focus back to input.
   fn focus_back_if_need(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if self.focus_handle.contains_focused(window, cx) {
-      self.focus_handle.focus(window);
+      self.focus_handle.focus(window, cx);
     }
   }
 
@@ -458,7 +458,7 @@ impl RenderOnce for DatePicker {
                         move |_, window, cx| {
                           state.update(cx, |state, cx| {
                             state.clean(&ClickEvent::default(), window, cx);
-                            state.focus_handle.focus(window);
+                            state.focus_handle.focus(window, cx);
                           });
                         }
                       }),

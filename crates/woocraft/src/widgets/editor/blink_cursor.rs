@@ -63,7 +63,7 @@ impl BlinkCursor {
     self._task = cx.spawn(async move |this, cx| {
       cx.background_executor().timer(ANIMATION_FRAME).await;
       if let Some(this) = this.upgrade() {
-        let _ = this.update(cx, |this, cx| this.tick(epoch, cx));
+        this.update(cx, |this, cx| this.tick(epoch, cx));
       }
     });
   }

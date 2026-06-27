@@ -155,28 +155,28 @@ impl Render for ChartWindow {
 }
 
 fn main() {
-  let app = gpui::Application::new().with_assets(woocraft::Assets);
+  gpui_platform::application()
+    .with_assets(woocraft::Assets)
+    .run(|cx: &mut App| {
+      init(cx);
+      cx.activate(true);
 
-  app.run(|cx: &mut App| {
-    init(cx);
-    cx.activate(true);
+      let bounds = Bounds::centered(None, GpuiSize::new(px(1080.), px(800.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            ..Default::default()
+          },
+          |_window, cx| ChartWindow::view(cx),
+        )
+        .expect("open pie chart demo window failed");
 
-    let bounds = Bounds::centered(None, GpuiSize::new(px(1080.), px(800.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          ..Default::default()
-        },
-        |_window, cx| ChartWindow::view(cx),
-      )
-      .expect("open pie chart demo window failed");
-
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Woocraft Chart Example · Pie + Donut");
-      })
-      .expect("update pie chart demo window failed");
-  });
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Woocraft Chart Example · Pie + Donut");
+        })
+        .expect("update pie chart demo window failed");
+    });
 }

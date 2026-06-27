@@ -270,7 +270,12 @@ impl Button {
       disabled: false,
       selected: false,
       rounded: ButtonRounded::default(),
-      border_corners: Corners::all(true),
+      border_corners: Corners {
+        top_left: true,
+        top_right: true,
+        bottom_left: true,
+        bottom_right: true,
+      },
       expanded: false,
       tab_stop: true,
       tab_index: 0,

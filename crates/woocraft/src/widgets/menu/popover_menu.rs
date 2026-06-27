@@ -30,7 +30,7 @@ pub(crate) fn render_popup_menu(
         state.menu = Some(menu.clone());
       });
 
-      menu.focus_handle(cx).focus(window);
+      menu.focus_handle(cx).focus(window, cx);
 
       window
         .subscribe(&menu, cx, {

@@ -177,7 +177,7 @@ impl RenderOnce for Switch {
         let toggle_state = toggle_state.clone();
         async move |cx| {
           cx.background_executor().timer(animation_duration).await;
-          let _ = toggle_state.update(cx, |state, _| *state = checked);
+          toggle_state.update(cx, |state, _| *state = checked);
         }
       })
       .detach();

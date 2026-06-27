@@ -165,7 +165,7 @@ impl InputState {
       }
 
       if completions.is_empty() {
-        let _ = menu.update(cx, |menu, cx| {
+        menu.update(cx, |menu, cx| {
           menu.hide(cx);
           cx.notify();
         });

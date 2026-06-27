@@ -51,7 +51,7 @@ impl InputState {
 
       let result = task.await?;
 
-      let _ = editor.update(cx, |editor, cx| match result {
+      editor.update(cx, |editor, cx| match result {
         Some(hover) => {
           if let Some(range) = hover.range {
             let start = editor.text.position_to_offset(&range.start);

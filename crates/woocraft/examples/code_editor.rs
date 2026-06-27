@@ -802,89 +802,93 @@ impl Render for CodeEditorApp {
 // ---------------------------------------------------------------------------
 
 fn main() {
-  let app = gpui::Application::new().with_assets(woocraft::Assets);
+  gpui_platform::application()
+    .with_assets(woocraft::Assets)
+    .run(|cx: &mut App| {
+      init(cx);
+      cx.activate(true);
+      #[cfg(debug_assertions)]
+      setup_inspector_renderer(cx);
 
-  app.run(|cx: &mut App| {
-    init(cx);
-    cx.activate(true);
-    #[cfg(debug_assertions)]
-    setup_inspector_renderer(cx);
+      cx.bind_keys([
+        KeyBinding::new("cmd-shift-i", ToggleInspector, None),
+        KeyBinding::new("ctrl-shift-i", ToggleInspector, None),
+      ]);
 
-    cx.bind_keys([
-      KeyBinding::new("cmd-shift-i", ToggleInspector, None),
-      KeyBinding::new("ctrl-shift-i", ToggleInspector, None),
-    ]);
-
-    // Set up application menus (use i18n keys for AppMenuBar translation)
-    cx.set_menus(vec![
-      Menu {
-        name: "tech.woooo.woocraft.menu.file".into(),
-        items: vec![
-          MenuItem::action("tech.woooo.woocraft.menu.new_file", NewFile),
-          MenuItem::action("tech.woooo.woocraft.menu.open_folder", OpenFolder),
-          MenuItem::separator(),
-          MenuItem::action("tech.woooo.woocraft.menu.save", Save),
-          MenuItem::action("tech.woooo.woocraft.menu.save_as", SaveAs),
-          MenuItem::separator(),
-          MenuItem::action("tech.woooo.woocraft.menu.close_file", CloseFile),
-          MenuItem::separator(),
-          MenuItem::action("tech.woooo.woocraft.menu.quit", Quit),
-        ],
-      },
-      Menu {
-        name: "tech.woooo.woocraft.menu.edit".into(),
-        items: vec![
-          MenuItem::action("tech.woooo.woocraft.menu.undo", Undo),
-          MenuItem::action("tech.woooo.woocraft.menu.redo", Redo),
-          MenuItem::separator(),
-          MenuItem::action("tech.woooo.woocraft.menu.cut", Cut),
-          MenuItem::action("tech.woooo.woocraft.menu.copy", Copy),
-          MenuItem::action("tech.woooo.woocraft.menu.paste", Paste),
-          MenuItem::separator(),
-          MenuItem::action("tech.woooo.woocraft.menu.select_all", SelectAll),
-          MenuItem::action("tech.woooo.woocraft.menu.find", Find),
-        ],
-      },
-      Menu {
-        name: "tech.woooo.woocraft.menu.view".into(),
-        items: vec![
-          MenuItem::action("tech.woooo.woocraft.menu.toggle_sidebar", ToggleLeftDock),
-          MenuItem::separator(),
-          MenuItem::action("tech.woooo.woocraft.menu.toggle_inspector", ToggleInspector),
-          MenuItem::separator(),
-          MenuItem::action("tech.woooo.woocraft.menu.word_wrap", WordWrap),
-        ],
-      },
-      Menu {
-        name: "tech.woooo.woocraft.menu.help".into(),
-        items: vec![MenuItem::action(
-          "tech.woooo.woocraft.menu.about",
-          ShowAbout,
-        )],
-      },
-    ]);
-
-    let bounds = Bounds::centered(None, GpuiSize::new(px(1400.), px(900.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          titlebar: Some(TitleBar::title_bar_options()),
-          #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
-          #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
-          ..Default::default()
+      // Set up application menus (use i18n keys for AppMenuBar translation)
+      cx.set_menus(vec![
+        Menu {
+          name: "tech.woooo.woocraft.menu.file".into(),
+          disabled: false,
+          items: vec![
+            MenuItem::action("tech.woooo.woocraft.menu.new_file", NewFile),
+            MenuItem::action("tech.woooo.woocraft.menu.open_folder", OpenFolder),
+            MenuItem::separator(),
+            MenuItem::action("tech.woooo.woocraft.menu.save", Save),
+            MenuItem::action("tech.woooo.woocraft.menu.save_as", SaveAs),
+            MenuItem::separator(),
+            MenuItem::action("tech.woooo.woocraft.menu.close_file", CloseFile),
+            MenuItem::separator(),
+            MenuItem::action("tech.woooo.woocraft.menu.quit", Quit),
+          ],
         },
-        CodeEditorApp::view,
-      )
-      .expect("open code editor window failed");
+        Menu {
+          name: "tech.woooo.woocraft.menu.edit".into(),
+          disabled: false,
+          items: vec![
+            MenuItem::action("tech.woooo.woocraft.menu.undo", Undo),
+            MenuItem::action("tech.woooo.woocraft.menu.redo", Redo),
+            MenuItem::separator(),
+            MenuItem::action("tech.woooo.woocraft.menu.cut", Cut),
+            MenuItem::action("tech.woooo.woocraft.menu.copy", Copy),
+            MenuItem::action("tech.woooo.woocraft.menu.paste", Paste),
+            MenuItem::separator(),
+            MenuItem::action("tech.woooo.woocraft.menu.select_all", SelectAll),
+            MenuItem::action("tech.woooo.woocraft.menu.find", Find),
+          ],
+        },
+        Menu {
+          name: "tech.woooo.woocraft.menu.view".into(),
+          disabled: false,
+          items: vec![
+            MenuItem::action("tech.woooo.woocraft.menu.toggle_sidebar", ToggleLeftDock),
+            MenuItem::separator(),
+            MenuItem::action("tech.woooo.woocraft.menu.toggle_inspector", ToggleInspector),
+            MenuItem::separator(),
+            MenuItem::action("tech.woooo.woocraft.menu.word_wrap", WordWrap),
+          ],
+        },
+        Menu {
+          name: "tech.woooo.woocraft.menu.help".into(),
+          disabled: false,
+          items: vec![MenuItem::action(
+            "tech.woooo.woocraft.menu.about",
+            ShowAbout,
+          )],
+        },
+      ]);
 
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Woocraft Code Editor");
-      })
-      .expect("update code editor window failed");
-  });
+      let bounds = Bounds::centered(None, GpuiSize::new(px(1400.), px(900.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+          },
+          CodeEditorApp::view,
+        )
+        .expect("open code editor window failed");
+
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Woocraft Code Editor");
+        })
+        .expect("update code editor window failed");
+    });
 }

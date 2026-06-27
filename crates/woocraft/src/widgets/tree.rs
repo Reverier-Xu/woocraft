@@ -229,8 +229,8 @@ impl TreeState {
     self.scroll_handle.scroll_to_item(ix, strategy);
   }
 
-  pub fn focus(&mut self, window: &mut Window, _cx: &mut App) {
-    self.focus_handle.focus(window);
+  pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
+    self.focus_handle.focus(window, cx);
   }
 
   /// Returns the underlying tree model.
@@ -652,9 +652,9 @@ impl Render for TreeState {
         state.on_blank_right_click(ev, window, cx);
       }),
     )
-    .flex_grow()
+    .flex_grow(1.)
     .size_full()
-    .track_scroll(self.scroll_handle.clone())
+    .track_scroll(&self.scroll_handle.clone())
     .with_sizing_behavior(ListSizingBehavior::Auto)
   }
 }

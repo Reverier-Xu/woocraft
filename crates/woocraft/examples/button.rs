@@ -138,28 +138,28 @@ impl Render for ButtonWindow {
 }
 
 fn main() {
-  let app = gpui::Application::new().with_assets(woocraft::Assets);
+  gpui_platform::application()
+    .with_assets(woocraft::Assets)
+    .run(|cx: &mut App| {
+      init(cx);
+      cx.activate(true);
 
-  app.run(|cx: &mut App| {
-    init(cx);
-    cx.activate(true);
+      let bounds = Bounds::centered(None, GpuiSize::new(px(900.), px(620.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            ..Default::default()
+          },
+          |_window, cx| ButtonWindow::view(cx),
+        )
+        .expect("open button demo window failed");
 
-    let bounds = Bounds::centered(None, GpuiSize::new(px(900.), px(620.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          ..Default::default()
-        },
-        |_window, cx| ButtonWindow::view(cx),
-      )
-      .expect("open button demo window failed");
-
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Woocraft Button Example");
-      })
-      .expect("update button demo window failed");
-  });
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Woocraft Button Example");
+        })
+        .expect("update button demo window failed");
+    });
 }

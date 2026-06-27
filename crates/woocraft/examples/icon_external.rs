@@ -78,30 +78,30 @@ fn main() {
     .with(woocraft::Assets)
     .with(EmbeddedSource::<ExternalAssets>::new());
 
-  let app = gpui::Application::new().with_assets(assets);
+  gpui_platform::application()
+    .with_assets(assets)
+    .run(|cx: &mut App| {
+      init(cx);
+      cx.activate(true);
 
-  app.run(|cx: &mut App| {
-    init(cx);
-    cx.activate(true);
+      register_icon("external-star", "external/star.svg");
 
-    register_icon("external-star", "external/star.svg");
+      let bounds = Bounds::centered(None, GpuiSize::new(px(760.), px(420.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            ..Default::default()
+          },
+          |_window, cx| ExternalIconWindow::view(cx),
+        )
+        .expect("open external icon demo window failed");
 
-    let bounds = Bounds::centered(None, GpuiSize::new(px(760.), px(420.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          ..Default::default()
-        },
-        |_window, cx| ExternalIconWindow::view(cx),
-      )
-      .expect("open external icon demo window failed");
-
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Woocraft External Icon Example");
-      })
-      .expect("update external icon demo window failed");
-  });
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Woocraft External Icon Example");
+        })
+        .expect("update external icon demo window failed");
+    });
 }

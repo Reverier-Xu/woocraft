@@ -6,7 +6,7 @@ use gpui::{
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
-  AXIS_GAP, ActiveTheme, AxisText, Grid, PixelsExt, Plot, PlotAxis, StrokeStyle,
+  AXIS_GAP, ActiveTheme, AxisText, Grid, Plot, PlotAxis, StrokeStyle,
   scale::{Scale, ScaleLinear, ScalePoint, Sealed},
   shape::Line,
 };

@@ -7,11 +7,11 @@ use std::{
 };
 
 use gpui::{
-  App, Axis, BorderStyle, Bounds, ContentMask, Corner, CursorStyle, Edges, Element, ElementId,
-  GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, IsZero, LayoutId,
-  ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, Position,
-  ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window, fill, point, px,
-  relative, size,
+  App, Axis, BorderStyle, Bounds, ContentMask, CursorStyle, DispatchPhase, Edges, Element,
+  ElementId, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement,
+  IsZero, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels,
+  Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window,
+  fill, point, px, relative, size,
 };
 
 use crate::{ActiveTheme, ScrollbarShow};
@@ -53,8 +53,8 @@ impl ScrollbarHandle for ScrollHandle {
 
   fn content_size(&self) -> Size<Pixels> {
     size(
-      self.max_offset().width + self.bounds().size.width,
-      self.max_offset().height + self.bounds().size.height,
+      self.max_offset().x + self.bounds().size.width,
+      self.max_offset().y + self.bounds().size.height,
     )
   }
 }
@@ -71,8 +71,8 @@ impl ScrollbarHandle for UniformListScrollHandle {
   fn content_size(&self) -> Size<Pixels> {
     let base = &self.0.borrow().base_handle;
     size(
-      base.max_offset().width + base.bounds().size.width,
-      base.max_offset().height + base.bounds().size.height,
+      base.max_offset().x + base.bounds().size.width,
+      base.max_offset().y + base.bounds().size.height,
     )
   }
 }
@@ -87,7 +87,8 @@ impl ScrollbarHandle for ListState {
   }
 
   fn content_size(&self) -> Size<Pixels> {
-    self.viewport_bounds().size + self.max_offset_for_scrollbar()
+    let max_offset = self.max_offset_for_scrollbar();
+    self.viewport_bounds().size + size(max_offset.x, max_offset.y)
   }
 
   fn start_drag(&self) {
@@ -566,31 +567,31 @@ impl Element for Scrollbar {
 
       let thumb_length = thumb_end - thumb_start - inset * 2;
       let thumb_bounds = if vertical {
-        Bounds::from_corner_and_size(
-          Corner::TopRight,
-          bounds.top_right() + point(-inset, inset + thumb_start),
-          size(WIDTH, thumb_length),
-        )
+        {
+          let size = size(WIDTH, thumb_length);
+          let anchor_point = bounds.top_right() + point(-inset, inset + thumb_start);
+          Bounds::new(anchor_point - point(size.width, px(0.)), size)
+        }
       } else {
-        Bounds::from_corner_and_size(
-          Corner::BottomLeft,
-          bounds.bottom_left() + point(inset + thumb_start, -inset),
-          size(thumb_length, WIDTH),
-        )
+        {
+          let size = size(thumb_length, WIDTH);
+          let anchor_point = bounds.bottom_left() + point(inset + thumb_start, -inset);
+          Bounds::new(anchor_point - point(px(0.), size.height), size)
+        }
       };
 
       let thumb_fill_bounds = if vertical {
-        Bounds::from_corner_and_size(
-          Corner::TopRight,
-          bounds.top_right() + point(-inset, inset + thumb_start),
-          size(thumb_width, thumb_length),
-        )
+        {
+          let size = size(thumb_width, thumb_length);
+          let anchor_point = bounds.top_right() + point(-inset, inset + thumb_start);
+          Bounds::new(anchor_point - point(size.width, px(0.)), size)
+        }
       } else {
-        Bounds::from_corner_and_size(
-          Corner::BottomLeft,
-          bounds.bottom_left() + point(inset + thumb_start, -inset),
-          size(thumb_length, thumb_width),
-        )
+        {
+          let size = size(thumb_length, thumb_width);
+          let anchor_point = bounds.bottom_left() + point(inset + thumb_start, -inset);
+          Bounds::new(anchor_point - point(px(0.), size.height), size)
+        }
       };
 
       let bar_hitbox = window.with_content_mask(Some(ContentMask { bounds }), |window| {
@@ -642,32 +643,51 @@ impl Element for Scrollbar {
       cx.notify(view_id);
     }
 
+    #[derive(Clone)]
+    struct AxisData {
+      axis: Axis,
+      bounds: Bounds<Pixels>,
+      thumb_bounds: Bounds<Pixels>,
+      scroll_size: Pixels,
+      container_size: Pixels,
+      thumb_size: Pixels,
+      margin_end: Pixels,
+      vertical: bool,
+    }
+
+    let axis_data: Vec<AxisData> = prepaint
+      .states
+      .iter()
+      .map(|state| AxisData {
+        axis: state.axis,
+        bounds: state.bounds,
+        thumb_bounds: state.thumb_bounds,
+        scroll_size: state.scroll_size,
+        container_size: state.container_size,
+        thumb_size: state.thumb_size,
+        margin_end: state.margin_end,
+        vertical: is_vertical(state.axis),
+      })
+      .collect();
+
     window.with_content_mask(
       Some(ContentMask {
         bounds: hitbox_bounds,
       }),
       |window| {
         for state in prepaint.states.iter() {
-          let axis = state.axis;
           let mut radius = state.radius;
           if cx.theme().radius.is_zero() {
             radius = px(0.);
           }
-          let bounds = state.bounds;
-          let thumb_bounds = state.thumb_bounds;
-          let scroll_area_size = state.scroll_size;
-          let container_size = state.container_size;
-          let thumb_size = state.thumb_size;
-          let margin_end = state.margin_end;
-          let vertical = is_vertical(axis);
 
           window.set_cursor_style(CursorStyle::default(), &state.bar_hitbox);
 
-          window.paint_layer(bounds, |cx| {
+          window.paint_layer(state.bounds, |cx| {
             cx.paint_quad(fill(state.bounds, state.bg));
 
             cx.paint_quad(PaintQuad {
-              bounds,
+              bounds: state.bounds,
               corner_radii: (0.).into(),
               background: gpui::transparent_black().into(),
               border_widths: Edges {
@@ -682,29 +702,33 @@ impl Element for Scrollbar {
 
             cx.paint_quad(fill(state.thumb_fill_bounds, state.thumb_bg).corner_radii(radius));
           });
+        }
 
-          window.on_mouse_event({
-            let state = scrollbar_state.clone();
-            let scroll_handle = self.scroll_handle.clone();
-            let line_height = window.line_height();
+        let line_height = window.line_height();
 
-            move |event: &ScrollWheelEvent, phase, _, cx| {
-              if !(phase.capture() && hitbox_bounds.contains(&event.position)) {
-                return;
+        window.on_mouse_event({
+          let scrollbar_state = scrollbar_state.clone();
+          let scroll_handle = self.scroll_handle.clone();
+          let axis_data = axis_data.clone();
+
+          move |event: &ScrollWheelEvent, phase, _, cx| {
+            if !(phase.capture() && hitbox_bounds.contains(&event.position)) {
+              return;
+            }
+
+            let mut delta = event.delta.pixel_delta(line_height);
+            if !delta.x.is_zero() && !delta.y.is_zero() {
+              if delta.x.abs() > delta.y.abs() {
+                delta.y = px(0.);
+              } else {
+                delta.x = px(0.);
               }
+            }
 
-              let mut delta = event.delta.pixel_delta(line_height);
-              if !delta.x.is_zero() && !delta.y.is_zero() {
-                if delta.x.abs() > delta.y.abs() {
-                  delta.y = px(0.);
-                } else {
-                  delta.x = px(0.);
-                }
-              }
-
-              let safe_range = (-scroll_area_size + container_size).min(px(0.))..px(0.);
+            for data in &axis_data {
+              let safe_range = (-data.scroll_size + data.container_size).min(px(0.))..px(0.);
               let mut offset = scroll_handle.offset();
-              if vertical {
+              if data.vertical {
                 offset.y = (offset.y + delta.y).clamp(safe_range.start, safe_range.end);
               } else {
                 offset.x = (offset.x + delta.x).clamp(safe_range.start, safe_range.end);
@@ -712,8 +736,8 @@ impl Element for Scrollbar {
 
               if offset != scroll_handle.offset() {
                 scroll_handle.set_offset(offset);
-                state.set(
-                  state
+                scrollbar_state.set(
+                  scrollbar_state
                     .get()
                     .with_last_scroll(scroll_handle.offset(), Some(Instant::now())),
                 );
@@ -721,106 +745,125 @@ impl Element for Scrollbar {
                 cx.stop_propagation();
               }
             }
-          });
+          }
+        });
 
-          let safe_range = (-scroll_area_size + container_size).min(px(0.))..px(0.);
-          let scroll_span = (scroll_area_size - container_size).max(px(0.));
+        if is_hover_to_show || is_visible {
+          window.on_mouse_event({
+            let scrollbar_state = scrollbar_state.clone();
+            let scroll_handle = self.scroll_handle.clone();
+            let axis_data = axis_data.clone();
 
-          if is_hover_to_show || is_visible {
-            window.on_mouse_event({
-              let state = scrollbar_state.clone();
-              let scroll_handle = self.scroll_handle.clone();
+            move |event: &MouseDownEvent, phase, _, cx| {
+              if !phase.bubble() {
+                return;
+              }
 
-              move |event: &MouseDownEvent, phase, _, cx| {
-                if phase.bubble() && bounds.contains(&event.position) {
-                  cx.stop_propagation();
+              for data in &axis_data {
+                if !data.bounds.contains(&event.position) {
+                  continue;
+                }
 
-                  if thumb_bounds.contains(&event.position) {
-                    let pos = event.position - thumb_bounds.origin;
+                cx.stop_propagation();
 
-                    scroll_handle.start_drag();
-                    state.set(state.get().with_drag_pos(axis, pos));
-                    cx.notify(view_id);
+                let safe_range = (-data.scroll_size + data.container_size).min(px(0.))..px(0.);
+                let scroll_span = (data.scroll_size - data.container_size).max(px(0.));
+
+                if data.thumb_bounds.contains(&event.position) {
+                  let pos = event.position - data.thumb_bounds.origin;
+
+                  scroll_handle.start_drag();
+                  scrollbar_state.set(scrollbar_state.get().with_drag_pos(data.axis, pos));
+                  cx.notify(view_id);
+                } else {
+                  let offset = scroll_handle.offset();
+                  let percentage = if data.vertical {
+                    (event.position.y - data.thumb_size / 2. - data.bounds.origin.y)
+                      / (data.bounds.size.height - data.thumb_size)
                   } else {
-                    let offset = scroll_handle.offset();
-                    let percentage = if vertical {
-                      (event.position.y - thumb_size / 2. - bounds.origin.y)
-                        / (bounds.size.height - thumb_size)
-                    } else {
-                      (event.position.x - thumb_size / 2. - bounds.origin.x)
-                        / (bounds.size.width - thumb_size - margin_end)
-                    }
-                    .clamp(0., 1.);
+                    (event.position.x - data.thumb_size / 2. - data.bounds.origin.x)
+                      / (data.bounds.size.width - data.thumb_size - data.margin_end)
+                  }
+                  .clamp(0., 1.);
 
-                    if vertical {
-                      scroll_handle.set_offset(point(
-                        offset.x,
-                        (-scroll_span * percentage).clamp(safe_range.start, safe_range.end),
-                      ));
-                    } else {
-                      scroll_handle.set_offset(point(
-                        (-scroll_span * percentage).clamp(safe_range.start, safe_range.end),
-                        offset.y,
-                      ));
-                    }
+                  if data.vertical {
+                    scroll_handle.set_offset(point(
+                      offset.x,
+                      (-scroll_span * percentage).clamp(safe_range.start, safe_range.end),
+                    ));
+                  } else {
+                    scroll_handle.set_offset(point(
+                      (-scroll_span * percentage).clamp(safe_range.start, safe_range.end),
+                      offset.y,
+                    ));
                   }
                 }
               }
-            });
-          }
+            }
+          });
+        }
 
-          window.on_mouse_event({
-            let scroll_handle = self.scroll_handle.clone();
-            let state = scrollbar_state.clone();
-            let max_fps_duration = Duration::from_millis((1000 / self.max_fps) as u64);
+        let max_fps_duration = Duration::from_millis((1000 / self.max_fps) as u64);
 
-            move |event: &MouseMoveEvent, _, _, cx| {
-              let mut notify = false;
-              let need_hover_to_update = is_hover_to_show || is_visible;
-              if bounds.contains(&event.position) && need_hover_to_update {
-                state.set(state.get().with_hovered(Some(axis)));
-                if state.get().hovered_axis != Some(axis) {
+        window.on_mouse_event({
+          let scrollbar_state = scrollbar_state.clone();
+          let scroll_handle = self.scroll_handle.clone();
+          let axis_data = axis_data.clone();
+
+          move |event: &MouseMoveEvent, phase, _, cx| {
+            if phase != DispatchPhase::Bubble {
+              return;
+            }
+            let mut notify = false;
+            let need_hover_to_update = is_hover_to_show || is_visible;
+
+            for data in &axis_data {
+              if data.bounds.contains(&event.position) && need_hover_to_update {
+                scrollbar_state.set(scrollbar_state.get().with_hovered(Some(data.axis)));
+                if scrollbar_state.get().hovered_axis != Some(data.axis) {
                   notify = true;
                 }
-              } else if state.get().hovered_axis == Some(axis) && state.get().hovered_axis.is_some()
+              } else if scrollbar_state.get().hovered_axis == Some(data.axis)
+                && scrollbar_state.get().hovered_axis.is_some()
               {
-                state.set(state.get().with_hovered(None));
+                scrollbar_state.set(scrollbar_state.get().with_hovered(None));
                 notify = true;
               }
 
-              if thumb_bounds.contains(&event.position) {
-                if state.get().hovered_on_thumb != Some(axis) {
-                  state.set(state.get().with_hovered_on_thumb(Some(axis)));
+              if data.thumb_bounds.contains(&event.position) {
+                if scrollbar_state.get().hovered_on_thumb != Some(data.axis) {
+                  scrollbar_state.set(scrollbar_state.get().with_hovered_on_thumb(Some(data.axis)));
                   notify = true;
                 }
-              } else if state.get().hovered_on_thumb == Some(axis) {
-                state.set(state.get().with_hovered_on_thumb(None));
+              } else if scrollbar_state.get().hovered_on_thumb == Some(data.axis) {
+                scrollbar_state.set(scrollbar_state.get().with_hovered_on_thumb(None));
                 notify = true;
               }
 
-              if state.get().dragged_axis == Some(axis) && event.dragging() {
+              if scrollbar_state.get().dragged_axis == Some(data.axis) && event.dragging() {
                 cx.stop_propagation();
 
-                let drag_pos = state.get().drag_pos;
+                let drag_pos = scrollbar_state.get().drag_pos;
+                let safe_range = (-data.scroll_size + data.container_size).min(px(0.))..px(0.);
 
-                let percentage = (if vertical {
-                  (event.position.y - drag_pos.y - bounds.origin.y)
-                    / (bounds.size.height - thumb_size)
+                let percentage = (if data.vertical {
+                  (event.position.y - drag_pos.y - data.bounds.origin.y)
+                    / (data.bounds.size.height - data.thumb_size)
                 } else {
-                  (event.position.x - drag_pos.x - bounds.origin.x)
-                    / (bounds.size.width - thumb_size - margin_end)
+                  (event.position.x - drag_pos.x - data.bounds.origin.x)
+                    / (data.bounds.size.width - data.thumb_size - data.margin_end)
                 })
                 .clamp(0., 1.);
 
-                let offset = if vertical {
+                let offset = if data.vertical {
                   point(
                     scroll_handle.offset().x,
-                    (-(scroll_area_size - container_size) * percentage)
+                    (-(data.scroll_size - data.container_size) * percentage)
                       .clamp(safe_range.start, safe_range.end),
                   )
                 } else {
                   point(
-                    (-(scroll_area_size - container_size) * percentage)
+                    (-(data.scroll_size - data.container_size) * percentage)
                       .clamp(safe_range.start, safe_range.end),
                     scroll_handle.offset().y,
                   )
@@ -828,33 +871,33 @@ impl Element for Scrollbar {
 
                 if ((scroll_handle.offset().y - offset.y).abs() > px(1.)
                   || (scroll_handle.offset().x - offset.x).abs() > px(1.))
-                  && state.get().last_update.elapsed() > max_fps_duration
+                  && scrollbar_state.get().last_update.elapsed() > max_fps_duration
                 {
                   scroll_handle.set_offset(offset);
-                  state.set(state.get().with_last_update(Instant::now()));
+                  scrollbar_state.set(scrollbar_state.get().with_last_update(Instant::now()));
                   notify = true;
                 }
               }
-
-              if notify {
-                cx.notify(view_id);
-              }
             }
-          });
 
-          window.on_mouse_event({
-            let state = scrollbar_state.clone();
-            let scroll_handle = self.scroll_handle.clone();
-
-            move |_event: &MouseUpEvent, phase, _, cx| {
-              if phase.bubble() {
-                scroll_handle.end_drag();
-                state.set(state.get().with_unset_drag_pos());
-                cx.notify(view_id);
-              }
+            if notify {
+              cx.notify(view_id);
             }
-          });
-        }
+          }
+        });
+
+        window.on_mouse_event({
+          let scrollbar_state = scrollbar_state.clone();
+          let scroll_handle = self.scroll_handle.clone();
+
+          move |_event: &MouseUpEvent, phase, _, cx| {
+            if phase.bubble() {
+              scroll_handle.end_drag();
+              scrollbar_state.set(scrollbar_state.get().with_unset_drag_pos());
+              cx.notify(view_id);
+            }
+          }
+        });
       },
     );
   }

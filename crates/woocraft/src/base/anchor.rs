@@ -4,7 +4,7 @@
 //! top-right, bottom-left, bottom-center, bottom-right, plus center variations)
 //! for positioning popovers, dropdowns, and other floating containers.
 
-use gpui::Corner;
+use gpui::Anchor as GpuiAnchor;
 
 /// Anchor point for positioning floating elements (popovers, dropdowns, menus).
 ///
@@ -41,26 +41,30 @@ impl Anchor {
   }
 }
 
-impl From<Corner> for Anchor {
-  fn from(corner: Corner) -> Self {
-    match corner {
-      Corner::TopLeft => Self::TopLeft,
-      Corner::TopRight => Self::TopRight,
-      Corner::BottomLeft => Self::BottomLeft,
-      Corner::BottomRight => Self::BottomRight,
+impl From<GpuiAnchor> for Anchor {
+  fn from(anchor: GpuiAnchor) -> Self {
+    match anchor {
+      GpuiAnchor::TopLeft => Self::TopLeft,
+      GpuiAnchor::TopCenter => Self::TopCenter,
+      GpuiAnchor::TopRight => Self::TopRight,
+      GpuiAnchor::BottomLeft => Self::BottomLeft,
+      GpuiAnchor::BottomCenter => Self::BottomCenter,
+      GpuiAnchor::BottomRight => Self::BottomRight,
+      GpuiAnchor::LeftCenter => Self::TopLeft,
+      GpuiAnchor::RightCenter => Self::TopRight,
     }
   }
 }
 
-impl From<Anchor> for Corner {
+impl From<Anchor> for GpuiAnchor {
   fn from(anchor: Anchor) -> Self {
     match anchor {
-      Anchor::TopLeft => Corner::TopLeft,
-      Anchor::TopCenter => Corner::TopLeft,
-      Anchor::TopRight => Corner::TopRight,
-      Anchor::BottomLeft => Corner::BottomLeft,
-      Anchor::BottomCenter => Corner::BottomLeft,
-      Anchor::BottomRight => Corner::BottomRight,
+      Anchor::TopLeft => Self::TopLeft,
+      Anchor::TopCenter => Self::TopCenter,
+      Anchor::TopRight => Self::TopRight,
+      Anchor::BottomLeft => Self::BottomLeft,
+      Anchor::BottomCenter => Self::BottomCenter,
+      Anchor::BottomRight => Self::BottomRight,
     }
   }
 }

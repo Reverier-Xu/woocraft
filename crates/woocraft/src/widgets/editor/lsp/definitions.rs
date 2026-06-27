@@ -47,6 +47,10 @@ impl HoverDefinition {
     self.locations.is_empty()
   }
 
+  pub(crate) fn cache_key(&self) -> (Range<usize>, *const Vec<lsp_types::LocationLink>) {
+    (self.symbol_range.clone(), Rc::as_ptr(&self.locations))
+  }
+
   pub(crate) fn clear(&mut self) {
     if !self.locations.is_empty() {
       self.last_location = Some((self.symbol_range.clone(), self.locations.clone()));
@@ -80,7 +84,7 @@ impl InputState {
     self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
       let locations = task.await?;
 
-      let _ = editor.update(cx, |editor, cx| {
+      editor.update(cx, |editor, cx| {
         let had_hover_definition = !editor.hover_definition.is_empty();
         let was_same_hover_definition = editor.hover_definition.is_same(offset);
         if locations.is_empty() {

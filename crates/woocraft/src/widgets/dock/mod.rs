@@ -7,16 +7,15 @@ mod state;
 mod tab_panel;
 mod tiles;
 
-use std::{collections::HashSet, ops::Deref, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result;
-use dock::ResizePanel;
 pub use dock::*;
 use gpui::{
-  AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, DragMoveEvent, Edges, Entity,
-  EntityId, EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _,
-  Pixels, Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
-  prelude::FluentBuilder, px,
+  AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
+  EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
+  Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
+  prelude::FluentBuilder,
 };
 pub use panel::*;
 pub use stack_panel::*;
@@ -24,8 +23,7 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::{AnyDrag, DragDrop, DragMoving, DragResizing, TileItem, Tiles};
 
-use super::resizable::resize_handle;
-use crate::{ActiveTheme, DockPlacement, ElementExt, Placement, TabBarDirection};
+use crate::{DockPlacement, ElementExt, TabBarDirection};
 
 pub(crate) fn init(cx: &mut App) {
   PanelRegistry::init(cx);
@@ -42,12 +40,6 @@ pub enum DockEvent {
 
   /// The drag item drop event.
   DragDrop(AnyDrag),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct SplitPreview {
-  bounds: Bounds<Pixels>,
-  placement: Placement,
 }
 
 /// The main area of the dock.
@@ -94,8 +86,12 @@ pub struct DockArea {
   _subscriptions: Vec<Subscription>,
   subscribed_panel_ids: HashSet<EntityId>,
   subscribed_tile_drop_ids: HashSet<EntityId>,
-  split_preview: Option<SplitPreview>,
   pending_layout_change: bool,
+
+  /// Tracks which [`TabPanel`] drop zone the mouse was over during the last
+  /// `DragPanel` drag move so that the single global listener can efficiently
+  /// clear stale previews when the pointer leaves a zone.
+  last_drag_hover: Option<(WeakEntity<TabPanel>, TabPanelDropZone)>,
 }
 
 /// DockItem is a tree structure that represents the layout of the dock.
@@ -503,32 +499,6 @@ impl DockItem {
       DockItem::Panel { .. } => None,
     }
   }
-
-  fn collect_tab_panels(&self, out: &mut Vec<Entity<TabPanel>>, cx: &App) {
-    match self {
-      DockItem::Tabs { view, .. } => out.push(view.clone()),
-      DockItem::Split { items, .. } => {
-        for item in items {
-          item.collect_tab_panels(out, cx);
-        }
-      }
-      DockItem::Tiles { view, .. } => {
-        let panels = view.read(cx).panels().to_vec();
-        for tile_item in panels {
-          if tile_item.panel.panel_name(cx) == "TabPanel" {
-            let tab_panel: Entity<TabPanel> = tile_item.panel.as_ref().into();
-            out.push(tab_panel);
-          }
-        }
-      }
-      DockItem::Panel { view, .. } => {
-        if view.panel_name(cx) == "TabPanel" {
-          let tab_panel: Entity<TabPanel> = view.as_ref().into();
-          out.push(tab_panel);
-        }
-      }
-    }
-  }
 }
 
 impl DockArea {
@@ -607,8 +577,8 @@ impl DockArea {
       _subscriptions: vec![],
       subscribed_panel_ids: HashSet::new(),
       subscribed_tile_drop_ids: HashSet::new(),
-      split_preview: None,
       pending_layout_change: false,
+      last_drag_hover: None,
     };
 
     this.subscribe_panel(&stack_panel, window, cx);
@@ -928,24 +898,110 @@ impl DockArea {
     self.remove_panel(panel.clone(), DockPlacement::Bottom, window, cx);
   }
 
+  /// Single global handler for `DragPanel` drag-move events.
+  ///
+  /// Previously each [`TabPanel`] registered three `on_drag_move` listeners,
+  /// giving 3N capture-phase callbacks for N panels. This method replaces them
+  /// with one listener on the [`DockArea`] root that performs a cheap bounds
+  /// test against the drop zones recorded during each panel's last prepaint.
+  fn handle_drag_move(
+    &mut self, drag: &gpui::DragMoveEvent<DragPanel>, _window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    let position = drag.event.position;
+    let dock_area_locked = self.is_locked();
+    let mut hovered: Option<(WeakEntity<TabPanel>, TabPanelDropZone)> = None;
+
+    for tab_panel in self.all_tab_panels(cx) {
+      let state = tab_panel.read(cx);
+      let droppable = !state.is_locked_with_dock_area(dock_area_locked);
+
+      if droppable
+        && let Some(bounds) = state.tab_bar_bounds
+        && bounds.contains(&position)
+      {
+        hovered = Some((tab_panel.downgrade(), TabPanelDropZone::TabBar));
+        break;
+      }
+      if droppable
+        && let Some(bounds) = state.vertical_tab_bar_bounds
+        && bounds.contains(&position)
+      {
+        hovered = Some((tab_panel.downgrade(), TabPanelDropZone::VerticalTabBar));
+        break;
+      }
+      if droppable
+        && let Some(bounds) = state.panel_content_bounds
+        && bounds.contains(&position)
+      {
+        hovered = Some((tab_panel.downgrade(), TabPanelDropZone::PanelContent));
+        break;
+      }
+    }
+
+    if self.last_drag_hover != hovered {
+      if let Some((last_panel, last_zone)) = self.last_drag_hover.take()
+        && let Some(last_panel) = last_panel.upgrade()
+      {
+        last_panel.update(cx, |panel, cx| match last_zone {
+          TabPanelDropZone::TabBar | TabPanelDropZone::VerticalTabBar => {
+            panel.clear_tab_drop_preview();
+          }
+          TabPanelDropZone::PanelContent => panel.clear_split_preview(cx),
+        });
+      }
+      self.last_drag_hover = hovered.clone();
+    }
+
+    if let Some((panel, zone)) = hovered
+      && let Some(panel) = panel.upgrade()
+    {
+      panel.update(cx, |panel, cx| {
+        let bounds = match zone {
+          TabPanelDropZone::TabBar => panel.tab_bar_bounds.unwrap(),
+          TabPanelDropZone::VerticalTabBar => panel.vertical_tab_bar_bounds.unwrap(),
+          TabPanelDropZone::PanelContent => panel.panel_content_bounds.unwrap(),
+        };
+        match zone {
+          TabPanelDropZone::TabBar => panel.on_tab_bar_drag_move(position, bounds, cx),
+          TabPanelDropZone::VerticalTabBar => {
+            panel.on_vertical_tab_bar_drag_move(position, bounds, cx)
+          }
+          TabPanelDropZone::PanelContent => {
+            if panel.allows_split_drop() {
+              panel.on_panel_drag_move(position, bounds, cx);
+            } else {
+              panel.set_center_drop_active(true, cx);
+            }
+          }
+        }
+      });
+    }
+  }
+
+  fn collect_tab_panels_from_panel_view(
+    panel: Arc<dyn PanelView>, out: &mut Vec<Entity<TabPanel>>, cx: &App,
+  ) {
+    if let Ok(tab_panel) = panel.view().downcast::<TabPanel>() {
+      out.push(tab_panel);
+    } else if let Ok(stack_panel) = panel.view().downcast::<StackPanel>() {
+      stack_panel.read(cx).collect_tab_panels(out, cx);
+    }
+  }
+
   fn all_tab_panels(&self, cx: &App) -> Vec<Entity<TabPanel>> {
     let mut panels = Vec::new();
-    self.center.collect_tab_panels(&mut panels, cx);
-    self
-      .left_dock
-      .read(cx)
-      .panel
-      .collect_tab_panels(&mut panels, cx);
-    self
-      .right_dock
-      .read(cx)
-      .panel
-      .collect_tab_panels(&mut panels, cx);
-    self
-      .bottom_dock
-      .read(cx)
-      .panel
-      .collect_tab_panels(&mut panels, cx);
+    Self::collect_tab_panels_from_panel_view(self.center.view(), &mut panels, cx);
+    Self::collect_tab_panels_from_panel_view(self.left_dock.read(cx).panel.view(), &mut panels, cx);
+    Self::collect_tab_panels_from_panel_view(
+      self.right_dock.read(cx).panel.view(),
+      &mut panels,
+      cx,
+    );
+    Self::collect_tab_panels_from_panel_view(
+      self.bottom_dock.read(cx).panel.view(),
+      &mut panels,
+      cx,
+    );
     panels
   }
 
@@ -996,7 +1052,7 @@ impl DockArea {
     }
 
     if let Some(panel) = self.panel_by_id(panel_id, cx) {
-      panel.focus_handle(cx).focus(window);
+      panel.focus_handle(cx).focus(window, cx);
       return true;
     }
 
@@ -1036,7 +1092,6 @@ impl DockArea {
     self._subscriptions.clear();
     self.subscribed_panel_ids.clear();
     self.subscribed_tile_drop_ids.clear();
-    self.split_preview = None;
     self.version = state.version;
     self.center_enabled = state.center_enabled;
     let weak_self = cx.entity().downgrade();
@@ -1208,53 +1263,6 @@ impl DockArea {
       .left_top_tab_panel(cx)
       .map(|view| view.entity_id());
   }
-
-  pub(crate) fn set_split_preview(
-    &mut self, bounds: Bounds<Pixels>, placement: Placement, _cx: &mut Context<Self>,
-  ) {
-    let next_preview = Some(SplitPreview { bounds, placement });
-    if self.split_preview == next_preview {
-      return;
-    }
-
-    self.split_preview = next_preview;
-  }
-
-  pub(crate) fn clear_split_preview(&mut self, _cx: &mut Context<Self>) {
-    self.split_preview = None;
-  }
-
-  fn render_split_preview(&self, cx: &App) -> Option<impl IntoElement> {
-    let preview = self.split_preview?;
-    let bounds = preview.bounds;
-    let left = bounds.left() - self.bounds.left();
-    let top = bounds.top() - self.bounds.top();
-
-    let overlay = match preview.placement {
-      Placement::Left => div()
-        .left(left)
-        .top(top)
-        .w(bounds.size.width * 0.5)
-        .h(bounds.size.height),
-      Placement::Right => div()
-        .left(left + bounds.size.width * 0.5)
-        .top(top)
-        .w(bounds.size.width * 0.5)
-        .h(bounds.size.height),
-      Placement::Top => div()
-        .left(left)
-        .top(top)
-        .w(bounds.size.width)
-        .h(bounds.size.height * 0.5),
-      Placement::Bottom => div()
-        .left(left)
-        .top(top + bounds.size.height * 0.5)
-        .w(bounds.size.width)
-        .h(bounds.size.height * 0.5),
-    };
-
-    Some(overlay.absolute().bg(cx.theme().drop_target))
-  }
 }
 impl EventEmitter<DockEvent> for DockArea {}
 impl Render for DockArea {
@@ -1266,16 +1274,16 @@ impl Render for DockArea {
       .relative()
       .size_full()
       .overflow_hidden()
-      .on_drag_move(cx.listener(|this, drag: &DragMoveEvent<DragPanel>, _, cx| {
-        if let Some(preview) = this.split_preview
-          && !preview.bounds.contains(&drag.event.position)
-        {
-          this.clear_split_preview(cx);
-        }
+      .on_drag_move(cx.listener(|this, drag, window, cx| {
+        this.handle_drag_move(drag, window, cx);
       }))
       .on_mouse_up(
         MouseButton::Left,
-        cx.listener(|this, _, _, cx| this.clear_split_preview(cx)),
+        cx.listener(|this, _, _, cx| {
+          for tab_panel in this.all_tab_panels(cx) {
+            tab_panel.update(cx, |panel, cx| panel.clear_split_preview(cx));
+          }
+        }),
       )
       .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds))
       .map(|this| {
@@ -1293,135 +1301,35 @@ impl Render for DockArea {
               let bottom_dock = self.bottom_dock.clone();
 
               // render dock
-              this
-                .child(
-                  div()
-                    .flex()
-                    .flex_row()
-                    .h_full()
-                    // Left dock (always present)
-                    .child(div().flex().flex_none().child(left_dock.clone()))
-                    // Center column
-                    .child(
-                      div()
-                        .flex()
-                        .flex_1()
-                        .flex_col()
-                        .overflow_hidden()
-                        // Center content (or empty space when disabled)
-                        .child(
-                          div()
-                            .flex_1()
-                            .overflow_hidden()
-                            .when(self.center_enabled, |this| {
-                              this.child(self.render_items(window, cx))
-                            }),
-                        )
-                        // Bottom Dock (always present)
-                        .child(bottom_dock.clone()),
-                    )
-                    // Right Dock (always present)
-                    .child(div().flex().flex_none().child(right_dock.clone())),
-                )
-                .when_some(self.render_split_preview(cx), |this, overlay| {
-                  this.child(overlay)
-                })
-                // Dock resize handle overlays — rendered last so they paint on
-                // top of all dock content and center area, ensuring the
-                // symmetric hit areas are not obscured by siblings.
-                .map(|this| {
-                  let dock_read = left_dock.read(cx);
-                  if dock_read.collapsed {
-                    return this;
-                  }
-                  let size = dock_read.display_size();
-                  let dock_clone = left_dock.clone();
-                  this.child(
+              this.child(
+                div()
+                  .flex()
+                  .flex_row()
+                  .h_full()
+                  // Left dock (always present)
+                  .child(div().flex().flex_none().child(left_dock.clone()))
+                  // Center column
+                  .child(
                     div()
-                      .absolute()
-                      .left(size)
-                      .top_0()
-                      .bottom_0()
-                      .w(px(0.))
+                      .flex()
+                      .flex_1()
+                      .flex_col()
+                      .overflow_hidden()
+                      // Center content (or empty space when disabled)
                       .child(
-                        resize_handle::<ResizePanel, ResizePanel>(
-                          "left-dock-resize",
-                          Axis::Horizontal,
-                        )
-                        .on_drag(ResizePanel, move |info, _, _, cx| {
-                          cx.stop_propagation();
-                          dock_clone.update(cx, |dock, _| dock.set_resizing(true));
-                          cx.new(|_| info.deref().clone())
-                        }),
-                      ),
+                        div()
+                          .flex_1()
+                          .overflow_hidden()
+                          .when(self.center_enabled, |this| {
+                            this.child(self.render_items(window, cx))
+                          }),
+                      )
+                      // Bottom Dock (always present)
+                      .child(bottom_dock.clone()),
                   )
-                })
-                .map(|this| {
-                  let dock_read = right_dock.read(cx);
-                  if dock_read.collapsed {
-                    return this;
-                  }
-                  let size = dock_read.display_size();
-                  let dock_clone = right_dock.clone();
-                  this.child(
-                    div()
-                      .absolute()
-                      .right(size)
-                      .top_0()
-                      .bottom_0()
-                      .w(px(0.))
-                      .child(
-                        resize_handle::<ResizePanel, ResizePanel>(
-                          "right-dock-resize",
-                          Axis::Horizontal,
-                        )
-                        .on_drag(ResizePanel, move |info, _, _, cx| {
-                          cx.stop_propagation();
-                          dock_clone.update(cx, |dock, _| dock.set_resizing(true));
-                          cx.new(|_| info.deref().clone())
-                        }),
-                      ),
-                  )
-                })
-                .map(|this| {
-                  let dock_read = bottom_dock.read(cx);
-                  if dock_read.collapsed {
-                    return this;
-                  }
-                  let size = dock_read.display_size();
-                  let dock_clone = bottom_dock.clone();
-                  let left_d = left_dock.read(cx);
-                  let left_size = if left_d.collapsed {
-                    px(41.)
-                  } else {
-                    left_d.display_size()
-                  };
-                  let right_d = right_dock.read(cx);
-                  let right_size = if right_d.collapsed {
-                    px(41.)
-                  } else {
-                    right_d.display_size()
-                  };
-                  this.child(
-                    div()
-                      .absolute()
-                      .bottom(size)
-                      .left(left_size)
-                      .right(right_size)
-                      .h(px(0.))
-                      .child(
-                        resize_handle::<ResizePanel, ResizePanel>(
-                          "bottom-dock-resize",
-                          Axis::Vertical,
-                        )
-                        .on_drag(ResizePanel, move |info, _, _, cx| {
-                          cx.stop_propagation();
-                          dock_clone.update(cx, |dock, _| dock.set_resizing(true));
-                          cx.new(|_| info.deref().clone())
-                        }),
-                      ),
-                  )
-                })
+                  // Right Dock (always present)
+                  .child(div().flex().flex_none().child(right_dock.clone())),
+              )
             }
           }
         }

@@ -318,7 +318,7 @@ impl LoadingWindow {
       )
       .child(
         div()
-          .flex_grow()
+          .flex_grow(1.)
           .h_64()
           .border_1()
           .border_color(cx.theme().border)
@@ -417,7 +417,7 @@ impl LoadingWindow {
       )
       .child(
         div()
-          .flex_grow()
+          .flex_grow(1.)
           .min_h_0()
           .border_1()
           .border_color(cx.theme().border)
@@ -454,33 +454,33 @@ fn toggle_list_loading(items: &mut [LoadingListItem], target_id: &str) {
 }
 
 fn main() {
-  let app = gpui::Application::new().with_assets(woocraft::Assets);
+  gpui_platform::application()
+    .with_assets(woocraft::Assets)
+    .run(|cx: &mut App| {
+      init(cx);
+      cx.activate(true);
 
-  app.run(|cx: &mut App| {
-    init(cx);
-    cx.activate(true);
+      let bounds = Bounds::centered(None, GpuiSize::new(px(1200.), px(700.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+          },
+          LoadingWindow::view,
+        )
+        .expect("open loading demo window failed");
 
-    let bounds = Bounds::centered(None, GpuiSize::new(px(1200.), px(700.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          titlebar: Some(TitleBar::title_bar_options()),
-          #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
-          #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
-          ..Default::default()
-        },
-        LoadingWindow::view,
-      )
-      .expect("open loading demo window failed");
-
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Loading & Hot-Update Example");
-      })
-      .expect("update loading demo window failed");
-  });
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Loading & Hot-Update Example");
+        })
+        .expect("update loading demo window failed");
+    });
 }

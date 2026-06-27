@@ -114,33 +114,33 @@ impl Render for PaginationWindow {
 }
 
 fn main() {
-  let app = gpui::Application::new().with_assets(woocraft::Assets);
+  gpui_platform::application()
+    .with_assets(woocraft::Assets)
+    .run(|cx: &mut App| {
+      woocraft::init(cx);
+      cx.activate(true);
 
-  app.run(|cx: &mut App| {
-    woocraft::init(cx);
-    cx.activate(true);
+      let bounds = Bounds::centered(None, GpuiSize::new(px(980.), px(680.)), cx);
+      let window = cx
+        .open_window(
+          WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
+            ..Default::default()
+          },
+          PaginationWindow::view,
+        )
+        .expect("open pagination demo window failed");
 
-    let bounds = Bounds::centered(None, GpuiSize::new(px(980.), px(680.)), cx);
-    let window = cx
-      .open_window(
-        WindowOptions {
-          window_bounds: Some(WindowBounds::Windowed(bounds)),
-          titlebar: Some(TitleBar::title_bar_options()),
-          #[cfg(target_os = "linux")]
-          window_background: gpui::WindowBackgroundAppearance::Transparent,
-          #[cfg(target_os = "linux")]
-          window_decorations: Some(gpui::WindowDecorations::Client),
-          ..Default::default()
-        },
-        PaginationWindow::view,
-      )
-      .expect("open pagination demo window failed");
-
-    window
-      .update(cx, |_, window, _| {
-        window.activate_window();
-        window.set_window_title("Woocraft Pagination Example");
-      })
-      .expect("update pagination demo window failed");
-  });
+      window
+        .update(cx, |_, window, _| {
+          window.activate_window();
+          window.set_window_title("Woocraft Pagination Example");
+        })
+        .expect("update pagination demo window failed");
+    });
 }

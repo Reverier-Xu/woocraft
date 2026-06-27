@@ -1,7 +1,7 @@
 use std::{cell::RefCell, panic::Location, rc::Rc};
 
 use gpui::{
-  AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
+  Anchor, AnyElement, App, Context, DismissEvent, Element, ElementId, Entity, Focusable,
   GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
   MouseButton, MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled, Subscription,
   Window, anchored, deferred, div, prelude::FluentBuilder, px,
@@ -38,7 +38,7 @@ pub struct ContextMenu<E: ParentElement + Styled + Sized> {
   menu: Option<Rc<MenuBuilderFn>>,
   // This is not in use, just for style refinement forwarding.
   _ignore_style: StyleRefinement,
-  anchor: Corner,
+  anchor: Anchor,
 }
 
 impl<E: ParentElement + Styled> ContextMenu<E> {
@@ -48,7 +48,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
       id: id.into(),
       element: Some(element),
       menu: None,
-      anchor: Corner::TopLeft,
+      anchor: Anchor::TopLeft,
       _ignore_style: StyleRefinement::default(),
     }
   }
@@ -181,7 +181,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                       .when_some(menu_view, |this, menu| {
                         // Focus the menu, so that can be handle the action.
                         if !menu.focus_handle(cx).contains_focused(window, cx) {
-                          menu.focus_handle(cx).focus(window);
+                          menu.focus_handle(cx).focus(window, cx);
                         }
 
                         this.child(

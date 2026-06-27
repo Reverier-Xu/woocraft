@@ -4,7 +4,6 @@ use gpui::{App, Bounds, IntoElement, Pixels, RenderOnce, Styled, Window, canvas}
 
 use crate::{
   ActiveTheme, Plot,
-  base::PixelsExt,
   shape::{Arc, ArcData, Pie},
 };
 

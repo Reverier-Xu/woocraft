@@ -924,9 +924,9 @@ impl InputState {
           cx,
         );
       }
-    } else if let Some(last_layout) = self.last_layout.as_ref() {
-      self.sync_wrap_metrics_for_view(last_layout.content_width, window, cx);
     } else {
+      // Defer the actual rewrap to ViewportElement::prepaint, which has the
+      // up-to-date container bounds and can debounce rapid resize frames.
       self.text_wrapper.set_default_text(&self.text);
     }
     self.refresh_backend_highlighter(force || change.is_some(), change.as_ref());
@@ -1277,7 +1277,7 @@ impl InputState {
 
   /// Focus the input field.
   pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-    self.focus_handle.focus(window);
+    self.focus_handle.focus(window, cx);
     self.blink_cursor.update(cx, |cursor, cx| {
       cursor.start(cx);
     });
@@ -2769,19 +2769,14 @@ impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     self.install_builtin_backend_if_needed();
     self.sync_text_with_backend(false, None, window, cx);
-    if let Some((content_width, line_height)) = self
-      .last_layout
-      .as_ref()
-      .map(|layout| (layout.content_width, layout.line_height))
-    {
-      self.sync_wrap_metrics_for_view(content_width, window, cx);
+    if let Some(line_height) = self.last_layout.as_ref().map(|layout| layout.line_height) {
       self.clamp_top_row(line_height);
     }
     div()
       .id("input-state")
       .flex_1()
       .h_full()
-      .flex_grow()
+      .flex_grow(1.)
       .min_w_0()
       .min_h_0()
       .overflow_hidden()

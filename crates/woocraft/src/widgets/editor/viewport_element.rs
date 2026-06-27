@@ -1,10 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-  App, Bounds, ContentMask, Element, ElementId, ElementInputHandler, Entity, GlobalElementId,
-  HighlightStyle, Hsla, IntoElement, LayoutId, MouseButton, MouseMoveEvent, MouseUpEvent, Path,
-  Pixels, ShapedLine, SharedString, Style, TextRun, UnderlineStyle, Window, fill, point, px,
-  relative, size,
+  App, Bounds, ContentMask, DispatchPhase, Element, ElementId, ElementInputHandler, Entity, Font,
+  GlobalElementId, HighlightStyle, Hsla, IntoElement, LayoutId, LineFragment, MouseButton,
+  MouseMoveEvent, MouseUpEvent, Path, Pixels, ShapedLine, SharedString, Style, TextAlign, TextRun,
+  TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -15,10 +15,10 @@ use super::{
   mode::InputMode,
   rope_ext::RopeExt as _,
   state::{InputState, LastLayout, VisibleLine, WhitespaceIndicators},
-  text_wrapper::{LineLayout, break_all_ranges},
+  text_wrapper::LineLayout,
   viewport,
 };
-use crate::{ActiveTheme as _, ColorExt as _, paint_caret};
+use crate::{ActiveTheme as _, ColorExt as _, Selection, paint_caret};
 
 const OVERSCAN_ROWS: usize = 2;
 const LINE_NUMBER_LEFT_MARGIN: Pixels = px(24.);
@@ -30,6 +30,7 @@ pub(super) struct ViewportElement {
   placeholder: SharedString,
 }
 
+#[derive(Clone)]
 pub(super) struct PrepaintState {
   last_layout: LastLayout,
   line_numbers: Option<Vec<SmallVec<[ShapedLine; 1]>>>,
@@ -51,9 +52,69 @@ struct VisibleRowLayout {
   byte_range: Range<usize>,
 }
 
+/// Content cache key for the ViewportElement. This captures the inputs that
+/// affect text shaping, syntax highlighting and line-number rendering, but
+/// deliberately excludes `bounds`. During resize the editor bounds change
+/// every frame; by splitting content from geometry we can reuse the expensive
+/// shaping/highlighting work while only rebuilding paths/cursor which depend
+/// on the absolute bounds.
+#[derive(Clone)]
+struct ContentCacheKey {
+  top_row: usize,
+  visible_range_offset: Range<usize>,
+  text: Rope,
+  selected_range: Selection,
+  selection_reversed: bool,
+  ime_marked_range: Option<Selection>,
+  masked: bool,
+  line_number: bool,
+  text_style: TextStyle,
+  hover_symbol_range: Range<usize>,
+  hover_locations_ptr: *const Vec<lsp_types::LocationLink>,
+  document_colors_ptr: *const Vec<(lsp_types::Range, Hsla)>,
+  document_colors_len: usize,
+  search_matched_ranges_ptr: *const Vec<Range<usize>>,
+  highlighter_revision: u64,
+}
+
+impl PartialEq for ContentCacheKey {
+  fn eq(&self, other: &Self) -> bool {
+    self.top_row == other.top_row
+      && self.visible_range_offset == other.visible_range_offset
+      && self.text == other.text
+      && self.selected_range == other.selected_range
+      && self.selection_reversed == other.selection_reversed
+      && self.ime_marked_range == other.ime_marked_range
+      && self.masked == other.masked
+      && self.line_number == other.line_number
+      && self.text_style == other.text_style
+      && self.hover_symbol_range == other.hover_symbol_range
+      && self.hover_locations_ptr == other.hover_locations_ptr
+      && self.document_colors_ptr == other.document_colors_ptr
+      && self.document_colors_len == other.document_colors_len
+      && self.search_matched_ranges_ptr == other.search_matched_ranges_ptr
+      && self.highlighter_revision == other.highlighter_revision
+  }
+}
+
+/// Cached content-independent-of-bounds.
+#[derive(Clone)]
+struct Content {
+  lines: Vec<LineLayout>,
+  line_numbers: Option<Vec<SmallVec<[ShapedLine; 1]>>>,
+  current_row: Option<usize>,
+}
+
+#[derive(Clone)]
+struct ContentCache {
+  key: ContentCacheKey,
+  content: Content,
+}
+
 struct LayoutLinesParams<'a> {
   display_text: &'a Rope,
   last_layout: &'a LastLayout,
+  font: Font,
   font_size: Pixels,
   runs: &'a [TextRun],
   bg_segments: &'a [(Range<usize>, Hsla)],
@@ -73,11 +134,29 @@ impl ViewportElement {
     self
   }
 
-  fn paint_mouse_listeners(&mut self, window: &mut Window, _: &mut App) {
+  fn paint_mouse_listeners(&mut self, window: &mut Window, cx: &mut App) {
+    // Only install the global window listeners while the user is actively
+    // interacting with this editor. This avoids accumulating 2N always-on
+    // window listeners when N editor panels are present.
+    let needs_listeners = {
+      let state = self.state.read(cx);
+      state.scrollbar_dragging || state.selecting
+    };
+    if !needs_listeners {
+      return;
+    }
+
     window.on_mouse_event({
       let state = self.state.clone();
 
-      move |event: &MouseMoveEvent, _, window, cx| {
+      move |event: &MouseMoveEvent, phase, window, cx| {
+        if phase != DispatchPhase::Bubble {
+          return;
+        }
+        if event.pressed_button != Some(MouseButton::Left) {
+          return;
+        }
+
         state.update(cx, |state, cx| {
           if state.scrollbar_dragging {
             if event.pressed_button != Some(MouseButton::Left) {
@@ -92,7 +171,10 @@ impl ViewportElement {
             return;
           }
 
-          if event.pressed_button == Some(MouseButton::Left) {
+          if event.pressed_button == Some(MouseButton::Left)
+            && state.selecting
+            && state.focus_handle.is_focused(window)
+          {
             state.on_drag_move(event, window, cx);
           }
         });
@@ -102,7 +184,10 @@ impl ViewportElement {
     window.on_mouse_event({
       let state = self.state.clone();
 
-      move |_event: &MouseUpEvent, _, _window, cx| {
+      move |_event: &MouseUpEvent, phase, _window, cx| {
+        if phase != DispatchPhase::Bubble {
+          return;
+        }
         state.update(cx, |state, _| {
           state.scrollbar_dragging = false;
         });
@@ -415,6 +500,7 @@ impl ViewportElement {
     let LayoutLinesParams {
       display_text,
       last_layout,
+      font,
       font_size,
       runs,
       bg_segments,
@@ -436,12 +522,32 @@ impl ViewportElement {
         .byte_range
         .start
         .saturating_sub(last_layout.visible_range_offset.start);
-      let wrapped_ranges = if !state.masked {
-        state
+
+      let (line, wrapped_ranges) = if state.masked {
+        let line = display_text.slice_line(row).to_string();
+        let mut wrapper = window.text_system().line_wrapper(font.clone(), font_size);
+        let fragment = LineFragment::Text { text: &line };
+        let mut start = 0;
+        let mut wrapped = Vec::new();
+        for boundary in wrapper.wrap_line(&[fragment], wrap_width) {
+          wrapped.push(start..boundary.ix);
+          start = boundary.ix;
+        }
+        wrapped.push(start..line.len());
+        let wrapped_ranges = wrapped
+          .get(visible_line.wrap_range.clone())
+          .map(ToOwned::to_owned)
+          .unwrap_or_else(|| std::iter::once(0..line.len()).collect());
+        (line, wrapped_ranges)
+      } else {
+        let line = display_text
+          .slice(visible_line.byte_range.start..visible_line.byte_range.end)
+          .to_string();
+        let wrapped_ranges = state
           .text_wrapper
           .line(row)
-          .map(|line| {
-            line.wrapped_lines[visible_line.wrap_range.clone()]
+          .map(|line_item| {
+            line_item.wrapped_lines[visible_line.wrap_range.clone()]
               .iter()
               .map(|range| {
                 range.start.saturating_sub(slice_start_offset)
@@ -451,47 +557,38 @@ impl ViewportElement {
           })
           .unwrap_or_else(|| {
             std::iter::once(0..slice_end_offset.saturating_sub(slice_start_offset)).collect()
-          })
-      } else {
-        let line = display_text.slice_line(row).to_string();
-        let line_shared: SharedString = SharedString::from(line.clone());
-        let full_line_runs = runs_for_range(runs, visible_offset, &(0..line.len()));
-        let wrapped = break_all_ranges(
-          &line,
-          &window
-            .text_system()
-            .shape_line(line_shared, font_size, &full_line_runs, None),
-          wrap_width,
-        );
-
-        wrapped
-          .get(visible_line.wrap_range.clone())
-          .map(ToOwned::to_owned)
-          .unwrap_or_else(|| std::iter::once(0..line.len()).collect())
+          });
+        (line, wrapped_ranges)
       };
 
-      let line = if state.masked {
-        display_text.slice_line(row).to_string()
+      let full_line_runs = runs_for_range(runs, visible_offset, &(0..line.len()));
+      let full_line_runs = if bg_segments.is_empty() {
+        full_line_runs
       } else {
-        display_text
-          .slice(visible_line.byte_range.start..visible_line.byte_range.end)
-          .to_string()
+        split_runs_by_bg_segments(visible_line.byte_range.start, &full_line_runs, bg_segments)
       };
-      let mut wrapped_lines = SmallVec::with_capacity(1);
+
+      let shaped_full_line =
+        window
+          .text_system()
+          .shape_line(line.into(), font_size, &full_line_runs, None);
+      let mut wrapped_lines = SmallVec::with_capacity(wrapped_ranges.len());
+      let mut remaining = shaped_full_line;
+      let mut last_end = 0;
       for range in &wrapped_ranges {
-        let sub_line_runs = runs_for_range(runs, visible_offset, range);
-        let sub_line_runs = if bg_segments.is_empty() {
-          sub_line_runs
-        } else {
-          split_runs_by_bg_segments(visible_line.byte_range.start, &sub_line_runs, bg_segments)
-        };
-
-        let sub_line: SharedString = line[range.clone()].to_string().into();
-        let shaped_line =
-          window
-            .text_system()
-            .shape_line(sub_line, font_size, &sub_line_runs, None);
-        wrapped_lines.push(shaped_line);
+        let split_at = range.end.saturating_sub(last_end);
+        if split_at >= remaining.len() || remaining.len() == 0 {
+          wrapped_lines.push(remaining);
+          remaining = ShapedLine::default();
+          break;
+        }
+        let (left, right) = remaining.split_at(split_at);
+        wrapped_lines.push(left);
+        remaining = right;
+        last_end = range.end;
+      }
+      if remaining.len() > 0 {
+        wrapped_lines.push(remaining);
       }
 
       lines.push(
@@ -581,7 +678,7 @@ impl Element for ViewportElement {
   }
 
   fn prepaint(
-    &mut self, _id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    &mut self, id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
     bounds: Bounds<Pixels>, _request_layout: &mut Self::RequestLayoutState, window: &mut Window,
     cx: &mut App,
   ) -> Self::PrepaintState {
@@ -635,19 +732,43 @@ impl Element for ViewportElement {
     let text_style = window.text_style();
     let wrap_width = Some(wrap_width);
 
-    let mut last_layout = LastLayout {
-      visible_range: visible_range.clone(),
-      visible_top: px(0.),
-      visible_range_offset: visible_start_offset..visible_end_offset,
-      line_height,
-      wrap_width,
-      line_number_width,
-      lines: Rc::new(vec![]),
-      visible_lines: Rc::new(visible_layout.lines.clone()),
-      cursor_bounds: None,
-      text_align: state.text_align,
-      content_width: bounds.size.width - line_number_width,
+    let document_colors = state
+      .lsp
+      .document_colors_for_range(&display_text, &visible_range);
+
+    let (hover_symbol_range, hover_locations_ptr) = state.hover_definition.cache_key();
+    let document_colors_ref = state.lsp.document_colors();
+    let document_colors_ptr = document_colors_ref as *const Vec<(lsp_types::Range, Hsla)>;
+    let document_colors_len = document_colors_ref.len();
+    let search_matched_ranges_ptr = state
+      .search_panel
+      .as_ref()
+      .map(|panel| panel.read(cx).matched_ranges_ptr())
+      .unwrap_or(std::ptr::null());
+    let text_align = state.text_align;
+    let line_number_enabled = state.mode.line_number();
+    let cursor_row = {
+      let cursor = state.cursor();
+      state.text.offset_to_point(cursor).row
     };
+    let content_key = ContentCacheKey {
+      top_row: state.top_row,
+      visible_range_offset: visible_start_offset..visible_end_offset,
+      text: state.text.clone(),
+      selected_range: state.selected_range,
+      selection_reversed: state.selection_reversed,
+      ime_marked_range,
+      masked: state.masked,
+      line_number: line_number_enabled,
+      text_style: text_style.clone(),
+      hover_symbol_range,
+      hover_locations_ptr,
+      document_colors_ptr,
+      document_colors_len,
+      search_matched_ranges_ptr,
+      highlighter_revision: state.highlighter_revision,
+    };
+    let _ = state;
 
     let run = TextRun {
       len: display_text.len(),
@@ -670,70 +791,163 @@ impl Element for ViewportElement {
       strikethrough: None,
     };
 
-    let document_colors = state
-      .lsp
-      .document_colors_for_range(&display_text, &last_layout.visible_range);
-    let _ = state;
-
-    let highlight_styles =
-      self.highlight_lines(&visible_range, visible_start_offset..visible_end_offset, cx);
-    let runs = if !is_text_empty {
-      if let Some(highlight_styles) = highlight_styles {
-        let mut runs = vec![];
-        for (range, style) in highlight_styles {
-          let mut run = text_style.clone().highlight(style).to_run(range.len());
-          if let Some(ime_marked_range) = &ime_marked_range
-            && range.start >= ime_marked_range.start
-            && range.end <= ime_marked_range.end
-          {
-            run.color = marked_run.color;
-            run.strikethrough = marked_run.strikethrough;
-            run.underline = marked_run.underline;
+    let compute_content = |window: &mut Window| -> Content {
+      let highlight_styles =
+        self.highlight_lines(&visible_range, visible_start_offset..visible_end_offset, cx);
+      let runs = if !is_text_empty {
+        if let Some(highlight_styles) = highlight_styles.clone() {
+          let mut runs = vec![];
+          for (range, style) in highlight_styles {
+            let mut run = text_style.clone().highlight(style).to_run(range.len());
+            if let Some(ime_marked_range) = &ime_marked_range
+              && range.start >= ime_marked_range.start
+              && range.end <= ime_marked_range.end
+            {
+              run.color = marked_run.color;
+              run.strikethrough = marked_run.strikethrough;
+              run.underline = marked_run.underline;
+            }
+            runs.push(run);
           }
-          runs.push(run);
+          runs.into_iter().filter(|run| run.len > 0).collect()
+        } else {
+          vec![run.clone()]
         }
-        runs.into_iter().filter(|run| run.len > 0).collect()
+      } else if let Some(ime_marked_range) = &ime_marked_range {
+        vec![
+          TextRun {
+            len: ime_marked_range.start,
+            ..run.clone()
+          },
+          TextRun {
+            len: ime_marked_range.end - ime_marked_range.start,
+            underline: marked_run.underline,
+            ..run.clone()
+          },
+          TextRun {
+            len: display_text.len() - ime_marked_range.end,
+            ..run.clone()
+          },
+        ]
+        .into_iter()
+        .filter(|run| run.len > 0)
+        .collect()
       } else {
-        vec![run]
+        vec![run.clone()]
+      };
+
+      let mut content_last_layout = LastLayout {
+        visible_range: visible_range.clone(),
+        visible_top: px(0.),
+        visible_range_offset: visible_start_offset..visible_end_offset,
+        line_height,
+        wrap_width,
+        line_number_width,
+        lines: Rc::new(vec![]),
+        visible_lines: Rc::new(visible_layout.lines.clone()),
+        cursor_bounds: None,
+        text_align,
+        content_width: bounds.size.width - line_number_width,
+      };
+      let lines = Self::layout_lines(
+        self.state.read(cx),
+        LayoutLinesParams {
+          display_text: &display_text,
+          last_layout: &content_last_layout,
+          font: font.clone(),
+          font_size: text_size,
+          runs: &runs,
+          bg_segments: &document_colors,
+          whitespace_indicators,
+        },
+        window,
+      );
+      content_last_layout.lines = Rc::new(lines);
+
+      let current_row = content_last_layout
+        .visible_lines
+        .iter()
+        .find(|line| line.row == cursor_row)
+        .map(|_| cursor_row);
+
+      let line_numbers = if line_number_enabled {
+        let mut line_numbers = vec![];
+        for (ix, line) in content_last_layout.lines.iter().enumerate() {
+          let row = content_last_layout.visible_lines[ix].row;
+          let line_number_text = self.state.read(cx).line_number_text_for_row(row as u64);
+          let line_no: SharedString = line_number_text.into();
+          let line_no_len = line_no.len();
+          let color = if current_row == Some(row) {
+            cx.theme().primary
+          } else {
+            cx.theme().muted_foreground
+          };
+          let runs = vec![TextRun {
+            len: line_no_len,
+            font: style.font(),
+            color,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+          }];
+          let mut sub_lines: SmallVec<[ShapedLine; 1]> = SmallVec::new();
+          sub_lines.push(
+            window
+              .text_system()
+              .shape_line(line_no, text_size, &runs, None),
+          );
+          for _ in 0..line.wrapped_lines.len().saturating_sub(1) {
+            sub_lines.push(ShapedLine::default());
+          }
+          line_numbers.push(sub_lines);
+        }
+        Some(line_numbers)
+      } else {
+        None
+      };
+
+      Content {
+        lines: (*content_last_layout.lines).clone(),
+        line_numbers,
+        current_row,
       }
-    } else if let Some(ime_marked_range) = &ime_marked_range {
-      vec![
-        TextRun {
-          len: ime_marked_range.start,
-          ..run.clone()
-        },
-        TextRun {
-          len: ime_marked_range.end - ime_marked_range.start,
-          underline: marked_run.underline,
-          ..run.clone()
-        },
-        TextRun {
-          len: display_text.len() - ime_marked_range.end,
-          ..run.clone()
-        },
-      ]
-      .into_iter()
-      .filter(|run| run.len > 0)
-      .collect()
-    } else {
-      vec![run]
     };
 
-    let lines = Self::layout_lines(
-      self.state.read(cx),
-      LayoutLinesParams {
-        display_text: &display_text,
-        last_layout: &last_layout,
-        font_size: text_size,
-        runs: &runs,
-        bg_segments: &document_colors,
-        whitespace_indicators,
-      },
-      window,
-    );
-    last_layout.lines = Rc::new(lines);
+    let content = if let Some(id) = id {
+      window.with_element_state(id, |cache: Option<ContentCache>, window| {
+        if let Some(cache) = cache
+          && cache.key == content_key
+        {
+          return (cache.content.clone(), cache);
+        }
+        let content = compute_content(window);
+        (
+          content.clone(),
+          ContentCache {
+            key: content_key,
+            content,
+          },
+        )
+      })
+    } else {
+      compute_content(window)
+    };
 
-    let (cursor_bounds, current_row) = self.layout_cursor(&last_layout, bounds, window, cx);
+    let mut last_layout = LastLayout {
+      visible_range: visible_range.clone(),
+      visible_top: px(0.),
+      visible_range_offset: visible_start_offset..visible_end_offset,
+      line_height,
+      wrap_width,
+      line_number_width,
+      lines: Rc::new(content.lines),
+      visible_lines: Rc::new(visible_layout.lines.clone()),
+      cursor_bounds: None,
+      text_align,
+      content_width: bounds.size.width - line_number_width,
+    };
+
+    let (cursor_bounds, _) = self.layout_cursor(&last_layout, bounds, window, cx);
     last_layout.cursor_bounds = cursor_bounds;
 
     let search_match_paths = self.layout_search_matches(&last_layout, &bounds, cx);
@@ -745,47 +959,12 @@ impl Element for ViewportElement {
     let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
     let (indent_guides_path, active_indent_guide_path) =
       self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-    let line_numbers = if state.mode.line_number() {
-      let mut line_numbers = vec![];
-      for (ix, line) in last_layout.lines.iter().enumerate() {
-        let row = last_layout.visible_lines[ix].row;
-        let line_number_text = state.line_number_text_for_row(row as u64);
-        let line_no: SharedString = line_number_text.into();
-        let line_no_len = line_no.len();
-        let color = if current_row == Some(row) {
-          cx.theme().primary
-        } else {
-          cx.theme().muted_foreground
-        };
-        let runs = vec![TextRun {
-          len: line_no_len,
-          font: style.font(),
-          color,
-          background_color: None,
-          underline: None,
-          strikethrough: None,
-        }];
-        let mut sub_lines: SmallVec<[ShapedLine; 1]> = SmallVec::new();
-        sub_lines.push(
-          window
-            .text_system()
-            .shape_line(line_no, text_size, &runs, None),
-        );
-        for _ in 0..line.wrapped_lines.len().saturating_sub(1) {
-          sub_lines.push(ShapedLine::default());
-        }
-        line_numbers.push(sub_lines);
-      }
-      Some(line_numbers)
-    } else {
-      None
-    };
 
     PrepaintState {
       last_layout,
-      line_numbers,
+      line_numbers: content.line_numbers,
       cursor_bounds,
-      current_row,
+      current_row: content.current_row,
       selection_path,
       hover_highlight_path,
       search_match_paths,
@@ -904,7 +1083,7 @@ impl Element for ViewportElement {
                 - line.width)
                 .max(input_bounds.origin.x + LINE_NUMBER_LEFT_MARGIN);
               let p = point(line_x, origin.y + offset_y);
-              _ = line.paint(p, line_height, window, cx);
+              _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
               offset_y += line_height;
             }
           }

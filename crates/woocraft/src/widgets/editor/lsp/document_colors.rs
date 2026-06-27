@@ -67,7 +67,7 @@ impl Lsp {
       if let Some(task) = task_result
         && let Ok(colors) = task.await
       {
-        let _ = input_state.update(cx, |input_state, cx| {
+        input_state.update(cx, |input_state, cx| {
           let mut document_colors: Vec<(lsp_types::Range, Hsla)> = colors
             .iter()
             .map(|info| {
