@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use gpui::{
   AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty,
@@ -99,9 +99,6 @@ pub struct TabPanel {
   center_drop_active: bool,
   /// Is TabPanel used in Tiles.
   in_tiles: bool,
-  /// Timestamp of the last drag preview update, used to throttle high-frequency
-  /// mouse events to the display refresh rate.
-  last_drag_update: Option<Instant>,
 }
 
 impl Panel for TabPanel {
@@ -206,7 +203,6 @@ impl TabPanel {
       zoomed: false,
       closable: true,
       in_tiles: false,
-      last_drag_update: None,
     }
   }
 
@@ -1381,15 +1377,6 @@ impl TabPanel {
       return;
     }
 
-    const DRAG_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
-    let now = Instant::now();
-    if let Some(last) = self.last_drag_update
-      && now.duration_since(last) < DRAG_THROTTLE
-    {
-      return;
-    }
-    self.last_drag_update = Some(now);
-
     let new_placement = if position.x < bounds.left() + bounds.size.width * 0.35 {
       Some(Placement::Left)
     } else if position.x > bounds.left() + bounds.size.width * 0.65 {
@@ -1417,15 +1404,6 @@ impl TabPanel {
       return;
     }
 
-    const DRAG_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
-    let now = Instant::now();
-    if let Some(last) = self.last_drag_update
-      && now.duration_since(last) < DRAG_THROTTLE
-    {
-      return;
-    }
-    self.last_drag_update = Some(now);
-
     self.clear_split_preview(cx);
     let relative_x = position.x - bounds.left();
     let visible_tabs = self.visible_panels(cx).count();
@@ -1449,15 +1427,6 @@ impl TabPanel {
       self.pending_drop_index = None;
       return;
     }
-
-    const DRAG_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
-    let now = Instant::now();
-    if let Some(last) = self.last_drag_update
-      && now.duration_since(last) < DRAG_THROTTLE
-    {
-      return;
-    }
-    self.last_drag_update = Some(now);
 
     self.clear_split_preview(cx);
     let relative_y = position.y - bounds.top();

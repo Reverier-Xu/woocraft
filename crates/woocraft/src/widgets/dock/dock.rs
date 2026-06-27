@@ -1,6 +1,6 @@
 //! Dock is a fixed container that places at left, bottom, right of the Windows.
 
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use gpui::{
   App, AppContext, Context, Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent,
@@ -44,9 +44,6 @@ pub struct Dock {
   // Runtime state
   /// Whether the Dock is resizing
   resizing: bool,
-  /// Timestamp of the last live resize update, used to throttle high-frequency
-  /// mouse events to the display refresh rate.
-  last_resize_update: Option<Instant>,
 }
 
 impl Dock {
@@ -103,7 +100,6 @@ impl Dock {
       tab_bar_direction,
       preview_size: None,
       resizing: false,
-      last_resize_update: None,
     };
 
     let dock_entity = cx.entity().clone();
@@ -176,7 +172,6 @@ impl Dock {
       tab_bar_direction,
       preview_size: None,
       resizing: false,
-      last_resize_update: None,
     };
 
     let dock_entity = cx.entity().clone();
@@ -308,24 +303,12 @@ impl Dock {
 
   pub(super) fn set_resizing(&mut self, resizing: bool) {
     self.resizing = resizing;
-    if resizing {
-      self.last_resize_update = None;
-    }
   }
 
   fn resize(&mut self, mouse_position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
     if !self.resizing {
       return;
     }
-
-    const RESIZE_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
-    let now = Instant::now();
-    if let Some(last) = self.last_resize_update
-      && now.duration_since(last) < RESIZE_THROTTLE
-    {
-      return;
-    }
-    self.last_resize_update = Some(now);
 
     let dock_area = self
       .dock_area
@@ -394,7 +377,6 @@ impl Dock {
 
   fn done_resizing(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
     self.resizing = false;
-    self.last_resize_update = None;
     if let Some(preview_size) = self.preview_size.take()
       && self.size != preview_size
     {
