@@ -1210,7 +1210,7 @@ impl DockArea {
   }
 
   pub(crate) fn set_split_preview(
-    &mut self, bounds: Bounds<Pixels>, placement: Placement, cx: &mut Context<Self>,
+    &mut self, bounds: Bounds<Pixels>, placement: Placement, _cx: &mut Context<Self>,
   ) {
     let next_preview = Some(SplitPreview { bounds, placement });
     if self.split_preview == next_preview {
@@ -1218,13 +1218,10 @@ impl DockArea {
     }
 
     self.split_preview = next_preview;
-    cx.notify();
   }
 
-  pub(crate) fn clear_split_preview(&mut self, cx: &mut Context<Self>) {
-    if self.split_preview.take().is_some() {
-      cx.notify();
-    }
+  pub(crate) fn clear_split_preview(&mut self, _cx: &mut Context<Self>) {
+    self.split_preview = None;
   }
 
   fn render_split_preview(&self, cx: &App) -> Option<impl IntoElement> {

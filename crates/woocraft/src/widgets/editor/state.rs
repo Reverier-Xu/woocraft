@@ -2,7 +2,7 @@
 //!
 //! Based on the `Input` example from the `gpui` crate.
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
-use std::{ops::Range, rc::Rc, sync::Arc};
+use std::{ops::Range, rc::Rc, sync::Arc, time::Instant};
 
 use anyhow::Result;
 use gpui::{
@@ -363,6 +363,9 @@ pub struct InputState {
   pub(super) last_bounds: Option<Bounds<Pixels>>,
   pub(super) last_selected_range: Option<Selection>,
   pub(super) selecting: bool,
+  /// Timestamp of the last drag-selection update, used to throttle
+  /// high-frequency mouse events to the display refresh rate.
+  pub(super) last_drag_update: Option<Instant>,
   pub(super) scrollbar_dragging: bool,
   pub(super) top_row: usize,
   pub(super) size: Size,
@@ -462,6 +465,7 @@ impl InputState {
       ime_marked_range: None,
       input_bounds: Bounds::default(),
       selecting: false,
+      last_drag_update: None,
       disabled: false,
       read_only: false,
       masked: false,
@@ -1622,6 +1626,7 @@ impl InputState {
     // Keep editor focus before opening the shared right-click menu.
     self.focus(window, cx);
     self.selecting = true;
+    self.last_drag_update = None;
     let offset = self.index_for_mouse_position(event.position);
     self.emit_backend_action(EditorUserAction::MouseDown {
       offset: offset as u64,
@@ -1687,6 +1692,7 @@ impl InputState {
     }
     self.scrollbar_dragging = false;
     self.selecting = false;
+    self.last_drag_update = None;
     self.selected_word_range = None;
   }
 
@@ -1698,6 +1704,13 @@ impl InputState {
     self.emit_backend_action(EditorUserAction::MouseMove {
       offset: offset as u64,
     });
+
+    // While actively dragging out a selection, skip hover/definition/diagnostic
+    // work to avoid full re-renders on every mouse move.
+    if self.selecting {
+      return;
+    }
+
     self.handle_mouse_move(offset, event, window, cx);
 
     if self.mode.is_code_editor() {
@@ -1966,6 +1979,9 @@ impl InputState {
     self.clear_inline_completion(cx);
 
     let offset = offset.clamp(0, self.text.len());
+    let old_range = self.selected_range;
+    let old_reversed = self.selection_reversed;
+
     if self.selection_reversed {
       self.selected_range.start = offset
     } else {
@@ -1986,6 +2002,11 @@ impl InputState {
         self.selected_range.end = word_range.end;
       }
     }
+
+    if self.selected_range == old_range && self.selection_reversed == old_reversed {
+      return;
+    }
+
     if self.selected_range.is_empty() {
       self.update_preferred_column();
     }
@@ -2141,7 +2162,22 @@ impl InputState {
       return;
     }
 
+    // Throttle drag updates to roughly 120 Hz so high-report-rate mice (500/1000
+    // Hz) do not spend the entire frame budget processing redundant move events
+    // on high-refresh-rate displays.
+    const DRAG_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
+    let now = Instant::now();
+    if let Some(last) = self.last_drag_update
+      && now.duration_since(last) < DRAG_THROTTLE
+    {
+      return;
+    }
+    self.last_drag_update = Some(now);
+
     let offset = self.index_for_mouse_position(event.position);
+    if offset == self.cursor() {
+      return;
+    }
     self.select_to(offset, cx);
   }
 

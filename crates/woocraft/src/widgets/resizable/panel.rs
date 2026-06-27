@@ -270,7 +270,7 @@ impl RenderOnce for ResizablePanel {
     let state = self
       .state
       .expect("BUG: The `state` in ResizablePanel should be present.");
-    let committed_size = state.read(cx).committed_size(self.panel_ix);
+    let display_size = state.read(cx).display_size(self.panel_ix);
     let size_range = self.size_range.clone();
     let content = div().flex_1().size_full().children(self.children);
 
@@ -290,13 +290,12 @@ impl RenderOnce for ResizablePanel {
       .when(self.initial_size.is_none(), |this| this.flex_shrink())
       .when_some(self.initial_size, |this, initial_size| {
         this
-          .when(
-            committed_size.is_none() && !initial_size.is_zero(),
-            |this| this.flex_none(),
-          )
+          .when(display_size.is_none() && !initial_size.is_zero(), |this| {
+            this.flex_none()
+          })
           .flex_basis(initial_size)
       })
-      .map(|this| match committed_size {
+      .map(|this| match display_size {
         Some(size) => this.flex_basis(size.min(size_range.end).max(size_range.start)),
         None => this,
       })

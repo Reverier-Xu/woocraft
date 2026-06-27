@@ -1,6 +1,6 @@
 //! Dock is a fixed container that places at left, bottom, right of the Windows.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use gpui::{
   App, AppContext, Context, Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent,
@@ -44,6 +44,9 @@ pub struct Dock {
   // Runtime state
   /// Whether the Dock is resizing
   resizing: bool,
+  /// Timestamp of the last live resize update, used to throttle high-frequency
+  /// mouse events to the display refresh rate.
+  last_resize_update: Option<Instant>,
 }
 
 impl Dock {
@@ -100,6 +103,7 @@ impl Dock {
       tab_bar_direction,
       preview_size: None,
       resizing: false,
+      last_resize_update: None,
     };
 
     let dock_entity = cx.entity().clone();
@@ -172,6 +176,7 @@ impl Dock {
       tab_bar_direction,
       preview_size: None,
       resizing: false,
+      last_resize_update: None,
     };
 
     let dock_entity = cx.entity().clone();
@@ -303,12 +308,24 @@ impl Dock {
 
   pub(super) fn set_resizing(&mut self, resizing: bool) {
     self.resizing = resizing;
+    if resizing {
+      self.last_resize_update = None;
+    }
   }
 
-  fn resize(&mut self, mouse_position: Point<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
+  fn resize(&mut self, mouse_position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>) {
     if !self.resizing {
       return;
     }
+
+    const RESIZE_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
+    let now = Instant::now();
+    if let Some(last) = self.last_resize_update
+      && now.duration_since(last) < RESIZE_THROTTLE
+    {
+      return;
+    }
+    self.last_resize_update = Some(now);
 
     let dock_area = self
       .dock_area
@@ -352,7 +369,7 @@ impl Dock {
         let next_size = size.clamp(self.min_size(), max_size);
         if self.preview_size != Some(next_size) {
           self.preview_size = Some(next_size);
-          cx.notify();
+          window.refresh();
         }
       }
       DockPlacement::Right => {
@@ -360,7 +377,7 @@ impl Dock {
         let next_size = size.clamp(self.min_size(), max_size);
         if self.preview_size != Some(next_size) {
           self.preview_size = Some(next_size);
-          cx.notify();
+          window.refresh();
         }
       }
       DockPlacement::Bottom => {
@@ -368,7 +385,7 @@ impl Dock {
         let next_size = size.clamp(self.min_size(), max_size);
         if self.preview_size != Some(next_size) {
           self.preview_size = Some(next_size);
-          cx.notify();
+          window.refresh();
         }
       }
       DockPlacement::Center => unreachable!(),
@@ -377,6 +394,7 @@ impl Dock {
 
   fn done_resizing(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
     self.resizing = false;
+    self.last_resize_update = None;
     if let Some(preview_size) = self.preview_size.take()
       && self.size != preview_size
     {
@@ -395,8 +413,8 @@ impl Render for Dock {
     div()
       .relative()
       .map(|this| match self.placement {
-        DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(self.size),
-        DockPlacement::Bottom => this.v_flex().w_full().h(self.size),
+        DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(self.display_size()),
+        DockPlacement::Bottom => this.v_flex().w_full().h(self.display_size()),
         DockPlacement::Center => unreachable!(),
       })
       .when(self.collapsed, |this| match self.placement {

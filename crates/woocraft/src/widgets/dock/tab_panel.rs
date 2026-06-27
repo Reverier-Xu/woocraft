@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use gpui::{
   AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty,
@@ -99,6 +99,9 @@ pub struct TabPanel {
   center_drop_active: bool,
   /// Is TabPanel used in Tiles.
   in_tiles: bool,
+  /// Timestamp of the last drag preview update, used to throttle high-frequency
+  /// mouse events to the display refresh rate.
+  last_drag_update: Option<Instant>,
 }
 
 impl Panel for TabPanel {
@@ -203,6 +206,7 @@ impl TabPanel {
       zoomed: false,
       closable: true,
       in_tiles: false,
+      last_drag_update: None,
     }
   }
 
@@ -1377,6 +1381,15 @@ impl TabPanel {
       return;
     }
 
+    const DRAG_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
+    let now = Instant::now();
+    if let Some(last) = self.last_drag_update
+      && now.duration_since(last) < DRAG_THROTTLE
+    {
+      return;
+    }
+    self.last_drag_update = Some(now);
+
     let new_placement = if position.x < bounds.left() + bounds.size.width * 0.35 {
       Some(Placement::Left)
     } else if position.x > bounds.left() + bounds.size.width * 0.65 {
@@ -1400,30 +1413,30 @@ impl TabPanel {
     let position = drag.event.position;
 
     if !bounds.contains(&position) {
-      if self.pending_drop_index.take().is_some() {
-        cx.notify();
-      }
+      self.pending_drop_index = None;
       return;
     }
 
+    const DRAG_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
+    let now = Instant::now();
+    if let Some(last) = self.last_drag_update
+      && now.duration_since(last) < DRAG_THROTTLE
+    {
+      return;
+    }
+    self.last_drag_update = Some(now);
+
     self.clear_split_preview(cx);
     let relative_x = position.x - bounds.left();
-
     let visible_tabs = self.visible_panels(cx).count();
     if visible_tabs == 0 {
-      if self.pending_drop_index != Some(0) {
-        self.pending_drop_index = Some(0);
-        cx.notify();
-      }
+      self.pending_drop_index = Some(0);
       return;
     }
 
     let slot_width = bounds.size.width / (visible_tabs + 1) as f32;
     let ix = ((relative_x / slot_width) as usize).min(visible_tabs);
-    if self.pending_drop_index != Some(ix) {
-      self.pending_drop_index = Some(ix);
-      cx.notify();
-    }
+    self.pending_drop_index = Some(ix);
   }
 
   fn on_vertical_tab_bar_drag_move(
@@ -1433,30 +1446,30 @@ impl TabPanel {
     let position = drag.event.position;
 
     if !bounds.contains(&position) {
-      if self.pending_drop_index.take().is_some() {
-        cx.notify();
-      }
+      self.pending_drop_index = None;
       return;
     }
 
+    const DRAG_THROTTLE: std::time::Duration = std::time::Duration::from_millis(8);
+    let now = Instant::now();
+    if let Some(last) = self.last_drag_update
+      && now.duration_since(last) < DRAG_THROTTLE
+    {
+      return;
+    }
+    self.last_drag_update = Some(now);
+
     self.clear_split_preview(cx);
     let relative_y = position.y - bounds.top();
-
     let visible_tabs = self.visible_panels(cx).count();
     if visible_tabs == 0 {
-      if self.pending_drop_index != Some(0) {
-        self.pending_drop_index = Some(0);
-        cx.notify();
-      }
+      self.pending_drop_index = Some(0);
       return;
     }
 
     let slot_height = bounds.size.height / (visible_tabs + 1) as f32;
     let ix = ((relative_y / slot_height) as usize).min(visible_tabs);
-    if self.pending_drop_index != Some(ix) {
-      self.pending_drop_index = Some(ix);
-      cx.notify();
-    }
+    self.pending_drop_index = Some(ix);
   }
 
   /// Handle the drop event when dragging a panel

@@ -50,8 +50,14 @@ impl ResizableState {
     &self.sizes
   }
 
-  fn committed_size(&self, ix: usize) -> Option<Pixels> {
-    self.sizes.get(ix).copied()
+  /// Returns the live size for a panel, preferring any in-progress drag
+  /// preview size stored on the panel state.
+  pub(crate) fn display_size(&self, ix: usize) -> Option<Pixels> {
+    self
+      .panels
+      .get(ix)
+      .and_then(|panel| panel.size)
+      .or_else(|| self.sizes.get(ix).copied())
   }
 
   #[allow(dead_code)]
@@ -187,7 +193,9 @@ impl ResizableState {
       .collect()
   }
 
-  fn resize_panel(&mut self, ix: usize, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
+  fn resize_panel(
+    &mut self, ix: usize, size: Pixels, window: &mut Window, _cx: &mut Context<Self>,
+  ) {
     let old_sizes = self.display_sizes();
     let mut ix = ix;
 
@@ -247,7 +255,7 @@ impl ResizableState {
       let size = new_sizes[i];
       self.panels[i].size = Some(size);
     }
-    cx.notify();
+    window.refresh();
   }
 
   fn adjust_to_container_size(&mut self, cx: &mut Context<Self>) {
