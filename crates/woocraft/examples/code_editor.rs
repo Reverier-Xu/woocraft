@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use gpuim::{
+use gpui::{
   App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
   IntoElement, KeyBinding, Menu, MenuItem, ParentElement, Render, SharedString, Size as GpuiSize,
   Styled, Subscription, Window, WindowBounds, WindowOptions, actions, div, px,
@@ -200,7 +200,7 @@ fn demo_tree_items() -> Vec<TreeItem> {
 
 #[cfg(debug_assertions)]
 fn setup_inspector_renderer(cx: &mut App) {
-  cx.register_inspector_element::<gpuim::DivInspectorState, _>(|_id, state, _window, cx| {
+  cx.register_inspector_element::<gpui::DivInspectorState, _>(|_id, state, _window, cx| {
     v_flex()
       .gap_1()
       .p_2()
@@ -352,7 +352,7 @@ impl Panel for FileExplorerPanel {
   }
 }
 
-impl gpuim::EventEmitter<PanelEvent> for FileExplorerPanel {}
+impl gpui::EventEmitter<PanelEvent> for FileExplorerPanel {}
 
 impl Focusable for FileExplorerPanel {
   fn focus_handle(&self, _cx: &App) -> FocusHandle {
@@ -504,7 +504,7 @@ impl Panel for EditorPanel {
   }
 }
 
-impl gpuim::EventEmitter<PanelEvent> for EditorPanel {}
+impl gpui::EventEmitter<PanelEvent> for EditorPanel {}
 
 impl Focusable for EditorPanel {
   fn focus_handle(&self, _cx: &App) -> FocusHandle {
@@ -802,7 +802,7 @@ impl Render for CodeEditorApp {
 // ---------------------------------------------------------------------------
 
 fn main() {
-  let app = gpuim_platform::application().with_assets(woocraft::Assets);
+  let app = gpui::Application::new().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     init(cx);
@@ -818,7 +818,6 @@ fn main() {
     // Set up application menus (use i18n keys for AppMenuBar translation)
     cx.set_menus(vec![
       Menu {
-        disabled: false,
         name: "tech.woooo.woocraft.menu.file".into(),
         items: vec![
           MenuItem::action("tech.woooo.woocraft.menu.new_file", NewFile),
@@ -833,7 +832,6 @@ fn main() {
         ],
       },
       Menu {
-        disabled: false,
         name: "tech.woooo.woocraft.menu.edit".into(),
         items: vec![
           MenuItem::action("tech.woooo.woocraft.menu.undo", Undo),
@@ -848,7 +846,6 @@ fn main() {
         ],
       },
       Menu {
-        disabled: false,
         name: "tech.woooo.woocraft.menu.view".into(),
         items: vec![
           MenuItem::action("tech.woooo.woocraft.menu.toggle_sidebar", ToggleLeftDock),
@@ -859,7 +856,6 @@ fn main() {
         ],
       },
       Menu {
-        disabled: false,
         name: "tech.woooo.woocraft.menu.help".into(),
         items: vec![MenuItem::action(
           "tech.woooo.woocraft.menu.about",
@@ -875,9 +871,9 @@ fn main() {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
           titlebar: Some(TitleBar::title_bar_options()),
           #[cfg(target_os = "linux")]
-          window_background: gpuim::WindowBackgroundAppearance::Transparent,
+          window_background: gpui::WindowBackgroundAppearance::Transparent,
           #[cfg(target_os = "linux")]
-          window_decorations: Some(gpuim::WindowDecorations::Client),
+          window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
         CodeEditorApp::view,

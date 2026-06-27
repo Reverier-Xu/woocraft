@@ -55,7 +55,7 @@
 //! - Custom cell renderers should avoid blocking operations; consider async
 //!   cells via `Entity<View>`
 
-use gpuim::{Edges, Pixels};
+use gpui::{Edges, Pixels};
 
 use crate::Size;
 
@@ -103,36 +103,36 @@ impl Default for TableOptions {
 }
 
 pub trait TableThemeExt {
-  fn table_bg(&self) -> gpuim::Hsla;
-  fn table_head(&self) -> gpuim::Hsla;
-  fn table_head_foreground(&self) -> gpuim::Hsla;
-  fn table_even(&self) -> gpuim::Hsla;
-  fn table_hover(&self) -> gpuim::Hsla;
-  fn table_active(&self) -> gpuim::Hsla;
+  fn table_bg(&self) -> gpui::Hsla;
+  fn table_head(&self) -> gpui::Hsla;
+  fn table_head_foreground(&self) -> gpui::Hsla;
+  fn table_even(&self) -> gpui::Hsla;
+  fn table_hover(&self) -> gpui::Hsla;
+  fn table_active(&self) -> gpui::Hsla;
 }
 
 impl TableThemeExt for crate::Theme {
-  fn table_bg(&self) -> gpuim::Hsla {
+  fn table_bg(&self) -> gpui::Hsla {
     self.background
   }
 
-  fn table_head(&self) -> gpuim::Hsla {
+  fn table_head(&self) -> gpui::Hsla {
     self.title_bar
   }
 
-  fn table_head_foreground(&self) -> gpuim::Hsla {
+  fn table_head_foreground(&self) -> gpui::Hsla {
     self.foreground
   }
 
-  fn table_even(&self) -> gpuim::Hsla {
+  fn table_even(&self) -> gpui::Hsla {
     self.foreground.opacity(0.015)
   }
 
-  fn table_hover(&self) -> gpuim::Hsla {
+  fn table_hover(&self) -> gpui::Hsla {
     self.foreground.opacity(0.04)
   }
 
-  fn table_active(&self) -> gpuim::Hsla {
+  fn table_active(&self) -> gpui::Hsla {
     self.primary.opacity(0.12)
   }
 }

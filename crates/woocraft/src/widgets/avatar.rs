@@ -29,7 +29,7 @@
 //!   .bg_color(theme.primary)
 //! ```
 
-use gpuim::{
+use gpui::{
   App, Div, Hsla, ImageSource, InteractiveElement, Interactivity, IntoElement, ParentElement as _,
   RenderOnce, SharedString, StyleRefinement, Styled, Window, div, img, prelude::FluentBuilder,
 };
@@ -147,7 +147,7 @@ impl InteractiveElement for Avatar {
 impl RenderOnce for Avatar {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let corner_radii = self.style.corner_radii.clone();
-    let inner_style = gpuim::StyleRefinement {
+    let inner_style = gpui::StyleRefinement {
       corner_radii,
       ..Default::default()
     };
@@ -166,7 +166,7 @@ impl RenderOnce for Avatar {
     }
 
     fn get_color_for_name(name: &str, cx: &mut App) -> Hsla {
-      color_for_index(gpuim::hash(&name) as usize, cx)
+      color_for_index(gpui::hash(&name) as usize, cx)
     }
 
     const BG_OPACITY: f32 = 0.2;
@@ -288,7 +288,7 @@ impl InteractiveElement for AvatarGroup {
 }
 
 impl RenderOnce for AvatarGroup {
-  fn render(self, _: &mut gpuim::Window, cx: &mut gpuim::App) -> impl IntoElement {
+  fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
     let item_ml = -self.size.component_height() * 0.3;
     let avatars_len = self.avatars.len();
 

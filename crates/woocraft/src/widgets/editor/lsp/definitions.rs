@@ -1,7 +1,7 @@
 use std::{ops::Range, rc::Rc};
 
 use anyhow::Result;
-use gpuim::{
+use gpui::{
   App, Context, HighlightStyle, Hitbox, MouseDownEvent, Task, UnderlineStyle, Window, px,
 };
 use ropey::Rope;
@@ -80,7 +80,7 @@ impl InputState {
     self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
       let locations = task.await?;
 
-      editor.update(cx, |editor, cx| {
+      let _ = editor.update(cx, |editor, cx| {
         let had_hover_definition = !editor.hover_definition.is_empty();
         let was_same_hover_definition = editor.hover_definition.is_same(offset);
         if locations.is_empty() {
@@ -213,6 +213,6 @@ impl ViewportElement {
 
     let bounds = editor.range_to_bounds(&editor.hover_definition.symbol_range)?;
 
-    Some(window.insert_hitbox(bounds, gpuim::HitboxBehavior::Normal))
+    Some(window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal))
   }
 }

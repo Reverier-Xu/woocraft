@@ -1,4 +1,4 @@
-use gpuim::{App, AppContext, Axis, Bounds, Entity, Pixels, WeakEntity, Window, point, px, size};
+use gpui::{App, AppContext, Axis, Bounds, Entity, Pixels, WeakEntity, Window, point, px, size};
 use serde::{Deserialize, Serialize};
 
 use super::{Dock, DockArea, DockItem, Panel, PanelRegistry};

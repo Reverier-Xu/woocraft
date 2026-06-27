@@ -1,6 +1,6 @@
 use std::{cell::Cell, rc::Rc};
 
-use gpuim::{
+use gpui::{
   AnyElement, App, Axis, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement,
   ParentElement as _, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
   div, prelude::FluentBuilder as _, px,
@@ -158,7 +158,7 @@ impl WidgetGroup {
     }
   }
 
-  fn corner_pixels(corners: Corners<bool>, radius: gpuim::Pixels) -> Corners<gpuim::Pixels> {
+  fn corner_pixels(corners: Corners<bool>, radius: gpui::Pixels) -> Corners<gpui::Pixels> {
     Corners {
       top_left: if corners.top_left { radius } else { px(0.) },
       top_right: if corners.top_right { radius } else { px(0.) },

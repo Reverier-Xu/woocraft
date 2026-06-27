@@ -6,7 +6,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use gpuim::{
+use gpui::{
   App, Axis, BorderStyle, Bounds, ContentMask, Corner, CursorStyle, Edges, Element, ElementId,
   GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, IsZero, LayoutId,
   ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point, Position,
@@ -53,8 +53,8 @@ impl ScrollbarHandle for ScrollHandle {
 
   fn content_size(&self) -> Size<Pixels> {
     size(
-      self.max_offset().x + self.bounds().size.width,
-      self.max_offset().y + self.bounds().size.height,
+      self.max_offset().width + self.bounds().size.width,
+      self.max_offset().height + self.bounds().size.height,
     )
   }
 }
@@ -71,8 +71,8 @@ impl ScrollbarHandle for UniformListScrollHandle {
   fn content_size(&self) -> Size<Pixels> {
     let base = &self.0.borrow().base_handle;
     size(
-      base.max_offset().x + base.bounds().size.width,
-      base.max_offset().y + base.bounds().size.height,
+      base.max_offset().width + base.bounds().size.width,
+      base.max_offset().height + base.bounds().size.height,
     )
   }
 }
@@ -87,7 +87,7 @@ impl ScrollbarHandle for ListState {
   }
 
   fn content_size(&self) -> Size<Pixels> {
-    self.viewport_bounds().size + self.max_offset_for_scrollbar().into()
+    self.viewport_bounds().size + self.max_offset_for_scrollbar()
   }
 
   fn start_drag(&self) {
@@ -332,7 +332,7 @@ impl Scrollbar {
     (
       cx.theme().scrollbar_thumb,
       cx.theme().scrollbar,
-      gpuim::transparent_black(),
+      gpui::transparent_black(),
       THUMB_ACTIVE_WIDTH,
       THUMB_ACTIVE_INSET,
       THUMB_ACTIVE_RADIUS,
@@ -349,7 +349,7 @@ impl Scrollbar {
     (
       cx.theme().scrollbar_thumb,
       cx.theme().scrollbar,
-      gpuim::transparent_black(),
+      gpui::transparent_black(),
       width,
       inset,
       radius,
@@ -364,9 +364,9 @@ impl Scrollbar {
     };
 
     (
-      gpuim::transparent_black(),
-      gpuim::transparent_black(),
-      gpuim::transparent_black(),
+      gpui::transparent_black(),
+      gpui::transparent_black(),
+      gpui::transparent_black(),
       width,
       inset,
       radius,
@@ -408,7 +408,7 @@ impl Element for Scrollbar {
   type RequestLayoutState = ();
   type PrepaintState = PrepaintState;
 
-  fn id(&self) -> Option<gpuim::ElementId> {
+  fn id(&self) -> Option<gpui::ElementId> {
     Some(self.id.clone())
   }
 
@@ -497,7 +497,7 @@ impl Element for Scrollbar {
             hitbox.origin.y + hitbox.size.height - WIDTH,
           )
         },
-        size: gpuim::Size {
+        size: gpui::Size {
           width: if vertical { WIDTH } else { hitbox.size.width },
           height: if vertical { hitbox.size.height } else { WIDTH },
         },
@@ -594,7 +594,7 @@ impl Element for Scrollbar {
       };
 
       let bar_hitbox = window.with_content_mask(Some(ContentMask { bounds }), |window| {
-        window.insert_hitbox(bounds, gpuim::HitboxBehavior::Normal)
+        window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal)
       });
 
       states.push(AxisPrepaintState {
@@ -669,7 +669,7 @@ impl Element for Scrollbar {
             cx.paint_quad(PaintQuad {
               bounds,
               corner_radii: (0.).into(),
-              background: gpuim::transparent_black().into(),
+              background: gpui::transparent_black().into(),
               border_widths: Edges {
                 top: px(0.),
                 right: px(0.),

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpuim::{App, Pixels, Size};
+use gpui::{App, Pixels, Size};
 
 use crate::IndexPath;
 

@@ -1,4 +1,4 @@
-use gpuim::SharedString;
+use gpui::SharedString;
 
 use crate::widgets::editor::highlighter::LanguageConfig;
 

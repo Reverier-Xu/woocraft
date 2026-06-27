@@ -1,4 +1,4 @@
-use gpuim::App;
+use gpui::App;
 
 mod app_menu_bar;
 mod context_menu;

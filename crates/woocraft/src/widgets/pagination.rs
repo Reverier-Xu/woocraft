@@ -1,6 +1,6 @@
 use std::{ops::Range, rc::Rc};
 
-use gpuim::{
+use gpui::{
   App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, SharedString,
   StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
 };

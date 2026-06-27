@@ -1,11 +1,11 @@
 //! A text input field that allows the user to enter text.
 //!
-//! Based on the `Input` example from the `gpuim` crate.
-//! https://github.com/zed-industries/zed/blob/main/crates/gpuim/examples/input.rs
+//! Based on the `Input` example from the `gpui` crate.
+//! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use std::{ops::Range, rc::Rc, sync::Arc};
 
 use anyhow::Result;
-use gpuim::{
+use gpui::{
   Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
   EventEmitter, FocusHandle, Focusable, Font, Half, Hsla, InteractiveElement as _, IntoElement,
   KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -13,9 +13,9 @@ use gpuim::{
   Styled as _, Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
   prelude::FluentBuilder as _, px,
 };
+use gpui_sum_tree::Bias;
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
-use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
@@ -685,10 +685,10 @@ impl InputState {
       let sample_line = window.text_system().shape_line(
         sample_text.clone().into(),
         font_size,
-        &[gpuim::TextRun {
+        &[gpui::TextRun {
           len: sample_len,
           font: font.clone(),
-          color: gpuim::black(),
+          color: gpui::black(),
           background_color: None,
           underline: None,
           strikethrough: None,
@@ -732,7 +732,7 @@ impl InputState {
     let space = window.text_system().shape_line(
       space_text.clone(),
       space_font_size,
-      &[gpuim::TextRun {
+      &[gpui::TextRun {
         len: space_text.len(),
         font: font.clone(),
         color: invisible_color,
@@ -747,7 +747,7 @@ impl InputState {
     let tab = window.text_system().shape_line(
       tab_text.clone(),
       tab_font_size,
-      &[gpuim::TextRun {
+      &[gpui::TextRun {
         len: tab_text.len(),
         font: font.clone(),
         color: invisible_color,
@@ -1277,7 +1277,7 @@ impl InputState {
 
   /// Focus the input field.
   pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-    self.focus_handle.focus(window, cx);
+    self.focus_handle.focus(window);
     self.blink_cursor.update(cx, |cursor, cx| {
       cursor.start(cx);
     });
@@ -2594,7 +2594,7 @@ impl EntityInputHandler for InputState {
   }
 
   fn character_index_for_point(
-    &mut self, position: gpuim::Point<Pixels>, _window: &mut Window, _cx: &mut Context<Self>,
+    &mut self, position: gpui::Point<Pixels>, _window: &mut Window, _cx: &mut Context<Self>,
   ) -> Option<usize> {
     let last_layout = self.last_layout.as_ref()?;
     let bounds = self.last_bounds?;
@@ -2639,7 +2639,7 @@ impl InputState {
 
   fn render_vertical_scrollbar(
     &self, window: &mut Window, cx: &mut Context<Self>,
-  ) -> gpuim::AnyElement {
+  ) -> gpui::AnyElement {
     let line_height = self
       .last_layout
       .as_ref()

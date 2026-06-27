@@ -28,7 +28,7 @@
 
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement as _,
   IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
@@ -177,7 +177,7 @@ impl RenderOnce for Switch {
         let toggle_state = toggle_state.clone();
         async move |cx| {
           cx.background_executor().timer(animation_duration).await;
-          toggle_state.update(cx, |state, _| *state = checked);
+          let _ = toggle_state.update(cx, |state, _| *state = checked);
         }
       })
       .detach();
@@ -211,11 +211,11 @@ impl RenderOnce for Switch {
     };
 
     let max_x = track_w - thumb_size;
-    let thumb_x = if checked { max_x } else { gpuim::px(0.0) };
+    let thumb_x = if checked { max_x } else { gpui::px(0.0) };
     let filled_w = if checked {
       thumb_x + thumb_offset
     } else {
-      gpuim::px(0.0)
+      gpui::px(0.0)
     };
 
     let filled_track: AnyElement = div()
@@ -235,7 +235,7 @@ impl RenderOnce for Switch {
           this
             .with_animation(
               ElementId::NamedInteger("switch-fill".into(), checked as u64),
-              Animation::new(animation_duration).with_easing(gpuim::ease_out_quint()),
+              Animation::new(animation_duration).with_easing(gpui::ease_out_quint()),
               move |this, delta| {
                 let width = if checked {
                   total_w * delta

@@ -4,7 +4,7 @@ use std::{
   sync::{Arc, LazyLock, RwLock},
 };
 
-use gpuim::{App, FontWeight, HighlightStyle, Hsla, SharedString};
+use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -154,12 +154,12 @@ pub enum FontStyle {
   Underline,
 }
 
-impl From<FontStyle> for gpuim::FontStyle {
+impl From<FontStyle> for gpui::FontStyle {
   fn from(style: FontStyle) -> Self {
     match style {
-      FontStyle::Normal => gpuim::FontStyle::Normal,
-      FontStyle::Italic => gpuim::FontStyle::Italic,
-      FontStyle::Underline => gpuim::FontStyle::Normal,
+      FontStyle::Normal => gpui::FontStyle::Normal,
+      FontStyle::Italic => gpui::FontStyle::Italic,
+      FontStyle::Underline => gpui::FontStyle::Normal,
     }
   }
 }

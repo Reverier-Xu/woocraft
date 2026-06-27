@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use gpuim::ElementId;
+use gpui::ElementId;
 
 /// Represents an index path in a list, which consists of a section index,
 /// row index and column index.

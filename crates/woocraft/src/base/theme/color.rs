@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use gpuim::{Hsla, Rgba};
+use gpui::{Hsla, Rgba};
 use palette::{FromColor, OklabHue, Oklch, Srgb};
 use serde::{Deserialize, Serialize};
 
@@ -336,7 +336,7 @@ impl ThemeColors {
     let scrollbar = with_alpha(background, 0.4);
     let scrollbar_thumb = with_alpha(foreground, 0.4);
     let scrollbar_thumb_hover = with_alpha(foreground, 0.6);
-    let transparent = gpuim::transparent_white();
+    let transparent = gpui::transparent_white();
     let selection = with_alpha(primary, 0.3);
     let caret = foreground;
     let editor_background = background;
@@ -484,7 +484,7 @@ mod tests {
     (a - b).abs() < 1e-4
   }
 
-  fn same_color(a: gpuim::Hsla, b: gpuim::Hsla) -> bool {
+  fn same_color(a: gpui::Hsla, b: gpui::Hsla) -> bool {
     almost_eq(a.h, b.h) && almost_eq(a.s, b.s) && almost_eq(a.l, b.l) && almost_eq(a.a, b.a)
   }
 

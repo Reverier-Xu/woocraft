@@ -23,7 +23,7 @@ pub use widgets::*;
 
 pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono NR NFMono CN";
 
-pub fn init(cx: &mut gpuim::App) {
+pub fn init(cx: &mut gpui::App) {
   #[cfg(feature = "resources")]
   assets::register_fonts(cx.text_system())
     .expect("failed to register embedded fonts from src/assets/fonts");

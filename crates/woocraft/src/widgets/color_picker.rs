@@ -19,7 +19,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use gpuim::{App, Context};
+//! use gpui::{App, Context};
 //! use woocraft::{ColorPickerState, ColorPicker, ColorPickerOklch};
 //!
 //! let color_picker_state = cx.new(|cx| ColorPickerState::new());
@@ -34,7 +34,7 @@
 //! differences. RGB values and hex input are converted to Oklch on change, with
 //! hue preservation when changing from RGB.
 
-use gpuim::{
+use gpui::{
   App, AppContext as _, Bounds, Context, ElementId, Entity, EventEmitter, Hsla,
   InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
   Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window, canvas,
@@ -447,7 +447,7 @@ impl RenderOnce for ColorPicker {
 
     let resolved = self.state.read(cx).value();
     let state_id = self.state.entity_id();
-    let swatch_color = gpuim::Rgba {
+    let swatch_color = gpui::Rgba {
       r: resolved.rgba.r,
       g: resolved.rgba.g,
       b: resolved.rgba.b,
@@ -631,7 +631,7 @@ fn paint_channel(
       size(segment_width, bounds.size.height),
     );
 
-    let color = Hsla::from(gpuim::Rgba {
+    let color = Hsla::from(gpui::Rgba {
       r: resolved.rgba.r,
       g: resolved.rgba.g,
       b: resolved.rgba.b,

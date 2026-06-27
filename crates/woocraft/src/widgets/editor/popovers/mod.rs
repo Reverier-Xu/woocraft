@@ -6,7 +6,7 @@ mod hover_popover;
 pub(crate) use code_action_menu::*;
 pub(crate) use completion_menu::*;
 pub(crate) use diagnostic_popover::*;
-use gpuim::{
+use gpui::{
   AnyElement, App, Div, ElementId, Entity, InteractiveElement as _, IntoElement,
   ParentElement as _, SharedString, Stateful, Styled as _, Window, div,
 };

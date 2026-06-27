@@ -1,4 +1,4 @@
-use gpuim::SharedString;
+use gpui::SharedString;
 use ropey::Rope;
 
 use super::{
@@ -104,7 +104,7 @@ impl EditorHighlighter for TreeSitterEditorHighlighter {
 
   fn highlight_range(
     &self, _snapshot: &dyn EditorSnapshot, range: std::ops::Range<u64>, theme: &HighlightTheme,
-  ) -> Vec<(std::ops::Range<u64>, gpuim::HighlightStyle)> {
+  ) -> Vec<(std::ops::Range<u64>, gpui::HighlightStyle)> {
     self
       .inner
       .styles(&(range.start as usize..range.end as usize), theme)

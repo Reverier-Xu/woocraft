@@ -30,7 +30,7 @@
 //! )
 //! ```
 
-use gpuim::{
+use gpui::{
   AnyElement, App, Hsla, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
   div, prelude::FluentBuilder as _, px,
 };

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpuim::{Context, Corner, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window};
+use gpui::{Context, Corner, ElementId, IntoElement, RenderOnce, SharedString, Styled, Window};
 
 use super::popover_menu::{MenuBuilderFn, render_popup_menu};
 use crate::{Button, Popover, PopupMenu, Selectable};
@@ -74,7 +74,7 @@ impl<T> RenderOnce for DropdownMenuPopover<T>
 where
   T: Selectable + IntoElement + 'static,
 {
-  fn render(self, _window: &mut Window, _cx: &mut gpuim::App) -> impl IntoElement {
+  fn render(self, _window: &mut Window, _cx: &mut gpui::App) -> impl IntoElement {
     let builder = self.builder.clone();
     let menu_state_id = self.id.clone();
 

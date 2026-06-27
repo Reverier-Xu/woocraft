@@ -1,8 +1,8 @@
 use std::{char, ops::Range};
 
-use gpuim::{Context, Window};
+use gpui::{Context, Window};
+use gpui_sum_tree::Bias;
 use ropey::Rope;
-use sum_tree::Bias;
 
 use super::{rope_ext::RopeExt as _, state::InputState};
 

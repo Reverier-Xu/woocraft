@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use gpuim::{
+use gpui::{
   App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
   Styled, Subscription, Window, WindowBounds, WindowOptions, div, px,
 };
@@ -454,7 +454,7 @@ fn toggle_list_loading(items: &mut [LoadingListItem], target_id: &str) {
 }
 
 fn main() {
-  let app = gpuim_platform::application().with_assets(woocraft::Assets);
+  let app = gpui::Application::new().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     init(cx);
@@ -467,9 +467,9 @@ fn main() {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
           titlebar: Some(TitleBar::title_bar_options()),
           #[cfg(target_os = "linux")]
-          window_background: gpuim::WindowBackgroundAppearance::Transparent,
+          window_background: gpui::WindowBackgroundAppearance::Transparent,
           #[cfg(target_os = "linux")]
-          window_decorations: Some(gpuim::WindowDecorations::Client),
+          window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
         LoadingWindow::view,

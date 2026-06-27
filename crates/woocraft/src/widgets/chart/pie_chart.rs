@@ -1,18 +1,19 @@
 use std::rc::Rc;
 
-use gpuim::{App, Bounds, IntoElement, Pixels, RenderOnce, Styled, Window, canvas};
+use gpui::{App, Bounds, IntoElement, Pixels, RenderOnce, Styled, Window, canvas};
 
 use crate::{
   ActiveTheme, Plot,
+  base::PixelsExt,
   shape::{Arc, ArcData, Pie},
 };
 
 type ArcRadiusFn<T> = Rc<dyn Fn(&ArcData<T>) -> f32 + 'static>;
 type ValueFn<T> = Rc<dyn Fn(&T) -> f32>;
-type ColorFn<T> = Rc<dyn Fn(&T) -> gpuim::Hsla>;
+type ColorFn<T> = Rc<dyn Fn(&T) -> gpui::Hsla>;
 
 #[inline]
-fn palette(index: usize, cx: &App) -> gpuim::Hsla {
+fn palette(index: usize, cx: &App) -> gpui::Hsla {
   let colors = [
     cx.theme().primary,
     cx.theme().accent,
@@ -108,7 +109,7 @@ impl<T> PieChart<T> {
 
   pub fn color<H>(mut self, color: impl Fn(&T) -> H + 'static) -> Self
   where
-    H: Into<gpuim::Hsla> + 'static, {
+    H: Into<gpui::Hsla> + 'static, {
     self.color = Some(Rc::new(move |t| color(t).into()));
     self
   }

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpuim::{Context, DismissEvent, ElementId, Entity, Focusable, Window};
+use gpui::{Context, DismissEvent, ElementId, Entity, Focusable, Window};
 
 use crate::{PopoverState, PopupMenu};
 
@@ -30,7 +30,7 @@ pub(crate) fn render_popup_menu(
         state.menu = Some(menu.clone());
       });
 
-      menu.focus_handle(cx).focus(window, cx);
+      menu.focus_handle(cx).focus(window);
 
       window
         .subscribe(&menu, cx, {

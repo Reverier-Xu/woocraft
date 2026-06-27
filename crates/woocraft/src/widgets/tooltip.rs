@@ -1,4 +1,4 @@
-use gpuim::{
+use gpui::{
   Action, AnyElement, AnyView, App, AppContext, Context, IntoElement, ParentElement, Render,
   SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };

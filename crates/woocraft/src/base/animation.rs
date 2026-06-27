@@ -3,7 +3,7 @@
 //! Provides ready-to-use animations (e.g., spinner rotation) utilizing theme
 //! duration settings.
 
-use gpuim::{Animation, linear};
+use gpui::{Animation, linear};
 
 use crate::base::theme::duration;
 

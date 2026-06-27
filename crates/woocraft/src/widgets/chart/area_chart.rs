@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   App, Background, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, TextAlign,
   Window, canvas, px,
 };
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
-  AXIS_GAP, ActiveTheme, AxisText, Grid, Plot, PlotAxis, StrokeStyle,
+  AXIS_GAP, ActiveTheme, AxisText, Grid, PixelsExt, Plot, PlotAxis, StrokeStyle,
   scale::{Scale, ScaleLinear, ScalePoint, Sealed},
   shape::Area,
 };
@@ -16,7 +16,7 @@ type XAccessor<T, X> = Rc<dyn Fn(&T) -> X>;
 type YAccessor<T, Y> = Rc<dyn Fn(&T) -> Y>;
 
 #[inline]
-fn palette(index: usize, cx: &App) -> gpuim::Hsla {
+fn palette(index: usize, cx: &App) -> gpui::Hsla {
   let colors = [
     cx.theme().primary,
     cx.theme().accent,
@@ -39,7 +39,7 @@ where
   data: Vec<T>,
   x: Option<XAccessor<T, X>>,
   y: Vec<YAccessor<T, Y>>,
-  strokes: Vec<gpuim::Hsla>,
+  strokes: Vec<gpui::Hsla>,
   stroke_styles: Vec<StrokeStyle>,
   fills: Vec<Background>,
   tick_margin: usize,
@@ -74,7 +74,7 @@ where
     self
   }
 
-  pub fn stroke(mut self, stroke: impl Into<gpuim::Hsla>) -> Self {
+  pub fn stroke(mut self, stroke: impl Into<gpui::Hsla>) -> Self {
     self.strokes.push(stroke.into());
     self
   }

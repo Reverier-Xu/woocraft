@@ -1,4 +1,4 @@
-use gpuim::{
+use gpui::{
   AnyElement, App, Bounds, CursorStyle, Decorations, Edges, HitboxBehavior, Hsla,
   InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce,
   ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px,
@@ -65,11 +65,11 @@ impl RenderOnce for WindowBorder {
     div()
       .id("window-backdrop")
       .font(default_font())
-      .bg(gpuim::transparent_black())
+      .bg(gpui::transparent_black())
       .map(|this| match decorations {
         Decorations::Server => this,
         Decorations::Client { tiling, .. } => this
-          .bg(gpuim::transparent_black())
+          .bg(gpui::transparent_black())
           .child(
             canvas(
               |_bounds, window, _| {
@@ -161,7 +161,7 @@ impl RenderOnce for WindowBorder {
               .when(!tiling.left, |div| div.border_l(BORDER_SIZE))
               .when(!tiling.right, |div| div.border_r(BORDER_SIZE))
               .when(!tiling.is_tiled(), |div| {
-                div.shadow(vec![gpuim::BoxShadow {
+                div.shadow(vec![gpui::BoxShadow {
                   color: Hsla {
                     h: 0.,
                     s: 0.,

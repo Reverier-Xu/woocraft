@@ -9,14 +9,14 @@
 //! # Example
 //! ```rust,ignore
 //! use woocraft::{Theme, ThemeMode, ActiveTheme};
-//! use gpuim::App;
+//! use gpui::App;
 //!
 //! let theme = Theme::global(&cx);
 //! Theme::set_mode(ThemeMode::Dark, &mut cx);
 //! Theme::sync_system_appearance(&mut cx);
 //! ```
 
-use gpuim::{App, Global, Pixels, WindowAppearance, px};
+use gpui::{App, Global, Pixels, WindowAppearance, px};
 use serde::{Deserialize, Serialize};
 
 mod color;
@@ -196,13 +196,13 @@ impl Theme {
   /// let accent = cx.theme().color_for_hue(130.0);
   /// ```
   #[inline]
-  pub fn color_for_hue(&self, hue: f32) -> gpuim::Hsla {
+  pub fn color_for_hue(&self, hue: f32) -> gpui::Hsla {
     self.tokens.syntax_color(hue)
   }
 
   /// Gets the editor background color.
   #[inline]
-  pub fn editor_background(&self) -> gpuim::Hsla {
+  pub fn editor_background(&self) -> gpui::Hsla {
     self.editor_background
   }
 }
@@ -224,7 +224,7 @@ mod tests {
     (a - b).abs() < 1e-4
   }
 
-  fn same_color(a: gpuim::Hsla, b: gpuim::Hsla) -> bool {
+  fn same_color(a: gpui::Hsla, b: gpui::Hsla) -> bool {
     almost_eq(a.h, b.h) && almost_eq(a.s, b.s) && almost_eq(a.l, b.l) && almost_eq(a.a, b.a)
   }
 

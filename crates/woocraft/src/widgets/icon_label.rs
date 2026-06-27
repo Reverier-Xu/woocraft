@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   AnimationExt as _, AnyElement, App, ClickEvent, ElementId, Hsla, InteractiveElement as _,
   IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
   StyleRefinement, Styled, Transformation, Window, div, percentage, prelude::FluentBuilder as _,

@@ -1,6 +1,6 @@
 use std::{cell::Cell, rc::Rc};
 
-use gpuim::{
+use gpui::{
   AnyElement, App, Axis, Element, ElementId, Entity, GlobalElementId, InteractiveElement,
   IntoElement, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render,
   StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
@@ -85,9 +85,9 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
   }
 
   fn request_layout(
-    &mut self, id: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
+    &mut self, id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
     window: &mut Window, cx: &mut App,
-  ) -> (gpuim::LayoutId, Self::RequestLayoutState) {
+  ) -> (gpui::LayoutId, Self::RequestLayoutState) {
     let axis = self.axis;
 
     window.with_element_state(id.unwrap(), |state, window| {
@@ -160,16 +160,16 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
   }
 
   fn prepaint(
-    &mut self, _: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
-    _: gpuim::Bounds<Pixels>, request_layout: &mut Self::RequestLayoutState, window: &mut Window,
+    &mut self, _: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    _: gpui::Bounds<Pixels>, request_layout: &mut Self::RequestLayoutState, window: &mut Window,
     cx: &mut App,
   ) -> Self::PrepaintState {
     request_layout.prepaint(window, cx);
   }
 
   fn paint(
-    &mut self, id: Option<&GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
-    bounds: gpuim::Bounds<Pixels>, request_layout: &mut Self::RequestLayoutState,
+    &mut self, id: Option<&GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    bounds: gpui::Bounds<Pixels>, request_layout: &mut Self::RequestLayoutState,
     _: &mut Self::PrepaintState, window: &mut Window, cx: &mut App,
   ) {
     request_layout.paint(window, cx);

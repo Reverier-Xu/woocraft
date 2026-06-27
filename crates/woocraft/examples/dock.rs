@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpuim::{
+use gpui::{
   App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
   IntoElement, Menu, MenuItem, ParentElement, Render, SharedString, Size as GpuiSize, Styled,
   Window, WindowBounds, WindowOptions, actions, div, px,
@@ -69,7 +69,7 @@ impl Panel for ExamplePanel {
   }
 }
 
-impl gpuim::EventEmitter<PanelEvent> for ExamplePanel {}
+impl gpui::EventEmitter<PanelEvent> for ExamplePanel {}
 
 impl Focusable for ExamplePanel {
   fn focus_handle(&self, _cx: &App) -> FocusHandle {
@@ -286,14 +286,13 @@ impl Render for DockExample {
 }
 
 fn main() {
-  let app = gpuim_platform::application().with_assets(woocraft::Assets);
+  let app = gpui::Application::new().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     woocraft::init(cx);
     cx.activate(true);
     cx.set_menus(vec![
       Menu {
-        disabled: false,
         name: "Layout".into(),
         items: vec![
           MenuItem::action("Toggle Left Dock", ToggleLeftDock),
@@ -303,12 +302,10 @@ fn main() {
           MenuItem::action("Expand All Docks", ExpandAllDocks),
           MenuItem::action("Collapse All Docks", CollapseAllDocks),
           MenuItem::submenu(Menu {
-            disabled: false,
             name: "Resize Presets".into(),
             items: vec![
               MenuItem::action("Reset to Default Sizes", ResetDockSizes),
               MenuItem::submenu(Menu {
-                disabled: false,
                 name: "Read Modes".into(),
                 items: vec![
                   MenuItem::action("Focus Mode (Collapse All Docks)", CollapseAllDocks),
@@ -320,7 +317,6 @@ fn main() {
         ],
       },
       Menu {
-        disabled: false,
         name: "About".into(),
         items: vec![
           MenuItem::action("About Woocraft Dock Example", AboutWoocraft),
@@ -328,7 +324,6 @@ fn main() {
           MenuItem::action("License", AboutLicense),
           MenuItem::separator(),
           MenuItem::submenu(Menu {
-            disabled: false,
             name: "Changelog".into(),
             items: vec![
               MenuItem::action("v0.1 Highlights", AboutChangelogHighlights),
@@ -336,7 +331,6 @@ fn main() {
             ],
           }),
           MenuItem::submenu(Menu {
-            disabled: false,
             name: "Credits".into(),
             items: vec![
               MenuItem::action("Core Team", AboutCreditsCore),
@@ -354,9 +348,9 @@ fn main() {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
           titlebar: Some(TitleBar::title_bar_options()),
           #[cfg(target_os = "linux")]
-          window_background: gpuim::WindowBackgroundAppearance::Transparent,
+          window_background: gpui::WindowBackgroundAppearance::Transparent,
           #[cfg(target_os = "linux")]
-          window_decorations: Some(gpuim::WindowDecorations::Client),
+          window_decorations: Some(gpui::WindowDecorations::Client),
           ..Default::default()
         },
         DockExample::view,

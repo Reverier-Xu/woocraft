@@ -30,7 +30,7 @@
 use std::rc::Rc;
 
 use chrono::NaiveDate;
-use gpuim::{
+use gpui::{
   AnyElement, App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter,
   FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
   ParentElement as _, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription,
@@ -176,7 +176,7 @@ impl DatePickerState {
       |this, _, event: &CalendarEvent, window, cx| match event {
         CalendarEvent::Selected(date) => {
           this.update_date(*date, true, window, cx);
-          this.focus_handle.focus(window, cx);
+          this.focus_handle.focus(window);
         }
       },
     )];
@@ -265,7 +265,7 @@ impl DatePickerState {
   // If focus stays inside date picker when closing popover, focus back to input.
   fn focus_back_if_need(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if self.focus_handle.contains_focused(window, cx) {
-      self.focus_handle.focus(window, cx);
+      self.focus_handle.focus(window);
     }
   }
 
@@ -458,7 +458,7 @@ impl RenderOnce for DatePicker {
                         move |_, window, cx| {
                           state.update(cx, |state, cx| {
                             state.clean(&ClickEvent::default(), window, cx);
-                            state.focus_handle.focus(window, cx);
+                            state.focus_handle.focus(window);
                           });
                         }
                       }),

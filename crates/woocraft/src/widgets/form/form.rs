@@ -1,4 +1,4 @@
-use gpuim::{
+use gpui::{
   App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled, Window,
 };
 

@@ -88,7 +88,7 @@ pub use virtual_list::*;
 pub use widget_group::*;
 pub use window_border::*;
 
-pub fn init(cx: &mut gpuim::App) {
+pub fn init(cx: &mut gpui::App) {
   input::init(cx);
   date_picker::init(cx);
   editor::init(cx);

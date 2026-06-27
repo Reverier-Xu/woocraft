@@ -4,7 +4,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use gpuim::{
+use gpui::{
   App, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render, RenderOnce,
   SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder as _, px, relative,
@@ -65,7 +65,7 @@ impl NotificationType {
     }
   }
 
-  fn color(&self, cx: &App) -> gpuim::Hsla {
+  fn color(&self, cx: &App) -> gpui::Hsla {
     match self {
       Self::Info => cx.theme().primary,
       Self::Success => cx.theme().success,
@@ -308,7 +308,7 @@ impl NotificationState {
   }
 
   fn spawn_timer(
-    state: gpuim::WeakEntity<Self>, id: usize, duration: Duration, epoch: u64, window: &mut Window,
+    state: gpui::WeakEntity<Self>, id: usize, duration: Duration, epoch: u64, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     cx.spawn_in(window, async move |_, cx| {
@@ -318,28 +318,30 @@ impl NotificationState {
           .await;
 
         let keep_running = if let Some(state) = state.upgrade() {
-          state.update(cx, |state, cx| {
-            let Some(item) = state.items.iter_mut().find(|item| item.id == id) else {
-              return false;
-            };
+          state
+            .update(cx, |state, cx| {
+              let Some(item) = state.items.iter_mut().find(|item| item.id == id) else {
+                return false;
+              };
 
-            if !item.autohide || item.timer_epoch != epoch {
-              return false;
-            }
+              if !item.autohide || item.timer_epoch != epoch {
+                return false;
+              }
 
-            let Some(started_at) = item.started_at else {
-              return false;
-            };
+              let Some(started_at) = item.started_at else {
+                return false;
+              };
 
-            if started_at.elapsed() >= duration {
-              state.close(id);
+              if started_at.elapsed() >= duration {
+                state.close(id);
+                cx.notify();
+                return false;
+              }
+
               cx.notify();
-              return false;
-            }
-
-            cx.notify();
-            true
-          })
+              true
+            })
+            .unwrap_or(false)
         } else {
           false
         };
@@ -420,11 +422,11 @@ pub struct NotificationCenter {
   state: Entity<NotificationState>,
   style: StyleRefinement,
   placement: NotificationPlacement,
-  margin_top: gpuim::Pixels,
-  margin_right: gpuim::Pixels,
-  margin_bottom: gpuim::Pixels,
-  margin_left: gpuim::Pixels,
-  width: gpuim::Pixels,
+  margin_top: gpui::Pixels,
+  margin_right: gpui::Pixels,
+  margin_bottom: gpui::Pixels,
+  margin_left: gpui::Pixels,
+  width: gpui::Pixels,
   size: Size,
 }
 
@@ -449,7 +451,7 @@ impl NotificationCenter {
   }
 
   pub fn margins(
-    mut self, top: gpuim::Pixels, right: gpuim::Pixels, bottom: gpuim::Pixels, left: gpuim::Pixels,
+    mut self, top: gpui::Pixels, right: gpui::Pixels, bottom: gpui::Pixels, left: gpui::Pixels,
   ) -> Self {
     self.margin_top = top;
     self.margin_right = right;
@@ -458,7 +460,7 @@ impl NotificationCenter {
     self
   }
 
-  pub fn width(mut self, width: gpuim::Pixels) -> Self {
+  pub fn width(mut self, width: gpui::Pixels) -> Self {
     self.width = width;
     self
   }

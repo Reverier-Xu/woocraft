@@ -1,8 +1,8 @@
 use std::ops::Range;
 
+use gpui_sum_tree::Bias;
 use lsp_types::Position;
 use ropey::{LineType, Rope, RopeSlice};
-use sum_tree::Bias;
 use tree_sitter::Point;
 
 /// An iterator over the lines of a `Rope`.
@@ -211,7 +211,7 @@ pub trait RopeExt {
   ///
   /// ```
   /// use woocraft::{Rope, RopeExt};
-  /// use sum_tree::Bias;
+  /// use gpui_sum_tree::Bias;
   ///
   /// let rope = Rope::from("Hello 中文🎉 test\nRope");
   /// assert_eq!(rope.clip_offset(5, Bias::Left), 5);
@@ -432,8 +432,8 @@ impl RopeExt for Rope {
 
 #[cfg(test)]
 mod tests {
+  use gpui_sum_tree::Bias;
   use ropey::Rope;
-  use sum_tree::Bias;
   use tree_sitter::Point;
 
   use crate::widgets::editor::{Position, RopeExt};

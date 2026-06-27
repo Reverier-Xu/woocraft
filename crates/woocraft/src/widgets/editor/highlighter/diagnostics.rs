@@ -3,9 +3,9 @@ use std::{
   ops::{Deref, Range},
 };
 
-use gpuim::{App, HighlightStyle, Hsla, SharedString, UnderlineStyle, px};
+use gpui::{App, HighlightStyle, Hsla, SharedString, UnderlineStyle, px};
+use gpui_sum_tree::{Bias, SeekTarget, SumTree};
 use ropey::Rope;
-use sum_tree::{Bias, SeekTarget, SumTree};
 
 use crate::{
   ActiveTheme, ColorExt as _,
@@ -196,7 +196,7 @@ pub struct DiagnosticSummary {
   end: usize,
 }
 
-impl sum_tree::Item for DiagnosticEntry {
+impl gpui_sum_tree::Item for DiagnosticEntry {
   type Summary = DiagnosticSummary;
   fn summary(&self, _cx: &()) -> Self::Summary {
     DiagnosticSummary {
@@ -207,7 +207,7 @@ impl sum_tree::Item for DiagnosticEntry {
   }
 }
 
-impl sum_tree::Summary for DiagnosticSummary {
+impl gpui_sum_tree::Summary for DiagnosticSummary {
   type Context<'a> = &'a ();
   fn zero(_: Self::Context<'_>) -> Self {
     DiagnosticSummary {

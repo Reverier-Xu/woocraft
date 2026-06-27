@@ -1,6 +1,6 @@
 //! Extension trait for GPUI elements providing prepaint callback support.
 
-use gpuim::{App, Bounds, ParentElement, Pixels, Styled as _, Window, canvas};
+use gpui::{App, Bounds, ParentElement, Pixels, Styled as _, Window, canvas};
 
 /// Extends elements with a prepaint callback hook.
 ///

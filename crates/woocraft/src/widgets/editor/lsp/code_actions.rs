@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use anyhow::Result;
-use gpuim::{App, Context, Entity, SharedString, Task, Window};
+use gpui::{App, Context, Entity, SharedString, Task, Window};
 use lsp_types::CodeAction;
 
 use crate::widgets::editor::{
@@ -76,7 +76,7 @@ impl InputState {
       }
 
       if code_actions.is_empty() {
-        menu.update(cx, |menu, cx| {
+        let _ = menu.update(cx, |menu, cx| {
           menu.hide(cx);
           cx.notify();
         });

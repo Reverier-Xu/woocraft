@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gpuim::{Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px};
+use gpui::{Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px};
 
 use crate::PixelsExt;
 

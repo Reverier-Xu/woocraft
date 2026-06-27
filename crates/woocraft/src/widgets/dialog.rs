@@ -34,7 +34,7 @@
 
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   AnyElement, App, BoxShadow, Corners, Decorations, DismissEvent, ElementId, EventEmitter,
   FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
   Pixels, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
@@ -66,7 +66,7 @@ pub enum DialogMode {
 // ─── Builder callbacks ──────────────────────────────────────────────────────
 
 type DialogContentBuilder = Rc<
-  dyn Fn(&mut DialogState, &mut Window, &mut gpuim::Context<DialogState>) -> AnyElement + 'static,
+  dyn Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> AnyElement + 'static,
 >;
 
 type DialogCloseHandler = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
@@ -98,28 +98,28 @@ impl DialogState {
   }
 
   /// Imperatively open the dialog and move focus into it.
-  pub fn show(&mut self, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  pub fn show(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
     if !self.open {
       self.set_open(true, window, cx);
     }
   }
 
   /// Imperatively close the dialog.
-  pub fn dismiss(&mut self, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  pub fn dismiss(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
     if self.open {
       self.set_open(false, window, cx);
     }
   }
 
-  fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut gpui::Context<Self>) {
     self.dismiss(window, cx);
   }
 
-  fn set_open(&mut self, open: bool, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  fn set_open(&mut self, open: bool, window: &mut Window, cx: &mut gpui::Context<Self>) {
     self.open = open;
 
     if open {
-      self.focus_handle.focus(window, cx);
+      self.focus_handle.focus(window);
 
       // Subscribe to `DismissEvent` so external code can close us via the
       // event bus (same pattern as `PopoverState`).
@@ -149,7 +149,7 @@ impl Focusable for DialogState {
 }
 
 impl Render for DialogState {
-  fn render(&mut self, _: &mut Window, _: &mut gpuim::Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
     div()
   }
 }
@@ -273,7 +273,7 @@ impl Dialog {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut DialogState, &mut Window, &mut gpuim::Context<DialogState>) -> E + 'static, {
+    F: Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> E + 'static, {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));
@@ -393,7 +393,7 @@ impl RenderOnce for Dialog {
     let on_close_btn = on_close_from_state.clone();
 
     // Build the header div first (needs `h_flex()` return type stability).
-    let header_el: Option<gpuim::AnyElement> = if has_title || show_close_button {
+    let header_el: Option<gpui::AnyElement> = if has_title || show_close_button {
       let on_close_btn2 = on_close_btn.clone();
       Some(
         h_flex()
@@ -412,10 +412,10 @@ impl RenderOnce for Dialog {
                 .label(t),
             )
           })
-          .when(!has_title, |this: gpuim::Stateful<gpuim::Div>| {
+          .when(!has_title, |this: gpui::Stateful<gpui::Div>| {
             this.child(div().flex_1())
           })
-          .when(show_close_button, |this: gpuim::Stateful<gpuim::Div>| {
+          .when(show_close_button, |this: gpui::Stateful<gpui::Div>| {
             this.child(
               Button::new("dialog-close-btn")
                 .flat()
@@ -453,8 +453,8 @@ impl RenderOnce for Dialog {
       })
       .card_style(cx.theme())
       // Panel size — apply only when set
-      .when_some(width, |this: gpuim::Stateful<gpuim::Div>, w| this.w(w))
-      .when_some(height, |this: gpuim::Stateful<gpuim::Div>, h| this.h(h))
+      .when_some(width, |this: gpui::Stateful<gpui::Div>, w| this.w(w))
+      .when_some(height, |this: gpui::Stateful<gpui::Div>, h| this.h(h))
       // Elevated shadow
       .shadow(vec![BoxShadow {
         color: Hsla {
@@ -500,7 +500,7 @@ impl RenderOnce for Dialog {
       // In Light mode: click outside the panel dismisses the dialog.
       .when(
         mode == DialogMode::Light,
-        |this: gpuim::Stateful<gpuim::Div>| {
+        |this: gpui::Stateful<gpui::Div>| {
           let cb = on_close_from_state.clone();
           this.on_mouse_down(MouseButton::Left, move |_, window, cx| cb(window, cx))
         },

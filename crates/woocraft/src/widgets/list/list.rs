@@ -1,6 +1,6 @@
 use std::{ops::Range, rc::Rc};
 
-use gpuim::{
+use gpui::{
   App, AppContext, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement,
   EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, Length,
   ListSizingBehavior, MouseButton, ParentElement, Pixels, Render, RenderOnce, ScrollStrategy,
@@ -70,7 +70,7 @@ impl Default for ListOptions {
 /// List requires all items to have same height.
 pub struct ListState<D: ListDelegate> {
   pub(crate) focus_handle: FocusHandle,
-  pub(crate) query_input: gpuim::Entity<InputState>,
+  pub(crate) query_input: gpui::Entity<InputState>,
   options: ListOptions,
   delegate: D,
   last_query: Option<String>,
@@ -167,7 +167,7 @@ where
 
   /// Focus the list. If searchable, focus search input.
   pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
-    self.focus_handle(cx).focus(window, cx);
+    self.focus_handle(cx).focus(window);
   }
 
   /// Set selected index and scroll to it.
@@ -250,7 +250,7 @@ where
   }
 
   fn on_query_input_event(
-    &mut self, state: &gpuim::Entity<InputState>, event: &InputEvent, window: &mut Window,
+    &mut self, state: &gpui::Entity<InputState>, event: &InputEvent, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     match event {
@@ -678,7 +678,7 @@ where
 /// The List element.
 #[derive(IntoElement)]
 pub struct List<D: ListDelegate + 'static> {
-  state: gpuim::Entity<ListState<D>>,
+  state: gpui::Entity<ListState<D>>,
   style: StyleRefinement,
   options: ListOptions,
   context_menu_builder: Option<ListContextMenuBuilder<D>>,
@@ -689,7 +689,7 @@ where
   D: ListDelegate + 'static,
 {
   /// Create a new List element with the given ListState entity.
-  pub fn new(state: &gpuim::Entity<ListState<D>>) -> Self {
+  pub fn new(state: &gpui::Entity<ListState<D>>) -> Self {
     Self {
       state: state.clone(),
       style: StyleRefinement::default(),

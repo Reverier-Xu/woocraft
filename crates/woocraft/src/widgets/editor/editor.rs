@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   AnyElement, App, Context, DefiniteLength, EdgesRefinement, Entity, Focusable,
   InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,

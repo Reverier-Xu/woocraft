@@ -18,8 +18,8 @@ aho-corasick                  = { workspace = true }
 anyhow                        = { workspace = true }
 chrono                        = { workspace = true }
 enum-iterator                 = { workspace = true }
-gpuim                         = { workspace = true }
-gpuim-macros                  = { workspace = true }
+gpui                          = { workspace = true }
+gpui-macros                   = { workspace = true }
 lsp-types                     = { workspace = true }
 num-traits                    = { workspace = true }
 palette                       = { workspace = true }
@@ -31,7 +31,7 @@ serde_json                    = { workspace = true }
 serde_repr                    = { workspace = true }
 smallvec                      = { workspace = true }
 smol                          = { workspace = true }
-sum-tree                      = { workspace = true }
+gpui_sum_tree                 = { workspace = true }
 thiserror                     = { workspace = true }
 toml                          = { workspace = true }
 tracing                       = { workspace = true }
@@ -87,8 +87,7 @@ rust-i18n  = { workspace = true }
 zstd       = { workspace = true, optional = true }
 
 [dev-dependencies]
-gpuim          = { workspace = true, features = ["test-support"] }
-gpuim-platform = { workspace = true }
+gpui           = { workspace = true, features = ["test-support"] }
 
 [features]
 default = ["resources", "tree-sitter-languages"]

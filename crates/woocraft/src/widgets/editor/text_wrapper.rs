@@ -1,8 +1,7 @@
 use std::ops::Range;
 
-use gpuim::{
-  App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextAlign, TextRun, Window,
-  point, px, size,
+use gpui::{
+  App, Font, Half, Pixels, Point, ShapedLine, SharedString, Size, TextRun, Window, point, px, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -220,7 +219,7 @@ impl TextWrapper {
           &[TextRun {
             len: line_str.len(),
             font: font.clone(),
-            color: gpuim::black(),
+            color: gpui::black(),
             background_color: None,
             underline: None,
             strikethrough: None,
@@ -639,15 +638,12 @@ impl LineLayout {
   }
 
   pub(super) fn paint(
-    &self, pos: Point<Pixels>, line_height: Pixels, _text_align: TextAlign,
-    _align_width: Option<Pixels>, window: &mut Window, cx: &mut App,
+    &self, pos: Point<Pixels>, line_height: Pixels, window: &mut Window, cx: &mut App,
   ) {
     for (ix, line) in self.wrapped_lines.iter().enumerate() {
       _ = line.paint(
         pos + point(px(0.), ix * line_height),
         line_height,
-        _text_align,
-        _align_width,
         window,
         cx,
       );
@@ -667,7 +663,7 @@ impl LineLayout {
           pos.y + *line_index as f32 * line_height,
         );
 
-        _ = invisible.paint(origin, line_height, _text_align, _align_width, window, cx);
+        _ = invisible.paint(origin, line_height, window, cx);
       }
     }
   }
@@ -675,13 +671,13 @@ impl LineLayout {
 
 #[cfg(test)]
 mod tests {
-  use gpuim::{FontFeatures, FontStyle, FontWeight, px};
+  use gpui::{FontFeatures, FontStyle, FontWeight, px};
 
   use super::*;
 
   #[test]
   fn test_update() {
-    let font = gpuim::Font {
+    let font = gpui::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,
@@ -890,7 +886,7 @@ mod tests {
 
   #[test]
   fn test_offset_to_display_point() {
-    let font = gpuim::Font {
+    let font = gpui::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,
@@ -992,7 +988,7 @@ mod tests {
 
   #[test]
   fn test_display_row_to_line_row() {
-    let font = gpuim::Font {
+    let font = gpui::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,
@@ -1026,7 +1022,7 @@ mod tests {
 
   #[test]
   fn test_empty_line_only_uses_one_wrapped_row() {
-    let font = gpuim::Font {
+    let font = gpui::Font {
       family: "Arial".into(),
       weight: FontWeight::default(),
       style: FontStyle::Normal,

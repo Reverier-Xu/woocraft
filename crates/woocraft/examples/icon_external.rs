@@ -1,4 +1,4 @@
-use gpuim::{
+use gpui::{
   App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
   Styled, Window, WindowBounds, WindowOptions, div, px,
 };
@@ -78,7 +78,7 @@ fn main() {
     .with(woocraft::Assets)
     .with(EmbeddedSource::<ExternalAssets>::new());
 
-  let app = gpuim_platform::application().with_assets(assets);
+  let app = gpui::Application::new().with_assets(assets);
 
   app.run(|cx: &mut App| {
     init(cx);

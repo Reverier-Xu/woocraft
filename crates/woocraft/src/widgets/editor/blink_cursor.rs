@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use gpuim::{Context, Pixels, Task};
+use gpui::{Context, Pixels, Task};
 
 use crate::{
   CARET_BLINK_DURATION, CARET_STEADY_DURATION, CARET_THICKNESS, caret_opacity,
@@ -63,7 +63,7 @@ impl BlinkCursor {
     self._task = cx.spawn(async move |this, cx| {
       cx.background_executor().timer(ANIMATION_FRAME).await;
       if let Some(this) = this.upgrade() {
-        this.update(cx, |this, cx| this.tick(epoch, cx));
+        let _ = this.update(cx, |this, cx| this.tick(epoch, cx));
       }
     });
   }

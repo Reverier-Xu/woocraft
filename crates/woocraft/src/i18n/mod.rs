@@ -104,7 +104,7 @@ pub fn available_locales() -> Vec<String> {
     .collect::<Vec<_>>();
 
   for locale in rust_i18n::available_locales!() {
-    let locale = normalize_locale(locale);
+    let locale = normalize_locale(&locale);
     if !locales.iter().any(|existing| existing == &locale) {
       locales.push(locale);
     }

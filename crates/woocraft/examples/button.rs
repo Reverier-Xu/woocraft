@@ -1,4 +1,4 @@
-use gpuim::{
+use gpui::{
   App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
   Styled, Window, WindowBounds, WindowOptions, div, px,
 };
@@ -138,7 +138,7 @@ impl Render for ButtonWindow {
 }
 
 fn main() {
-  let app = gpuim_platform::application().with_assets(woocraft::Assets);
+  let app = gpui::Application::new().with_assets(woocraft::Assets);
 
   app.run(|cx: &mut App| {
     init(cx);

@@ -4,7 +4,7 @@
 //! (h_flex, v_flex), font fallback configuration for multilingual text, and
 //! style-related traits.
 
-use gpuim::{
+use gpui::{
   BoxShadow, Corners, DefiniteLength, Div, Edges, Font, FontFallbacks, FontFeatures, Hsla, Pixels,
   Refineable, StyleRefinement, Styled, div, point, px,
 };
@@ -45,8 +45,8 @@ pub fn default_font() -> Font {
 
   Font {
     family: crate::DEFAULT_FONT_FAMILY.into(),
-    weight: gpuim::FontWeight::NORMAL,
-    style: gpuim::FontStyle::Normal,
+    weight: gpui::FontWeight::NORMAL,
+    style: gpui::FontStyle::Normal,
     features: FontFeatures::default(),
     fallbacks: Some(FontFallbacks::from_fonts(fallbacks)),
   }
@@ -90,12 +90,12 @@ macro_rules! font_weight {
   ($fn:ident, $const:ident) => {
     #[inline]
     fn $fn(self) -> Self {
-      self.font_weight(gpuim::FontWeight::$const)
+      self.font_weight(gpui::FontWeight::$const)
     }
   };
 }
 
-/// Extends [`gpuim::Styled`] with common style helpers.
+/// Extends [`gpui::Styled`] with common style helpers.
 pub trait StyledExt: Styled + Sized {
   fn refine_style(mut self, style: &StyleRefinement) -> Self {
     self.style().refine(style);
@@ -690,7 +690,7 @@ impl<E: Styled> CardStyle for E {}
 
 #[cfg(test)]
 mod tests {
-  use gpuim::px;
+  use gpui::px;
 
   use super::Size;
 

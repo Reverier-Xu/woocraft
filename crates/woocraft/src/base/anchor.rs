@@ -4,7 +4,7 @@
 //! top-right, bottom-left, bottom-center, bottom-right, plus center variations)
 //! for positioning popovers, dropdowns, and other floating containers.
 
-use gpuim::Corner;
+use gpui::Corner;
 
 /// Anchor point for positioning floating elements (popovers, dropdowns, menus).
 ///

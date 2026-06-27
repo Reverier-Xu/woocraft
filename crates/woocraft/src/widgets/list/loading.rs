@@ -1,4 +1,4 @@
-use gpuim::{IntoElement, ParentElement as _, RenderOnce, Styled};
+use gpui::{IntoElement, ParentElement as _, RenderOnce, Styled};
 
 use super::ListItem;
 use crate::{Spinner, h_flex};
@@ -7,7 +7,7 @@ use crate::{Spinner, h_flex};
 pub struct Loading;
 
 impl RenderOnce for Loading {
-  fn render(self, _window: &mut gpuim::Window, _cx: &mut gpuim::App) -> impl IntoElement {
+  fn render(self, _window: &mut gpui::Window, _cx: &mut gpui::App) -> impl IntoElement {
     ListItem::new("list-loading").disabled(true).child(
       h_flex()
         .size_full()

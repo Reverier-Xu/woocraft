@@ -1,7 +1,7 @@
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use anyhow::Result;
-use gpuim::{Context, EntityInputHandler, Task, Window};
+use gpui::{Context, EntityInputHandler, Task, Window};
 use lsp_types::{
   CompletionContext, CompletionItem, CompletionResponse, InlineCompletionContext,
   InlineCompletionItem, InlineCompletionResponse, InlineCompletionTriggerKind, request::Completion,
@@ -165,7 +165,7 @@ impl InputState {
       }
 
       if completions.is_empty() {
-        menu.update(cx, |menu, cx| {
+        let _ = menu.update(cx, |menu, cx| {
           menu.hide(cx);
           cx.notify();
         });

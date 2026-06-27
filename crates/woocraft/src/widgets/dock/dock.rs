@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use gpuim::{
+use gpui::{
   App, AppContext, Context, Element, Empty, Entity, IntoElement, MouseMoveEvent, MouseUpEvent,
   ParentElement as _, Pixels, Point, Render, Style, StyleRefinement, Styled as _, WeakEntity,
   Window, div, prelude::FluentBuilder as _, px,
@@ -387,7 +387,7 @@ impl Dock {
 }
 
 impl Render for Dock {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpuim::IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
     let cache_style = StyleRefinement::default().absolute().size_full();
 
     let collapsed_width = px(40.0);
@@ -446,7 +446,7 @@ impl Element for DockElement {
   type RequestLayoutState = ();
   type PrepaintState = ();
 
-  fn id(&self) -> Option<gpuim::ElementId> {
+  fn id(&self) -> Option<gpui::ElementId> {
     None
   }
 
@@ -455,23 +455,23 @@ impl Element for DockElement {
   }
 
   fn request_layout(
-    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
-    window: &mut gpuim::Window, cx: &mut App,
-  ) -> (gpuim::LayoutId, Self::RequestLayoutState) {
+    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    window: &mut gpui::Window, cx: &mut App,
+  ) -> (gpui::LayoutId, Self::RequestLayoutState) {
     (window.request_layout(Style::default(), None, cx), ())
   }
 
   fn prepaint(
-    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
-    _: gpuim::Bounds<Pixels>, _: &mut Self::RequestLayoutState, _window: &mut gpuim::Window,
+    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    _: gpui::Bounds<Pixels>, _: &mut Self::RequestLayoutState, _window: &mut gpui::Window,
     _cx: &mut App,
   ) {
   }
 
   fn paint(
-    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
-    _: gpuim::Bounds<Pixels>, _: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState,
-    window: &mut gpuim::Window, _cx: &mut App,
+    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
+    _: gpui::Bounds<Pixels>, _: &mut Self::RequestLayoutState, _: &mut Self::PrepaintState,
+    window: &mut gpui::Window, _cx: &mut App,
   ) {
     window.on_mouse_event({
       let view = self.view.clone();

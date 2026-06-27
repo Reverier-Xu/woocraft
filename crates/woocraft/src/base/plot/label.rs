@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use gpuim::{
+use gpui::{
   App, Bounds, FontWeight, Hsla, Pixels, Point, SharedString, TextAlign, TextRun, Window, point, px,
 };
 

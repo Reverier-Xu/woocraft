@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use gpuim::{
+use gpui::{
   Animation, AnimationExt as _, App, Hsla, IntoElement, ParentElement, RenderOnce, Styled as _,
   Transformation, Window, div, linear, percentage, prelude::FluentBuilder as _,
 };

@@ -4,7 +4,7 @@
 //! separate sections of content. Supports solid and dashed line styles,
 //! optional center labels (for horizontal dividers), and customizable colors.
 
-use gpuim::{
+use gpui::{
   App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
   StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };

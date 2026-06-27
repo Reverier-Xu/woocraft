@@ -4,7 +4,7 @@ use std::{
   sync::Arc,
 };
 
-use gpuim::{
+use gpui::{
   AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty, EntityId,
   EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton,
   MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, SharedString,

@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::HashSet, marker::PhantomData, sync::Arc};
 
 use anyhow::Context;
-use gpuim::{AssetSource, Result, SharedString};
+use gpui::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;
 
 use crate::IconNamed;
@@ -29,7 +29,7 @@ impl AssetSource for Assets {
   }
 }
 
-/// Adapter that turns any [`RustEmbed`] type into a [`gpuim::AssetSource`].
+/// Adapter that turns any [`RustEmbed`] type into a [`gpui::AssetSource`].
 #[derive(Default, Clone, Copy)]
 pub struct EmbeddedSource<T>(PhantomData<T>);
 
@@ -259,7 +259,7 @@ pub fn list_icons() -> Vec<crate::IconName> {
     .collect()
 }
 
-pub fn register_fonts(text_system: &gpuim::TextSystem) -> Result<()> {
+pub fn register_fonts(text_system: &gpui::TextSystem) -> Result<()> {
   let mut fonts = Vec::new();
 
   for path in Assets::iter().filter(|path| is_font_asset(path.as_ref())) {
@@ -277,7 +277,7 @@ pub fn register_fonts(text_system: &gpuim::TextSystem) -> Result<()> {
 mod tests {
   use std::{borrow::Cow, collections::HashMap};
 
-  use gpuim::{AssetSource, Result, SharedString};
+  use gpui::{AssetSource, Result, SharedString};
 
   use crate::IconNamed;
 

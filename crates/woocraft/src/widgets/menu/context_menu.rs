@@ -1,6 +1,6 @@
 use std::{cell::RefCell, panic::Location, rc::Rc};
 
-use gpuim::{
+use gpui::{
   AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
   GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
   MouseButton, MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled, Subscription,
@@ -143,9 +143,9 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
   }
 
   fn request_layout(
-    &mut self, id: Option<&gpuim::GlobalElementId>, _: Option<&gpuim::InspectorElementId>,
+    &mut self, id: Option<&gpui::GlobalElementId>, _: Option<&gpui::InspectorElementId>,
     window: &mut Window, cx: &mut App,
-  ) -> (gpuim::LayoutId, Self::RequestLayoutState) {
+  ) -> (gpui::LayoutId, Self::RequestLayoutState) {
     let anchor = self.anchor;
 
     self.with_element_state(
@@ -181,7 +181,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                       .when_some(menu_view, |this, menu| {
                         // Focus the menu, so that can be handle the action.
                         if !menu.focus_handle(cx).contains_focused(window, cx) {
-                          menu.focus_handle(cx).focus(window, cx);
+                          menu.focus_handle(cx).focus(window);
                         }
 
                         this.child(
@@ -222,8 +222,8 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
   }
 
   fn prepaint(
-    &mut self, _: Option<&gpuim::GlobalElementId>, _: Option<&InspectorElementId>,
-    bounds: gpuim::Bounds<gpuim::Pixels>, request_layout: &mut Self::RequestLayoutState,
+    &mut self, _: Option<&gpui::GlobalElementId>, _: Option<&InspectorElementId>,
+    bounds: gpui::Bounds<gpui::Pixels>, request_layout: &mut Self::RequestLayoutState,
     window: &mut Window, cx: &mut App,
   ) -> Self::PrepaintState {
     if let Some(element) = &mut request_layout.element {
@@ -240,8 +240,8 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
   }
 
   fn paint(
-    &mut self, id: Option<&gpuim::GlobalElementId>, _: Option<&InspectorElementId>,
-    _: gpuim::Bounds<gpuim::Pixels>, request_layout: &mut Self::RequestLayoutState,
+    &mut self, id: Option<&gpui::GlobalElementId>, _: Option<&InspectorElementId>,
+    _: gpui::Bounds<gpui::Pixels>, request_layout: &mut Self::RequestLayoutState,
     hitbox: &mut Self::PrepaintState, window: &mut Window, cx: &mut App,
   ) {
     if let Some(element) = &mut request_layout.element {

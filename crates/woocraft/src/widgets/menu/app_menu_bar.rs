@@ -1,4 +1,4 @@
-use gpuim::{
+use gpui::{
   App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, OwnedMenu,
   ParentElement, Render, StatefulInteractiveElement as _, Styled, Window,
 };

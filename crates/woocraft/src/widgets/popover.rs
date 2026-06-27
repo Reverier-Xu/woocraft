@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   AnyElement, App, Bounds, Deferred, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable,
   Half, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, Render,
   RenderOnce, Stateful, StyleRefinement, Styled, Subscription, Window, anchored, deferred, div,
@@ -15,7 +15,7 @@ use crate::{
 
 type PopoverTriggerBuilder = Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>;
 type PopoverContentBuilder = Rc<
-  dyn Fn(&mut PopoverState, &mut Window, &mut gpuim::Context<PopoverState>) -> AnyElement + 'static,
+  dyn Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> AnyElement + 'static,
 >;
 type OpenChangeHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
@@ -114,7 +114,7 @@ impl Popover {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut PopoverState, &mut Window, &mut gpuim::Context<PopoverState>) -> E + 'static, {
+    F: Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> E + 'static, {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));
@@ -158,7 +158,7 @@ impl Popover {
 
   fn render_popover_content(
     anchor: Anchor, size: Size, _: &mut Window, cx: &mut App,
-  ) -> Stateful<gpuim::Div> {
+  ) -> Stateful<gpui::Div> {
     h_flex()
       .id("content")
       .occlude()
@@ -203,23 +203,23 @@ impl PopoverState {
     self.open
   }
 
-  pub fn dismiss(&mut self, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  pub fn dismiss(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
     if self.open {
       self.toggle_open(window, cx);
     }
   }
 
-  fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut gpui::Context<Self>) {
     self.dismiss(window, cx);
   }
 
-  pub fn show(&mut self, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  pub fn show(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
     if !self.open {
       self.toggle_open(window, cx);
     }
   }
 
-  fn toggle_open(&mut self, window: &mut Window, cx: &mut gpuim::Context<Self>) {
+  fn toggle_open(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
     self.open = !self.open;
 
     if self.open {
@@ -228,7 +228,7 @@ impl PopoverState {
         .tracked_focus_handle
         .clone()
         .unwrap_or_else(|| self.focus_handle.clone());
-      focus_handle.focus(window, cx);
+      focus_handle.focus(window);
 
       self.dismiss_subscription =
         Some(
@@ -258,7 +258,7 @@ impl Focusable for PopoverState {
 }
 
 impl Render for PopoverState {
-  fn render(&mut self, _: &mut Window, _: &mut gpuim::Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
     div()
   }
 }

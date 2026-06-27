@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   App, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, TextAlign, Window, canvas,
   fill, px,
 };
 use num_traits::{Num, ToPrimitive};
 
 use crate::{
-  AXIS_GAP, ActiveTheme, AxisText, Grid, Plot, PlotAxis, origin_point,
+  AXIS_GAP, ActiveTheme, AxisText, Grid, PixelsExt, Plot, PlotAxis, origin_point,
   scale::{Scale, ScaleBand, ScaleLinear, Sealed},
 };
 
@@ -174,7 +174,7 @@ where
       let body_left = center_x - body_width / 2.;
       let body_right = center_x + body_width / 2.;
 
-      let mut wick_builder = gpuim::PathBuilder::stroke(px(1.));
+      let mut wick_builder = gpui::PathBuilder::stroke(px(1.));
       wick_builder.move_to(origin_point(px(center_x), px(high_y), origin));
       wick_builder.line_to(origin_point(px(center_x), px(low_y), origin));
 

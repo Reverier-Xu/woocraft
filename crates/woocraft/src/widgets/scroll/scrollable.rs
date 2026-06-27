@@ -1,6 +1,6 @@
 use std::{panic::Location, rc::Rc};
 
-use gpuim::{
+use gpui::{
   App, Div, Element, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
   ScrollHandle, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder,
@@ -84,19 +84,19 @@ impl<E> ParentElement for Scrollable<E>
 where
   E: InteractiveElement + Styled + ParentElement + Element,
 {
-  fn extend(&mut self, elements: impl IntoIterator<Item = gpuim::AnyElement>) {
+  fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
     self.element.extend(elements)
   }
 }
 
 impl InteractiveElement for Scrollable<Div> {
-  fn interactivity(&mut self) -> &mut gpuim::Interactivity {
+  fn interactivity(&mut self) -> &mut gpui::Interactivity {
     self.element.interactivity()
   }
 }
 
 impl InteractiveElement for Scrollable<Stateful<Div>> {
-  fn interactivity(&mut self) -> &mut gpuim::Interactivity {
+  fn interactivity(&mut self) -> &mut gpui::Interactivity {
     self.element.interactivity()
   }
 }

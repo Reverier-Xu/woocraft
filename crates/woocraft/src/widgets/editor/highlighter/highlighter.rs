@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use gpuim::{HighlightStyle, SharedString};
+use gpui::{HighlightStyle, SharedString};
 use ropey::{ChunkCursor, Rope};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
 
@@ -132,7 +132,7 @@ impl HighlightItem {
   }
 }
 
-impl sum_tree::Item for HighlightItem {
+impl gpui_sum_tree::Item for HighlightItem {
   type Summary = HighlightSummary;
   fn summary(&self, _cx: &()) -> Self::Summary {
     HighlightSummary {
@@ -145,7 +145,7 @@ impl sum_tree::Item for HighlightItem {
   }
 }
 
-impl sum_tree::Summary for HighlightSummary {
+impl gpui_sum_tree::Summary for HighlightSummary {
   type Context<'a> = &'a ();
   fn zero(_: Self::Context<'_>) -> Self {
     HighlightSummary {
@@ -166,7 +166,7 @@ impl sum_tree::Summary for HighlightSummary {
   }
 }
 
-impl<'a> sum_tree::Dimension<'a, HighlightSummary> for usize {
+impl<'a> gpui_sum_tree::Dimension<'a, HighlightSummary> for usize {
   fn zero(_: &()) -> Self {
     0
   }
@@ -174,7 +174,7 @@ impl<'a> sum_tree::Dimension<'a, HighlightSummary> for usize {
   fn add_summary(&mut self, _: &'a HighlightSummary, _: &()) {}
 }
 
-impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
+impl<'a> gpui_sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
   fn zero(_: &()) -> Self {
     Default::default()
   }
@@ -780,7 +780,7 @@ fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
 
 #[cfg(test)]
 mod tests {
-  use gpuim::Hsla;
+  use gpui::Hsla;
 
   use super::*;
 
@@ -799,11 +799,11 @@ mod tests {
     fn color_name(c: Option<Hsla>) -> String {
       match c {
         Some(c) => {
-          if c == gpuim::red() {
+          if c == gpui::red() {
             "red".to_string()
-          } else if c == gpuim::green() {
+          } else if c == gpui::green() {
             "green".to_string()
-          } else if c == gpuim::blue() {
+          } else if c == gpui::blue() {
             "blue".to_string()
           } else {
             c.to_string()
@@ -886,9 +886,9 @@ $x = 1;
 
   #[test]
   fn test_unique_styles() {
-    let red = color_style(gpuim::red());
-    let green = color_style(gpuim::green());
-    let blue = color_style(gpuim::blue());
+    let red = color_style(gpui::red());
+    let green = color_style(gpui::green());
+    let blue = color_style(gpui::blue());
     let clean = HighlightStyle::default();
 
     assert_unique_styles(

@@ -1,6 +1,6 @@
 // @reference: https://d3js.org/d3-shape/area
 
-use gpuim::{Background, Bounds, Path, PathBuilder, Pixels, Point, Window, px};
+use gpui::{Background, Bounds, Path, PathBuilder, Pixels, Point, Window, px};
 
 use crate::base::plot::{StrokeStyle, origin_point};
 

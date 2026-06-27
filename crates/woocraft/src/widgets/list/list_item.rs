@@ -1,4 +1,4 @@
-use gpuim::{
+use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, Div, ElementId, InteractiveElement, IntoElement,
   MouseMoveEvent, ParentElement, RenderOnce, Stateful, StatefulInteractiveElement as _,
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
@@ -148,7 +148,7 @@ impl Selectable for ListItem {
 impl_styled!(ListItem);
 
 impl ParentElement for ListItem {
-  fn extend(&mut self, elements: impl IntoIterator<Item = gpuim::AnyElement>) {
+  fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
     self.children.extend(elements);
   }
 }

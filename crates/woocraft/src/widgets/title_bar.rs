@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpuim::{
+use gpui::{
   AnyElement, App, ClickEvent, Context, Decorations, InteractiveElement as _, IntoElement,
   MouseButton, ParentElement, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
   StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, div,
@@ -102,7 +102,7 @@ impl TitleBar {
     TitlebarOptions {
       title: None,
       appears_transparent: true,
-      traffic_light_position: Some(gpuim::point(px(9.0), px(9.0))),
+      traffic_light_position: Some(gpui::point(px(9.0), px(9.0))),
     }
   }
 

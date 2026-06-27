@@ -4,7 +4,7 @@
 //! across different states (hover, active, disabled). Includes ColorExt trait
 //! for color manipulation operations (darken, lighten, adjust opacity, etc.).
 
-use gpuim::Hsla;
+use gpui::Hsla;
 
 use crate::base::theme::opacity;
 
@@ -148,7 +148,7 @@ impl ColorExt for Hsla {
     let out_g = (fg.g * fg.a + bg.g * bg.a * (1.0 - fg.a)) / out_a;
     let out_b = (fg.b * fg.a + bg.b * bg.a * (1.0 - fg.a)) / out_a;
 
-    gpuim::Rgba {
+    gpui::Rgba {
       r: out_r.clamp(0.0, 1.0),
       g: out_g.clamp(0.0, 1.0),
       b: out_b.clamp(0.0, 1.0),

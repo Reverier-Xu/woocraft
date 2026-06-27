@@ -12,7 +12,7 @@ use std::{
   sync::{OnceLock, RwLock},
 };
 
-use gpuim::{
+use gpui::{
   AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
   SharedString, StyleRefinement, Styled, Svg, Transformation, Window, img,
   prelude::FluentBuilder as _, svg,
@@ -243,7 +243,7 @@ impl Icon {
   /// Applies a transformation (scale, rotate, translate) to the icon.
   ///
   /// Use for custom transforms beyond the rotate() method.
-  pub fn transform(mut self, transformation: gpuim::Transformation) -> Self {
+  pub fn transform(mut self, transformation: gpui::Transformation) -> Self {
     self.base = self.base.with_transformation(transformation);
     self
   }

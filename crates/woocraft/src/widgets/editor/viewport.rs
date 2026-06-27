@@ -1,4 +1,4 @@
-use gpuim::{Half, Pixels, px};
+use gpui::{Half, Pixels, px};
 
 pub(crate) const VERTICAL_SCROLLBAR_WIDTH: Pixels = px(32.0);
 pub(crate) const DEFAULT_VIEWPORT_ROWS: usize = 24;
@@ -72,7 +72,7 @@ pub(crate) fn scrollbar_y_to_top_row(
 
 #[cfg(test)]
 mod tests {
-  use gpuim::px;
+  use gpui::px;
 
   use super::*;
 
