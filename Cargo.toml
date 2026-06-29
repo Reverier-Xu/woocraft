@@ -25,8 +25,9 @@ aho-corasick                  = "1.1"
 anyhow                        = "1.0"
 chrono                        = "0.4"
 enum-iterator                 = "2.1"
-gpui                          = { git = "https://github.com/zed-industries/zed", rev = "184cf97ee9e8f9a054389a6288b4caddc73db1af", package = "gpui" }
-gpui-macros                   = { git = "https://github.com/zed-industries/zed", rev = "184cf97ee9e8f9a054389a6288b4caddc73db1af", package = "gpui_macros" }
+gpui                          = { git = "https://github.com/zed-industries/zed", package = "gpui" }
+gpui-macros                   = { git = "https://github.com/zed-industries/zed", package = "gpui_macros" }
+gpui_sum_tree                 = { git = "https://github.com/zed-industries/zed", package = "sum_tree" }
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
 palette                       = "0.7"
@@ -37,7 +38,6 @@ serde_json                    = "1.0"
 serde_repr                    = "0.1"
 smallvec                      = "1.15"
 smol                          = "2.0"
-gpui_sum_tree                 = { git = "https://github.com/zed-industries/zed", rev = "184cf97ee9e8f9a054389a6288b4caddc73db1af", package = "sum_tree" }
 thiserror                     = "2.0"
 toml                          = "1.0"
 tracing                       = "0.1"
@@ -88,8 +88,11 @@ tree-sitter-zig               = "1.1"
 unicode-segmentation          = "1.12"
 zstd                          = "0.13"
 
-rust-embed = { version = "8.11", features = ["interpolate-folder-path", "include-exclude"] }
-rust-i18n  = "4.1"
+rust-embed = { version = "8.11", features = [
+  "interpolate-folder-path",
+  "include-exclude",
+] }
+rust-i18n = "4.1"
 
 ropey = { version = "2.0.0-beta.1", features = [
   "metric_lines_lf",
