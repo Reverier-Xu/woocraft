@@ -581,7 +581,13 @@ impl Element for DockElement {
           return;
         }
 
-        view.update(cx, |view, cx| view.resize(e.position, window, cx))
+        let position = e.position;
+        let view_read = view.read(cx);
+        if view_read.last_resize_position == Some(position) {
+          return;
+        }
+
+        view.update(cx, |view, cx| view.resize(position, window, cx))
       }
     });
 

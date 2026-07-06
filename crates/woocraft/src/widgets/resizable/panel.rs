@@ -143,7 +143,6 @@ impl RenderOnce for ResizablePanelGroup {
                     cx.stop_propagation();
                     state.update(cx, |state, _| {
                       state.resizing_panel_ix = Some(ix);
-                      state.last_resize_position = None;
                     });
                     cx.new(|_| drag_panel.deref().clone())
                   }
@@ -163,7 +162,6 @@ impl RenderOnce for ResizablePanelGroup {
                     cx.stop_propagation();
                     state.update(cx, |state, _| {
                       state.resizing_panel_ix = Some(ix);
-                      state.last_resize_position = None;
                     });
                     cx.new(|_| drag_panel.deref().clone())
                   }
@@ -377,22 +375,18 @@ impl Element for ResizePanelGroupElement {
           return;
         };
 
+        let state_read = state.read(cx);
+        let panel = state_read.panels.get(ix).expect("BUG: invalid panel index");
+        let new_size = match axis {
+          Axis::Horizontal => e.position.x - panel.bounds.left(),
+          Axis::Vertical => e.position.y - panel.bounds.top(),
+        };
+        if state_read.pending_resize == Some((ix, new_size)) {
+          return;
+        }
+
         state.update(cx, |state, cx| {
-          if state.last_resize_position == Some(e.position) {
-            return;
-          }
-          state.last_resize_position = Some(e.position);
-
-          let panel = state.panels.get(ix).expect("BUG: invalid panel index");
-
-          match axis {
-            Axis::Horizontal => {
-              state.resize_panel(ix, e.position.x - panel.bounds.left(), window, cx)
-            }
-            Axis::Vertical => {
-              state.resize_panel(ix, e.position.y - panel.bounds.top(), window, cx);
-            }
-          }
+          state.resize_panel(ix, new_size, window, cx);
         })
       }
     });

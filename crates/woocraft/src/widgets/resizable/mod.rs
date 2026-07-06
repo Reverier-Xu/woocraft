@@ -1,8 +1,6 @@
 use std::ops::Range;
 
-use gpui::{
-  Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Point, Window, px,
-};
+use gpui::{Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px};
 
 use crate::PixelsExt;
 
@@ -33,9 +31,6 @@ pub struct ResizableState {
   sizes: Vec<Pixels>,
   pub(crate) resizing_panel_ix: Option<usize>,
   bounds: Bounds<Pixels>,
-  /// Last mouse position processed during a resize, used to skip duplicate
-  /// drag events.
-  last_resize_position: Option<Point<Pixels>>,
   /// Resize target captured from the latest mouse-move event. The actual
   /// size redistribution is deferred to the next frame render so that many
   /// mouse events within one display interval are coalesced into a single
@@ -51,7 +46,6 @@ impl Default for ResizableState {
       sizes: vec![],
       resizing_panel_ix: None,
       bounds: Bounds::default(),
-      last_resize_position: None,
       pending_resize: None,
     }
   }
@@ -190,7 +184,6 @@ impl ResizableState {
     }
 
     self.resizing_panel_ix = None;
-    self.last_resize_position = None;
     cx.notify();
     cx.emit(ResizablePanelEvent::Resized);
   }

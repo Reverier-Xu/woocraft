@@ -88,7 +88,7 @@ zstd       = { workspace = true, optional = true }
 
 [dev-dependencies]
 gpui           = { workspace = true, features = ["test-support"] }
-gpui_platform  = { git = "https://github.com/zed-industries/zed", rev = "184cf97ee9e8f9a054389a6288b4caddc73db1af", package = "gpui_platform", features = ["font-kit", "wayland", "x11"] }
+gpui_platform  = { git = "https://github.com/zed-industries/zed", package = "gpui_platform", features = ["font-kit", "wayland", "x11"] }
 
 [features]
 default = ["resources", "tree-sitter-languages"]

@@ -14,7 +14,7 @@ pub use dock::*;
 use gpui::{
   AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
   EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
-  Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
+  Point, Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
   prelude::FluentBuilder,
 };
 pub use panel::*;
@@ -92,6 +92,10 @@ pub struct DockArea {
   /// `DragPanel` drag move so that the single global listener can efficiently
   /// clear stale previews when the pointer leaves a zone.
   last_drag_hover: Option<(WeakEntity<TabPanel>, TabPanelDropZone)>,
+  /// Mouse position captured from the latest `DragPanel` drag-move event. The
+  /// actual drop-zone computation is deferred to the next frame render so that
+  /// high-frequency mouse reports are coalesced into one preview update pass.
+  pending_drag_position: Option<Point<Pixels>>,
 }
 
 /// DockItem is a tree structure that represents the layout of the dock.
@@ -579,6 +583,7 @@ impl DockArea {
       subscribed_tile_drop_ids: HashSet::new(),
       pending_layout_change: false,
       last_drag_hover: None,
+      pending_drag_position: None,
     };
 
     this.subscribe_panel(&stack_panel, window, cx);
@@ -904,10 +909,28 @@ impl DockArea {
   /// giving 3N capture-phase callbacks for N panels. This method replaces them
   /// with one listener on the [`DockArea`] root that performs a cheap bounds
   /// test against the drop zones recorded during each panel's last prepaint.
+  ///
+  /// To avoid doing O(N) work on every high-frequency mouse report, the handler
+  /// only records the latest position; the actual drop-zone computation is
+  /// deferred to the next frame render via
+  /// [`DockArea::apply_pending_drag_move`].
   fn handle_drag_move(
-    &mut self, drag: &gpui::DragMoveEvent<DragPanel>, _window: &mut Window, cx: &mut Context<Self>,
+    &mut self, drag: &gpui::DragMoveEvent<DragPanel>, _window: &mut Window, _cx: &mut Context<Self>,
   ) {
     let position = drag.event.position;
+    if self.pending_drag_position != Some(position) {
+      self.pending_drag_position = Some(position);
+    }
+  }
+
+  /// Compute the drag drop-zone preview from the latest captured mouse
+  /// position. Called once per frame during render so that high-frequency
+  /// drag-move events are coalesced into a single preview update pass.
+  fn apply_pending_drag_move(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    let Some(position) = self.pending_drag_position.take() else {
+      return;
+    };
+
     let dock_area_locked = self.is_locked();
     let mut hovered: Option<(WeakEntity<TabPanel>, TabPanelDropZone)> = None;
 
@@ -1267,6 +1290,8 @@ impl DockArea {
 impl EventEmitter<DockEvent> for DockArea {}
 impl Render for DockArea {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    self.apply_pending_drag_move(window, cx);
+
     let view = cx.entity().clone();
 
     div()
