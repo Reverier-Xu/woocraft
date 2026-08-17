@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-  AlignItems, AnyElement, AnyView, App, Axis, Div, ElementId, InteractiveElement as _,
-  IntoElement, ParentElement, Pixels, Rems, RenderOnce, SharedString, Styled, Window, div,
+  AlignItems, AnyElement, AnyView, App, Axis, Div, ElementId, InteractiveElement as _, IntoElement,
+  ParentElement, Pixels, Rems, RenderOnce, SharedString, Styled, Window, div,
   prelude::FluentBuilder as _, px,
 };
 
