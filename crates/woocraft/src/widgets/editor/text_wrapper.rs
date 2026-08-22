@@ -110,6 +110,26 @@ impl TextWrapper {
     self.soft_lines
   }
 
+  /// The display row at which the given logical line starts. Rows beyond the
+  /// document clamp to the end.
+  pub(super) fn line_row_to_display_row(&self, line_row: u64) -> usize {
+    self
+      .display_row_starts
+      .get(line_row as usize)
+      .copied()
+      .unwrap_or(self.soft_lines)
+  }
+
+  /// How many display rows a logical line occupies (1 when it does not
+  /// soft-wrap).
+  pub(super) fn line_display_rows(&self, line_row: u64) -> usize {
+    self
+      .lines
+      .get(line_row as usize)
+      .map(LineItem::lines_len)
+      .unwrap_or(1)
+  }
+
   pub(crate) fn display_row_to_line_row(&self, display_row: usize) -> Option<(usize, usize)> {
     if self.lines.is_empty() {
       return Some((0, 0));
@@ -1036,5 +1056,43 @@ mod tests {
     assert_eq!(wrapper.lines[1].wrapped_lines, vec![0..0]);
     assert_eq!(wrapper.lines[1].lines_len(), 1);
     assert_eq!(wrapper.soft_lines, 3);
+  }
+
+  #[test]
+  fn test_full_replace_tracks_soft_line_count_in_both_directions() {
+    let font = gpui::Font {
+      family: "Arial".into(),
+      weight: FontWeight::default(),
+      style: FontStyle::Normal,
+      features: FontFeatures::default(),
+      fallbacks: None,
+    };
+
+    let mut wrapper = TextWrapper::new(font, px(14.), Some(px(80.)));
+
+    fn no_wrap(_line: &str, _wrap_width: Pixels) -> Vec<Range<usize>> {
+      vec![]
+    }
+
+    // Initial document: 100 single-row lines.
+    let initial = Rope::from((0..100).map(|i| format!("line {i}\n")).collect::<String>());
+    wrapper._update(&initial, &(0..initial.len()), initial.len(), &mut no_wrap);
+    assert_eq!(wrapper.soft_lines, 101, "100 lines + trailing empty line");
+
+    // Grow: full replace (as `set_value` does) with 200 lines.
+    let grown = Rope::from((0..200).map(|i| format!("line {i}\n")).collect::<String>());
+    wrapper._update(&grown, &(0..initial.len()), grown.len(), &mut no_wrap);
+    assert_eq!(
+      wrapper.soft_lines, 201,
+      "grown document must extend soft_lines"
+    );
+
+    // Shrink: full replace back to 50 lines.
+    let shrunk = Rope::from((0..50).map(|i| format!("line {i}\n")).collect::<String>());
+    wrapper._update(&shrunk, &(0..grown.len()), shrunk.len(), &mut no_wrap);
+    assert_eq!(
+      wrapper.soft_lines, 51,
+      "shrunk document must shrink soft_lines"
+    );
   }
 }

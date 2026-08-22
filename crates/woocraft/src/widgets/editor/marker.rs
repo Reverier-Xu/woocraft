@@ -23,10 +23,10 @@ pub enum ScrollbarMarkerKind {
 /// minimap-style indicator for notable lines such as log entries at a given
 /// severity or diagnostics.
 ///
-/// Markers are anchored to document rows; the editor maps rows proportionally
-/// onto the scrollbar track, so a marker at row `n` of `total` is drawn `n /
-/// total` of the way down the track, independent of the current scroll
-/// position.
+/// Markers are anchored to **logical document rows** (the same row indexing
+/// used by [`super::EditorBackend`] line APIs); the editor translates them
+/// through soft-wrap before laying them out on the track, so positions stay
+/// accurate even when lines wrap.
 ///
 /// # Overlap
 ///
@@ -159,13 +159,17 @@ pub(crate) struct ResolvedScrollbarMarker {
 
 /// Lays out `markers` onto the scrollbar track.
 ///
-/// Rows are mapped proportionally: row `n` of `total_rows` is drawn `n /
-/// total_rows` of the way down the track. Overlapping markers are resolved
-/// per pixel by [`ScrollbarMarker::priority`] (ties go to the later marker),
-/// and consecutive track pixels won by the same `(kind, color)` are merged
-/// into a single segment so dense markers stay cheap to render.
+/// Rows are mapped to track positions with [`super::viewport::row_to_track_y`]
+/// — the same travel-based scaling used by the thumb and the drag mapping, so
+/// markers always agree with the scrollbar. `total_rows` and `viewport_rows`
+/// must be the editor's display-row metrics (the caller is responsible for
+/// translating marker rows through soft-wrap). Overlapping markers are
+/// resolved per pixel by [`ScrollbarMarker::priority`] (ties go to the later
+/// marker), and consecutive track pixels won by the same `(kind, color)` are
+/// merged into a single segment so dense markers stay cheap to render.
 pub(crate) fn resolve_scrollbar_markers(
-  markers: &[ScrollbarMarker], total_rows: usize, track_width: Pixels, track_height: Pixels,
+  markers: &[ScrollbarMarker], total_rows: usize, viewport_rows: usize, track_width: Pixels,
+  track_height: Pixels,
 ) -> Vec<ResolvedScrollbarMarker> {
   if markers.is_empty() || total_rows == 0 || track_height <= px(0.0) {
     return Vec::new();
@@ -173,10 +177,16 @@ pub(crate) fn resolve_scrollbar_markers(
 
   let track_h = f32::from(track_height);
   let track_w = f32::from(track_width);
-  let total = total_rows as f32;
   let height_px = track_h.ceil().max(1.0) as usize;
 
-  let y_of = |row: f32| (row / total * track_h).clamp(0.0, track_h);
+  let y_of = |row: usize| {
+    f32::from(super::viewport::row_to_track_y(
+      row,
+      total_rows,
+      viewport_rows,
+      track_height,
+    ))
+  };
 
   // Per-pixel winners: (priority, marker index, kind, color).
   let mut winners: Vec<Option<(u32, usize, ScrollbarMarkerKind, Hsla)>> = vec![None; height_px];
@@ -185,12 +195,12 @@ pub(crate) fn resolve_scrollbar_markers(
     let (_, height) = fixed_geometry(marker.kind);
     let (y_top, y_bottom) = match marker.kind {
       ScrollbarMarkerKind::Bar => {
-        let start = y_of(marker.row as f32);
-        let end = y_of(marker.end_row.saturating_add(1) as f32);
+        let start = y_of(marker.row as usize);
+        let end = y_of(marker.end_row.saturating_add(1) as usize);
         (start, (end - start).max(MIN_BAR_HEIGHT) + start)
       }
       _ => {
-        let center = y_of(marker.row as f32);
+        let center = y_of(marker.row as usize);
         (center - height / 2.0, center + height / 2.0)
       }
     };
@@ -246,13 +256,16 @@ mod tests {
   use super::*;
 
   const TRACK: (Pixels, Pixels) = (px(32.0), px(100.0));
+  const VIEWPORT_ROWS: usize = 10;
 
   fn resolve(markers: &[ScrollbarMarker], total_rows: usize) -> Vec<ResolvedScrollbarMarker> {
-    resolve_scrollbar_markers(markers, total_rows, TRACK.0, TRACK.1)
+    resolve_scrollbar_markers(markers, total_rows, VIEWPORT_ROWS, TRACK.0, TRACK.1)
   }
 
   #[test]
   fn point_marker_is_centered_on_its_row() {
+    // 100 rows / 10 visible: thumb = 10px, travel = 90px, max_top = 90.
+    // Row 50 → 50/90 × 90 = 50px.
     let markers = [ScrollbarMarker::dot(50, rgb(0xFF0000).into())];
     let segments = resolve(&markers, 100);
     assert_eq!(segments.len(), 1);
@@ -270,6 +283,35 @@ mod tests {
     let segments = resolve(&markers, 100);
     assert_eq!(segments.len(), 1);
     assert_eq!(segments[0].top, px(0.0));
+    assert!(segments[0].height >= px(2.0));
+  }
+
+  #[test]
+  fn marker_below_viewport_sits_below_the_thumb() {
+    // The first row that is NOT visible is row `viewport_rows`; its marker
+    // center must sit at the bottom edge of the thumb, never inside it.
+    let markers = [ScrollbarMarker::dot(
+      VIEWPORT_ROWS as u64,
+      rgb(0xFF0000).into(),
+    )];
+    let segments = resolve(&markers, 100);
+    let thumb_h = px(100.0 * VIEWPORT_ROWS as f32 / 100.0);
+    assert_eq!(thumb_h, px(10.0));
+    let segment = segments[0];
+    let center = f32::from(segment.top) + f32::from(segment.height) / 2.0;
+    assert!(
+      center >= f32::from(thumb_h),
+      "marker center {center} < thumb height {}",
+      f32::from(thumb_h)
+    );
+  }
+
+  #[test]
+  fn marker_at_last_scrollable_row_sits_at_travel_end() {
+    // Row 90 (= max_top) maps to y = travel = track - thumb = 90px.
+    let markers = [ScrollbarMarker::dot(90, rgb(0xFF0000).into())];
+    let segments = resolve(&markers, 100);
+    assert_eq!(segments[0].top, px(87.0));
     assert!(segments[0].height >= px(2.0));
   }
 

@@ -26,7 +26,7 @@ use super::{
   change::Change,
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
-  marker,
+  marker::{self, ScrollbarMarker, ScrollbarMarkerKind},
   mask_pattern::MaskPattern,
   mode::InputMode,
   movement::MoveDirection,
@@ -804,19 +804,25 @@ impl InputState {
   }
 
   pub(crate) fn sync_wrap_metrics_for_view(
-    &mut self, wrap_width: Pixels, window: &Window, cx: &mut App,
+    &mut self, wrap_width: Pixels, window: &Window, cx: &mut Context<Self>,
   ) {
     let style = window.text_style();
     let font = style.font();
     let font_size = style.font_size.to_pixels(window.rem_size());
-    self.text_wrapper.sync(
+    if self.text_wrapper.sync(
       &self.text,
       font,
       font_size,
       Some(wrap_width.max(px(1.0))),
       window,
       cx,
-    );
+    ) {
+      // Wrap metrics (display row count, wrap positions) changed during
+      // prepaint — after the scrollbar geometry was already computed in
+      // `render`. Request another frame so the thumb and markers are laid out
+      // from fresh values instead of staying stale.
+      cx.notify();
+    }
   }
 
   pub(super) fn emit_backend_action(&mut self, action: EditorUserAction) {
@@ -2745,14 +2751,33 @@ impl InputState {
       });
 
     // Minimap-style markers injected by the backend, laid out by
-    // `resolve_scrollbar_markers` (priority-based pixel resolution).
+    // `resolve_scrollbar_markers` (priority-based pixel resolution). Backends
+    // report logical rows, so translate them through soft-wrap to display
+    // rows before mapping onto the track.
     if total_rows > 0
-      && let Some(markers) = self.backend.as_ref().map(|b| b.scrollbar_markers())
-      && !markers.is_empty()
+      && let Some(backend_markers) = self.backend.as_ref().map(|b| b.scrollbar_markers())
+      && !backend_markers.is_empty()
     {
+      let markers: Vec<ScrollbarMarker> = backend_markers
+        .into_iter()
+        .map(|mut marker| {
+          let start = self.text_wrapper.line_row_to_display_row(marker.row) as u64;
+          if marker.kind == ScrollbarMarkerKind::Bar {
+            let end = self.text_wrapper.line_row_to_display_row(marker.end_row)
+              + self.text_wrapper.line_display_rows(marker.end_row);
+            marker.row = start;
+            marker.end_row = end.saturating_sub(1) as u64;
+          } else {
+            marker.row = start;
+            marker.end_row = start;
+          }
+          marker
+        })
+        .collect();
       let resolved = marker::resolve_scrollbar_markers(
         &markers,
         total_rows,
+        viewport_rows,
         viewport::VERTICAL_SCROLLBAR_WIDTH,
         track_height,
       );
