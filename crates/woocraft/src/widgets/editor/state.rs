@@ -2709,7 +2709,12 @@ impl InputState {
       .as_ref()
       .and_then(|backend| backend.scrollbar_indicator())
       .map_or_else(
-        || (theme.foreground.opacity(0.35), theme.foreground.opacity(0.6)),
+        || {
+          (
+            theme.foreground.opacity(0.35),
+            theme.foreground.opacity(0.6),
+          )
+        },
         |color| (color.opacity(0.45), color.opacity(0.8)),
       );
 
