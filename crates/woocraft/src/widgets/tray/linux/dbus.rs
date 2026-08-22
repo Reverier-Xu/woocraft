@@ -417,16 +417,19 @@ impl DbusService {
 
         debug!("D-Bus service create with name={service_name}");
 
-        let connection = Arc::new(Connection::session()?);
-        connection.request_name(service_name.as_str())?;
-
         let item = StatusNotifierItem::new(item_state, event_sender.clone());
         let menu = DBusMenu::new(menu_state, event_sender);
 
-        connection
-            .object_server()
-            .at(STATUS_NOTIFIER_ITEM_PATH, item)?;
-        connection.object_server().at(DBUS_MENU_PATH, menu)?;
+        // Request the name and serve the objects atomically so no method
+        // calls are lost (avoids the "requesting name before setting up the
+        // object server" warning).
+        let connection = Arc::new(
+            zbus::blocking::connection::Builder::session()?
+                .name(service_name.as_str())?
+                .serve_at(STATUS_NOTIFIER_ITEM_PATH, item)?
+                .serve_at(DBUS_MENU_PATH, menu)?
+                .build()?,
+        );
 
         register_status_notifier_item(&connection, service_name.as_str())?;
 

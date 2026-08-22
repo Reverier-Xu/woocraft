@@ -27,13 +27,8 @@ use super::platform::{BackendError, Error, PlatformTray, Result};
 use super::{Tray, TrayEvent as RuntimeTrayEvent, TrayMenuItem, TrayMouseButton};
 
 enum BackendCommand {
-    SetTray {
-        tray: Tray,
-        response: std::sync::mpsc::Sender<Result<()>>,
-    },
-    RemoveTray {
-        response: std::sync::mpsc::Sender<Result<()>>,
-    },
+    SetTray { tray: Tray },
+    RemoveTray,
     Shutdown,
 }
 
@@ -41,28 +36,19 @@ pub(crate) struct LinuxBackend {
     command_tx: std::sync::mpsc::Sender<BackendCommand>,
 }
 
-impl LinuxBackend {
-    fn send_and_wait(&self, cmd: impl FnOnce(std::sync::mpsc::Sender<Result<()>>) -> BackendCommand) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.command_tx
-            .send(cmd(tx))
-            .map_err(|_| Error::Backend(BackendError::ChannelSend))?;
-
-        rx.recv()
-            .map_err(|_| Error::Backend(BackendError::ChannelReceive))?
-    }
-}
-
 impl PlatformTray for LinuxBackend {
+    /// Fire-and-forget: the worker thread applies the snapshot in the
+    /// background so the D-Bus setup never blocks the caller.
     fn set_tray(&self, tray: &Tray) -> Result<()> {
-        self.send_and_wait(|response| BackendCommand::SetTray {
-            tray: tray.clone(),
-            response,
-        })
+        self.command_tx
+            .send(BackendCommand::SetTray { tray: tray.clone() })
+            .map_err(|_| Error::Backend(BackendError::ChannelSend))
     }
 
     fn remove_tray(&self) -> Result<()> {
-        self.send_and_wait(|response| BackendCommand::RemoveTray { response })
+        self.command_tx
+            .send(BackendCommand::RemoveTray)
+            .map_err(|_| Error::Backend(BackendError::ChannelSend))
     }
 
     fn shutdown(&self) -> Result<()> {
@@ -280,12 +266,16 @@ fn backend_thread_main(
 
 fn handle_command(state: &mut WorkerState, command: BackendCommand) -> bool {
     match command {
-        BackendCommand::SetTray { tray, response } => {
-            let _ = response.send(state.apply_set_tray(tray));
+        BackendCommand::SetTray { tray } => {
+            if let Err(err) = state.apply_set_tray(tray) {
+                error!("failed to apply tray snapshot: {err}");
+            }
             true
         }
-        BackendCommand::RemoveTray { response } => {
-            let _ = response.send(state.apply_remove_tray());
+        BackendCommand::RemoveTray => {
+            if let Err(err) = state.apply_remove_tray() {
+                error!("failed to remove tray: {err}");
+            }
             true
         }
         BackendCommand::Shutdown => false,

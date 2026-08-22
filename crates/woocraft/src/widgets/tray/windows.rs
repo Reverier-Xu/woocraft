@@ -46,13 +46,8 @@ const TRAY_CLASS_NAME: &str = "WOOCRAFT::Tray";
 const TRAY_ID: u32 = 1;
 
 enum BackendCommand {
-    SetTray {
-        tray: Tray,
-        response: std::sync::mpsc::Sender<Result<()>>,
-    },
-    RemoveTray {
-        response: std::sync::mpsc::Sender<Result<()>>,
-    },
+    SetTray { tray: Tray },
+    RemoveTray,
     IconDecoded {
         revision: u64,
         icon_key: u64,
@@ -117,29 +112,19 @@ pub(crate) struct WindowsBackend {
     command_tx: std::sync::mpsc::Sender<BackendCommand>,
 }
 
-impl WindowsBackend {
-    fn send_and_wait(
-        &self, cmd: impl FnOnce(std::sync::mpsc::Sender<Result<()>>) -> BackendCommand,
-    ) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.command_tx
-            .send(cmd(tx))
-            .map_err(|_| Error::Backend(BackendError::ChannelSend))?;
-        rx.recv()
-            .map_err(|_| Error::Backend(BackendError::ChannelReceive))?
-    }
-}
-
 impl PlatformTray for WindowsBackend {
+    /// Fire-and-forget: the message-loop thread applies the snapshot in the
+    /// background so the caller is never blocked.
     fn set_tray(&self, tray: &Tray) -> Result<()> {
-        self.send_and_wait(|response| BackendCommand::SetTray {
-            tray: tray.clone(),
-            response,
-        })
+        self.command_tx
+            .send(BackendCommand::SetTray { tray: tray.clone() })
+            .map_err(|_| Error::Backend(BackendError::ChannelSend))
     }
 
     fn remove_tray(&self) -> Result<()> {
-        self.send_and_wait(|response| BackendCommand::RemoveTray { response })
+        self.command_tx
+            .send(BackendCommand::RemoveTray)
+            .map_err(|_| Error::Backend(BackendError::ChannelSend))
     }
 
     fn shutdown(&self) -> Result<()> {
@@ -271,21 +256,19 @@ fn process_window_messages() {
 
 fn handle_command(hwnd: HWND, state: &mut TrayWindowState, cmd: BackendCommand) -> bool {
     match cmd {
-        BackendCommand::SetTray { tray, response } => {
-            let result = apply_tray_snapshot(hwnd, state, tray.clone());
-            if result.is_ok() {
-                schedule_icon_decode(state, tray);
+        BackendCommand::SetTray { tray } => {
+            match apply_tray_snapshot(hwnd, state, tray.clone()) {
+                Ok(()) => schedule_icon_decode(state, tray),
+                Err(err) => error!("failed to apply tray snapshot: {err}"),
             }
-            let _ = response.send(result);
             true
         }
-        BackendCommand::RemoveTray { response } => {
+        BackendCommand::RemoveTray => {
             state.current_tray = None;
             state.requested_icon_revision = state.requested_icon_revision.saturating_add(1);
             remove_tray_icon(hwnd, state);
             state.current_icon = None;
             state.clear_menu();
-            let _ = response.send(Ok(()));
             true
         }
         BackendCommand::IconDecoded {
