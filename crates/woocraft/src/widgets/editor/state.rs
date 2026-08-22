@@ -2689,24 +2689,30 @@ impl InputState {
     self.set_top_row(row, line_height)
   }
 
-  /// Requests the preview strip for the current scroll position: a window of
-  /// up to `capacity` rows starting at the first logical line of the
-  /// viewport, so the preview content scrolls together with the document
-  /// while the thumb stays the global scrollbar.
+  /// Requests the preview strip for the current scroll position.
+  ///
+  /// Fit regime (`total <= capacity`): the whole document is requested and
+  /// the editor scales it up to fill the track. Windowed regime: a
+  /// `capacity`-row window anchored on the thumb's top edge, so the preview
+  /// content scrolls up in real time while the thumb stays the global
+  /// scrollbar. The window is expressed in the backend's own row space.
   fn preview_lines(
-    &self, backend: &dyn EditorBackend, capacity: usize,
+    &self, backend: &dyn EditorBackend, capacity: usize, thumb_y: Pixels,
   ) -> Option<Vec<ScrollbarPreviewLine>> {
     if capacity == 0 {
       return None;
     }
-    let top_line = self
+    let total = self
+      .current_backend_snapshot()
+      .map(|snapshot| snapshot.line_count() as usize)
+      .unwrap_or(0);
+    let anchor = self
       .text_wrapper
       .display_row_to_line_row(self.top_row)
       .map(|(line, _)| line)
       .unwrap_or(0);
-    let window = (top_line as u64)..(top_line as u64 + capacity as u64);
-    let lines = backend.scrollbar_preview(window);
-    Some(lines)
+    let window = viewport::preview_window(total, capacity, anchor, f32::from(thumb_y));
+    Some(backend.scrollbar_preview(window.start as u64..window.end as u64))
   }
 
   fn render_vertical_scrollbar(
@@ -2770,29 +2776,36 @@ impl InputState {
         }
       });
 
-    // Preview strip (minimap): the backend provides up to one 1px line per
-    // track pixel for a row window that follows the scroll position. The
-    // thumb stays the global scrollbar overlaid on top.
+    // Preview strip (minimap): the backend provides one line per preview row
+    // for a window selected by `preview_window`; the editor scales the strip
+    // to fill the track with cumulative rounding (fit stretches, windowed is
+    // 1px per row). The thumb stays the global scrollbar overlaid on top.
     let preview_capacity = f32::from(track_height).ceil().max(0.0) as usize;
     if preview_capacity > 0
       && let Some(backend) = self.backend.as_ref()
-      && let Some(lines) = self.preview_lines(&**backend, preview_capacity)
+      && let Some(lines) = self.preview_lines(&**backend, preview_capacity, thumb_y)
       && !lines.is_empty()
     {
-      for (row, line) in lines.iter().take(preview_capacity).enumerate() {
-        // Fully transparent rows are invisible; skip the element.
-        if line.color.a <= 0.0 {
-          continue;
+      let count = lines.len().min(preview_capacity);
+      let scale = preview_capacity as f32 / count.max(1) as f32;
+      let heights = viewport::tile_preview_rows(count, scale);
+      let mut y = 0usize;
+      for (row, line) in lines.iter().take(count).enumerate() {
+        let height = heights[row];
+        // Fully transparent rows are invisible; skip the element but keep
+        // their slot so tiling stays aligned.
+        if line.color.a > 0.0 {
+          scrollbar = scrollbar.child(
+            div()
+              .absolute()
+              .left_0()
+              .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
+              .top(px(y as f32))
+              .h(px(height as f32))
+              .bg(line.color),
+          );
         }
-        scrollbar = scrollbar.child(
-          div()
-            .absolute()
-            .left_0()
-            .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
-            .top(px(row as f32))
-            .h(px(1.0))
-            .bg(line.color),
-        );
+        y += height;
       }
     }
 
