@@ -2,6 +2,25 @@ use std::ops::Range;
 
 use gpui::{Hsla, Pixels, px};
 
+/// A single 1-pixel-tall row of the scrollbar preview (minimap) area.
+///
+/// The preview is a dense strip rendered in the scrollbar track: each entry
+/// occupies exactly one track pixel, top-down. Unlike [`ScrollbarMarker`],
+/// which is a sparse annotation positioned by document row, the preview is a
+/// continuous miniature rendering of the document content near the current
+/// scroll position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScrollbarPreviewLine {
+  /// Fill color of this preview row; the alpha channel is respected.
+  pub color: Hsla,
+}
+
+impl ScrollbarPreviewLine {
+  pub fn new(color: Hsla) -> Self {
+    Self { color }
+  }
+}
+
 /// The visual shape of a [`ScrollbarMarker`].
 ///
 /// This enum is `#[non_exhaustive]`: new shapes may be added in future

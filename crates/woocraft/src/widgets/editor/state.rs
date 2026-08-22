@@ -26,7 +26,7 @@ use super::{
   change::Change,
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
-  marker::{self, ScrollbarMarker, ScrollbarMarkerKind},
+  marker::{self, ScrollbarMarker, ScrollbarMarkerKind, ScrollbarPreviewLine},
   mask_pattern::MaskPattern,
   mode::InputMode,
   movement::MoveDirection,
@@ -2689,6 +2689,26 @@ impl InputState {
     self.set_top_row(row, line_height)
   }
 
+  /// Requests the preview strip for the current scroll position: a window of
+  /// up to `capacity` rows starting at the first logical line of the
+  /// viewport, so the preview content scrolls together with the document
+  /// while the thumb stays the global scrollbar.
+  fn preview_lines(
+    &self, backend: &dyn EditorBackend, capacity: usize,
+  ) -> Option<Vec<ScrollbarPreviewLine>> {
+    if capacity == 0 {
+      return None;
+    }
+    let top_line = self
+      .text_wrapper
+      .display_row_to_line_row(self.top_row)
+      .map(|(line, _)| line)
+      .unwrap_or(0);
+    let window = (top_line as u64)..(top_line as u64 + capacity as u64);
+    let lines = backend.scrollbar_preview(window);
+    Some(lines)
+  }
+
   fn render_vertical_scrollbar(
     &self, window: &mut Window, cx: &mut Context<Self>,
   ) -> gpui::AnyElement {
@@ -2749,6 +2769,32 @@ impl InputState {
           });
         }
       });
+
+    // Preview strip (minimap): the backend provides up to one 1px line per
+    // track pixel for a row window that follows the scroll position. The
+    // thumb stays the global scrollbar overlaid on top.
+    let preview_capacity = f32::from(track_height).ceil().max(0.0) as usize;
+    if preview_capacity > 0
+      && let Some(backend) = self.backend.as_ref()
+      && let Some(lines) = self.preview_lines(&**backend, preview_capacity)
+      && !lines.is_empty()
+    {
+      for (row, line) in lines.iter().take(preview_capacity).enumerate() {
+        // Fully transparent rows are invisible; skip the element.
+        if line.color.a <= 0.0 {
+          continue;
+        }
+        scrollbar = scrollbar.child(
+          div()
+            .absolute()
+            .left_0()
+            .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
+            .top(px(row as f32))
+            .h(px(1.0))
+            .bg(line.color),
+        );
+      }
+    }
 
     // Minimap-style markers injected by the backend, laid out by
     // `resolve_scrollbar_markers` (priority-based pixel resolution). Backends

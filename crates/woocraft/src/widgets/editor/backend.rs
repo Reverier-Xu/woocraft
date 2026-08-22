@@ -5,7 +5,10 @@ use lsp_types::Position;
 use ropey::Rope;
 
 use super::{
-  RopeExt as _, highlighter::HighlightTheme, marker::ScrollbarMarker, state::InputState,
+  RopeExt as _,
+  highlighter::HighlightTheme,
+  marker::{ScrollbarMarker, ScrollbarPreviewLine},
+  state::InputState,
 };
 use crate::PopupMenu;
 
@@ -234,6 +237,23 @@ pub trait EditorBackend:
   /// return a cheap cached list and only rebuild it when their content
   /// changes.
   fn scrollbar_markers(&self) -> Vec<ScrollbarMarker> {
+    Vec::new()
+  }
+
+  /// Preview (minimap) content for the vertical scrollbar track.
+  ///
+  /// `row_window` is the range of rows the editor currently wants to display:
+  /// a window of at most the track height (in pixels) rows that follows the
+  /// scroll position, so it always reflects the document region around the
+  /// viewport. The backend should return at most `row_window.len()` entries
+  /// and must not do work beyond the requested window; each entry is rendered
+  /// as exactly one track pixel, top-down. Return `Vec::new()` to hide the
+  /// preview.
+  ///
+  /// This is called on every scrollbar render, so implementations should
+  /// keep the parsing cheap (e.g. slice the requested window from cached
+  /// text rather than re-parsing the whole document).
+  fn scrollbar_preview(&self, _row_window: Range<u64>) -> Vec<ScrollbarPreviewLine> {
     Vec::new()
   }
 
