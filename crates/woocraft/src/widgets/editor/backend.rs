@@ -1,6 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
-use gpui::{Entity, HighlightStyle, MouseButton, SharedString, Window};
+use gpui::{Entity, HighlightStyle, Hsla, MouseButton, SharedString, Window};
 use lsp_types::Position;
 use ropey::Rope;
 
@@ -222,6 +222,15 @@ pub trait EditorBackend:
 
   fn capabilities(&self) -> EditorBackendCapabilities {
     EditorBackendCapabilities::default()
+  }
+
+  /// Optional indicator (thumb) color for the editor's vertical scrollbar.
+  ///
+  /// Backends that understand the semantic meaning of their content (e.g. a
+  /// log viewer coloring the scrollbar by the most severe level) can inject
+  /// a color here. When `None`, the theme default indicator color is used.
+  fn scrollbar_indicator(&self) -> Option<Hsla> {
+    None
   }
 
   fn snapshot(&self) -> Arc<dyn EditorSnapshot>;

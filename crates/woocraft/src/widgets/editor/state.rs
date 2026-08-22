@@ -2701,6 +2701,18 @@ impl InputState {
     let entity = cx.entity().clone();
     let theme = cx.theme();
 
+    // The indicator color can be injected by the editor backend (e.g. a log
+    // viewer coloring the scrollbar by the most severe level). Otherwise it
+    // falls back to a semi-transparent version of the base text color.
+    let (indicator_bg, indicator_border) = self
+      .backend
+      .as_ref()
+      .and_then(|backend| backend.scrollbar_indicator())
+      .map_or_else(
+        || (theme.foreground.opacity(0.35), theme.foreground.opacity(0.6)),
+        |color| (color.opacity(0.45), color.opacity(0.8)),
+      );
+
     let mut scrollbar = div()
       .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
       .h_full()
@@ -2749,9 +2761,9 @@ impl InputState {
           .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
           .top(thumb_y)
           .h(thumb_h)
-          .bg(theme.primary.opacity(0.45))
+          .bg(indicator_bg)
           .border_1()
-          .border_color(theme.primary.opacity(0.8)),
+          .border_color(indicator_border),
       );
     }
 
