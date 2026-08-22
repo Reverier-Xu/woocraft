@@ -17,7 +17,6 @@ use std::{
   ffi::OsStr,
   hash::{DefaultHasher, Hash, Hasher},
   os::windows::ffi::OsStrExt,
-  sync::Mutex,
   thread,
   time::Duration,
 };
@@ -33,13 +32,14 @@ use windows::{
         Shell_NotifyIconW,
       },
       WindowsAndMessaging::{
-        AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
-        DispatchMessageW, GWLP_USERDATA, GetCursorPos, GetWindowLongPtrW, HMENU, HWND_MESSAGE,
-        MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PM_REMOVE, PeekMessageW, PostMessageW,
-        RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, SetWindowLongPtrW,
-        TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu, TranslateMessage, UnregisterClassW,
-        WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_COMMAND, WM_LBUTTONDBLCLK, WM_LBUTTONUP,
-        WM_MBUTTONUP, WM_NCCREATE, WM_NULL, WM_RBUTTONUP, WNDCLASSW,
+        AppendMenuW, CreateIconIndirect, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
+        DestroyIcon, DestroyMenu, DestroyWindow, DispatchMessageW, GWLP_USERDATA, GetCursorPos,
+        GetWindowLongPtrW, HICON, HMENU, HWND_MESSAGE, ICONINFO, MF_POPUP, MF_SEPARATOR, MF_STRING,
+        MSG, PM_REMOVE, PeekMessageW, PostMessageW, RegisterClassW, RegisterWindowMessageW,
+        SetForegroundWindow, SetWindowLongPtrW, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu,
+        TranslateMessage, UnregisterClassW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_COMMAND,
+        WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_MBUTTONUP, WM_NCCREATE, WM_NULL, WM_RBUTTONUP,
+        WNDCLASSW,
       },
     },
   },
@@ -610,13 +610,12 @@ fn decode_icon(bytes: &[u8]) -> Result<DecodedIcon> {
 }
 
 fn create_hicon(decoded: &DecodedIcon) -> Result<OwnedIcon> {
-  use windows::Win32::{
-    Foundation::BOOL,
-    Graphics::Gdi::{
+  use windows::{
+    Win32::Graphics::Gdi::{
       BITMAPINFO, BITMAPINFOHEADER, CreateBitmap, CreateDIBSection, DIB_RGB_COLORS, DeleteObject,
       GetDC, ReleaseDC,
     },
-    UI::WindowsAndMessaging::{CreateIconIndirect, DestroyIcon, HICON, ICONINFO},
+    core::BOOL,
   };
 
   unsafe {
