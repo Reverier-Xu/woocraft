@@ -1,10 +1,12 @@
 use std::{ops::Range, sync::Arc};
 
-use gpui::{Entity, HighlightStyle, Hsla, MouseButton, SharedString, Window};
+use gpui::{Entity, HighlightStyle, MouseButton, SharedString, Window};
 use lsp_types::Position;
 use ropey::Rope;
 
-use super::{RopeExt as _, highlighter::HighlightTheme, state::InputState};
+use super::{
+  RopeExt as _, highlighter::HighlightTheme, marker::ScrollbarMarker, state::InputState,
+};
 use crate::PopupMenu;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -216,17 +218,6 @@ pub trait EditorContextMenuProvider {
   }
 }
 
-/// A marker rendered on the vertical scrollbar track, e.g. a minimap-style
-/// dot indicating the position of a notable line (such as a log entry at a
-/// given severity).
-#[derive(Debug, Clone, Copy)]
-pub struct ScrollbarMarker {
-  /// The document row (0-based) the marker refers to.
-  pub row: u64,
-  /// The color of the marker.
-  pub color: Hsla,
-}
-
 pub trait EditorBackend:
   EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider {
   fn revision(&self) -> u64;
@@ -235,11 +226,13 @@ pub trait EditorBackend:
     EditorBackendCapabilities::default()
   }
 
-  /// Markers rendered on the vertical scrollbar track (minimap-style dots).
+  /// Markers rendered on the vertical scrollbar track, e.g. minimap-style
+  /// indicators for notable lines such as log entries at a given severity or
+  /// diagnostics. See [`ScrollbarMarker`] for the overlap contract.
   ///
-  /// Markers must be sorted by `row` ascending; when multiple markers map to
-  /// the same pixel, the last one wins. When empty, no markers are rendered
-  /// and the scrollbar keeps the default indicator.
+  /// This is called on every scrollbar render, so implementations should
+  /// return a cheap cached list and only rebuild it when their content
+  /// changes.
   fn scrollbar_markers(&self) -> Vec<ScrollbarMarker> {
     Vec::new()
   }

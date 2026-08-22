@@ -24,11 +24,13 @@ mod viewport_element;
 pub use backend::*;
 pub use buffer_backend::RopeBufferBackend;
 pub use editor::Editor as CodeEditor;
+mod marker;
 #[allow(unused_imports)]
 pub use highlighter::*;
 pub use indent::TabSize;
 pub use lsp::*;
 pub use lsp_types::Position;
+pub use marker::*;
 pub use mask_pattern::MaskPattern;
 pub use rope_ext::*;
 pub use ropey::Rope;

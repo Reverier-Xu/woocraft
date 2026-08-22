@@ -26,6 +26,7 @@ use super::{
   change::Change,
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
+  marker,
   mask_pattern::MaskPattern,
   mode::InputMode,
   movement::MoveDirection,
@@ -2692,12 +2693,9 @@ impl InputState {
       .unwrap_or(window.line_height());
     let total_rows = self.display_row_count();
     let viewport_rows = self.viewport_rows(line_height);
-    let (thumb_y, thumb_h) = viewport::compute_scrollbar_thumb(
-      self.top_row,
-      viewport_rows,
-      total_rows,
-      self.input_bounds.size.height,
-    );
+    let track_height = self.input_bounds.size.height;
+    let (thumb_y, thumb_h) =
+      viewport::compute_scrollbar_thumb(self.top_row, viewport_rows, total_rows, track_height);
     let entity = cx.entity().clone();
     let theme = cx.theme();
 
@@ -2706,8 +2704,6 @@ impl InputState {
     let indicator_bg = theme.foreground.opacity(0.35);
     let indicator_border = theme.foreground.opacity(0.6);
 
-    let track_height = self.input_bounds.size.height;
-    let marker_size = px(5.0);
     let mut scrollbar = div()
       .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
       .h_full()
@@ -2748,40 +2744,28 @@ impl InputState {
         }
       });
 
-    // Minimap-style markers: one dot per notable line, mapped proportionally
-    // over the track. Markers arrive sorted by row; when several land on the
-    // same pixel the last one wins.
+    // Minimap-style markers injected by the backend, laid out by
+    // `resolve_scrollbar_markers` (priority-based pixel resolution).
     if total_rows > 0
       && let Some(markers) = self.backend.as_ref().map(|b| b.scrollbar_markers())
       && !markers.is_empty()
     {
-      let total_rows_f = total_rows.max(1) as f32;
-      let track_height_f = f32::from(track_height);
-      let half = f32::from(marker_size) / 2.0;
-      let max_top = (track_height_f - f32::from(marker_size)).max(0.0);
-      let mut by_pixel: Vec<(i32, Hsla)> = Vec::new();
-      for marker in markers {
-        let row = (marker.row as f32).clamp(0.0, total_rows_f - 1.0);
-        let top = (row / total_rows_f * track_height_f - half).clamp(0.0, max_top);
-        let pixel = top.round() as i32;
-        if let Some((last_pixel, last_color)) = by_pixel.last_mut()
-          && *last_pixel == pixel
-        {
-          *last_color = marker.color;
-        } else {
-          by_pixel.push((pixel, marker.color));
-        }
-      }
-      for (pixel, color) in by_pixel {
+      let resolved = marker::resolve_scrollbar_markers(
+        &markers,
+        total_rows,
+        viewport::VERTICAL_SCROLLBAR_WIDTH,
+        track_height,
+      );
+      for item in resolved {
         scrollbar = scrollbar.child(
           div()
             .absolute()
-            .left_0()
-            .w(marker_size)
-            .h(marker_size)
-            .top(px(pixel as f32))
+            .left(item.left)
+            .top(item.top)
+            .w(item.width)
+            .h(item.height)
             .rounded_full()
-            .bg(color),
+            .bg(item.color),
         );
       }
     }
