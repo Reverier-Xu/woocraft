@@ -2777,7 +2777,6 @@ impl InputState {
       let resolved = marker::resolve_scrollbar_markers(
         &markers,
         total_rows,
-        viewport_rows,
         viewport::VERTICAL_SCROLLBAR_WIDTH,
         track_height,
       );

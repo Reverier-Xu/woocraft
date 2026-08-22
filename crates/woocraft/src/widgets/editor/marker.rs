@@ -159,17 +159,18 @@ pub(crate) struct ResolvedScrollbarMarker {
 
 /// Lays out `markers` onto the scrollbar track.
 ///
-/// Rows are mapped to track positions with [`super::viewport::row_to_track_y`]
-/// — the same travel-based scaling used by the thumb and the drag mapping, so
-/// markers always agree with the scrollbar. `total_rows` and `viewport_rows`
-/// must be the editor's display-row metrics (the caller is responsible for
-/// translating marker rows through soft-wrap). Overlapping markers are
-/// resolved per pixel by [`ScrollbarMarker::priority`] (ties go to the later
-/// marker), and consecutive track pixels won by the same `(kind, color)` are
-/// merged into a single segment so dense markers stay cheap to render.
+/// Rows are mapped **proportionally over the full track** (`row / total_rows`
+/// × track height), the standard minimap semantics: the entire document is
+/// scaled to fit the track and the thumb overlays the visible window. This
+/// keeps markers evenly distributed no matter how the document size compares
+/// to the viewport. `total_rows` must be the editor's display-row metric (the
+/// caller is responsible for translating marker rows through soft-wrap).
+/// Overlapping markers are resolved per pixel by
+/// [`ScrollbarMarker::priority`] (ties go to the later marker), and
+/// consecutive track pixels won by the same `(kind, color)` are merged into a
+/// single segment so dense markers stay cheap to render.
 pub(crate) fn resolve_scrollbar_markers(
-  markers: &[ScrollbarMarker], total_rows: usize, viewport_rows: usize, track_width: Pixels,
-  track_height: Pixels,
+  markers: &[ScrollbarMarker], total_rows: usize, track_width: Pixels, track_height: Pixels,
 ) -> Vec<ResolvedScrollbarMarker> {
   if markers.is_empty() || total_rows == 0 || track_height <= px(0.0) {
     return Vec::new();
@@ -177,16 +178,10 @@ pub(crate) fn resolve_scrollbar_markers(
 
   let track_h = f32::from(track_height);
   let track_w = f32::from(track_width);
+  let total = total_rows.max(1) as f32;
   let height_px = track_h.ceil().max(1.0) as usize;
 
-  let y_of = |row: usize| {
-    f32::from(super::viewport::row_to_track_y(
-      row,
-      total_rows,
-      viewport_rows,
-      track_height,
-    ))
-  };
+  let y_of = |row: usize| (row as f32 / total * track_h).clamp(0.0, track_h);
 
   // Per-pixel winners: (priority, marker index, kind, color).
   let mut winners: Vec<Option<(u32, usize, ScrollbarMarkerKind, Hsla)>> = vec![None; height_px];
@@ -259,13 +254,12 @@ mod tests {
   const VIEWPORT_ROWS: usize = 10;
 
   fn resolve(markers: &[ScrollbarMarker], total_rows: usize) -> Vec<ResolvedScrollbarMarker> {
-    resolve_scrollbar_markers(markers, total_rows, VIEWPORT_ROWS, TRACK.0, TRACK.1)
+    resolve_scrollbar_markers(markers, total_rows, TRACK.0, TRACK.1)
   }
 
   #[test]
   fn point_marker_is_centered_on_its_row() {
-    // 100 rows / 10 visible: thumb = 10px, travel = 90px, max_top = 90.
-    // Row 50 → 50/90 × 90 = 50px.
+    // 100 rows mapped over the full 100px track: row 50 → 50px.
     let markers = [ScrollbarMarker::dot(50, rgb(0xFF0000).into())];
     let segments = resolve(&markers, 100);
     assert_eq!(segments.len(), 1);
@@ -307,12 +301,24 @@ mod tests {
   }
 
   #[test]
-  fn marker_at_last_scrollable_row_sits_at_travel_end() {
-    // Row 90 (= max_top) maps to y = travel = track - thumb = 90px.
-    let markers = [ScrollbarMarker::dot(90, rgb(0xFF0000).into())];
-    let segments = resolve(&markers, 100);
-    assert_eq!(segments[0].top, px(87.0));
-    assert!(segments[0].height >= px(2.0));
+  fn markers_do_not_collapse_when_document_is_slightly_larger_than_viewport() {
+    // Regression: with a travel-based mapping, rows beyond `max_top` all
+    // clamped to a single pixel — 13 lines rendered only 5 dots. The
+    // proportional mapping must keep every row distinct.
+    let track_height = px(260.0);
+    let markers: Vec<ScrollbarMarker> = (0..13)
+      .map(|row| ScrollbarMarker::dot(row, rgb(0xFF0000).into()))
+      .collect();
+    let segments = resolve_scrollbar_markers(&markers, 13, TRACK.0, track_height);
+    assert_eq!(
+      segments.len(),
+      13,
+      "all 13 markers must stay distinct on a track of {}px",
+      track_height
+    );
+    // Markers land in ascending order across the full track.
+    let tops: Vec<f32> = segments.iter().map(|s| f32::from(s.top)).collect();
+    assert!(tops.windows(2).all(|w| w[0] < w[1]), "{tops:?}");
   }
 
   #[test]

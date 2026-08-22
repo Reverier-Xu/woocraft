@@ -70,38 +70,6 @@ pub(crate) fn scrollbar_y_to_top_row(
   (frac * max_top as f32).round() as usize
 }
 
-/// Maps a document row to a position on the scrollbar track, using the same
-/// travel-based scaling as [`scrollbar_y_to_top_row`] (its exact inverse).
-///
-/// This is the single source of truth for row → track geometry: the thumb
-/// position, the drag mapping and minimap markers all derive from it, so they
-/// always agree regardless of total row count, viewport row count or track
-/// size. When the whole document fits in the viewport (`total_rows <=
-/// viewport_rows`) rows are mapped proportionally so markers stay
-/// informative even without scrolling.
-pub(crate) fn row_to_track_y(
-  row: usize, total_rows: usize, viewport_rows: usize, track_height: Pixels,
-) -> Pixels {
-  if total_rows == 0 || track_height <= px(0.0) {
-    return px(0.0);
-  }
-
-  let (_, thumb_height) = compute_scrollbar_thumb(0, viewport_rows, total_rows, track_height);
-  let travel = (track_height - thumb_height).max(px(0.0));
-  let total = total_rows.max(1);
-  let clamped_row = row.min(total.saturating_sub(1));
-  let max_top = max_top_row(total, viewport_rows);
-  if max_top == 0 {
-    let frac = (clamped_row as f32 / total as f32).clamp(0.0, 1.0);
-    return px(frac * f32::from(track_height));
-  }
-  if travel <= px(0.0) {
-    return px(0.0);
-  }
-  let frac = (clamped_row as f32 / max_top as f32).clamp(0.0, 1.0);
-  px(frac * f32::from(travel))
-}
-
 #[cfg(test)]
 mod tests {
   use gpui::px;
@@ -129,44 +97,5 @@ mod tests {
     assert!(thumb_height >= MIN_THUMB_HEIGHT);
     let mapped = scrollbar_y_to_top_row(thumb_y + thumb_height.half(), 100, 10, track_height);
     assert!(mapped.abs_diff(40) <= 1);
-  }
-
-  #[test]
-  fn row_to_track_y_agrees_with_thumb_position() {
-    let track_height = px(200.0);
-    let (total, viewport) = (100, 10);
-    // The thumb's own top position is produced by the same canonical mapping.
-    for top_row in [0, 5, 40, 89, 90, 95] {
-      let (thumb_y, _) = compute_scrollbar_thumb(top_row, viewport, total, track_height);
-      assert_eq!(
-        thumb_y,
-        row_to_track_y(top_row, total, viewport, track_height),
-        "top_row {top_row}"
-      );
-    }
-    // Dragging at the thumb's own center round-trips back to the same row.
-    for top_row in [0, 5, 40, 89, 90] {
-      let y = row_to_track_y(top_row, total, viewport, track_height);
-      let (_, thumb_height) = compute_scrollbar_thumb(0, viewport, total, track_height);
-      let back = scrollbar_y_to_top_row(y + thumb_height.half(), total, viewport, track_height);
-      assert_eq!(back, top_row, "top_row {top_row}");
-    }
-  }
-
-  #[test]
-  fn row_to_track_y_scales_with_row_counts_only() {
-    // Same track, same fraction → same position regardless of absolute sizes.
-    let (total, viewport) = (1000, 40);
-    let y_500 = row_to_track_y(500, total, viewport, px(200.0));
-    let (total2, viewport2) = (500, 20);
-    let y_250 = row_to_track_y(250, total2, viewport2, px(200.0));
-    assert_eq!(y_500, y_250);
-  }
-
-  #[test]
-  fn row_to_track_y_is_proportional_when_everything_fits() {
-    assert_eq!(row_to_track_y(50, 100, 200, px(100.0)), px(50.0));
-    assert_eq!(row_to_track_y(0, 100, 200, px(100.0)), px(0.0));
-    assert_eq!(row_to_track_y(99, 100, 200, px(100.0)), px(99.0));
   }
 }
