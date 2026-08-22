@@ -26,7 +26,7 @@ use super::{
   change::Change,
   highlighter::DiagnosticSet,
   lsp::{HoverDefinition, InlineCompletion, Lsp},
-  marker::{self, ScrollbarMarker, ScrollbarMarkerKind, ScrollbarPreviewLine},
+  marker::{self, ScrollbarMarker, ScrollbarMarkerKind, ScrollbarPreview},
   mask_pattern::MaskPattern,
   mode::InputMode,
   movement::MoveDirection,
@@ -2695,10 +2695,11 @@ impl InputState {
   /// the editor scales it up to fill the track. Windowed regime: a
   /// `capacity`-row window anchored on the thumb's top edge, so the preview
   /// content scrolls up in real time while the thumb stays the global
-  /// scrollbar. The window is expressed in the backend's own row space.
-  fn preview_lines(
+  /// scrollbar. The window is expressed in the backend's own row space; the
+  /// returned strip carries the backend-chosen geometry (width/position).
+  fn preview_content(
     &self, backend: &dyn EditorBackend, capacity: usize, thumb_y: Pixels,
-  ) -> Option<Vec<ScrollbarPreviewLine>> {
+  ) -> Option<ScrollbarPreview> {
     if capacity == 0 {
       return None;
     }
@@ -2734,7 +2735,6 @@ impl InputState {
     // The indicator is a semi-transparent version of the base text color; the
     // backend can additionally inject minimap-style markers on the track.
     let indicator_bg = theme.foreground.opacity(0.35);
-    let indicator_border = theme.foreground.opacity(0.6);
 
     let mut scrollbar = div()
       .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
@@ -2777,20 +2777,22 @@ impl InputState {
       });
 
     // Preview strip (minimap): the backend provides one line per preview row
-    // for a window selected by `preview_window`; the editor scales the strip
-    // to fill the track with cumulative rounding (fit stretches, windowed is
-    // 1px per row). The thumb stays the global scrollbar overlaid on top.
+    // for a window selected by `preview_window`, plus the strip's own
+    // geometry (width/position) so several status strips can share the track.
+    // The editor scales the lines to fill the track with cumulative rounding
+    // (fit stretches, windowed is 1px per row). The thumb stays the global
+    // scrollbar overlaid on top.
     let preview_capacity = f32::from(track_height).ceil().max(0.0) as usize;
     if preview_capacity > 0
       && let Some(backend) = self.backend.as_ref()
-      && let Some(lines) = self.preview_lines(&**backend, preview_capacity, thumb_y)
-      && !lines.is_empty()
+      && let Some(preview) = self.preview_content(&**backend, preview_capacity, thumb_y)
+      && !preview.lines.is_empty()
     {
-      let count = lines.len().min(preview_capacity);
+      let count = preview.lines.len().min(preview_capacity);
       let scale = preview_capacity as f32 / count.max(1) as f32;
       let heights = viewport::tile_preview_rows(count, scale);
       let mut y = 0usize;
-      for (row, line) in lines.iter().take(count).enumerate() {
+      for (row, line) in preview.lines.iter().take(count).enumerate() {
         let height = heights[row];
         // Fully transparent rows are invisible; skip the element but keep
         // their slot so tiling stays aligned.
@@ -2798,8 +2800,8 @@ impl InputState {
           scrollbar = scrollbar.child(
             div()
               .absolute()
-              .left_0()
-              .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
+              .left(preview.left)
+              .w(preview.width)
               .top(px(y as f32))
               .h(px(height as f32))
               .bg(line.color),
@@ -2861,9 +2863,7 @@ impl InputState {
           .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
           .top(thumb_y)
           .h(thumb_h)
-          .bg(indicator_bg)
-          .border_1()
-          .border_color(indicator_border),
+          .bg(indicator_bg),
       );
     }
 

@@ -21,6 +21,35 @@ impl ScrollbarPreviewLine {
   }
 }
 
+/// A preview strip for the scrollbar track: a vertical run of 1-pixel rows
+/// plus the strip's geometry within the track.
+///
+/// The backend decides how its status marker is drawn — its width and its
+/// horizontal position — so several independent strips (log levels, git
+/// status, LSP diagnostics…) can share the track side by side instead of one
+/// status occupying the full width. The default geometry is the full track
+/// width at the left edge.
+#[derive(Debug, Clone, Default)]
+pub struct ScrollbarPreview {
+  /// Horizontal offset of the strip from the track's left edge.
+  pub left: Pixels,
+  /// Width of the strip.
+  pub width: Pixels,
+  /// One line per preview row, top-down. Empty hides the preview.
+  pub lines: Vec<ScrollbarPreviewLine>,
+}
+
+impl ScrollbarPreview {
+  /// The default full-track geometry for a strip that wants the whole width.
+  pub fn full_track() -> Self {
+    Self {
+      left: px(0.0),
+      width: super::viewport::VERTICAL_SCROLLBAR_WIDTH,
+      lines: Vec::new(),
+    }
+  }
+}
+
 /// The visual shape of a [`ScrollbarMarker`].
 ///
 /// This enum is `#[non_exhaustive]`: new shapes may be added in future

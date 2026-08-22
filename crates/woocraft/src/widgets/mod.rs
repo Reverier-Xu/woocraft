@@ -59,8 +59,8 @@ pub use editor::{
   EditorBackendEditResult, EditorContextMenuProvider, EditorEditError, EditorEvent,
   EditorHighlighter, EditorHighlighterProvider, EditorLine, EditorPointerButton, EditorSnapshot,
   EditorState, EditorTextChange, EditorUserAction, MaskPattern, Position, Rope, RopeBufferBackend,
-  RopeEditorSnapshot, RopeExt, ScrollbarMarker, ScrollbarMarkerKind, ScrollbarPreviewLine, TabSize,
-  highlighter::*, lsp::*,
+  RopeEditorSnapshot, RopeExt, ScrollbarMarker, ScrollbarMarkerKind, ScrollbarPreview,
+  ScrollbarPreviewLine, TabSize, highlighter::*, lsp::*,
 };
 pub use form::*;
 pub use history::*;

@@ -7,7 +7,7 @@ use ropey::Rope;
 use super::{
   RopeExt as _,
   highlighter::HighlightTheme,
-  marker::{ScrollbarMarker, ScrollbarPreviewLine},
+  marker::{ScrollbarMarker, ScrollbarPreview},
   state::InputState,
 };
 use crate::PopupMenu;
@@ -245,16 +245,18 @@ pub trait EditorBackend:
   /// `row_window` is the range of rows the editor currently wants to display:
   /// a window of at most the track height (in pixels) rows that follows the
   /// scroll position, so it always reflects the document region around the
-  /// viewport. The backend should return at most `row_window.len()` entries
-  /// and must not do work beyond the requested window; each entry is rendered
-  /// as exactly one track pixel, top-down. Return `Vec::new()` to hide the
-  /// preview.
+  /// viewport. The backend should return at most `row_window.len()` lines and
+  /// must not do work beyond the requested window; each line is rendered as
+  /// exactly one track pixel, top-down, at the strip geometry chosen by the
+  /// backend ([`ScrollbarPreview::left`] / [`ScrollbarPreview::width`] — e.g.
+  /// a narrow column so several status strips can share the track). Return
+  /// empty `lines` to hide the preview.
   ///
   /// This is called on every scrollbar render, so implementations should
   /// keep the parsing cheap (e.g. slice the requested window from cached
   /// text rather than re-parsing the whole document).
-  fn scrollbar_preview(&self, _row_window: Range<u64>) -> Vec<ScrollbarPreviewLine> {
-    Vec::new()
+  fn scrollbar_preview(&self, _row_window: Range<u64>) -> ScrollbarPreview {
+    ScrollbarPreview::default()
   }
 
   fn snapshot(&self) -> Arc<dyn EditorSnapshot>;
