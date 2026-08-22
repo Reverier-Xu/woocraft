@@ -94,6 +94,21 @@ gpui_platform  = { git = "https://github.com/zed-industries/zed", package = "gpu
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5", features = ["blocking"], optional = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6", optional = true }
+objc2-app-kit = { version = "0.3", optional = true, features = [
+  "NSApplication",
+  "NSImage",
+  "NSMenu",
+  "NSMenuItem",
+  "NSStatusBar",
+  "NSStatusItem",
+] }
+objc2-foundation = { version = "0.3", optional = true, features = [
+  "NSData",
+  "NSString",
+] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62", optional = true, features = [
   "Win32_Foundation",
@@ -110,7 +125,15 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 [features]
 default = ["resources", "tree-sitter-languages"]
 resources = ["dep:rust-embed", "dep:zstd"]
-tray = ["dep:crossbeam-channel", "dep:image", "dep:zbus", "dep:windows"]
+tray = [
+  "dep:crossbeam-channel",
+  "dep:image",
+  "dep:zbus",
+  "dep:windows",
+  "dep:objc2",
+  "dep:objc2-app-kit",
+  "dep:objc2-foundation",
+]
 tree-sitter-languages = [
   "dep:tree-sitter-agda",
   "dep:tree-sitter-astro-next",
