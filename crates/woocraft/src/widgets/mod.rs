@@ -35,6 +35,8 @@ mod table;
 mod tag;
 mod title_bar;
 mod tooltip;
+#[cfg(feature = "tray")]
+mod tray;
 mod tree;
 mod virtual_list;
 mod widget_group;
@@ -83,6 +85,8 @@ pub use table::*;
 pub use tag::*;
 pub use title_bar::*;
 pub use tooltip::*;
+#[cfg(feature = "tray")]
+pub use tray::*;
 pub use tree::*;
 pub use virtual_list::*;
 pub use widget_group::*;
