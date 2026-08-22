@@ -2701,23 +2701,13 @@ impl InputState {
     let entity = cx.entity().clone();
     let theme = cx.theme();
 
-    // The indicator color can be injected by the editor backend (e.g. a log
-    // viewer coloring the scrollbar by the most severe level). Otherwise it
-    // falls back to a semi-transparent version of the base text color.
-    let (indicator_bg, indicator_border) = self
-      .backend
-      .as_ref()
-      .and_then(|backend| backend.scrollbar_indicator())
-      .map_or_else(
-        || {
-          (
-            theme.foreground.opacity(0.35),
-            theme.foreground.opacity(0.6),
-          )
-        },
-        |color| (color.opacity(0.45), color.opacity(0.8)),
-      );
+    // The indicator is a semi-transparent version of the base text color; the
+    // backend can additionally inject minimap-style markers on the track.
+    let indicator_bg = theme.foreground.opacity(0.35);
+    let indicator_border = theme.foreground.opacity(0.6);
 
+    let track_height = self.input_bounds.size.height;
+    let marker_size = px(5.0);
     let mut scrollbar = div()
       .w(viewport::VERTICAL_SCROLLBAR_WIDTH)
       .h_full()
@@ -2757,6 +2747,44 @@ impl InputState {
           });
         }
       });
+
+    // Minimap-style markers: one dot per notable line, mapped proportionally
+    // over the track. Markers arrive sorted by row; when several land on the
+    // same pixel the last one wins.
+    if total_rows > 0
+      && let Some(markers) = self.backend.as_ref().map(|b| b.scrollbar_markers())
+      && !markers.is_empty()
+    {
+      let total_rows_f = total_rows.max(1) as f32;
+      let track_height_f = f32::from(track_height);
+      let half = f32::from(marker_size) / 2.0;
+      let max_top = (track_height_f - f32::from(marker_size)).max(0.0);
+      let mut by_pixel: Vec<(i32, Hsla)> = Vec::new();
+      for marker in markers {
+        let row = (marker.row as f32).clamp(0.0, total_rows_f - 1.0);
+        let top = (row / total_rows_f * track_height_f - half).clamp(0.0, max_top);
+        let pixel = top.round() as i32;
+        if let Some((last_pixel, last_color)) = by_pixel.last_mut()
+          && *last_pixel == pixel
+        {
+          *last_color = marker.color;
+        } else {
+          by_pixel.push((pixel, marker.color));
+        }
+      }
+      for (pixel, color) in by_pixel {
+        scrollbar = scrollbar.child(
+          div()
+            .absolute()
+            .left_0()
+            .w(marker_size)
+            .h(marker_size)
+            .top(px(pixel as f32))
+            .rounded_full()
+            .bg(color),
+        );
+      }
+    }
 
     if total_rows > viewport_rows {
       scrollbar = scrollbar.child(

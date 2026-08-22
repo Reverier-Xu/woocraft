@@ -216,6 +216,17 @@ pub trait EditorContextMenuProvider {
   }
 }
 
+/// A marker rendered on the vertical scrollbar track, e.g. a minimap-style
+/// dot indicating the position of a notable line (such as a log entry at a
+/// given severity).
+#[derive(Debug, Clone, Copy)]
+pub struct ScrollbarMarker {
+  /// The document row (0-based) the marker refers to.
+  pub row: u64,
+  /// The color of the marker.
+  pub color: Hsla,
+}
+
 pub trait EditorBackend:
   EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider {
   fn revision(&self) -> u64;
@@ -224,13 +235,13 @@ pub trait EditorBackend:
     EditorBackendCapabilities::default()
   }
 
-  /// Optional indicator (thumb) color for the editor's vertical scrollbar.
+  /// Markers rendered on the vertical scrollbar track (minimap-style dots).
   ///
-  /// Backends that understand the semantic meaning of their content (e.g. a
-  /// log viewer coloring the scrollbar by the most severe level) can inject
-  /// a color here. When `None`, the theme default indicator color is used.
-  fn scrollbar_indicator(&self) -> Option<Hsla> {
-    None
+  /// Markers must be sorted by `row` ascending; when multiple markers map to
+  /// the same pixel, the last one wins. When empty, no markers are rendered
+  /// and the scrollbar keeps the default indicator.
+  fn scrollbar_markers(&self) -> Vec<ScrollbarMarker> {
+    Vec::new()
   }
 
   fn snapshot(&self) -> Arc<dyn EditorSnapshot>;
