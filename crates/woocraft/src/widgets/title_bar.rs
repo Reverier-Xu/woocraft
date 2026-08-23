@@ -19,6 +19,10 @@ type TitleMenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu
 
 const TITLE_BAR_SIZE: Size = Size::Medium;
 
+/// Left padding reserved for the native macOS traffic-light buttons
+/// (close / minimize / zoom) so the title-bar content never overlaps them.
+const TRAFFIC_LIGHT_PADDING: f32 = 68.0;
+
 #[derive(IntoElement)]
 pub struct TitleBar {
   style: StyleRefinement,
@@ -102,7 +106,7 @@ impl TitleBar {
     TitlebarOptions {
       title: None,
       appears_transparent: true,
-      traffic_light_position: Some(gpui::point(px(9.0), px(9.0))),
+      traffic_light_position: Some(gpui::point(px(9.0), px(13.0))),
     }
   }
 
@@ -365,6 +369,10 @@ impl RenderOnce for TitleBar {
             .id("bar")
             .window_control_area(WindowControlArea::Drag)
             .when(window.is_fullscreen(), |this| this.pl_3())
+            .when(
+              is_macos && !window.is_fullscreen() && !window.is_simple_fullscreen(),
+              |this| this.pl(px(TRAFFIC_LIGHT_PADDING)),
+            )
             .h_full()
             .justify_start()
             .gap_2()
