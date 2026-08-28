@@ -1,0 +1,21 @@
+[package]
+name        = "woocraft-terminal"
+description = "Cross-platform PTY terminal session core for the Woocraft design system, headless-friendly."
+
+authors      = { workspace = true }
+edition      = { workspace = true }
+homepage     = { workspace = true }
+license      = { workspace = true }
+publish      = { workspace = true }
+readme       = { workspace = true }
+repository   = { workspace = true }
+rust-version = { workspace = true }
+version      = { workspace = true }
+
+[dependencies]
+alacritty_terminal = { workspace = true }
+anyhow             = { workspace = true }
+async-channel      = { workspace = true }
+thiserror          = { workspace = true }
+tracing            = { workspace = true }
+vte                = { workspace = true }
