@@ -38,7 +38,7 @@ use crate::{
   options::SpawnOptions,
   types::{
     Cell, CellFlags, Content, Cursor, CursorShape, IndexedCell, Modes, Point, ScrollKind,
-    SelectionRange, TerminalBounds,
+    SelectionKind, SelectionRange, TerminalBounds,
   },
 };
 
@@ -322,12 +322,13 @@ pub(crate) fn scroll_display(term: &mut Term<BackendListener>, scroll: ScrollKin
 }
 
 pub(crate) fn set_selection(
-  term: &mut Term<BackendListener>, start: Point, end: Point, is_block: bool,
+  term: &mut Term<BackendListener>, start: Point, end: Point, kind: SelectionKind,
 ) {
-  let selection_type = if is_block {
-    AlacSelectionType::Block
-  } else {
-    AlacSelectionType::Lines
+  let selection_type = match kind {
+    SelectionKind::Characters => AlacSelectionType::Simple,
+    SelectionKind::Words => AlacSelectionType::Semantic,
+    SelectionKind::Lines => AlacSelectionType::Lines,
+    SelectionKind::Block => AlacSelectionType::Block,
   };
   let mut selection = AlacSelection::new(selection_type, start.to_alacritty(), AlacSide::Left);
   selection.update(end.to_alacritty(), AlacSide::Right);

@@ -15,7 +15,7 @@ use crate::{
   backend::{self, BackendListener, PtySender, TermLock},
   event::{ChildStatus, TerminalEvent},
   options::SpawnOptions,
-  types::{CellColor, Point, ScrollKind, TerminalBounds},
+  types::{CellColor, Point, ScrollKind, SelectionKind, TerminalBounds},
 };
 
 /// A running terminal session.
@@ -211,9 +211,9 @@ impl TerminalSession {
     backend::last_non_empty_lines(&self.inner.term.lock(), n)
   }
 
-  /// Selects a range of cells; `is_block` selects a rectangular block.
-  pub fn select(&self, start: Point, end: Point, is_block: bool) {
-    backend::set_selection(&mut self.inner.term.lock(), start, end, is_block);
+  /// Selects a range of cells with the given [`SelectionKind`] semantics.
+  pub fn select(&self, start: Point, end: Point, kind: SelectionKind) {
+    backend::set_selection(&mut self.inner.term.lock(), start, end, kind);
     self.wake();
   }
 

@@ -16,6 +16,7 @@ version      = { workspace = true }
 [dependencies]
 aho-corasick                  = { workspace = true }
 anyhow                        = { workspace = true }
+async-channel                 = { workspace = true }
 chrono                        = { workspace = true }
 enum-iterator                 = { workspace = true }
 gpui                          = { workspace = true }
@@ -81,6 +82,7 @@ tree-sitter-verilog           = { workspace = true, optional = true }
 tree-sitter-yaml              = { workspace = true, optional = true }
 tree-sitter-zig               = { workspace = true, optional = true }
 unicode-segmentation          = { workspace = true }
+woocraft-terminal             = { path = "../terminal", optional = true }
 
 # For assets embedding, optional and workspace to avoid unnecessary dependency for users who don't need it.
 rust-embed = { workspace = true, optional = true }
@@ -123,7 +125,7 @@ windows = { version = "0.62", optional = true, features = [
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "webp"], optional = true }
 
 [features]
-default = ["resources", "tree-sitter-languages"]
+default = ["resources", "tree-sitter-languages", "terminal"]
 resources = ["dep:rust-embed", "dep:zstd"]
 tray = [
   "dep:crossbeam-channel",
@@ -134,6 +136,7 @@ tray = [
   "dep:objc2-app-kit",
   "dep:objc2-foundation",
 ]
+terminal = ["dep:woocraft-terminal"]
 tree-sitter-languages = [
   "dep:tree-sitter-agda",
   "dep:tree-sitter-astro-next",

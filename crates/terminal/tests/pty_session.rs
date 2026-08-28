@@ -190,7 +190,7 @@ fn selection_captures_text() {
   session.select(
     woocraft_terminal::Point::new(0, 0),
     woocraft_terminal::Point::new(0, 14),
-    false,
+    woocraft_terminal::SelectionKind::Characters,
   );
   let copied = session.copy_selection().expect("selection text");
   assert_eq!(copied.trim_end(), "hello-woocraft");

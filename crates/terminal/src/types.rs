@@ -79,6 +79,20 @@ impl Range {
   }
 }
 
+/// The semantics of a user selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SelectionKind {
+  /// Character-wise selection, as produced by dragging the mouse.
+  #[default]
+  Characters,
+  /// Word-wise selection, as produced by double-clicking and dragging.
+  Words,
+  /// Whole-line selection, as produced by triple-clicking.
+  Lines,
+  /// Rectangular block selection, as produced by alt-dragging.
+  Block,
+}
+
 /// The user selection currently rendered on the terminal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SelectionRange {
@@ -148,6 +162,11 @@ impl CellFlags {
 
   pub const fn remove(&mut self, other: Self) {
     self.0 &= !other.0;
+  }
+
+  /// The union of two flag sets.
+  pub const fn union(self, other: Self) -> Self {
+    Self(self.0 | other.0)
   }
 
   pub(crate) const fn from_alacritty(flags: AlacFlags) -> Self {
@@ -385,6 +404,20 @@ impl std::ops::BitOrAssign for Modes {
   }
 }
 
+impl std::ops::BitOr for CellFlags {
+  type Output = Self;
+
+  fn bitor(self, rhs: Self) -> Self {
+    Self(self.0 | rhs.0)
+  }
+}
+
+impl std::ops::BitOrAssign for CellFlags {
+  fn bitor_assign(&mut self, rhs: Self) {
+    self.0 |= rhs.0;
+  }
+}
+
 /// The shape of the terminal cursor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CursorShape {
@@ -522,6 +555,36 @@ pub struct Content {
   pub scrolled_to_bottom: bool,
   /// The bounds that were active when the snapshot was taken.
   pub terminal_bounds: TerminalBounds,
+}
+
+impl Default for Content {
+  fn default() -> Self {
+    Self::empty()
+  }
+}
+
+impl Content {
+  /// An empty snapshot with default viewport bounds.
+  pub fn empty() -> Self {
+    Self {
+      cells: Vec::new(),
+      mode: Modes::empty(),
+      cursor: Cursor {
+        shape: CursorShape::Block,
+        point: Point::new(0, 0),
+      },
+      cursor_char: ' ',
+      total_lines: 0,
+      display_offset: 0,
+      columns: 0,
+      screen_lines: 0,
+      selection: None,
+      selection_text: None,
+      scrolled_to_top: true,
+      scrolled_to_bottom: true,
+      terminal_bounds: TerminalBounds::default(),
+    }
+  }
 }
 
 #[cfg(test)]

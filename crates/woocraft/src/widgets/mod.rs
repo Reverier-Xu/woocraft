@@ -33,6 +33,8 @@ mod switch;
 mod tab;
 mod table;
 mod tag;
+#[cfg(feature = "terminal")]
+mod terminal;
 mod title_bar;
 mod tooltip;
 #[cfg(feature = "tray")]
@@ -84,6 +86,8 @@ pub use switch::*;
 pub use tab::*;
 pub use table::*;
 pub use tag::*;
+#[cfg(feature = "terminal")]
+pub use terminal::*;
 pub use title_bar::*;
 pub use tooltip::*;
 #[cfg(feature = "tray")]
@@ -102,4 +106,6 @@ pub fn init(cx: &mut gpui::App) {
   table::init(cx);
   tree::init(cx);
   dock::init(cx);
+  #[cfg(feature = "terminal")]
+  terminal::init(cx);
 }
