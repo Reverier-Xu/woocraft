@@ -11,13 +11,19 @@ permissions:
 
 jobs:
   cargo-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     steps:
       - name: checkout
         uses: actions/checkout@v6
 
       - name: install linux dependencies
+        if: runner.os == 'Linux'
         run: |
           apt_get="apt-get"
           if command -v sudo >/dev/null 2>&1; then
