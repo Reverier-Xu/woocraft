@@ -259,8 +259,16 @@ mod tests {
   use super::*;
 
   fn esc(keystroke: &str) -> Option<String> {
-    to_esc_str(&Keystroke::parse(keystroke).unwrap(), Modes::NONE, false)
-      .map(|cow| cow.into_owned())
+    esc_with(keystroke, false)
+  }
+
+  fn esc_with(keystroke: &str, option_as_meta: bool) -> Option<String> {
+    to_esc_str(
+      &Keystroke::parse(keystroke).unwrap(),
+      Modes::NONE,
+      option_as_meta,
+    )
+    .map(|cow| cow.into_owned())
   }
 
   #[test]
@@ -321,11 +329,26 @@ mod tests {
 
   #[test]
   fn alt_is_meta_for_ascii() {
-    assert_eq!(esc("alt-x").as_deref(), Some("\x1bx"));
-    assert_eq!(esc("alt-shift-x").as_deref(), Some("\x1bX"));
-    assert_eq!(esc("alt-ctrl-x").as_deref(), Some("\x1b\x18"));
+    // Alt-as-meta is opt-in on macOS via `option_as_meta`, and always on for
+    // other platforms.
+    let expected = if cfg!(target_os = "macos") {
+      None
+    } else {
+      Some("\x1bx")
+    };
+    assert_eq!(esc("alt-x").as_deref(), expected);
+    assert_eq!(
+      esc("alt-shift-x").as_deref(),
+      expected.map(|s| s.to_uppercase()).as_deref()
+    );
+
+    // With `option_as_meta` enabled the mapping applies on every platform.
+    assert_eq!(esc_with("alt-x", true).as_deref(), Some("\x1bx"));
+    assert_eq!(esc_with("alt-shift-x", true).as_deref(), Some("\x1bX"));
+    assert_eq!(esc_with("alt-ctrl-x", true).as_deref(), Some("\x1b\x18"));
     // Non-ASCII keys are untouched.
     assert_eq!(esc("alt-键盘"), None);
+    assert_eq!(esc_with("alt-键盘", true), None);
   }
 
   #[test]
