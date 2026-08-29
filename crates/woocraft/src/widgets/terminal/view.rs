@@ -62,8 +62,10 @@ pub enum TerminalViewEvent {
 pub struct TerminalView {
   session: TerminalSession,
   focus: FocusHandle,
-  /// The latest content snapshot, refreshed during element prepaint.
-  pub(crate) content: woocraft_terminal::Content,
+  /// The latest content snapshot, refreshed during element prepaint. Shared
+  /// via `Arc` so the element can build this frame's layout from the same
+  /// copy stored on the view without a second full-grid clone.
+  pub(crate) content: std::sync::Arc<woocraft_terminal::Content>,
   title: Option<String>,
   pub(crate) marked_text: Option<String>,
   /// Whether the application requested a blinking cursor.
@@ -80,6 +82,9 @@ pub struct TerminalView {
   // down; dragging moves the head, exactly like Zed's Selection model.
   selection_phase: SelectionPhase,
   selection_anchor: Option<(GridPoint, SelectionKind)>,
+  /// Last selection head seen, so drag moves that didn't change the
+  /// selection neither re-select nor invalidate the frame.
+  selection_head: Option<GridPoint>,
   mouse_down_position: Option<gpui::Point<Pixels>>,
   last_mouse: Option<(GridPoint, bool)>,
   scroll_px: Pixels,
@@ -143,7 +148,7 @@ impl TerminalView {
     Self {
       session,
       focus,
-      content: woocraft_terminal::Content::empty(),
+      content: std::sync::Arc::new(woocraft_terminal::Content::empty()),
       title: None,
       marked_text: None,
       blinking_terminal_enabled: false,
@@ -153,6 +158,7 @@ impl TerminalView {
       font_size: None,
       selection_phase: SelectionPhase::Ended,
       selection_anchor: None,
+      selection_head: None,
       mouse_down_position: None,
       last_mouse: None,
       scroll_px: px(0.),
@@ -479,6 +485,7 @@ impl TerminalView {
         for report in reports {
           self.session.write_pty(report);
         }
+        cx.notify();
       }
     } else if self
       .content
@@ -487,10 +494,11 @@ impl TerminalView {
       && !shift
     {
       self.session.input(alt_scroll(scroll_lines));
+      cx.notify();
     } else {
       self.session.scroll(ScrollKind::Delta(scroll_lines));
+      cx.notify();
     }
-    cx.notify();
   }
 
   /// Accumulates pixel deltas and converts them to whole scroll lines.
@@ -579,6 +587,7 @@ impl TerminalView {
   fn set_selection(&mut self, point: GridPoint, kind: SelectionKind, cx: &mut Context<Self>) {
     self.session.select(point, point, kind);
     self.selection_anchor = Some((point, kind));
+    self.selection_head = Some(point);
     self.selection_phase = SelectionPhase::Selecting;
     cx.notify();
   }
@@ -648,8 +657,10 @@ impl TerminalView {
       && let Some(bytes) = mouse_moved_report(point, pressed_button, modifiers, self.content.mode)
     {
       self.session.write_pty(bytes);
+      // Invalidate only when a report was actually sent; sub-cell pointer
+      // jitters must not repaint the whole terminal.
+      cx.notify();
     }
-    cx.notify();
   }
 
   /// Handles mouse ups: release reports and selection finalization.
@@ -666,8 +677,26 @@ impl TerminalView {
     {
       self.session.write_pty(bytes);
     }
+    self.reset_gesture_state();
+  }
+
+  /// Handles a left mouse-up released outside the terminal (over the dock,
+  /// during a window resize, ...). `on_mouse_up` only fires while hovered, so
+  /// without this the selection would stay active forever and hijack every
+  /// subsequent drag in the app. No report is sent: the point is outside the
+  /// grid, and mouse-tracking applications handle stray gestures themselves.
+  pub(crate) fn mouse_up_outside(
+    &mut self, _position: gpui::Point<Pixels>, _button: gpui::MouseButton,
+    _modifiers: gpui::Modifiers,
+  ) {
+    self.reset_gesture_state();
+  }
+
+  /// Clears all in-progress gesture bookkeeping.
+  fn reset_gesture_state(&mut self) {
     self.selection_phase = SelectionPhase::Ended;
     self.selection_anchor = None;
+    self.selection_head = None;
     self.last_mouse = None;
     self.mouse_down_position = None;
   }
@@ -688,12 +717,19 @@ impl TerminalView {
     }
   }
 
-  /// Moves the selection head to `point`, keeping the anchor fixed.
-  fn update_selection(&mut self, point: GridPoint, cx: &mut Context<Self>) {
-    if let Some((anchor, kind)) = self.selection_anchor {
+  /// Moves the selection head to `point`, keeping the anchor fixed. Returns
+  /// whether the selection actually changed, so callers can skip no-op
+  /// invalidations.
+  fn update_selection(&mut self, point: GridPoint, cx: &mut Context<Self>) -> bool {
+    if let Some((anchor, kind)) = self.selection_anchor
+      && self.selection_head != Some(point)
+    {
       self.session.select(anchor, point, kind);
+      self.selection_head = Some(point);
       cx.notify();
+      return true;
     }
+    false
   }
 }
 

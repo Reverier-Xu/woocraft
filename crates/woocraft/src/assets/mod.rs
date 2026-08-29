@@ -383,7 +383,7 @@ mod tests {
     assert!(
       font_assets
         .iter()
-        .any(|path| path.as_ref().ends_with("fonts/default-font.ttf")),
+        .any(|path| path.as_ref().ends_with("fonts/maple-mono-regular.ttf")),
       "compressed font should be exposed via its original extension"
     );
     assert!(
@@ -392,16 +392,25 @@ mod tests {
         .all(|path| !path.as_ref().ends_with(".zst")),
       "compression suffix should stay internal to asset loading"
     );
-    assert!(super::has_asset(&format!(
-      "{}/fonts/default-font.ttf",
-      super::BUILTIN_ASSET_PREFIX
-    )));
+    // The embedded family ships all static weights and both styles so that
+    // bold/italic terminal runs resolve within the same family.
+    for face in [
+      "maple-mono-regular",
+      "maple-mono-bold",
+      "maple-mono-italic",
+      "maple-mono-bolditalic",
+    ] {
+      assert!(
+        super::has_asset(&format!("{}/fonts/{face}.ttf", super::BUILTIN_ASSET_PREFIX)),
+        "missing embedded face: {face}"
+      );
+    }
   }
 
   #[cfg(feature = "resources")]
   #[test]
   fn builtin_fonts_are_decompressed_on_load() {
-    let raw_font = super::Assets::get("fonts/default-font.ttf.zst")
+    let raw_font = super::Assets::get("fonts/maple-mono-regular.ttf.zst")
       .expect("compressed font should be embedded in test builds");
 
     assert!(
@@ -409,7 +418,10 @@ mod tests {
       "embedded font should be stored in zstd format"
     );
 
-    let font_path = format!("{}/fonts/default-font.ttf", super::BUILTIN_ASSET_PREFIX);
+    let font_path = format!(
+      "{}/fonts/maple-mono-regular.ttf",
+      super::BUILTIN_ASSET_PREFIX
+    );
     let loaded_font = super::load_builtin_asset(&font_path)
       .expect("font load should succeed")
       .expect("font asset should exist");

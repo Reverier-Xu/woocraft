@@ -21,7 +21,7 @@ pub use i18n::{
 pub use rust_i18n::{available_locales as available_locales_macro, t, tkv};
 pub use widgets::*;
 
-pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono NR NFMono CN";
+pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono";
 
 pub fn init(cx: &mut gpui::App) {
   #[cfg(feature = "resources")]

@@ -519,6 +519,7 @@ impl TerminalElement {
 
     self.interactivity.on_mouse_down(MouseButton::Left, {
       let view = view.clone();
+      let focus = focus.clone();
       move |event: &MouseDownEvent, window, cx| {
         window.focus(&focus, cx);
         view.update(cx, |view, cx| {
@@ -538,27 +539,38 @@ impl TerminalElement {
     window.on_mouse_event({
       let view = view.clone();
       let hitbox = hitbox.clone();
+      let focus = focus.clone();
       move |event: &MouseMoveEvent, phase: DispatchPhase, window, cx| {
         if phase != DispatchPhase::Bubble {
           return;
         }
-        view.update(cx, |view, cx| {
-          if event.pressed_button == Some(MouseButton::Left) && view.selection_started() {
-            view.mouse_drag(
-              event.position - origin,
-              hitbox.bounds,
-              event.modifiers.shift,
-              cx,
-            );
-          } else if hitbox.is_hovered(window) && view.mouse_mode_enabled() {
+        // Gate drag handling like Zed: only while the left button is held,
+        // no GPUI drag is active, and the terminal owns focus. Without the
+        // focus gate a stale selection would follow drags anywhere in the app.
+        if event.pressed_button == Some(MouseButton::Left)
+          && !cx.has_active_drag()
+          && focus.is_focused(window)
+        {
+          view.update(cx, |view, cx| {
+            if view.selection_started() || hitbox.is_hovered(window) {
+              view.mouse_drag(
+                event.position - origin,
+                hitbox.bounds,
+                event.modifiers.shift,
+                cx,
+              );
+            }
+          });
+        } else if hitbox.is_hovered(window) && view.read(cx).mouse_mode_enabled() {
+          view.update(cx, |view, cx| {
             view.mouse_move(
               event.position - origin,
               event.pressed_button,
               event.modifiers,
               cx,
             );
-          }
-        });
+          });
+        }
       }
     });
 
@@ -567,6 +579,19 @@ impl TerminalElement {
       move |event: &MouseUpEvent, _window, cx| {
         view.update(cx, |view, _| {
           view.mouse_up(event.position - origin, event.button, event.modifiers);
+        });
+      }
+    });
+
+    // End selections released outside the terminal (e.g. over the dock or
+    // while resizing the window): `on_mouse_up` only fires when hovered, so
+    // without this the selection would stay active forever and hijack every
+    // subsequent drag in the app.
+    self.interactivity.on_mouse_up_out(MouseButton::Left, {
+      let view = view.clone();
+      move |event: &MouseUpEvent, _window, cx| {
+        view.update(cx, |view, _| {
+          view.mouse_up_outside(event.position, event.button, event.modifiers);
         });
       }
     });
@@ -697,6 +722,7 @@ impl Element for TerminalElement {
           .unwrap_or_else(|| SharedString::from(super::element::default_monospace_family()));
         let font = gpui::Font {
           family,
+          fallbacks: crate::platform_font_fallbacks(),
           ..window.text_style().font()
         };
         let font_id = window.text_system().resolve_font(&font);
@@ -731,15 +757,19 @@ impl Element for TerminalElement {
         );
 
         // Resize the session when the viewport changed, then take a fresh
-        // short-lock snapshot for this frame.
-        self.view.update(cx, |view, _| {
+        // short-lock snapshot for this frame. The snapshot is stored on the
+        // view behind an `Arc` and reused here, so each frame copies the
+        // visible grid exactly once (Zed's `sync`/`last_content` pattern:
+        // never hold the emulator lock across layout/paint, never clone the
+        // grid twice).
+        let content = self.view.update(cx, |view, _| {
           if view.session().bounds() != dimensions {
             view.session().resize(dimensions);
           }
-          view.content = view.session().snapshot();
+          let snapshot = std::sync::Arc::new(view.session().snapshot());
+          view.content = snapshot.clone();
+          snapshot
         });
-
-        let content = self.view.read(cx).content.clone();
         let (background_rects, batched_runs, block_rects) =
           Self::layout_grid(&content, font.clone(), font_size, &palette);
 
@@ -1058,6 +1088,15 @@ fn cell_style(cell: &Cell, fg: CellColor, palette: &TerminalPalette, font: gpui:
       color: Some(color),
     });
 
+  // Bold/italic cells switch weight/style within the embedded multi-face
+  // family (`DEFAULT_FONT_FAMILY` now ships all static weights and italics).
+  // Requesting a face that exists keeps every run on the same metrics, so the
+  // forced per-cell grid stays aligned. CJK runs resolve through the platform
+  // fallback list; their glyph positions are still snapped to the cell grid.
+  //
+  // Do NOT request faces the family doesn't provide (e.g. synthetic-bold a
+  // Regular-only family): gpui would fall back to another family whose glyph
+  // advances mismatch `cell_width`, overlapping adjacent cells.
   let weight = if cell.flags.contains(CellFlags::BOLD) {
     FontWeight::BOLD
   } else {

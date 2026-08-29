@@ -32,23 +32,72 @@ impl PixelsExt for Pixels {
   }
 }
 
-pub fn default_font() -> Font {
-  let fallbacks = vec![
-    "Source Han Sans CN".into(),
-    "Source Han Sans SC".into(),
-    "Noto Sans CJK SC".into(),
-    "PingFang SC".into(),
-    "Microsoft YaHei".into(),
-    "Hiragino Sans GB".into(),
-    "WenQuanYi Micro Hei".into(),
-  ];
+/// Returns the platform-appropriate font fallback families for non-Latin
+/// scripts (CJK and beyond).
+///
+/// The embedded font (`DEFAULT_FONT_FAMILY`) only covers Latin plus terminal
+/// symbols (box drawing, powerline, braille, arrows); everything else resolves
+/// through the platform text stack's own script-coverage cascade:
+///
+/// - macOS (CoreText) and Windows (DirectWrite) already fall back per-script to
+///   system fonts; the list below merely pins a quality CJK preference so
+///   Chinese/Japanese/Korean text doesn't land on a poor default.
+/// - Linux (cosmic-text + fontdb) falls back by Unicode script across every
+///   font fontconfig manages. We additionally ask fontconfig itself once via
+///   `fc-match` so the user's own fontconfig preferences (per-language aliases,
+///   substitution rules) decide the priority order.
+///
+/// Returns `None` on Linux when fontconfig cannot be consulted, letting the
+/// platform cascade decide entirely.
+pub fn platform_font_fallbacks() -> Option<FontFallbacks> {
+  #[cfg(target_os = "linux")]
+  {
+    static FAMILIES: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
+    let families = FAMILIES.get_or_init(|| {
+      let output = std::process::Command::new("fc-match")
+        .args(["-f", "%{family}", "monospace:lang=zh-cn"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())?;
+      let stdout = String::from_utf8_lossy(&output.stdout);
+      let parsed: Vec<String> = stdout
+        .split(',')
+        .map(str::trim)
+        .filter(|family| !family.is_empty())
+        .take(2)
+        .map(str::to_owned)
+        .collect();
+      (!parsed.is_empty()).then_some(parsed)
+    });
+    families
+      .as_ref()
+      .map(|families| FontFallbacks::from_fonts(families.clone()))
+  }
+  #[cfg(target_os = "macos")]
+  {
+    // PingFang SC ships with macOS and covers CJK; other scripts ride the
+    // CoreText cascade.
+    Some(FontFallbacks::from_fonts(vec!["PingFang SC".into()]))
+  }
+  #[cfg(target_os = "windows")]
+  {
+    // Microsoft YaHei ships with Windows and covers CJK; other scripts ride
+    // the DirectWrite fallback.
+    Some(FontFallbacks::from_fonts(vec!["Microsoft YaHei".into()]))
+  }
+  #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+  {
+    None
+  }
+}
 
+pub fn default_font() -> Font {
   Font {
     family: crate::DEFAULT_FONT_FAMILY.into(),
     weight: gpui::FontWeight::NORMAL,
     style: gpui::FontStyle::Normal,
     features: FontFeatures::default(),
-    fallbacks: Some(FontFallbacks::from_fonts(fallbacks)),
+    fallbacks: platform_font_fallbacks(),
   }
 }
 
