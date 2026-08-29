@@ -1234,9 +1234,15 @@ fn collect_block_element_regions(
   }
 }
 
-/// The platform default monospace font family.
+/// The default terminal font family.
+///
+/// Prefers the font embedded by the `resources` feature (registered by
+/// `woocraft::init`); falls back to a platform system monospace when resources
+/// are disabled.
 pub fn default_monospace_family() -> &'static str {
-  if cfg!(target_os = "macos") {
+  if cfg!(feature = "resources") {
+    crate::DEFAULT_FONT_FAMILY
+  } else if cfg!(target_os = "macos") {
     "Menlo"
   } else if cfg!(target_os = "windows") {
     "Consolas"
