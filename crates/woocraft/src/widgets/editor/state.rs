@@ -2510,27 +2510,36 @@ impl EntityInputHandler for InputState {
       if new_text.is_empty() {
         self.selected_range = (range.start.min(text_len)..range.start.min(text_len)).into();
         self.ime_marked_range = None;
-      } else if let Some(selection) = response.selection {
-        let mut start = (selection.start as usize).min(text_len);
-        let mut end = (selection.end as usize).min(text_len);
-        self.selection_reversed = false;
-        if end < start {
-          std::mem::swap(&mut start, &mut end);
-          self.selection_reversed = true;
-        }
-        self.selected_range = (start..end).into();
-        self.ime_marked_range = Some((start..end).into());
       } else {
-        let fallback = response
-          .cursor
-          .map(|offset| (offset as usize).min(text_len))
-          .unwrap_or((range.start + new_text.len()).min(text_len));
-        let selected = new_selected_range_utf16
-          .as_ref()
-          .map(|range_utf16| self.range_from_utf16(range_utf16))
-          .unwrap_or(fallback..fallback);
-        self.selected_range = selected.into();
-        self.ime_marked_range = Some((fallback..fallback).into());
+        // The preedit text was inserted exactly at `range`, so the marked
+        // range must cover that region: the next composition update replaces
+        // it, and the final commit swaps it for the composed text. Storing an
+        // empty range here (the old behavior) made every composition
+        // keystroke append another full copy of the marked text instead of
+        // replacing the previous one.
+        let marked_end = (range.start + new_text.len()).min(text_len);
+        if let Some(selection) = response.selection {
+          // A custom backend placed the preedit cursor itself; only mirror
+          // its selection, the marked range is still the inserted region.
+          let mut start = (selection.start as usize).min(text_len);
+          let mut end = (selection.end as usize).min(text_len);
+          self.selection_reversed = false;
+          if end < start {
+            std::mem::swap(&mut start, &mut end);
+            self.selection_reversed = true;
+          }
+          self.selected_range = (start..end).into();
+        } else {
+          // The IME's selection is relative to the inserted text; map it onto
+          // the buffer by offsetting both ends to the insertion point.
+          let selected = new_selected_range_utf16
+            .as_ref()
+            .map(|range_utf16| self.range_from_utf16(range_utf16))
+            .map(|selection| selection.start + range.start..selection.end + range.start)
+            .unwrap_or(marked_end..marked_end);
+          self.selected_range = selected.into();
+        }
+        self.ime_marked_range = Some((range.start..marked_end).into());
       }
 
       if !self.mode.is_code_editor() {
@@ -2575,7 +2584,7 @@ impl EntityInputHandler for InputState {
       self.selected_range = new_selected_range_utf16
         .as_ref()
         .map(|range_utf16| self.range_from_utf16(range_utf16))
-        .map(|new_range| new_range.start + range.start..new_range.end + range.end)
+        .map(|new_range| new_range.start + range.start..new_range.end + range.start)
         .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len())
         .into();
     }

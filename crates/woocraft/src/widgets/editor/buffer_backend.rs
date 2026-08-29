@@ -152,7 +152,67 @@ impl EditorBackend for RopeBufferBackend {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use gpui::{AppContext as _, Entity, IntoElement, Render};
+
+  use super::{super::state::InputState, *};
+
+  /// Regression test for code editor IME composition: each preedit update
+  /// must REPLACE the previous marked text (tracked by `ime_marked_range`),
+  /// and the final commit must swap it for the composed text. The old
+  /// behavior stored an empty marked range, so every keystroke appended
+  /// another full copy of the pinyin and the final hanzi landed next to the
+  /// never-removed pinyin fragments.
+  #[gpui::test]
+  fn ime_preedit_replaces_previous_marked_text(cx: &mut gpui::TestAppContext) {
+    struct Host(Entity<InputState>);
+
+    impl Render for Host {
+      fn render(
+        &mut self, _window: &mut gpui::Window, _cx: &mut gpui::Context<Self>,
+      ) -> impl IntoElement {
+        gpui::div()
+      }
+    }
+
+    let window = cx.add_window(|window, cx| {
+      let state = cx.new(|cx| {
+        InputState::new(window, cx)
+          .code_editor("rust")
+          .backend(RopeBufferBackend::new(""))
+      });
+      Host(state)
+    });
+
+    window
+      .update(cx, |host, window, cx| {
+        use gpui::EntityInputHandler as _;
+
+        host.0.update(cx, |state, cx| {
+          // First composition keystroke inserts the pinyin fragment.
+          state.replace_and_mark_text_in_range(None, "n", None, window, cx);
+          assert_eq!(state.text.to_string(), "n");
+          assert_eq!(
+            state.ime_marked_range.map(|range| (range.start, range.end)),
+            Some((0, 1))
+          );
+
+          // The next preedit update must replace the marked text, not append
+          // another copy of it.
+          state.replace_and_mark_text_in_range(None, "ni", None, window, cx);
+          assert_eq!(state.text.to_string(), "ni");
+          assert_eq!(
+            state.ime_marked_range.map(|range| (range.start, range.end)),
+            Some((0, 2))
+          );
+
+          // Committing swaps the whole marked range for the composed hanzi.
+          state.replace_text_in_range(None, "你", window, cx);
+          assert_eq!(state.text.to_string(), "你");
+          assert!(state.ime_marked_range.is_none());
+        });
+      })
+      .unwrap();
+  }
 
   #[test]
   fn rope_buffer_backend_edits_and_updates_revision() {
