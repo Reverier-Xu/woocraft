@@ -799,6 +799,13 @@ impl Element for TerminalElement {
           .unwrap_or_default();
 
         // Cursor layout. The rectangle doubles as the IME anchor.
+        //
+        // Like Zed, compute the cursor position in *grid coordinates* here
+        // and add the element origin exactly once at paint time. Baking the
+        // origin in here double-offsets every consumer that also adds
+        // `prepaint.origin` (the IME anchor handed to the platform and the
+        // marked-text paint), which pushed the Wayland IME candidate window
+        // far away from the cursor.
         let display_offset = content.display_offset as i32;
         let cursor_line = content.cursor.point.line + display_offset;
         let cursor_position = if content.cursor.shape != CursorShape::Hidden
@@ -806,8 +813,8 @@ impl Element for TerminalElement {
           && (cursor_line as usize) < lines
         {
           Some(Point::new(
-            origin.x + px(content.cursor.point.column as f32 * f32::from(cell_width)),
-            origin.y + px(cursor_line as f32 * f32::from(line_height)),
+            px(content.cursor.point.column as f32 * f32::from(cell_width)),
+            px(cursor_line as f32 * f32::from(line_height)),
           ))
         } else {
           None
@@ -840,8 +847,10 @@ impl Element for TerminalElement {
         let cursor = if content.cursor.shape == CursorShape::Hidden {
           None
         } else {
+          // The visible cursor paints in window coordinates, so it resolves
+          // its grid-relative bounds against the origin here.
           ime_cursor_bounds.map(|bounds| CursorLayout {
-            bounds,
+            bounds: bounds + origin,
             // Unfocused block cursors render hollow.
             shape: if self.focused {
               content.cursor.shape
@@ -889,6 +898,9 @@ impl Element for TerminalElement {
       let ime_cursor_bounds = prepaint.ime_cursor_bounds;
       let marked_text = self.view.read(cx).marked_text().map(str::to_string);
 
+      // `ime_cursor_bounds` is grid-relative; adding the element origin here
+      // yields the window-relative anchor the platform IME expects (Zed's
+      // pattern: origin is added exactly once, at paint time).
       let input_handler = TerminalInputHandler {
         view: self.view.clone(),
         cursor_bounds: ime_cursor_bounds.map(|bounds| bounds + prepaint.origin),
@@ -1012,8 +1024,8 @@ impl gpui::InputHandler for TerminalInputHandler {
   }
 
   fn replace_text_in_range(
-    &mut self, _replacement_range: Option<std::ops::Range<usize>>, text: &str,
-    _window: &mut Window, cx: &mut App,
+    &mut self, _replacement_range: Option<std::ops::Range<usize>>, text: &str, window: &mut Window,
+    cx: &mut App,
   ) {
     self.view.update(cx, |view, cx| {
       view.marked_text = None;
@@ -1027,6 +1039,11 @@ impl gpui::InputHandler for TerminalInputHandler {
       }
       cx.notify();
     });
+    // Like Zed, refresh the platform IME anchor after a commit: the cursor
+    // has moved (the committed text was consumed by the PTY), so the next
+    // frame must re-query `bounds_for_range` or the candidate window would
+    // sit at the stale pre-commit position.
+    window.invalidate_character_coordinates();
   }
 
   fn replace_and_mark_text_in_range(
