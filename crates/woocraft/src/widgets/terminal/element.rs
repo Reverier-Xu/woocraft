@@ -1016,7 +1016,14 @@ impl gpui::InputHandler for TerminalInputHandler {
   ) {
     self.view.update(cx, |view, cx| {
       view.marked_text = None;
-      view.session().paste(text);
+      // Keystrokes and IME commits are user keyboard input, not clipboard
+      // pastes: they must go to the PTY as raw bytes. Wrapping them in a
+      // bracketed-paste sequence would make applications treat every typed
+      // character as a paste (neovim's `nvim_paste` then fails with E21 on
+      // non-modifiable buffers).
+      if !text.is_empty() {
+        view.session().input_str(text);
+      }
       cx.notify();
     });
   }
