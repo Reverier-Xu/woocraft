@@ -151,7 +151,12 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
   ) {
   }
 
-  /// When this Panel is removed from a TabPanel, this will be called.
+  /// When this Panel is closed and removed from its TabPanel, this will be
+  /// called.
+  ///
+  /// This hook is not called when the panel is merely moved between docks by
+  /// dragging: use it to release external resources (e.g. a terminal session)
+  /// that must survive a re-parenting but not a close.
   fn on_removed(&mut self, window: &mut Window, cx: &mut Context<Self>) {}
 
   /// The addition dropdown menu of the panel, default is `None`.

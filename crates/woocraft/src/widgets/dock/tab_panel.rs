@@ -465,6 +465,10 @@ impl TabPanel {
   pub fn remove_panel(
     &mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>,
   ) {
+    // `on_removed` means "the panel is being closed": dragging a panel to
+    // another dock detaches it without firing the hook, so panels hosting
+    // external resources (e.g. a PTY session) keep them across moves.
+    panel.on_removed(window, cx);
     self.detach_panel(panel, window, cx);
     self.remove_self_if_empty(window, cx);
 
@@ -486,7 +490,6 @@ impl TabPanel {
   fn detach_panel(
     &mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    panel.on_removed(window, cx);
     let panel_view = panel.view();
     self.panels.retain(|p| p.view() != panel_view);
     if self.active_ix >= self.panels.len() {
