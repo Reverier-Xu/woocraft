@@ -286,8 +286,11 @@ impl TerminalView {
           .session
           .write_pty(formatter(palette.vte_rgb_at_index(index)));
       }
-      TerminalEvent::CursorBlinkingChanged(blinking) => {
-        self.blinking_terminal_enabled = blinking;
+      TerminalEvent::CursorBlinkingChanged => {
+        // The new state is read here, on the host thread: the listener emits
+        // this event while the PTY event loop may hold the emulator lock, so
+        // it must not query emulator state itself.
+        self.blinking_terminal_enabled = self.session.cursor_blinking();
         self.start_blink(cx);
         cx.notify();
       }
@@ -617,7 +620,7 @@ impl TerminalView {
       self.content.terminal_bounds,
       self.content.display_offset,
     );
-    self.update_selection(point, cx);
+    let mut changed = self.update_selection(point, cx);
 
     // Auto-scroll when dragging beyond the viewport (never on the alt screen).
     if !self.is_alt_screen() {
@@ -635,9 +638,13 @@ impl TerminalView {
       .map(|lines| lines.clamp(-3, 3));
       if let Some(lines) = scroll_lines.filter(|lines| *lines != 0) {
         self.session.scroll(ScrollKind::Delta(lines));
+        changed = true;
       }
     }
-    cx.notify();
+    // Sub-cell pointer jitter must not repaint the whole terminal.
+    if changed {
+      cx.notify();
+    }
   }
 
   /// Handles mouse moves: motion reports while a mouse mode is active.

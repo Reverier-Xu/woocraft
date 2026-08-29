@@ -72,7 +72,6 @@ impl TerminalSession {
       listener.clone(),
       !options.alternate_scroll,
     );
-    listener.set_term(term.clone());
 
     let (pty_tx, child_pid) = backend::open_pty(&options, bounds, &listener, term.clone())?;
 
@@ -113,7 +112,6 @@ impl TerminalSession {
       listener.clone(),
       !options.alternate_scroll,
     );
-    listener.set_term(term.clone());
 
     Self {
       inner: Arc::new(SessionInner {

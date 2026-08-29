@@ -70,14 +70,27 @@ impl BatchedTextRun {
   }
 
   fn append_cell(&mut self, c: char) {
-    self.text.push(c);
-    self.cell_count += 1;
+    self.append_char_internal(c, true);
   }
 
   fn append_zero_width(&mut self, chars: &[char]) {
     for &c in chars {
-      self.text.push(c);
+      self.append_char_internal(c, false);
     }
+  }
+
+  /// Pushes a glyph into the run. Zero-width characters extend the shaped
+  /// text (so they render with the cell's style) without occupying a cell.
+  ///
+  /// The style length must track the text exactly: gpui's layout maps run
+  /// styles onto the text by byte length, and any bytes not covered by a run
+  /// fall back to cosmic-text's default (sans-serif) attributes.
+  fn append_char_internal(&mut self, c: char, counts_cell: bool) {
+    self.text.push(c);
+    if counts_cell {
+      self.cell_count += 1;
+    }
+    self.style.len += c.len_utf8();
   }
 
   fn paint(
@@ -191,53 +204,55 @@ impl BackgroundRegion {
       color,
     }
   }
-
-  fn can_merge_with(&self, other: &Self) -> bool {
-    if self.color != other.color {
-      return false;
-    }
-    // Adjacent horizontally on the same line.
-    if self.start_line == other.start_line && self.end_line == other.end_line {
-      return self.end_column + 1 == other.start_column
-        || other.end_column + 1 == self.start_column;
-    }
-    // Adjacent vertically with the same column span.
-    if self.start_column == other.start_column && self.end_column == other.end_column {
-      return self.end_line + 1 == other.start_line || other.end_line + 1 == self.start_line;
-    }
-    false
-  }
-
-  fn merge_with(&mut self, other: &Self) {
-    self.start_line = self.start_line.min(other.start_line);
-    self.start_column = self.start_column.min(other.start_column);
-    self.end_line = self.end_line.max(other.end_line);
-    self.end_column = self.end_column.max(other.end_column);
-  }
 }
 
 /// Merges grid regions to minimize the number of painted rectangles.
+///
+/// Input regions are generated in row-major order (by line, then column) and
+/// never overlap within a line, so a single scanline pass is exact: each
+/// region either extends a region from the previous line with an identical
+/// column span vertically, extends the last region on the same line
+/// horizontally, or starts a new region. This is O(n); a pairwise
+/// fixpoint-merge would be O(n²) and cost tens of milliseconds per frame on
+/// colorful screens, which made selection dragging visibly stutter.
 fn merge_background_regions(regions: Vec<BackgroundRegion>) -> Vec<BackgroundRegion> {
-  if regions.len() < 2 {
-    return regions;
-  }
-  let mut merged = regions;
-  let mut changed = true;
-  while changed {
-    changed = false;
-    let mut index = 0;
-    while index < merged.len() {
-      let mut other = index + 1;
-      while other < merged.len() {
-        if merged[index].can_merge_with(&merged[other]) {
-          let other_region = merged.remove(other);
-          merged[index].merge_with(&other_region);
-          changed = true;
-        } else {
-          other += 1;
-        }
+  let mut merged: Vec<BackgroundRegion> = Vec::with_capacity(regions.len());
+  // Indices into `merged` of regions that may still extend vertically: those
+  // whose end line is immediately before the current line.
+  let mut extendable: Vec<usize> = Vec::new();
+  let mut current_line = None::<i32>;
+
+  for region in regions {
+    if current_line != Some(region.start_line) {
+      extendable.retain(|&index| merged[index].end_line + 1 == region.start_line);
+      current_line = Some(region.start_line);
+    }
+
+    // Vertical extension: identical column span and color on the next line.
+    if let Some(&index) = extendable.iter().find(|&index| {
+      let open = &merged[*index];
+      open.color == region.color
+        && open.start_column == region.start_column
+        && open.end_column == region.end_column
+    }) {
+      merged[index].end_line = region.end_line;
+      continue;
+    }
+
+    // Horizontal extension: adjacent columns on the same line.
+    match merged.last_mut() {
+      Some(last)
+        if last.color == region.color
+          && last.start_line == region.start_line
+          && last.end_line == region.end_line
+          && last.end_column + 1 == region.start_column =>
+      {
+        last.end_column = region.end_column;
       }
-      index += 1;
+      _ => {
+        extendable.push(merged.len());
+        merged.push(region);
+      }
     }
   }
   merged
@@ -722,6 +737,9 @@ impl Element for TerminalElement {
           .unwrap_or_else(|| SharedString::from(super::element::default_monospace_family()));
         let font = gpui::Font {
           family,
+          // Ligatures are wrong in a terminal: they would merge glyphs across
+          // separately-styled cells and break the forced per-cell grid.
+          features: gpui::FontFeatures::disable_ligatures(),
           fallbacks: crate::platform_font_fallbacks(),
           ..window.text_style().font()
         };
@@ -864,7 +882,6 @@ impl Element for TerminalElement {
     prepaint: &mut Self::PrepaintState, window: &mut Window, cx: &mut App,
   ) {
     let palette = TerminalPalette::from_theme(cx.theme());
-    let selection_color = cx.theme().selection;
 
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
       let cursor = prepaint.cursor.take();
@@ -946,7 +963,6 @@ impl Element for TerminalElement {
           if let Some(cursor) = cursor {
             cursor.paint(window, cx);
           }
-          let _ = selection_color;
         },
       );
     });
@@ -1351,6 +1367,32 @@ mod tests {
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].text, "abc");
     assert_eq!(runs[0].cell_count, 3);
+  }
+
+  #[test]
+  fn batched_run_style_covers_the_whole_text() {
+    // The run's style length must match its shaped text byte-for-byte: gpui
+    // maps run styles onto text by byte length, and uncovered bytes render
+    // with cosmic-text's default (sans-serif) attributes instead of the
+    // terminal font.
+    let content = content_with(vec![
+      (0, 0, 'a', CellFlags::BOLD),
+      (0, 1, '界', CellFlags::BOLD),
+    ]);
+    let (_, runs, _) = TerminalElement::layout_grid(&content, default_font(), px(14.), &palette());
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].text, "a界");
+    assert_eq!(runs[0].style.len, "a界".len());
+  }
+
+  #[test]
+  fn zero_width_chars_extend_style_but_not_cell_count() {
+    let mut content = content_with(vec![(0, 0, 'a', CellFlags::empty())]);
+    content.cells[0].cell.zerowidth = vec!['░'];
+    let (_, runs, _) = TerminalElement::layout_grid(&content, default_font(), px(14.), &palette());
+    assert_eq!(runs[0].text, "a░");
+    assert_eq!(runs[0].cell_count, 1);
+    assert_eq!(runs[0].style.len, "a░".len());
   }
 
   #[test]

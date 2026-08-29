@@ -80,9 +80,11 @@ pub enum TerminalEvent {
     index: usize,
     formatter: ColorFormatter,
   },
-  /// The cursor blinking state changed; the payload reports whether blinking
-  /// is now enabled.
-  CursorBlinkingChanged(bool),
+  /// The cursor blinking state changed. The host should query
+  /// [`crate::TerminalSession::cursor_blinking`] to read the new state; the
+  /// query must happen on the host side because the session's emulator lock
+  /// may be held by the PTY event loop when this event is emitted.
+  CursorBlinkingChanged,
   /// The child process exited.
   ChildExit(ChildStatus),
   /// The session is shutting down; no further events will be emitted.
@@ -99,9 +101,7 @@ impl std::fmt::Debug for TerminalEvent {
       TerminalEvent::ClipboardStore(data) => write!(f, "ClipboardStore({data:?})"),
       TerminalEvent::ClipboardLoad(_) => f.write_str("ClipboardLoad"),
       TerminalEvent::ColorRequest { index, .. } => write!(f, "ColorRequest({index})"),
-      TerminalEvent::CursorBlinkingChanged(blinking) => {
-        write!(f, "CursorBlinkingChanged({blinking})")
-      }
+      TerminalEvent::CursorBlinkingChanged => f.write_str("CursorBlinkingChanged"),
       TerminalEvent::ChildExit(status) => write!(f, "ChildExit({status:?})"),
       TerminalEvent::Exit => f.write_str("Exit"),
     }

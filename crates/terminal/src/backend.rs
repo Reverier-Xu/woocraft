@@ -103,13 +103,14 @@ impl PtySender {
 /// The `EventListener` installed into the emulator; it converts backend events
 /// into [`TerminalEvent`]s and answers PTY queries that must keep their
 /// ordering relative to other PTY writes (text-area size, application writes).
+///
+/// Callbacks run on the PTY event loop thread while the emulator lock is held
+/// (parsing happens under the lock), so they must never re-lock the emulator;
+/// anything that needs emulator state is deferred to the host thread instead.
 #[derive(Clone)]
 pub(crate) struct BackendListener {
   events_tx: async_channel::Sender<TerminalEvent>,
   bounds: Arc<Mutex<TerminalBounds>>,
-  /// Filled in right after the emulator is wrapped into its lock, before the
-  /// event loop thread is spawned, so no event can observe an empty slot.
-  term: Arc<OnceLock<Arc<TermLock>>>,
   /// Filled in right after the event loop is created, before its thread is
   /// spawned, so no event can observe an empty slot.
   pty_sender: Arc<OnceLock<PtySender>>,
@@ -125,15 +126,10 @@ impl BackendListener {
     Self {
       events_tx,
       bounds,
-      term: Arc::new(OnceLock::new()),
       pty_sender: Arc::new(OnceLock::new()),
       exited,
       exit_status,
     }
-  }
-
-  pub(crate) fn set_term(&self, term: Arc<TermLock>) {
-    let _ = self.term.set(term);
   }
 
   pub(crate) fn set_pty_sender(&self, sender: PtySender) {
@@ -177,13 +173,7 @@ impl EventListener for BackendListener {
         let window_size = self.bounds.lock().unwrap().to_window_size();
         self.write_to_pty(format(window_size).into_bytes());
       }
-      AlacEvent::CursorBlinkingChange => {
-        let blinking = self
-          .term
-          .get()
-          .is_some_and(|term| term.lock().cursor_style().blinking);
-        self.send(TerminalEvent::CursorBlinkingChanged(blinking));
-      }
+      AlacEvent::CursorBlinkingChange => self.send(TerminalEvent::CursorBlinkingChanged),
       AlacEvent::Wakeup => self.send(TerminalEvent::Wakeup),
       AlacEvent::Bell => self.send(TerminalEvent::Bell),
       AlacEvent::ChildExit(status) => {
