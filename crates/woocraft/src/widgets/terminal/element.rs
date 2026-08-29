@@ -734,13 +734,14 @@ impl Element for TerminalElement {
           .read(cx)
           .font_family
           .clone()
+          .or_else(|| crate::font_overrides().family)
           .unwrap_or_else(|| SharedString::from(super::element::default_monospace_family()));
         let font = gpui::Font {
           family,
           // Ligatures are wrong in a terminal: they would merge glyphs across
           // separately-styled cells and break the forced per-cell grid.
           features: gpui::FontFeatures::disable_ligatures(),
-          fallbacks: crate::platform_font_fallbacks(),
+          fallbacks: crate::font_fallbacks_with(crate::platform_font_fallbacks()),
           ..window.text_style().font()
         };
         let font_id = window.text_system().resolve_font(&font);
