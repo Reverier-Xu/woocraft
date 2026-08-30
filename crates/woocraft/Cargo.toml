@@ -91,7 +91,7 @@ zstd       = { workspace = true, optional = true }
 
 [dev-dependencies]
 gpui           = { workspace = true, features = ["test-support"] }
-gpui_platform  = { git = "https://github.com/zed-industries/zed", package = "gpui_platform", features = ["font-kit", "wayland", "x11"] }
+gpui_platform  = { git = "https://github.com/zed-industries/zed", rev = "399258feeaf90ad8a3a208c99221ee87b6452f38", package = "gpui_platform", features = ["font-kit", "wayland", "x11"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5", features = ["blocking"], optional = true }
