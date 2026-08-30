@@ -902,7 +902,7 @@ impl Element for TerminalElement {
       // yields the window-relative anchor the platform IME expects (Zed's
       // pattern: origin is added exactly once, at paint time).
       let input_handler = TerminalInputHandler {
-        view: self.view.clone(),
+        view: self.view.downgrade(),
         cursor_bounds: ime_cursor_bounds.map(|bounds| bounds + prepaint.origin),
         cell_width: prepaint.dimensions.cell_width(),
       };
@@ -991,8 +991,15 @@ impl IntoElement for TerminalElement {
 }
 
 /// The input handler registered with the platform for IME support.
+///
+/// Holds a `WeakEntity` because the platform window retains the last
+/// registered handler until after app shutdown: on Wayland the window state
+/// (and its input handler) is dropped in a detached teardown task that does
+/// not run before gpui's leak detector checks for live handles at exit. A
+/// strong handle here would keep the view alive past that check and panic
+/// with "Exited with leaked handles" when the terminal example quits.
 struct TerminalInputHandler {
-  view: gpui::Entity<TerminalView>,
+  view: gpui::WeakEntity<TerminalView>,
   cursor_bounds: Option<Bounds<Pixels>>,
   cell_width: f32,
 }
@@ -1012,7 +1019,8 @@ impl gpui::InputHandler for TerminalInputHandler {
   fn marked_text_range(
     &mut self, _window: &mut Window, cx: &mut App,
   ) -> Option<std::ops::Range<usize>> {
-    let marked = self.view.read(cx).marked_text()?;
+    let view = self.view.upgrade()?;
+    let marked = view.read(cx).marked_text()?;
     Some(0..marked.chars().map(char::len_utf16).sum())
   }
 
@@ -1027,7 +1035,10 @@ impl gpui::InputHandler for TerminalInputHandler {
     &mut self, _replacement_range: Option<std::ops::Range<usize>>, text: &str, window: &mut Window,
     cx: &mut App,
   ) {
-    self.view.update(cx, |view, cx| {
+    let Some(view) = self.view.upgrade() else {
+      return;
+    };
+    view.update(cx, |view, cx| {
       view.marked_text = None;
       // Keystrokes and IME commits are user keyboard input, not clipboard
       // pastes: they must go to the PTY as raw bytes. Wrapping them in a
@@ -1050,14 +1061,20 @@ impl gpui::InputHandler for TerminalInputHandler {
     &mut self, _range_utf16: Option<std::ops::Range<usize>>, new_text: &str,
     _new_selected_range: Option<std::ops::Range<usize>>, _window: &mut Window, cx: &mut App,
   ) {
-    self.view.update(cx, |view, cx| {
+    let Some(view) = self.view.upgrade() else {
+      return;
+    };
+    view.update(cx, |view, cx| {
       view.marked_text = Some(new_text.to_string());
       cx.notify();
     });
   }
 
   fn unmark_text(&mut self, _window: &mut Window, cx: &mut App) {
-    self.view.update(cx, |view, cx| {
+    let Some(view) = self.view.upgrade() else {
+      return;
+    };
+    view.update(cx, |view, cx| {
       if view.marked_text.take().is_some() {
         cx.notify();
       }
