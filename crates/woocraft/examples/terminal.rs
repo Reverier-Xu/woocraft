@@ -13,8 +13,9 @@ use std::time::Duration;
 
 use gpui::{
   App, AppContext, Bounds, ClipboardItem, Context, Entity, FocusHandle, Focusable,
-  InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, Size as GpuiSize,
-  Styled as _, Window, WindowBounds, WindowOptions, actions, div, prelude::FluentBuilder as _, px,
+  InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Render, SharedString,
+  Size as GpuiSize, Styled as _, Window, WindowBounds, WindowOptions, actions, div,
+  prelude::FluentBuilder as _, px,
 };
 use woocraft::{
   ActiveTheme, Assets, StyledExt as _, TerminalView, TerminalViewEvent, TitleBar, h_flex, init,
@@ -129,7 +130,6 @@ impl Render for TerminalDemo {
       .size_full()
       .bg(theme.background)
       .text_color(theme.foreground)
-      .on_action(cx.listener(|_, _: &Quit, _, cx| cx.quit()))
       // Header: demo label + live terminal title + transient indicators.
       .child(
         h_flex()
@@ -216,6 +216,9 @@ fn main() {
     .run(|cx: &mut App| {
       init(cx);
       cx.activate(true);
+      // Ctrl+Q quits the demo. The terminal view only consumes keystrokes
+      // while the shell is alive, so this fires once the shell has exited.
+      cx.bind_keys([KeyBinding::new("ctrl-q", Quit, None)]);
       cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
 
       let bounds = Bounds::centered(None, GpuiSize::new(px(1000.), px(640.)), cx);

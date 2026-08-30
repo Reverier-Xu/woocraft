@@ -380,6 +380,12 @@ impl TerminalView {
   }
 
   fn key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    // Once the child process has exited there is nothing left to receive
+    // input, so let keystrokes propagate to the host UI (e.g. a Ctrl+Q quit
+    // binding) instead of swallowing them as C0 control codes.
+    if self.session.child_exit_status().is_some() {
+      return;
+    }
     if self.process_keystroke(&event.keystroke, cx) {
       cx.stop_propagation();
     }
