@@ -37,6 +37,12 @@ mod options;
 mod session;
 mod types;
 
+/// Re-exported so downstream crates resolve the exact same git revision of
+/// `alacritty_terminal` as this crate (git deps are only unified when they
+/// point to the identical source). Prefer
+/// `woocraft_terminal::alacritty_terminal` over adding the git dependency
+/// directly.
+pub use alacritty_terminal;
 pub use control::*;
 pub use event::*;
 pub use options::*;

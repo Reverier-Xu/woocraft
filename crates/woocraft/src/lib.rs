@@ -1,3 +1,12 @@
+// Re-export git dependencies so downstream crates resolve the exact same
+// revisions as `woocraft` itself. Git dependencies are unified by Cargo across
+// a dependency graph only when they point to the same source; importing these
+// crates directly in a consumer can silently pick a different rev (or a
+// semver-incompatible copy), so prefer the re-exports below.
+pub use gpui;
+pub use gpui_macros;
+pub use gpui_sum_tree;
+
 pub mod actions;
 #[macro_use]
 pub mod base;
@@ -20,6 +29,8 @@ pub use i18n::{
 };
 pub use rust_i18n::{available_locales as available_locales_macro, t, tkv};
 pub use widgets::*;
+#[cfg(feature = "terminal")]
+pub use woocraft_terminal::alacritty_terminal;
 
 pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono";
 
