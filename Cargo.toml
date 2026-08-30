@@ -11,7 +11,7 @@ publish      = true
 readme       = "README.md"
 repository   = "https://github.com/Reverier-Xu/woocraft"
 rust-version = "1.95"
-version      = "0.5.6"
+version      = "0.5.7"
 
 [profile.release]
 codegen-units = 1
@@ -22,9 +22,9 @@ strip         = true
 
 [workspace.dependencies]
 aho-corasick                  = "1.1"
+alacritty_terminal            = { git = "https://github.com/zed-industries/alacritty", rev = "4c129667ce56611becdc82de6e28218c80e2e88f" }
 anyhow                        = "1.0"
 async-channel                 = "2"
-alacritty_terminal            = { git = "https://github.com/zed-industries/alacritty", rev = "4c129667ce56611becdc82de6e28218c80e2e88f" }
 chrono                        = "0.4"
 crossbeam-channel             = "0.5"
 enum-iterator                 = "2.3"
