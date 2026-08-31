@@ -325,6 +325,10 @@ pub(crate) fn set_selection(
   term.selection = Some(selection);
 }
 
+pub(crate) fn clear_selection(term: &mut Term<BackendListener>) {
+  term.selection = None;
+}
+
 pub(crate) fn clear_saved_screen(term: &mut Term<BackendListener>) {
   // Erase the saved lines (scrollback) first, then clear the visible screen
   // while keeping the current line, which is moved to the top. This mirrors
@@ -534,5 +538,25 @@ mod tests {
     assert!(cell.flags.contains(CellFlags::BOLD));
     assert!(cell.flags.contains(CellFlags::WIDE_CHAR));
     assert_eq!(cell.fg, CellColor::Named(NamedColor::Foreground));
+  }
+
+  #[test]
+  fn selection_roundtrip_and_clear() {
+    let bounds = TerminalBounds::new(24.0, 8.0, 80, 24);
+    let listener = BackendListener::new(
+      async_channel::unbounded().0,
+      Arc::new(std::sync::Mutex::new(bounds)),
+      Arc::new(AtomicBool::new(false)),
+      Arc::new(std::sync::Mutex::new(None)),
+    );
+    let mut term = Term::new(AlacConfig::default(), &bounds, listener);
+
+    let start = Point::new(0, 0);
+    let end = Point::new(0, 10);
+    set_selection(&mut term, start, end, SelectionKind::Characters);
+    assert!(term.selection.is_some());
+
+    clear_selection(&mut term);
+    assert!(term.selection.is_none());
   }
 }

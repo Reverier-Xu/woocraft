@@ -41,6 +41,10 @@ const SELECTION_DRAG_THRESHOLD: f64 = 2.0;
 enum SelectionPhase {
   #[default]
   Ended,
+  /// A click armed an anchor, but the pointer has not moved past the drag
+  /// threshold yet: no selection is rendered. Clicks and selections are
+  /// separate gestures, so a plain click must not leave a selection behind.
+  Pending,
   Selecting,
 }
 
@@ -562,20 +566,29 @@ impl TerminalView {
             self.update_selection(point, cx);
           } else {
             // Shift is the escape hatch for selecting text while an app has
-            // mouse tracking enabled.
-            self.set_selection(point, SelectionKind::Characters, cx);
+            // mouse tracking enabled. Arm an anchor without rendering a
+            // selection; it materializes only when the pointer drags.
+            self.arm_selection(point, SelectionKind::Characters);
           }
-          cx.notify();
           return;
         }
-        let kind = match click_count {
-          1 => Some(SelectionKind::Characters),
-          2 => Some(SelectionKind::Words),
-          3 => Some(SelectionKind::Lines),
-          _ => None,
-        };
-        if let Some(kind) = kind {
-          self.set_selection(point, kind, cx);
+        match click_count {
+          1 => {
+            // A plain click is not a selection: drop any existing selection
+            // and merely arm an anchor. The selection materializes once the
+            // pointer drags past the threshold (see `mouse_drag`).
+            let had_selection = self.content.selection.is_some();
+            if had_selection {
+              self.session.clear_selection();
+            }
+            self.arm_selection(point, SelectionKind::Characters);
+            if had_selection {
+              cx.notify();
+            }
+          }
+          2 => self.set_selection(point, SelectionKind::Words, cx),
+          3 => self.set_selection(point, SelectionKind::Lines, cx),
+          _ => {}
         }
       }
       // Middle-click pastes the primary selection on Linux.
@@ -592,7 +605,17 @@ impl TerminalView {
     }
   }
 
-  /// Anchors a new selection at `point` with the given semantics.
+  /// Arms a selection anchor at `point` without rendering a selection. The
+  /// anchor materializes into a real selection in `mouse_drag` once the
+  /// pointer moves past the drag threshold.
+  fn arm_selection(&mut self, point: GridPoint, kind: SelectionKind) {
+    self.selection_anchor = Some((point, kind));
+    self.selection_head = Some(point);
+    self.selection_phase = SelectionPhase::Pending;
+  }
+
+  /// Anchors a new selection at `point` with the given semantics and renders
+  /// it immediately (double/triple click).
   fn set_selection(&mut self, point: GridPoint, kind: SelectionKind, cx: &mut Context<Self>) {
     self.session.select(point, point, kind);
     self.selection_anchor = Some((point, kind));
@@ -611,16 +634,28 @@ impl TerminalView {
       return;
     }
 
-    // Ignore tiny pointer movements so the window-focusing click does not
-    // begin a selection.
-    if self.selection_phase != SelectionPhase::Selecting
-      && let Some(mouse_down_position) = self.mouse_down_position
-      && (position - mouse_down_position).magnitude() <= SELECTION_DRAG_THRESHOLD
-    {
-      return;
+    match self.selection_phase {
+      SelectionPhase::Ended => {
+        // No click anchored a selection here (the gesture started elsewhere);
+        // never begin a selection from a bare drag.
+        return;
+      }
+      SelectionPhase::Pending => {
+        // A click only armed an anchor: ignore tiny pointer movements (the
+        // window-focusing click must not begin a selection) and materialize
+        // the anchor once the drag passes the threshold.
+        if let Some(mouse_down_position) = self.mouse_down_position
+          && (position - mouse_down_position).magnitude() <= SELECTION_DRAG_THRESHOLD
+        {
+          return;
+        }
+        if let Some((anchor, kind)) = self.selection_anchor {
+          self.session.select(anchor, anchor, kind);
+          self.selection_phase = SelectionPhase::Selecting;
+        }
+      }
+      SelectionPhase::Selecting => {}
     }
-
-    self.selection_phase = SelectionPhase::Selecting;
     let point = grid_point(
       position,
       self.content.terminal_bounds,

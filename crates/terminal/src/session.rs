@@ -215,6 +215,12 @@ impl TerminalSession {
     self.wake();
   }
 
+  /// Clears the current selection, if any.
+  pub fn clear_selection(&self) {
+    backend::clear_selection(&mut self.inner.term.lock());
+    self.wake();
+  }
+
   /// The text covered by the current selection, if any.
   pub fn copy_selection(&self) -> Option<String> {
     self.inner.term.lock().selection_to_string()

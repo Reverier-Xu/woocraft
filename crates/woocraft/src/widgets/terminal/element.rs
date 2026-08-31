@@ -570,7 +570,9 @@ impl TerminalElement {
             if view.selection_started() || hitbox.is_hovered(window) {
               view.mouse_drag(
                 event.position - origin,
-                hitbox.bounds,
+                // The view works in local coordinates, so hand it a
+                // zero-origin region instead of the window-space hitbox.
+                gpui::Bounds::new(gpui::Point::default(), hitbox.bounds.size),
                 event.modifiers.shift,
                 cx,
               );
