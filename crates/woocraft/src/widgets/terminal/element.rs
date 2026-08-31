@@ -782,8 +782,9 @@ impl Element for TerminalElement {
         let cell_width = snap(measured_cell_width);
         let line_height = snap(measured_line_height);
 
-        // Fit a whole number of lines and columns; anchor to the bottom so
-        // output stays flush with the bottom edge.
+        // Fit a whole number of lines and columns, then center the character
+        // grid in the viewport: the leftover space is split evenly on both
+        // axes instead of anchoring to the bottom-left.
         let line_height_device_px = (f32::from(line_height) * scale_factor).round().max(1.0) as i32;
         let cell_width_device_px = (f32::from(cell_width) * scale_factor).round().max(1.0) as i32;
         let lines = ((f32::from(bounds.size.height) * scale_factor).floor() as i32
@@ -793,8 +794,13 @@ impl Element for TerminalElement {
           / cell_width_device_px)
           .max(1) as usize;
         let snapped_height = px((lines as i32 * line_height_device_px) as f32 / scale_factor);
-        let padding = (f32::from(bounds.size.height) - f32::from(snapped_height)).max(0.0);
-        let origin = Point::new(snap(bounds.origin.x), snap(bounds.origin.y + px(padding)));
+        let snapped_width = px((columns as i32 * cell_width_device_px) as f32 / scale_factor);
+        let vertical_padding = (f32::from(bounds.size.height) - f32::from(snapped_height)).max(0.0);
+        let horizontal_padding = (f32::from(bounds.size.width) - f32::from(snapped_width)).max(0.0);
+        let origin = Point::new(
+          snap(bounds.origin.x + px(horizontal_padding / 2.0)),
+          snap(bounds.origin.y + px(vertical_padding / 2.0)),
+        );
         let dimensions = TerminalBounds::new(
           f32::from(line_height),
           f32::from(cell_width),
