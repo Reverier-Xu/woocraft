@@ -744,20 +744,48 @@ impl Element for TerminalElement {
           fallbacks: crate::font_fallbacks_with(crate::platform_font_fallbacks()),
           ..window.text_style().font()
         };
-        let font_id = window.text_system().resolve_font(&font);
-        let cell_width = window
-          .text_system()
-          .advance(font_id, font_size, 'm')
-          .map(|advance| advance.width)
-          .unwrap_or(px(font_size.to_f64() as f32 * 0.6));
+        // Measure the monospace cell size with the real shaper (the same
+        // path that paints the runs), like the code editor does — not with a
+        // single-glyph `advance` guess. Shaping a sample of `m`s and averaging
+        // yields a sub-pixel-precise cell width that matches actual glyph
+        // positioning.
+        const SAMPLE_CHARS: usize = 10;
+        let sample = window.text_system().shape_line(
+          SharedString::from("m".repeat(SAMPLE_CHARS)),
+          font_size,
+          &[TextRun {
+            len: SAMPLE_CHARS,
+            font: font.clone(),
+            color: palette.foreground,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+          }],
+          None,
+        );
+        let measured_cell_width = if sample.width > px(0.0) {
+          sample.width / SAMPLE_CHARS as f32
+        } else {
+          px(font_size.to_f64() as f32 * 0.6)
+        };
         // 1.3 is the conventional terminal line height multiplier.
-        let line_height = px(font_size.to_f64() as f32 * 1.3);
+        let measured_line_height = px(font_size.to_f64() as f32 * 1.3);
+
+        // Snap both metrics to whole device pixels. The grid count and every
+        // paint position below derive from these values; a fractional cell
+        // would accumulate drift across columns/rows and push the last
+        // row/column past the viewport (the overflow grew with the window
+        // size because the column count used floored device pixels while
+        // paint positioned runs at the unrounded width).
+        let scale_factor = window.scale_factor();
+        let snap = |value: Pixels| px((f32::from(value) * scale_factor).floor() / scale_factor);
+        let cell_width = snap(measured_cell_width);
+        let line_height = snap(measured_line_height);
 
         // Fit a whole number of lines and columns; anchor to the bottom so
         // output stays flush with the bottom edge.
-        let scale_factor = window.scale_factor();
-        let line_height_device_px = (f32::from(line_height) * scale_factor).floor().max(1.0) as i32;
-        let cell_width_device_px = (f32::from(cell_width) * scale_factor).floor().max(1.0) as i32;
+        let line_height_device_px = (f32::from(line_height) * scale_factor).round().max(1.0) as i32;
+        let cell_width_device_px = (f32::from(cell_width) * scale_factor).round().max(1.0) as i32;
         let lines = ((f32::from(bounds.size.height) * scale_factor).floor() as i32
           / line_height_device_px)
           .max(1) as usize;
@@ -766,7 +794,6 @@ impl Element for TerminalElement {
           .max(1) as usize;
         let snapped_height = px((lines as i32 * line_height_device_px) as f32 / scale_factor);
         let padding = (f32::from(bounds.size.height) - f32::from(snapped_height)).max(0.0);
-        let snap = |value: Pixels| px((f32::from(value) * scale_factor).floor() / scale_factor);
         let origin = Point::new(snap(bounds.origin.x), snap(bounds.origin.y + px(padding)));
         let dimensions = TerminalBounds::new(
           f32::from(line_height),
