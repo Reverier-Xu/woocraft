@@ -102,23 +102,40 @@ impl BatchedTextRun {
       origin.x + px(self.column as f32 * dimensions.cell_width()),
       origin.y + px(self.line as f32 * dimensions.line_height()),
     );
-    window
-      .text_system()
-      .shape_line(
-        SharedString::from(self.text.clone()),
-        self.font_size,
-        std::slice::from_ref(&self.style),
-        Some(px(dimensions.cell_width())),
-      )
-      .paint(
-        position,
-        px(dimensions.line_height()),
-        TextAlign::Left,
-        None,
-        window,
-        cx,
-      )
+    let line_height = px(dimensions.line_height());
+
+    // Underline and strikethrough are painted by hand below instead of via
+    // the TextRun styles: gpui's line painter flushes a trailing decoration
+    // at the *natural* shaped width (`first_glyph_x + layout.width`), but
+    // glyph positions here were forced to whole cells, and the snapped cell
+    // width is floored to device pixels — so the natural width overshoots
+    // the run by the accumulated per-glyph difference, visibly spilling the
+    // underline past the last cell (e.g. underlined `eza` filenames).
+    // Painting cell-aligned decoration quads matches per-cell terminals.
+    let mut glyph_style = self.style.clone();
+    let underline = glyph_style.underline.take();
+    let strikethrough = glyph_style.strikethrough.take();
+    let shaped = window.text_system().shape_line(
+      SharedString::from(self.text.clone()),
+      self.font_size,
+      &[glyph_style],
+      Some(px(dimensions.cell_width())),
+    );
+    shaped
+      .paint(position, line_height, TextAlign::Left, None, window, cx)
       .ok();
+
+    let decoration_width = px(self.cell_count as f32 * dimensions.cell_width());
+    let padding_top = (line_height - shaped.ascent - shaped.descent) / 2.;
+    if let Some(style) = underline {
+      // Same vertical placement gpui uses for run underlines.
+      let y = position.y + padding_top + shaped.ascent + shaped.descent * 0.618;
+      window.paint_underline(Point::new(position.x, y), decoration_width, &style);
+    }
+    if let Some(style) = strikethrough {
+      let y = position.y + ((shaped.ascent * 0.5) + padding_top + shaped.ascent) * 0.5;
+      window.paint_strikethrough(Point::new(position.x, y), decoration_width, &style);
+    }
   }
 }
 
