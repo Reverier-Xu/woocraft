@@ -290,6 +290,8 @@ struct CursorLayout {
 impl CursorLayout {
   fn paint(&self, window: &mut Window, cx: &mut App) {
     let cursor_color = cx.theme().caret;
+    let scale_factor = window.scale_factor();
+    let stroke = |value: Pixels| snap_stroke(value, scale_factor);
     match self.shape {
       CursorShape::Block => {
         window.paint_quad(fill(self.bounds, cursor_color));
@@ -307,7 +309,7 @@ impl CursorLayout {
         }
       }
       CursorShape::Underline => {
-        let thickness = px(2.0);
+        let thickness = stroke(px(2.0));
         let bounds = Bounds::new(
           Point::new(
             self.bounds.origin.x,
@@ -318,7 +320,7 @@ impl CursorLayout {
         window.paint_quad(fill(bounds, cursor_color));
       }
       CursorShape::Bar => {
-        let width = px(2.0);
+        let width = stroke(px(2.0));
         let bounds = Bounds::new(
           self.bounds.origin,
           gpui::size(width, self.bounds.size.height),
@@ -326,7 +328,10 @@ impl CursorLayout {
         window.paint_quad(fill(bounds, cursor_color));
       }
       CursorShape::HollowBlock => {
-        let thickness = px(1.5);
+        // Stroke thickness must be a whole number of device pixels: a
+        // fractional stroke lands on different pixel-coverage phases per
+        // edge, which renders as asymmetric side borders on the box.
+        let thickness = stroke(px(1.5));
         let bounds = self.bounds;
         // Top, bottom, left, right strokes.
         window.paint_quad(fill(
@@ -355,6 +360,13 @@ impl CursorLayout {
       CursorShape::Hidden => {}
     }
   }
+}
+
+/// Mirrors gpui's `snap_stroke`: rounds a stroke thickness to whole device
+/// pixels (minimum one device pixel) so strokes render crisp and symmetric
+/// at any scale factor.
+fn snap_stroke(value: Pixels, scale_factor: f32) -> Pixels {
+  px((f32::from(value) * scale_factor).round().max(1.0) / scale_factor)
 }
 
 /// State computed during prepaint and consumed by paint.
@@ -771,7 +783,7 @@ impl Element for TerminalElement {
           .font_family
           .clone()
           .or_else(|| crate::font_overrides().family)
-          .unwrap_or_else(|| SharedString::from(super::element::default_monospace_family()));
+          .unwrap_or_else(|| SharedString::from(crate::TERMINAL_FONT_FAMILY));
         let font = gpui::Font {
           family,
           // Ligatures are wrong in a terminal: they would merge glyphs across
@@ -934,16 +946,22 @@ impl Element for TerminalElement {
             None,
           )
         });
-        let cursor_width = if cursor_char.is_whitespace() {
-          f32::from(cell_width)
+        // The cursor block covers exactly the cells the character occupies
+        // in the grid (two for a wide character) — cell geometry, not the
+        // natural glyph advance, which breaks the block on fractional
+        // metrics and lets the block bleed into the next cell.
+        let cursor_cells = if cursor_char.is_whitespace() {
+          1
         } else {
-          char_text
-            .as_ref()
-            .map(|line| f32::from(line.width.max(cell_width)))
-            .unwrap_or(f32::from(cell_width))
+          1 + content
+            .row(cursor_line.max(0) as usize)
+            .and_then(|row| row.get(content.cursor.point.column))
+            .is_some_and(|indexed| indexed.cell.flags.contains(CellFlags::WIDE_CHAR))
+            as usize
         };
+        let cursor_width = px(f32::from(cell_width) * cursor_cells as f32);
         let ime_cursor_bounds = cursor_position
-          .map(|position| Bounds::new(position, gpui::size(px(cursor_width.ceil()), line_height)));
+          .map(|position| Bounds::new(position, gpui::size(cursor_width, line_height)));
         let cursor = if cursor_shape == CursorShape::Hidden {
           None
         } else {
@@ -1447,11 +1465,9 @@ fn collect_block_element_regions(
   }
 }
 
-/// The default terminal font family.
-///
-/// Prefers the font embedded by the `resources` feature (registered by
-/// `woocraft::init`); falls back to a platform system monospace when resources
-/// are disabled.
+/// The legacy fallback chain used by tests to emulate hosts without the
+/// embedded `resources` feature.
+#[cfg(test)]
 pub fn default_monospace_family() -> &'static str {
   if cfg!(feature = "resources") {
     crate::DEFAULT_FONT_FAMILY

@@ -35,6 +35,12 @@ pub use woocraft_terminal::alacritty_terminal;
 
 pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono";
 
+/// The embedded terminal-optimized monospace family: Maple Mono NF (the
+/// Nerd Font build — Nerd Font icons, powerline, box drawing, braille and
+/// math symbols at uniform cell metrics). Regular/Bold/Italic/BoldItalic
+/// are embedded; CJK still resolves through the platform fallback chain.
+pub const TERMINAL_FONT_FAMILY: &str = "Maple Mono NF";
+
 pub fn init(cx: &mut gpui::App) {
   #[cfg(feature = "resources")]
   assets::register_fonts(cx.text_system())
