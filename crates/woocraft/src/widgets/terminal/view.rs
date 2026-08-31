@@ -735,10 +735,30 @@ impl TerminalView {
   /// Handles mouse dragging: updates the selection and auto-scrolls near the
   /// viewport edges.
   pub(crate) fn mouse_drag(
-    &mut self, position: gpui::Point<Pixels>, region: gpui::Bounds<Pixels>, shift: bool,
-    cx: &mut Context<Self>,
+    &mut self, position: gpui::Point<Pixels>, region: gpui::Bounds<Pixels>,
+    modifiers: gpui::Modifiers, cx: &mut Context<Self>,
   ) {
-    if self.mouse_mode(shift) {
+    if self.mouse_mode(modifiers.shift) {
+      // While a TUI application owns the mouse, a drag with the left button
+      // held must produce drag motion reports — this is how nvim extends its
+      // visual selection live while the pointer moves. It must never touch
+      // the local selection. (Deduped per cell by `mouse_changed`.)
+      let (point, after_midpoint) = grid_point_and_side(
+        position,
+        self.content.terminal_bounds,
+        self.content.display_offset,
+      );
+      if self.mouse_changed(point, after_midpoint)
+        && let Some(bytes) = mouse_moved_report(
+          point,
+          Some(gpui::MouseButton::Left),
+          modifiers,
+          self.content.mode,
+        )
+      {
+        self.session.write_pty(bytes);
+        cx.notify();
+      }
       return;
     }
 

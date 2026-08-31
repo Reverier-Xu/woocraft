@@ -15,7 +15,7 @@ mod view;
 
 pub use colors::TerminalPalette;
 use gpui::{App, KeyBinding};
-pub use link::{GridLink, LineContext, LinkProvider, LinkSpan, Osc8LinkProvider};
+pub use link::{GridLink, LineContext, LinkProvider, LinkSpan};
 pub use view::{TerminalView, TerminalViewEvent, TerminalViewOptions};
 
 // `TerminalCopy`, `TerminalPaste`, and `TerminalSelectAll` are prefixed to
