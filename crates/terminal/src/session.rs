@@ -215,6 +215,21 @@ impl TerminalSession {
     self.wake();
   }
 
+  /// Moves the head of the current selection to `head`, keeping the anchor
+  /// anchored to its content.
+  ///
+  /// The emulator rotates the selection to follow content as output scrolls,
+  /// so extending the live selection keeps the anchored end glued to the
+  /// original text even during continuous output. Returns `false` when no
+  /// selection exists.
+  pub fn update_selection_head(&self, head: Point) -> bool {
+    let updated = backend::update_selection_head(&mut self.inner.term.lock(), head);
+    if updated {
+      self.wake();
+    }
+    updated
+  }
+
   /// Clears the current selection, if any.
   pub fn clear_selection(&self) {
     backend::clear_selection(&mut self.inner.term.lock());
@@ -317,7 +332,7 @@ mod tests {
   use super::*;
   use crate::{
     options::{DEFAULT_SCROLLING_HISTORY, SpawnOptions},
-    types::{CellColor, DynamicColors, Modes, TerminalBounds},
+    types::{CellColor, DynamicColors, Modes, Point, ScrollKind, SelectionKind, TerminalBounds},
   };
 
   fn display_session(options: SpawnOptions) -> TerminalSession {
@@ -345,6 +360,53 @@ mod tests {
   fn display_only_defaults_to_theme_colors() {
     let session = display_session(SpawnOptions::default());
     assert_eq!(session.snapshot().dynamic_colors, DynamicColors::default());
+  }
+
+  #[test]
+  fn selection_head_updates_follow_scrolled_content() {
+    let session = display_session(SpawnOptions::default());
+    session.resize(TerminalBounds::new(20.0, 8.0, 10, 4));
+    // Fill the screen (4 lines) plus two lines of history.
+    session.feed_display(b"l1\nl2\nl3\nl4\nl5\nl6\n");
+
+    // Select from one history line up to the top screen line.
+    session.select(
+      Point::new(-1, 0),
+      Point::new(0, 0),
+      SelectionKind::Characters,
+    );
+    let start_before = session.snapshot().selection.unwrap().start;
+    assert_eq!(start_before, Point::new(-1, 0));
+
+    // New output rotates the grid: the emulator keeps the selection anchored
+    // to its original text, so its start moves up one line.
+    session.feed_display(b"l7\n");
+    let start_after = session.snapshot().selection.unwrap().start;
+    assert_eq!(start_after, Point::new(-2, 0));
+
+    // Extending the head keeps the rotated anchor: re-selecting from a stale
+    // mouse-down anchor would instead drag the selection back down.
+    assert!(session.update_selection_head(Point::new(0, 2)));
+    let selection = session.snapshot().selection.unwrap();
+    assert_eq!(selection.start, Point::new(-2, 0));
+    assert_eq!(selection.end, Point::new(0, 2));
+  }
+
+  #[test]
+  fn update_selection_head_without_selection_is_noop() {
+    let session = display_session(SpawnOptions::default());
+    assert!(!session.update_selection_head(Point::new(0, 0)));
+  }
+
+  #[test]
+  fn scroll_to_bottom_resets_display_offset() {
+    let session = display_session(SpawnOptions::default());
+    session.resize(TerminalBounds::new(20.0, 8.0, 10, 4));
+    session.feed_display(b"l1\nl2\nl3\nl4\nl5\nl6\n");
+    session.scroll(ScrollKind::Top);
+    assert_eq!(session.snapshot().scrolled_to_bottom, false);
+    session.scroll(ScrollKind::Bottom);
+    assert_eq!(session.snapshot().scrolled_to_bottom, true);
   }
 
   #[test]

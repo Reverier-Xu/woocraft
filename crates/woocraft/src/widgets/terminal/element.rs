@@ -1142,6 +1142,8 @@ impl gpui::InputHandler for TerminalInputHandler {
       // non-modifiable buffers).
       if !text.is_empty() {
         view.session().input_str(text);
+        // An IME commit is user input: return to the bottom like keystrokes.
+        view.input_scroll_to_bottom(cx);
       }
       cx.notify();
     });

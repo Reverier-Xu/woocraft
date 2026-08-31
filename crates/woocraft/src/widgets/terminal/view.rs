@@ -290,7 +290,18 @@ impl TerminalView {
   /// Pastes text into the terminal, honoring bracketed-paste mode.
   pub fn paste(&mut self, text: &str, cx: &mut Context<Self>) {
     self.session.paste(text);
+    self.input_scroll_to_bottom(cx);
     cx.notify();
+  }
+
+  /// Re-anchors the viewport at the bottom on user input, mirroring native
+  /// terminal behavior: typing while scrolled up through live output returns
+  /// to the prompt instead of staying stuck in the history.
+  pub(crate) fn input_scroll_to_bottom(&mut self, cx: &mut Context<Self>) {
+    if !self.content.scrolled_to_bottom {
+      self.session.scroll(ScrollKind::Bottom);
+      cx.notify();
+    }
   }
 
   /// Clears the screen and scrollback.
@@ -476,6 +487,7 @@ impl TerminalView {
     };
     let esc = esc.into_owned();
     self.session.input(esc.into_bytes());
+    self.input_scroll_to_bottom(cx);
     self.pause_blink(cx);
     cx.notify();
     true
@@ -706,6 +718,7 @@ impl TerminalView {
           && let Some(text) = item.text()
         {
           self.session.paste(&text);
+          self.input_scroll_to_bottom(cx);
           cx.notify();
         }
       }
@@ -929,15 +942,27 @@ impl TerminalView {
     }
   }
 
-  /// Moves the selection head to `point`, keeping the anchor fixed. Returns
-  /// whether the selection actually changed, so callers can skip no-op
-  /// invalidations.
+  /// Moves the selection head to `point`. Returns whether the selection
+  /// actually changed, so callers can skip no-op invalidations.
+  ///
+  /// The head is extended on the *live* emulator selection instead of
+  /// re-selecting from the anchor captured at mouse-down: the emulator
+  /// rotates the selection to follow content as output scrolls, so a cached
+  /// anchor would drift away from the original text (the selection visually
+  /// slides down as lines stream in).
   fn update_selection(&mut self, point: GridPoint, cx: &mut Context<Self>) -> bool {
-    if let Some((anchor, kind)) = self.selection_anchor
-      && self.selection_head != Some(point)
-    {
+    if self.selection_head == Some(point) {
+      return false;
+    }
+    self.selection_head = Some(point);
+    if self.session.update_selection_head(point) {
+      cx.notify();
+      return true;
+    }
+    // No live selection (the gesture just armed an anchor, or the emulator
+    // dropped it): materialize from the armed anchor.
+    if let Some((anchor, kind)) = self.selection_anchor {
       self.session.select(anchor, point, kind);
-      self.selection_head = Some(point);
       cx.notify();
       return true;
     }

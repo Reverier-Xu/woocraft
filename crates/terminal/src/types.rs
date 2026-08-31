@@ -562,7 +562,6 @@ pub struct Content {
   pub columns: usize,
   pub screen_lines: usize,
   pub selection: Option<SelectionRange>,
-  pub selection_text: Option<String>,
   pub scrolled_to_top: bool,
   pub scrolled_to_bottom: bool,
   /// Colors the application set via OSC 10/11/12, if any.
@@ -593,7 +592,6 @@ impl Content {
       columns: 0,
       screen_lines: 0,
       selection: None,
-      selection_text: None,
       scrolled_to_top: true,
       scrolled_to_bottom: true,
       dynamic_colors: DynamicColors::default(),

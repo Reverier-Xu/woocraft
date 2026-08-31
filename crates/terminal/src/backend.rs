@@ -428,12 +428,6 @@ pub(crate) fn make_content(term: &Term<BackendListener>, bounds: &TerminalBounds
     cell: cell_from_alacritty(indexed.cell),
   }));
 
-  let selection_text = if content.selection.is_some() {
-    term.selection_to_string()
-  } else {
-    None
-  };
-
   let grid = term.grid();
   Content {
     cells,
@@ -452,11 +446,26 @@ pub(crate) fn make_content(term: &Term<BackendListener>, bounds: &TerminalBounds
       end: Point::from_alacritty(range.end),
       is_block: range.is_block,
     }),
-    selection_text,
     scrolled_to_top: content.display_offset == term.history_size(),
     scrolled_to_bottom: content.display_offset == 0,
     dynamic_colors: dynamic_colors(term),
     terminal_bounds: *bounds,
+  }
+}
+
+/// Moves the head of the live selection to `head`, keeping the anchor where
+/// it is. Returns `false` when no selection exists.
+///
+/// The emulator rotates the selection to follow content as output scrolls,
+/// so extending the live selection keeps the anchored end glued to the
+/// original text; re-selecting from a cached anchor would not.
+pub(crate) fn update_selection_head(term: &mut Term<BackendListener>, head: Point) -> bool {
+  match term.selection.as_mut() {
+    Some(selection) => {
+      selection.update(head.to_alacritty(), AlacSide::Right);
+      true
+    }
+    None => false,
   }
 }
 
