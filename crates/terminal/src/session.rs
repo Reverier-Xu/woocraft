@@ -404,9 +404,9 @@ mod tests {
     session.resize(TerminalBounds::new(20.0, 8.0, 10, 4));
     session.feed_display(b"l1\nl2\nl3\nl4\nl5\nl6\n");
     session.scroll(ScrollKind::Top);
-    assert_eq!(session.snapshot().scrolled_to_bottom, false);
+    assert!(!session.snapshot().scrolled_to_bottom);
     session.scroll(ScrollKind::Bottom);
-    assert_eq!(session.snapshot().scrolled_to_bottom, true);
+    assert!(session.snapshot().scrolled_to_bottom);
   }
 
   #[test]
