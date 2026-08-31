@@ -295,7 +295,8 @@ impl MaskPattern {
           let mut parts = text.split('.');
           let int_part = parts.next().unwrap_or("");
 
-          // Limit the fraction part to the given range, if not enough, pad with 0
+          // Limit the fraction part to the given range, if not enough, pad with
+          // 0
           let frac_part = parts.next().map(|part| {
             part
               .chars()

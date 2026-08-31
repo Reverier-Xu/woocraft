@@ -1298,8 +1298,8 @@ impl Render for PopupMenu {
         })
       })
       .when(self.scrollable, |this| {
-        // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will
-        // cannot be displayed.
+        // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu
+        // will cannot be displayed.
         this.vertical_scrollbar(&self.scroll_handle)
       })
   }

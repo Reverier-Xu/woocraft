@@ -800,8 +800,8 @@ impl TabPanel {
     let view_entity_id = cx.entity().entity_id();
     let toggle_button_panels = dock_area.toggle_button_panels;
 
-    // Check if current TabPanel's entity_id matches the one stored in DockArea for
-    // this placement
+    // Check if current TabPanel's entity_id matches the one stored in DockArea
+    // for this placement
     if !match placement {
       DockPlacement::Left => toggle_button_panels.left == Some(view_entity_id),
       DockPlacement::Right => toggle_button_panels.right == Some(view_entity_id),
@@ -1324,8 +1324,8 @@ impl TabPanel {
     }
 
     let Some(active_panel) = state.active_panel.as_ref() else {
-      // Get custom center placeholder from DockArea (only for center panels, not dock
-      // panels)
+      // Get custom center placeholder from DockArea (only for center panels,
+      // not dock panels)
       let center_placeholder = if self.dock.is_none() {
         self
           .dock_area
@@ -1529,7 +1529,8 @@ impl TabPanel {
     // Here is looks like remove_panel on a same item, but it difference.
     //
     // We must to split it to remove_panel, unless it will be crash by error:
-    // Cannot update ui::dock::tab_panel::TabPanel while it is already being updated
+    // Cannot update ui::dock::tab_panel::TabPanel while it is already being
+    // updated
     if is_same_tab {
       self.detach_panel(panel.clone(), window, cx);
     } else {
@@ -1632,8 +1633,8 @@ impl TabPanel {
       // deferred parent update inside add_panel.
       let tab_panel = cx.entity().clone();
 
-      // Try to use the old stack panel, not just create a new one, to avoid too many
-      // nested stack panels
+      // Try to use the old stack panel, not just create a new one, to avoid too
+      // many nested stack panels
       let new_stack_panel = if stack_panel.read(cx).panels_len() <= 1 {
         stack_panel.update(cx, |view, cx| {
           view.remove_all_panels(window, cx);

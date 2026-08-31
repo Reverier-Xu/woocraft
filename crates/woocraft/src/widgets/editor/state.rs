@@ -1618,8 +1618,8 @@ impl InputState {
     // Clear inline completion on any mouse interaction
     self.clear_inline_completion(cx);
 
-    // If there have IME marked range and is empty (Means pressed Esc to abort IME
-    // typing) Clear the marked range.
+    // If there have IME marked range and is empty (Means pressed Esc to abort
+    // IME typing) Clear the marked range.
     if let Some(ime_marked_range) = &self.ime_marked_range
       && ime_marked_range.is_empty()
     {
@@ -1942,8 +1942,8 @@ impl InputState {
 
     // TIP: About the IBeam cursor
     //
-    // If cursor style is IBeam, the mouse mouse position is in the middle of the
-    // cursor (This is special in OS)
+    // If cursor style is IBeam, the mouse mouse position is in the middle of
+    // the cursor (This is special in OS)
 
     // The position is relative to the bounds of the text input
     //
@@ -2131,8 +2131,8 @@ impl InputState {
     }
 
     // NOTE: Do not cancel select, when blur.
-    // Because maybe user want to copy the selected text by AppMenuBar (will take
-    // focus handle).
+    // Because maybe user want to copy the selected text by AppMenuBar (will
+    // take focus handle).
 
     self.hover_popover = None;
     self.diagnostic_popover = None;

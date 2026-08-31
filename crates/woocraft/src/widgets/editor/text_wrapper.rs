@@ -304,7 +304,8 @@ impl TextWrapper {
         prev_boundary_ix = wrapped_lines.last().map(|range| range.end).unwrap_or(0);
       }
 
-      // Add the remaining tail when wrapping did not already cover the full line.
+      // Add the remaining tail when wrapping did not already cover the full
+      // line.
       if wrapped_lines.is_empty() || prev_boundary_ix < line.len() {
         wrapped_lines.push(prev_boundary_ix..line.len());
       }

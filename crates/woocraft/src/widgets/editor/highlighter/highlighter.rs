@@ -225,8 +225,9 @@ impl SyntaxHighlighter {
     let highlights_query_offset = query_source.len();
     query_source.push_str(&config.highlights);
 
-    // Construct a single query by concatenating the three query strings, but record
-    // the range of pattern indices that belong to each individual string.
+    // Construct a single query by concatenating the three query strings, but
+    // record the range of pattern indices that belong to each individual
+    // string.
     let mut query = Query::new(&config.language, &query_source).context("new query")?;
 
     let mut locals_pattern_index = 0;

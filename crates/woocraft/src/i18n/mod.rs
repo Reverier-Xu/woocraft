@@ -205,14 +205,14 @@ pub fn translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> Str
   let locale = normalize_locale(locale.as_ref());
   let key = key.as_ref();
 
-  // First, try to find the translation in the custom locale chain with rust_i18n
-  // fallback
+  // First, try to find the translation in the custom locale chain with
+  // rust_i18n fallback
   if let Some(value) = lookup_custom_translation_merged(&locale, key) {
     return value;
   }
 
-  // This should not be reached, as rust_i18n should always return something (the
-  // key itself)
+  // This should not be reached, as rust_i18n should always return something
+  // (the key itself)
   crate::_rust_i18n_translate(&locale, key).into_owned()
 }
 
@@ -349,11 +349,12 @@ mod tests {
     // Should return the custom translation for custom_key
     assert_eq!(translate_in_locale("zh-hans", "custom_key"), "自定义翻译");
 
-    // Should Fall back to built-in translation for keys not in custom translation
-    // (i18n.name exists in the built-in translation)
+    // Should Fall back to built-in translation for keys not in custom
+    // translation (i18n.name exists in the built-in translation)
     let display_name = locale_display_name("zh-hans");
     assert!(!display_name.is_empty());
-    // The display name should be a proper name, not "i18n.name" (the key itself)
+    // The display name should be a proper name, not "i18n.name" (the key
+    // itself)
     assert_ne!(
       display_name, "i18n.name",
       "Should not return the key itself when merging with built-in translations"

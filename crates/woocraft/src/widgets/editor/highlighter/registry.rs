@@ -622,8 +622,8 @@ impl LanguageRegistry {
   /// Returns the language configuration for the given language name.
   pub fn language(&self, name: &str) -> Option<LanguageConfig> {
     // Try to get by name first, there may have a custom language registered
-    // Then try to get built-in language to support short language names, e.g. "js"
-    // for "javascript"
+    // Then try to get built-in language to support short language names, e.g.
+    // "js" for "javascript"
     let languages = self.languages.read().unwrap();
     languages
       .get(name)

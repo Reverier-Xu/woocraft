@@ -262,7 +262,8 @@ impl DatePickerState {
     self.clean(&ClickEvent::default(), window, cx);
   }
 
-  // If focus stays inside date picker when closing popover, focus back to input.
+  // If focus stays inside date picker when closing popover, focus back to
+  // input.
   fn focus_back_if_need(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     if self.focus_handle.contains_focused(window, cx) {
       self.focus_handle.focus(window, cx);

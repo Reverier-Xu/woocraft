@@ -1202,7 +1202,8 @@ where
     &mut self, rows_count: usize, visible_end: usize, window: &mut Window, cx: &mut Context<Self>,
   ) {
     let threshold = self.delegate.load_more_threshold();
-    // Securely handle subtract logic to prevent attempt to subtract with overflow
+    // Securely handle subtract logic to prevent attempt to subtract with
+    // overflow
     if visible_end >= rows_count.saturating_sub(threshold) {
       if !self.delegate.has_more(cx) {
         return;
@@ -1513,7 +1514,8 @@ where
                   .border_color(cx.theme().drag_border)
               })
               .on_drop(cx.listener(move |table, drag: &DragColumn, window, cx| {
-                // If the drag col is not the same as the drop col, then swap the cols.
+                // If the drag col is not the same as the drop col, then swap
+                // the cols.
                 if drag.entity_id != cx.entity_id() {
                   return;
                 }

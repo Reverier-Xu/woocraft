@@ -259,8 +259,8 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
         let shared_state = state.shared_state.clone();
 
         let hitbox = hitbox.clone();
-        // When right mouse click, to build content menu, and show it at the mouse
-        // position.
+        // When right mouse click, to build content menu, and show it at the
+        // mouse position.
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
           if phase.bubble() && event.button == MouseButton::Right && hitbox.is_hovered(window) {
             {
@@ -273,7 +273,8 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
               shared_state.open = true;
             }
 
-            // Use defer to build the menu in the next frame, avoiding race conditions
+            // Use defer to build the menu in the next frame, avoiding race
+            // conditions
             window.defer(cx, {
               let shared_state = shared_state.clone();
               let builder = builder.clone();
