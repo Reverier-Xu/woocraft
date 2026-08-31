@@ -28,9 +28,10 @@ async-channel                 = "2"
 chrono                        = "0.4"
 crossbeam-channel             = "0.5"
 enum-iterator                 = "2.3"
-gpui                          = { git = "https://github.com/zed-industries/zed", rev = "399258feeaf90ad8a3a208c99221ee87b6452f38", package = "gpui" }
-gpui-macros                   = { git = "https://github.com/zed-industries/zed", rev = "399258feeaf90ad8a3a208c99221ee87b6452f38", package = "gpui_macros" }
-gpui_sum_tree                 = { git = "https://github.com/zed-industries/zed", rev = "399258feeaf90ad8a3a208c99221ee87b6452f38", package = "sum_tree" }
+gpui                          = { git = "https://github.com/zed-industries/zed", package = "gpui" }
+gpui-macros                   = { git = "https://github.com/zed-industries/zed", package = "gpui_macros" }
+gpui_platform                 = { git = "https://github.com/zed-industries/zed", package = "gpui_platform" }
+gpui_sum_tree                 = { git = "https://github.com/zed-industries/zed", package = "sum_tree" }
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
 palette                       = "0.7"

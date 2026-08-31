@@ -88,10 +88,10 @@ woocraft-terminal             = { path = "../terminal", optional = true }
 rust-embed = { workspace = true, optional = true }
 rust-i18n  = { workspace = true }
 zstd       = { workspace = true, optional = true }
+gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }
 
 [dev-dependencies]
-gpui           = { workspace = true, features = ["test-support"] }
-gpui_platform  = { git = "https://github.com/zed-industries/zed", rev = "399258feeaf90ad8a3a208c99221ee87b6452f38", package = "gpui_platform", features = ["font-kit", "wayland", "x11"] }
+gpui = { workspace = true, features = ["test-support"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5", features = ["blocking"], optional = true }

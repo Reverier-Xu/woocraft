@@ -5,6 +5,7 @@
 // semver-incompatible copy), so prefer the re-exports below.
 pub use gpui;
 pub use gpui_macros;
+pub use gpui_platform;
 pub use gpui_sum_tree;
 
 pub mod actions;
