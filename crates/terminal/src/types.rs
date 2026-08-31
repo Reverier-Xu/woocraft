@@ -536,6 +536,18 @@ impl AlacDimensions for TerminalBounds {
   }
 }
 
+/// Colors explicitly set by the running application via OSC 10/11/12.
+///
+/// `None` entries fall back to the host theme. Hosts should consult these
+/// when rendering default-styled cells so that applications that repaint
+/// their background (e.g. `vim` color schemes) look correct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DynamicColors {
+  pub foreground: Option<CellColor>,
+  pub background: Option<CellColor>,
+  pub cursor: Option<CellColor>,
+}
+
 /// A point-in-time snapshot of the terminal state, taken under a short lock.
 #[derive(Debug, Clone)]
 pub struct Content {
@@ -553,6 +565,8 @@ pub struct Content {
   pub selection_text: Option<String>,
   pub scrolled_to_top: bool,
   pub scrolled_to_bottom: bool,
+  /// Colors the application set via OSC 10/11/12, if any.
+  pub dynamic_colors: DynamicColors,
   /// The bounds that were active when the snapshot was taken.
   pub terminal_bounds: TerminalBounds,
 }
@@ -582,8 +596,41 @@ impl Content {
       selection_text: None,
       scrolled_to_top: true,
       scrolled_to_bottom: true,
+      dynamic_colors: DynamicColors::default(),
       terminal_bounds: TerminalBounds::default(),
     }
+  }
+
+  /// The cells of one viewport row (`0` is the topmost visible line).
+  ///
+  /// Rows are viewport-relative: they move with scrollback, unlike
+  /// [`Point`] coordinates carried by the cells themselves, which are also
+  /// viewport-relative.
+  pub fn row(&self, row: usize) -> Option<&[IndexedCell]> {
+    if row >= self.screen_lines {
+      return None;
+    }
+    let start = row * self.columns;
+    self.cells.get(start..start + self.columns)
+  }
+
+  /// The plain text of one viewport row, excluding wide-character spacers.
+  pub fn line_text(&self, row: usize) -> Option<String> {
+    use crate::types::CellFlags as F;
+    let cells = self.row(row)?;
+    let mut text = String::with_capacity(self.columns);
+    for indexed in cells {
+      if indexed
+        .cell
+        .flags
+        .intersects(F::WIDE_CHAR_SPACER | F::LEADING_WIDE_CHAR_SPACER)
+      {
+        continue;
+      }
+      text.push(indexed.cell.c);
+      text.extend(indexed.cell.zerowidth.iter().copied());
+    }
+    Some(text)
   }
 }
 
@@ -656,5 +703,27 @@ mod tests {
       ScrollKind::PageUp.to_alacritty(),
       alacritty_terminal::grid::Scroll::PageUp
     ));
+  }
+
+  #[test]
+  fn row_and_line_text() {
+    let mut content = Content::empty();
+    content.columns = 4;
+    content.screen_lines = 2;
+    content.cells = (0..8)
+      .map(|index| IndexedCell {
+        point: Point::new((index / 4) as i32, index % 4),
+        cell: Cell {
+          c: (b'a' + index as u8) as char,
+          ..Cell::default()
+        },
+      })
+      .collect();
+
+    assert_eq!(content.line_text(0).as_deref(), Some("abcd"));
+    assert_eq!(content.line_text(1).as_deref(), Some("efgh"));
+    assert_eq!(content.line_text(2), None);
+    assert_eq!(content.row(0).map(<[IndexedCell]>::len), Some(4));
+    assert_eq!(content.row(9), None);
   }
 }

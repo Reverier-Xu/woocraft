@@ -3,6 +3,8 @@
 //! Performance-critical path: cells are batched into background regions and
 //! text runs before painting; no per-cell glyph painting happens here.
 
+use std::{collections::HashMap, ops::Range as StdRange};
+
 use gpui::{
   App, Bounds, ContentMask, CursorStyle, DispatchPhase, Element, ElementId, FontStyle, FontWeight,
   GlobalElementId, Hitbox, Hsla, InspectorElementId, InteractiveElement, Interactivity,
@@ -367,8 +369,19 @@ impl TerminalElement {
 
   /// Groups cells into background regions, batched text runs, and block
   /// element rectangles.
+  #[cfg(test)]
   fn layout_grid(
     content: &Content, font: gpui::Font, font_size: Pixels, palette: &TerminalPalette,
+  ) -> (Vec<LayoutRect>, Vec<BatchedTextRun>, Vec<BlockElementRect>) {
+    Self::layout_grid_with_links(content, font, font_size, palette, &HashMap::new())
+  }
+
+  /// Like [`Self::layout_grid`], with `link_columns` mapping each grid line
+  /// to the column ranges covered by annotated links; those cells are
+  /// underlined.
+  fn layout_grid_with_links(
+    content: &Content, font: gpui::Font, font_size: Pixels, palette: &TerminalPalette,
+    link_columns: &HashMap<i32, Vec<StdRange<usize>>>,
   ) -> (Vec<LayoutRect>, Vec<BatchedTextRun>, Vec<BlockElementRect>) {
     let cells = &content.cells;
     let estimated = cells.len();
@@ -418,7 +431,7 @@ impl TerminalElement {
         if let Some(batch) = current_batch.take() {
           batched_runs.push(batch);
         }
-        let style = cell_style(cell, fg, palette, font.clone());
+        let style = cell_style(cell, fg, palette, font.clone(), false);
         collect_block_element_regions(
           display_line,
           point.column as i32,
@@ -429,12 +442,17 @@ impl TerminalElement {
         continue;
       }
 
-      if is_blank(cell) {
+      // Annotated link cells (even blank ones) must paint their underline.
+      let link_underline = link_columns
+        .get(&point.line)
+        .is_some_and(|ranges| ranges.iter().any(|range| range.contains(&point.column)));
+
+      if is_blank(cell) && !link_underline {
         continue;
       }
 
       // Extend or start a text run.
-      let style = cell_style(cell, fg, palette, font.clone());
+      let style = cell_style(cell, fg, palette, font.clone(), link_underline);
       let line = display_line;
       let column = point.column as i32;
       match current_batch.as_mut() {
@@ -578,7 +596,7 @@ impl TerminalElement {
               );
             }
           });
-        } else if hitbox.is_hovered(window) && view.read(cx).mouse_mode_enabled() {
+        } else if hitbox.is_hovered(window) {
           view.update(cx, |view, cx| {
             view.mouse_move(
               event.position - origin,
@@ -594,8 +612,8 @@ impl TerminalElement {
     self.interactivity.on_mouse_up(MouseButton::Left, {
       let view = view.clone();
       move |event: &MouseUpEvent, _window, cx| {
-        view.update(cx, |view, _| {
-          view.mouse_up(event.position - origin, event.button, event.modifiers);
+        view.update(cx, |view, cx| {
+          view.mouse_up(event.position - origin, event.button, event.modifiers, cx);
         });
       }
     });
@@ -631,8 +649,8 @@ impl TerminalElement {
     self.interactivity.on_mouse_up(MouseButton::Middle, {
       let view = view.clone();
       move |event: &MouseUpEvent, _window, cx| {
-        view.update(cx, |view, _| {
-          view.mouse_up(event.position - origin, event.button, event.modifiers);
+        view.update(cx, |view, cx| {
+          view.mouse_up(event.position - origin, event.button, event.modifiers, cx);
         });
       }
     });
@@ -653,8 +671,8 @@ impl TerminalElement {
     self.interactivity.on_mouse_up(MouseButton::Right, {
       let view = view.clone();
       move |event: &MouseUpEvent, _window, cx| {
-        view.update(cx, |view, _| {
-          view.mouse_up(event.position - origin, event.button, event.modifiers);
+        view.update(cx, |view, cx| {
+          view.mouse_up(event.position - origin, event.button, event.modifiers, cx);
         });
       }
     });
@@ -713,7 +731,6 @@ impl Element for TerminalElement {
   ) -> Self::PrepaintState {
     let theme = cx.theme().clone();
     let palette = TerminalPalette::from_theme(&theme);
-    let background_color = palette.background;
 
     self.interactivity.prepaint(
       global_id,
@@ -824,8 +841,32 @@ impl Element for TerminalElement {
           view.content = snapshot.clone();
           snapshot
         });
+
+        // Presentation options and link providers, read once per frame.
+        let view_options = self.view.read(cx).view_options().clone();
+        let link_providers = self.view.read(cx).link_providers().to_vec();
+
+        // Colors the application set via OSC 10/11/12 override the theme.
+        let palette = palette.with_dynamic_colors(&content.dynamic_colors);
+        let background_color = palette.background;
+
+        // Annotated links: per-line column ranges for the underline pass.
+        let link_columns = if view_options.link_annotation && !link_providers.is_empty() {
+          let mut columns: HashMap<i32, Vec<StdRange<usize>>> = HashMap::new();
+          for row in 0..content.screen_lines {
+            for link in super::link::links_for_row(&content, row, &link_providers) {
+              columns
+                .entry(link.range.start.line)
+                .or_default()
+                .push(link.range.start.column..link.range.end.column);
+            }
+          }
+          columns
+        } else {
+          HashMap::new()
+        };
         let (background_rects, batched_runs, block_rects) =
-          Self::layout_grid(&content, font.clone(), font_size, &palette);
+          Self::layout_grid_with_links(&content, font.clone(), font_size, &palette, &link_columns);
 
         // Selection rectangles, in viewport coordinates.
         let selection_rects = content
@@ -843,7 +884,14 @@ impl Element for TerminalElement {
         // far away from the cursor.
         let display_offset = content.display_offset as i32;
         let cursor_line = content.cursor.point.line + display_offset;
-        let cursor_position = if content.cursor.shape != CursorShape::Hidden
+        // The host cursor-shape override wins over the application's shape,
+        // but an application-hidden cursor always stays hidden.
+        let cursor_shape = if content.cursor.shape == CursorShape::Hidden {
+          CursorShape::Hidden
+        } else {
+          view_options.cursor_shape.unwrap_or(content.cursor.shape)
+        };
+        let cursor_position = if cursor_shape != CursorShape::Hidden
           && cursor_line >= 0
           && (cursor_line as usize) < lines
         {
@@ -879,7 +927,7 @@ impl Element for TerminalElement {
         };
         let ime_cursor_bounds = cursor_position
           .map(|position| Bounds::new(position, gpui::size(px(cursor_width.ceil()), line_height)));
-        let cursor = if content.cursor.shape == CursorShape::Hidden {
+        let cursor = if cursor_shape == CursorShape::Hidden {
           None
         } else {
           // The visible cursor paints in window coordinates, so it resolves
@@ -888,15 +936,15 @@ impl Element for TerminalElement {
             bounds: bounds + origin,
             // Unfocused block cursors render hollow.
             shape: if self.focused {
-              content.cursor.shape
+              cursor_shape
             } else {
-              match content.cursor.shape {
+              match cursor_shape {
                 CursorShape::Bar => CursorShape::Bar,
                 CursorShape::Underline => CursorShape::Underline,
                 _ => CursorShape::HollowBlock,
               }
             },
-            char_text: (self.focused && content.cursor.shape == CursorShape::Block)
+            char_text: (self.focused && cursor_shape == CursorShape::Block)
               .then_some(char_text)
               .flatten(),
             line_height,
@@ -926,12 +974,17 @@ impl Element for TerminalElement {
     bounds: Bounds<Pixels>, _request_layout: &mut Self::RequestLayoutState,
     prepaint: &mut Self::PrepaintState, window: &mut Window, cx: &mut App,
   ) {
-    let palette = TerminalPalette::from_theme(cx.theme());
+    // Dynamic colors also apply here so IME composition stays legible on
+    // application-repainted backgrounds.
+    let palette = TerminalPalette::from_theme(cx.theme())
+      .with_dynamic_colors(&self.view.read(cx).content.dynamic_colors);
 
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
       let cursor = prepaint.cursor.take();
       let ime_cursor_bounds = prepaint.ime_cursor_bounds;
       let marked_text = self.view.read(cx).marked_text().map(str::to_string);
+      // Links under the pointer get a pointing hand; otherwise the beam.
+      let pointer_cursor = self.view.read(cx).hovered_link().is_some();
 
       // `ime_cursor_bounds` is grid-relative; adding the element origin here
       // yields the window-relative anchor the platform IME expects (Zed's
@@ -943,7 +996,14 @@ impl Element for TerminalElement {
       };
 
       self.register_mouse_listeners(prepaint.hitbox.clone(), prepaint.origin, window);
-      window.set_cursor_style(CursorStyle::IBeam, &prepaint.hitbox);
+      window.set_cursor_style(
+        if pointer_cursor {
+          CursorStyle::PointingHand
+        } else {
+          CursorStyle::IBeam
+        },
+        &prepaint.hitbox,
+      );
 
       self.interactivity.paint(
         global_id,
@@ -1158,19 +1218,21 @@ fn is_blank(cell: &Cell) -> bool {
 }
 
 /// Resolves a cell into a GPUI text run with terminal styling applied.
-fn cell_style(cell: &Cell, fg: CellColor, palette: &TerminalPalette, font: gpui::Font) -> TextRun {
+fn cell_style(
+  cell: &Cell, fg: CellColor, palette: &TerminalPalette, font: gpui::Font, link_underline: bool,
+) -> TextRun {
   let mut color = palette.convert(&fg);
   if cell.flags.contains(CellFlags::DIM) {
     color.a *= 0.7;
   }
 
-  let underline =
-    (cell.flags.contains(CellFlags::UNDERLINE) || cell.hyperlink.is_some()).then(|| {
-      UnderlineStyle {
-        thickness: px(1.0),
-        color: Some(color),
-        wavy: cell.flags.contains(CellFlags::UNDERCURL),
-      }
+  let underline = (cell.flags.contains(CellFlags::UNDERLINE)
+    || cell.hyperlink.is_some()
+    || link_underline)
+    .then(|| UnderlineStyle {
+      thickness: px(1.0),
+      color: Some(color),
+      wavy: cell.flags.contains(CellFlags::UNDERCURL),
     });
 
   let strikethrough = cell
@@ -1512,6 +1574,29 @@ mod tests {
     assert_eq!(rects[0].column, 0);
     assert_eq!(rects[0].columns, 16);
     assert_eq!(rects[0].lines, 24);
+  }
+
+  #[test]
+  fn link_ranges_underline_cells() {
+    let content = content_with(vec![
+      (0, 0, 'a', CellFlags::empty()),
+      (0, 1, 'b', CellFlags::empty()),
+      (0, 2, 'c', CellFlags::empty()),
+    ]);
+    let mut link_columns = HashMap::new();
+    link_columns.insert(0, vec![1..2, 5..6]);
+    let (_, runs, _) = TerminalElement::layout_grid_with_links(
+      &content,
+      default_font(),
+      px(14.),
+      &palette(),
+      &link_columns,
+    );
+    // The underlined middle cell splits the run.
+    assert_eq!(runs.len(), 3);
+    assert!(runs[0].style.underline.is_none());
+    assert!(runs[1].style.underline.is_some());
+    assert!(runs[2].style.underline.is_none());
   }
 
   #[test]

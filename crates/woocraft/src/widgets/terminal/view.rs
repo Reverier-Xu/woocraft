@@ -9,13 +9,15 @@ use gpui::{
   div, px,
 };
 use woocraft_terminal::{
-  ChildStatus, Modes, Point as GridPoint, ScrollKind, SelectionKind, TerminalEvent, TerminalSession,
+  ChildStatus, CursorShape, Modes, Point as GridPoint, ScrollKind, SelectionKind, TerminalEvent,
+  TerminalSession,
 };
 
 use super::{
   colors::TerminalPalette,
   element::TerminalElement,
   input::to_esc_str,
+  link::{self, GridLink, LinkProvider},
   mouse::{
     alt_scroll, grid_point, grid_point_and_side, mouse_button_report, mouse_moved_report,
     scroll_reports,
@@ -60,6 +62,48 @@ pub enum TerminalViewEvent {
   /// The child process exited. The status is `None` when the session was
   /// shut down before reporting one.
   Exit(Option<ChildStatus>),
+  /// The link under the pointer changed. `None` leaves all links.
+  HoveredLinkChanged(Option<GridLink>),
+  /// The user clicked a link without turning the click into a drag or a
+  /// selection. Never emitted while a TUI application owns the mouse.
+  LinkActivated(GridLink, gpui::Modifiers),
+}
+
+/// Presentation-level options for a [`TerminalView`].
+///
+/// These configure how the view renders and interacts; process and emulator
+/// semantics live in `SpawnOptions`.
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct TerminalViewOptions {
+  /// Overrides the rendered cursor shape. `None` follows the application
+  /// (DECSCUSR). An application-hidden cursor always stays hidden.
+  pub cursor_shape: Option<CursorShape>,
+  /// Overrides the cursor blink cadence. `None` uses the 500ms default.
+  pub cursor_blink_interval: Option<Duration>,
+  /// Whether registered providers' links are underlined at all times (the
+  /// hover cursor and click behavior are always active). Default: true.
+  pub link_annotation: bool,
+}
+
+impl TerminalViewOptions {
+  /// Overrides the rendered cursor shape.
+  pub fn with_cursor_shape(mut self, shape: CursorShape) -> Self {
+    self.cursor_shape = Some(shape);
+    self
+  }
+
+  /// Overrides the cursor blink cadence.
+  pub fn with_cursor_blink_interval(mut self, interval: Duration) -> Self {
+    self.cursor_blink_interval = Some(interval);
+    self
+  }
+
+  /// Disables always-on link annotation; hover and click still work.
+  pub fn without_link_annotation(mut self) -> Self {
+    self.link_annotation = false;
+    self
+  }
 }
 
 /// A GPUI view rendering a terminal session.
@@ -92,6 +136,15 @@ pub struct TerminalView {
   mouse_down_position: Option<gpui::Point<Pixels>>,
   last_mouse: Option<(GridPoint, bool)>,
   scroll_px: Pixels,
+  /// Presentation options; see [`TerminalViewOptions`].
+  view_options: TerminalViewOptions,
+  /// Host-registered link providers; the built-in OSC 8 provider is implied.
+  link_providers: Vec<std::sync::Arc<dyn LinkProvider>>,
+  /// The link currently under the pointer, if any.
+  hovered_link: Option<GridLink>,
+  /// The link under the pointer when the current click started, used to
+  /// detect click-without-drag activation.
+  down_link: Option<GridLink>,
 }
 
 impl EventEmitter<TerminalViewEvent> for TerminalView {}
@@ -166,13 +219,46 @@ impl TerminalView {
       mouse_down_position: None,
       last_mouse: None,
       scroll_px: px(0.),
+      view_options: TerminalViewOptions::default(),
+      link_providers: Vec::new(),
+      hovered_link: None,
+      down_link: None,
       focus_subscriptions: vec![focus_in, focus_out],
     }
+  }
+
+  /// Creates a terminal view with custom presentation options.
+  pub fn with_view_options(
+    session: TerminalSession, options: TerminalViewOptions, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) -> Self {
+    let mut view = Self::new(session, window, cx);
+    view.view_options = options;
+    view
   }
 
   /// The wrapped session.
   pub fn session(&self) -> &TerminalSession {
     &self.session
+  }
+
+  /// Replaces the presentation options.
+  pub fn set_view_options(&mut self, options: TerminalViewOptions, cx: &mut Context<Self>) {
+    self.view_options = options;
+    cx.notify();
+  }
+
+  /// The current presentation options.
+  pub fn view_options(&self) -> &TerminalViewOptions {
+    &self.view_options
+  }
+
+  /// Registers a link provider; the built-in OSC 8 provider is always active.
+  pub fn register_link_provider(
+    &mut self, provider: std::sync::Arc<dyn LinkProvider>, cx: &mut Context<Self>,
+  ) {
+    self.link_providers.push(provider);
+    cx.notify();
   }
 
   /// The application title, if it set one.
@@ -244,14 +330,19 @@ impl TerminalView {
     self.selection_phase == SelectionPhase::Selecting
   }
 
-  /// Whether mouse events are currently reported to the application.
-  pub(crate) fn mouse_mode_enabled(&self) -> bool {
-    self.content.mode.intersects(Modes::MOUSE_MODE)
-  }
-
   /// The IME composition text, if any.
   pub(crate) fn marked_text(&self) -> Option<&str> {
     self.marked_text.as_deref()
+  }
+
+  /// The link currently under the pointer, if any (hover cursor affordance).
+  pub(crate) fn hovered_link(&self) -> Option<&GridLink> {
+    self.hovered_link.as_ref()
+  }
+
+  /// The host-registered link providers (OSC 8 is implied separately).
+  pub(crate) fn link_providers(&self) -> &[std::sync::Arc<dyn LinkProvider>] {
+    &self.link_providers
   }
 
   fn process_event(&mut self, event: TerminalEvent, cx: &mut Context<Self>) -> bool {
@@ -285,7 +376,10 @@ impl TerminalView {
       }
       TerminalEvent::ColorRequest { index, formatter } => {
         // Answer synchronously to preserve the ordering of PTY responses.
-        let palette = TerminalPalette::from_theme(cx.theme());
+        // Colors the application set via OSC 10/11/12 win over the theme so
+        // queries like OSC 11 echo what the application actually sees.
+        let palette =
+          TerminalPalette::from_theme(cx.theme()).with_dynamic_colors(&self.content.dynamic_colors);
         self
           .session
           .write_pty(formatter(palette.vte_rgb_at_index(index)));
@@ -320,9 +414,13 @@ impl TerminalView {
     self.cursor_visible = true;
     self.blink_generation += 1;
     let generation = self.blink_generation;
+    let interval = self
+      .view_options
+      .cursor_blink_interval
+      .unwrap_or(CURSOR_BLINK_INTERVAL);
     cx.spawn(async move |this, cx| {
       loop {
-        cx.background_executor().timer(CURSOR_BLINK_INTERVAL).await;
+        cx.background_executor().timer(interval).await;
         let Ok(stop) = this.update(cx, |view, cx| {
           if view.blink_generation != generation || !view.blinking_terminal_enabled {
             return true;
@@ -582,12 +680,22 @@ impl TerminalView {
               self.session.clear_selection();
             }
             self.arm_selection(point, SelectionKind::Characters);
+            // Remember whether the click landed on a link: if the pointer is
+            // released without turning this into a drag, the link activates.
+            self.down_link = link::link_at(&self.content, point, &self.link_providers);
             if had_selection {
               cx.notify();
             }
           }
-          2 => self.set_selection(point, SelectionKind::Words, cx),
-          3 => self.set_selection(point, SelectionKind::Lines, cx),
+          2 => {
+            // Word/line selections are never link activations.
+            self.down_link = None;
+            self.set_selection(point, SelectionKind::Words, cx);
+          }
+          3 => {
+            self.down_link = None;
+            self.set_selection(point, SelectionKind::Lines, cx);
+          }
           _ => {}
         }
       }
@@ -688,32 +796,52 @@ impl TerminalView {
     }
   }
 
-  /// Handles mouse moves: motion reports while a mouse mode is active.
+  /// Handles mouse moves: motion reports while a mouse mode is active, link
+  /// hover tracking otherwise. TUI mouse reporting always wins.
   pub(crate) fn mouse_move(
     &mut self, position: gpui::Point<Pixels>, pressed_button: Option<gpui::MouseButton>,
     modifiers: gpui::Modifiers, cx: &mut Context<Self>,
   ) {
-    if !self.mouse_mode(modifiers.shift) {
+    if self.mouse_mode(modifiers.shift) {
+      let (point, after_midpoint) = grid_point_and_side(
+        position,
+        self.content.terminal_bounds,
+        self.content.display_offset,
+      );
+      if self.mouse_changed(point, after_midpoint)
+        && let Some(bytes) = mouse_moved_report(point, pressed_button, modifiers, self.content.mode)
+      {
+        self.session.write_pty(bytes);
+        // Invalidate only when a report was actually sent; sub-cell pointer
+        // jitters must not repaint the whole terminal.
+        cx.notify();
+      }
       return;
     }
-    let (point, after_midpoint) = grid_point_and_side(
-      position,
-      self.content.terminal_bounds,
-      self.content.display_offset,
-    );
-    if self.mouse_changed(point, after_midpoint)
-      && let Some(bytes) = mouse_moved_report(point, pressed_button, modifiers, self.content.mode)
-    {
-      self.session.write_pty(bytes);
-      // Invalidate only when a report was actually sent; sub-cell pointer
-      // jitters must not repaint the whole terminal.
+
+    // Link hover tracking. Suspended while a selection drag is in progress.
+    let link = if self.selection_phase == SelectionPhase::Selecting {
+      None
+    } else {
+      let point = grid_point(
+        position,
+        self.content.terminal_bounds,
+        self.content.display_offset,
+      );
+      link::link_at(&self.content, point, &self.link_providers)
+    };
+    if self.hovered_link != link {
+      self.hovered_link = link.clone();
+      cx.emit(TerminalViewEvent::HoveredLinkChanged(link));
       cx.notify();
     }
   }
 
-  /// Handles mouse ups: release reports and selection finalization.
+  /// Handles mouse ups: release reports, link activation, and selection
+  /// finalization.
   pub(crate) fn mouse_up(
-    &mut self, position: gpui::Point<Pixels>, button: gpui::MouseButton, modifiers: gpui::Modifiers,
+    &mut self, position: gpui::Point<Pixels>, button: gpui::MouseButton,
+    modifiers: gpui::Modifiers, cx: &mut Context<Self>,
   ) {
     let point = grid_point(
       position,
@@ -725,6 +853,21 @@ impl TerminalView {
     {
       self.session.write_pty(bytes);
     }
+
+    // Link activation: only for clicks that never materialized into a drag
+    // or a word/line selection. Never fires while a TUI application owns the
+    // mouse: the release was reported above and `down_link` was not set.
+    let dragged = self.selection_phase == SelectionPhase::Selecting;
+    if !dragged
+      && let Some(down) = self.down_link.clone()
+      && link::link_at(&self.content, point, &self.link_providers).is_some_and(|up| up == down)
+    {
+      self.session.clear_selection();
+      self.hovered_link = Some(down.clone());
+      cx.emit(TerminalViewEvent::LinkActivated(down, modifiers));
+      cx.notify();
+    }
+
     self.reset_gesture_state();
   }
 
@@ -747,6 +890,7 @@ impl TerminalView {
     self.selection_head = None;
     self.last_mouse = None;
     self.mouse_down_position = None;
+    self.down_link = None;
   }
 
   /// Whether mouse events should be forwarded to the application instead of

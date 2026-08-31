@@ -37,8 +37,8 @@ use crate::{
   event::{ChildStatus, ClipboardFormatter, ColorFormatter, TerminalEvent},
   options::SpawnOptions,
   types::{
-    Cell, CellFlags, Content, Cursor, CursorShape, IndexedCell, Modes, Point, ScrollKind,
-    SelectionKind, SelectionRange, TerminalBounds,
+    Cell, CellColor, CellFlags, Content, Cursor, CursorShape, DynamicColors, IndexedCell, Modes,
+    NamedColor, Point, ScrollKind, SelectionKind, SelectionRange, TerminalBounds,
   },
 };
 
@@ -198,12 +198,22 @@ pub(crate) fn term_config(options: &SpawnOptions) -> AlacConfig {
   AlacConfig {
     scrolling_history: options.history().min(MAX_SCROLL_HISTORY),
     default_cursor_style: AlacCursorStyle {
-      shape: alacritty_cursor_shape(options.cursor_shape.into()),
+      shape: alacritty_cursor_shape(options.cursor_shape),
       blinking: false,
     },
-    semantic_escape_chars: format!("{SEMANTIC_ESCAPE_CHARS}\u{2500}"),
+    semantic_escape_chars: options
+      .word_separators
+      .clone()
+      .unwrap_or_else(default_word_separators),
     ..AlacConfig::default()
   }
+}
+
+/// The default word separators for double-click selection: the xterm set plus
+/// the box-drawing character used by TUIs to draw table borders (so a
+/// double-click inside a table cell selects the cell, not the row).
+pub(crate) fn default_word_separators() -> String {
+  format!("{SEMANTIC_ESCAPE_CHARS}\u{2500}")
 }
 
 pub(crate) fn normalize_terminal_bounds(bounds: TerminalBounds) -> TerminalBounds {
@@ -445,7 +455,20 @@ pub(crate) fn make_content(term: &Term<BackendListener>, bounds: &TerminalBounds
     selection_text,
     scrolled_to_top: content.display_offset == term.history_size(),
     scrolled_to_bottom: content.display_offset == 0,
+    dynamic_colors: dynamic_colors(term),
     terminal_bounds: *bounds,
+  }
+}
+
+/// The application-set foreground/background/cursor colors (OSC 10/11/12),
+/// which override the host theme while rendering default-styled cells.
+fn dynamic_colors(term: &Term<BackendListener>) -> DynamicColors {
+  let colors = term.colors();
+  let entry = |named: NamedColor| colors[named].map(CellColor::Spec);
+  DynamicColors {
+    foreground: entry(NamedColor::Foreground),
+    background: entry(NamedColor::Background),
+    cursor: entry(NamedColor::Cursor),
   }
 }
 

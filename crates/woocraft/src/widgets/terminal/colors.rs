@@ -5,7 +5,7 @@
 //! [`TerminalEvent::ColorRequest`] queries from terminal applications.
 
 use gpui::{Hsla, Rgba, black};
-use woocraft_terminal::{CellColor, NamedColor, Rgb};
+use woocraft_terminal::{CellColor, DynamicColors, NamedColor, Rgb};
 
 /// Number of entries answered for the classic 16 ANSI slots.
 pub const ANSI_COLOR_COUNT: usize = 16;
@@ -142,6 +142,26 @@ impl TerminalPalette {
   pub fn vte_rgb_at_index(&self, index: usize) -> Rgb {
     to_vte_rgb(self.color_at_index(index).unwrap_or_else(black))
   }
+
+  /// Returns a copy of the palette with the application-set colors (OSC
+  /// 10/11/12) applied, so default-styled cells render the way the running
+  /// application expects.
+  pub fn with_dynamic_colors(mut self, dynamic: &DynamicColors) -> Self {
+    let spec = |color: Option<CellColor>| match color {
+      Some(CellColor::Spec(rgb)) => Some(rgb_to_hsla(rgb.r, rgb.g, rgb.b)),
+      _ => None,
+    };
+    if let Some(color) = spec(dynamic.foreground) {
+      self.foreground = color;
+    }
+    if let Some(color) = spec(dynamic.background) {
+      self.background = color;
+    }
+    if let Some(color) = spec(dynamic.cursor) {
+      self.cursor = color;
+    }
+    self
+  }
 }
 
 /// Converts a GPUI color into the 8-bit RGB representation terminals expect.
@@ -245,6 +265,32 @@ mod tests {
     let palette = TerminalPalette::from_theme(&Theme::default());
     let request = palette.vte_rgb_at_index(196);
     assert_eq!((request.r, request.g, request.b), (255, 0, 0));
+  }
+
+  #[test]
+  fn dynamic_colors_override_theme() {
+    let palette = TerminalPalette::from_theme(&Theme::default());
+    let dynamic = DynamicColors {
+      foreground: Some(CellColor::Spec(Rgb { r: 255, g: 0, b: 0 })),
+      background: Some(CellColor::Spec(Rgb { r: 0, g: 0, b: 255 })),
+      cursor: None,
+    };
+    let resolved = palette.with_dynamic_colors(&dynamic);
+    assert_eq!(resolved.foreground, rgb_to_hsla(255, 0, 0));
+    assert_eq!(resolved.background, rgb_to_hsla(0, 0, 255));
+    // Unset entries keep the theme value.
+    assert_eq!(resolved.cursor, palette.cursor);
+    // Named lookups route through the overridden entries.
+    assert_eq!(
+      resolved.named_color(NamedColor::Foreground),
+      rgb_to_hsla(255, 0, 0)
+    );
+    assert_eq!(
+      palette
+        .with_dynamic_colors(&DynamicColors::default())
+        .foreground,
+      palette.foreground
+    );
   }
 
   #[test]

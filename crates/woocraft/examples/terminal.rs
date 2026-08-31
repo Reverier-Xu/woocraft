@@ -5,11 +5,13 @@
 //! - spawning a PTY-backed terminal session and hosting the view,
 //! - reacting to view events (`TitleChanged`, `Bell`, `ClipboardStored`,
 //!   `Exit`) to update the window chrome,
-//! - the Woocraft theme colors driving the terminal palette.
+//! - the Woocraft theme colors driving the terminal palette,
+//! - deep customization: a URL [`LinkProvider`] with hover/annotation/click
+//!   handling, and [`TerminalViewOptions`] for cursor presentation.
 //!
 //! Run with: `cargo run -p woocraft --example terminal`
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use gpui::{
   App, AppContext, Bounds, ClipboardItem, Context, Entity, FocusHandle, Focusable,
@@ -18,12 +20,42 @@ use gpui::{
   prelude::FluentBuilder as _, px,
 };
 use woocraft::{
-  ActiveTheme, Assets, StyledExt as _, TerminalView, TerminalViewEvent, TitleBar, h_flex, init,
-  v_flex,
+  ActiveTheme, Assets, LineContext, LinkProvider, LinkSpan, StyledExt as _, TerminalView,
+  TerminalViewEvent, TerminalViewOptions, TitleBar, h_flex, init, v_flex,
 };
 use woocraft_terminal::{ChildStatus, SpawnOptions, TerminalBounds, TerminalSession};
 
 actions!(terminal_example, [Quit]);
+
+/// A minimal URL detector: spans starting at `http://` or `https://` and
+/// running to the next whitespace. A real host would use a regex crate; this
+/// exists to show the [`LinkProvider`] shape.
+struct UrlProvider;
+
+impl LinkProvider for UrlProvider {
+  fn links_for_line(&self, line: &LineContext<'_>) -> Vec<LinkSpan> {
+    let text = &line.text;
+    let mut spans = Vec::new();
+    for prefix in ["https://", "http://"] {
+      let mut search_from = 0;
+      while let Some(offset) = text[search_from..].find(prefix) {
+        let start = search_from + offset;
+        let end = text[start..]
+          .find(char::is_whitespace)
+          .map_or(text.len(), |end| start + end);
+        if end > start {
+          spans.push(LinkSpan::new(
+            start,
+            end,
+            Arc::from(text[start..end].to_string()),
+          ));
+        }
+        search_from = (end + 1).min(text.len());
+      }
+    }
+    spans
+  }
+}
 
 /// How long a transient header indicator stays visible.
 const FLASH_DURATION: Duration = Duration::from_millis(800);
@@ -55,7 +87,16 @@ impl TerminalDemo {
         TerminalBounds::default(),
       )
       .expect("failed to spawn terminal session");
-      let terminal = cx.new(|cx| TerminalView::new(session, window, cx));
+      let terminal = cx.new(|cx| {
+        let mut view = TerminalView::with_view_options(
+          session,
+          TerminalViewOptions::default().with_cursor_blink_interval(Duration::from_millis(530)),
+          window,
+          cx,
+        );
+        view.register_link_provider(Arc::new(UrlProvider), cx);
+        view
+      });
       cx.subscribe(&terminal, Self::on_terminal_event).detach();
       terminal.focus_handle(cx).focus(window, cx);
 
@@ -85,6 +126,13 @@ impl TerminalDemo {
       TerminalViewEvent::Exit(_) => {
         self.exit_status = self.terminal.read(cx).session().child_exit_status();
       }
+      TerminalViewEvent::LinkActivated(link, _modifiers) => {
+        // Never reached while a TUI application (nvim, btop, ...) owns the
+        // mouse: those events are reported to the application instead.
+        cx.open_url(&link.uri);
+        self.flash_for("Opened link", cx);
+      }
+      TerminalViewEvent::HoveredLinkChanged(_) => {}
     }
     cx.notify();
   }

@@ -15,7 +15,7 @@ use crate::{
   backend::{self, BackendListener, PtySender, TermLock},
   event::{ChildStatus, TerminalEvent},
   options::SpawnOptions,
-  types::{CellColor, Point, ScrollKind, SelectionKind, TerminalBounds},
+  types::{Point, ScrollKind, SelectionKind, TerminalBounds},
 };
 
 /// A running terminal session.
@@ -251,21 +251,6 @@ impl TerminalSession {
     *self.inner.exit_status.lock().unwrap()
   }
 
-  /// The foreground/background colors currently set by the application.
-  ///
-  /// Hosts use this as the fallback when rendering cells with default colors.
-  pub fn default_colors(&self) -> (CellColor, CellColor) {
-    let term = self.inner.term.lock();
-    let colors = term.colors();
-    let fg = colors[crate::types::NamedColor::Foreground]
-      .map(CellColor::Spec)
-      .unwrap_or(CellColor::Named(crate::types::NamedColor::Foreground));
-    let bg = colors[crate::types::NamedColor::Background]
-      .map(CellColor::Spec)
-      .unwrap_or(CellColor::Named(crate::types::NamedColor::Background));
-    (fg, bg)
-  }
-
   /// Feeds raw output bytes directly into the emulator state, bypassing the
   /// PTY. Only meaningful for display-only sessions.
   pub fn feed_display(&self, bytes: &[u8]) {
@@ -324,5 +309,53 @@ impl std::fmt::Debug for TerminalSession {
       .field("pid", &self.pid())
       .field("alive", &self.is_alive())
       .finish()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{
+    options::{DEFAULT_SCROLLING_HISTORY, SpawnOptions},
+    types::{CellColor, DynamicColors, Modes, TerminalBounds},
+  };
+
+  fn display_session(options: SpawnOptions) -> TerminalSession {
+    TerminalSession::spawn_display_only(options, TerminalBounds::new(20.0, 8.0, 80, 24))
+  }
+
+  #[test]
+  fn display_only_reports_dynamic_colors() {
+    let session = display_session(SpawnOptions::default());
+    // OSC 10: set foreground, OSC 11: set background.
+    session.feed_display(b"\x1b]10;rgb:ff/00/00\x07\x1b]11;rgb:00/ff/00\x07");
+
+    let content = session.snapshot();
+    assert_eq!(
+      content.dynamic_colors,
+      DynamicColors {
+        foreground: Some(CellColor::Spec(vte::ansi::Rgb { r: 255, g: 0, b: 0 })),
+        background: Some(CellColor::Spec(vte::ansi::Rgb { r: 0, g: 255, b: 0 })),
+        cursor: None,
+      }
+    );
+  }
+
+  #[test]
+  fn display_only_defaults_to_theme_colors() {
+    let session = display_session(SpawnOptions::default());
+    assert_eq!(session.snapshot().dynamic_colors, DynamicColors::default());
+  }
+
+  #[test]
+  fn display_only_snapshot_shape() {
+    let session = display_session(SpawnOptions::default());
+    session.feed_display(b"hello");
+    let content = session.snapshot();
+    assert_eq!(content.columns, 80);
+    assert_eq!(content.screen_lines, 24);
+    assert_eq!(content.total_lines, 24);
+    assert!(content.mode.contains(Modes::LINE_WRAP));
+    assert_eq!(DEFAULT_SCROLLING_HISTORY, 10_000);
   }
 }

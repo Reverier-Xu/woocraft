@@ -9,12 +9,14 @@
 mod colors;
 mod element;
 mod input;
+mod link;
 mod mouse;
 mod view;
 
 pub use colors::TerminalPalette;
 use gpui::{App, KeyBinding};
-pub use view::{TerminalView, TerminalViewEvent};
+pub use link::{GridLink, LineContext, LinkProvider, LinkSpan, Osc8LinkProvider};
+pub use view::{TerminalView, TerminalViewEvent, TerminalViewOptions};
 
 // `TerminalCopy`, `TerminalPaste`, and `TerminalSelectAll` are prefixed to
 // avoid clashing with the `input` widget's `Copy`, `Paste`, and `SelectAll`
