@@ -432,11 +432,11 @@ mod tests {
     let mut content = content_from_rows(&["abcdef"]);
     let a: Arc<str> = Arc::from("https://a");
     let b: Arc<str> = Arc::from("https://b");
-    for point in 0..3 {
-      content.cells[point].cell.hyperlink = Some(a.clone());
+    for cell in &mut content.cells[..3] {
+      cell.cell.hyperlink = Some(a.clone());
     }
-    for point in 3..6 {
-      content.cells[point].cell.hyperlink = Some(b.clone());
+    for cell in &mut content.cells[3..6] {
+      cell.cell.hyperlink = Some(b.clone());
     }
     let links = all_links_for_row(&content, 0, &[]);
     assert_eq!(links.len(), 2);
