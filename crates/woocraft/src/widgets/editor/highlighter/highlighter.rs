@@ -457,7 +457,7 @@ impl SyntaxHighlighter {
         .unwrap_or(language_name);
 
       for capture in query_match
-        .captures
+        .captures()
         .iter()
         .filter(|cap| Some(cap.index) == self.combined_injection_content_capture_index)
       {
@@ -542,7 +542,7 @@ impl SyntaxHighlighter {
 
       let mut last_end = 0usize;
       while let Some(m) = matches.next() {
-        for cap in m.captures {
+        for cap in m.captures() {
           let node_range = cap.node.start_byte()..cap.node.end_byte();
 
           if node_range.start < last_end {
@@ -565,7 +565,7 @@ impl SyntaxHighlighter {
     let mut matches = cursor.matches(query, root_node, TextProvider(source));
 
     while let Some(query_match) = matches.next() {
-      for cap in query_match.captures {
+      for cap in query_match.captures() {
         let node = cap.node;
 
         let Some(highlight_name) = query.capture_names().get(cap.index as usize) else {
