@@ -82,6 +82,13 @@ All Rust code changes **MUST pass the following checks before any commit**. No c
 - **Test Execution**: Run `cargo test --workspace --all-features` to ensure all unit, integration, and doc tests pass before every commit.
 - **Test Coverage**: All new features and bug fixes must include corresponding test coverage. Tests must live alongside the code they validate (in `#[cfg(test)]` modules).
 
+### 3.4 Dependency Version Policy
+
+- **Minor-Pinned Manifests**: Every dependency version requirement in `Cargo.toml` must pin to the latest minor series (e.g. `0.6`, `2.0`). Bare-major (`"1"`) and wildcard (`"*"`) requirements are forbidden.
+- **Lockfile Pins Patches**: The committed `Cargo.lock` fixes exact patch versions. Never regenerate the lockfile casually; commit lock changes together with the manifest change that caused them.
+- **Deliberate Upgrades**: Minor bumps are explicit, atomic commits. Patch refreshes go through `cargo update -p <crate>` with the lock diff reviewed.
+- **Central Declaration**: All shared dependencies are declared once in `[workspace.dependencies]`; member crates reference them with `{ workspace = true }` only.
+
 ---
 
 ## 4. CI/CD Workflow Testing

@@ -28,6 +28,9 @@ strip         = true
 unsafe_code = "forbid"
 
 [workspace.dependencies]
-gpui = "0.2"
+gpui-base = "0.6"
+serde     = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+tracing   = "0.1"
 
 woocraft = { path = "crates/woocraft" }

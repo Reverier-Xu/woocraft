@@ -13,7 +13,10 @@ rust-version = { workspace = true }
 version      = { workspace = true }
 
 [dependencies]
-gpui = { workspace = true }
+gpui-base = { workspace = true }
+serde     = { workspace = true }
+thiserror = { workspace = true }
+tracing   = { workspace = true }
 
 [lints]
 workspace = true

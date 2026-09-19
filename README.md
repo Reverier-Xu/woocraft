@@ -8,9 +8,11 @@ A GPU-accelerated graphical component library for Rust, built on
 
 ## status
 
-the workspace is live on gpui `0.2` from crates.io (publishable, unlike the
-old zed git dependency). the component surface grows back under
-`crates/woocraft` module by module.
+the workspace builds on `gpui-base` 0.6 (style-free foundations from the
+gpui-kit family, with the `gpui-pre` gpui snapshot exposed internally) plus
+thiserror, serde, and tracing as infrastructure. manifest requirements pin to
+the latest minor series; `cargo.lock` fixes patches. the component surface
+grows back under `crates/woocraft` module by module.
 
 ## license
 
