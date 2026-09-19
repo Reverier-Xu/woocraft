@@ -16,7 +16,7 @@ use gpui::{
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_base::{
-  Button as BaseButton, RoleOverride,
+  Button as BaseButton, Disableable, RoleOverride, Selectable,
   motion::{
     Easing, IterationCount, Keyframe, Keyframes, MotionTransform, Timing, animate_keyframes,
   },
@@ -261,6 +261,25 @@ impl Button {
 impl ButtonVariants for Button {
   fn with_variant(mut self, variant: ButtonVariant) -> Self {
     self.variant = variant;
+    self
+  }
+}
+
+impl Selectable for Button {
+  fn selected(mut self, selected: bool) -> Self {
+    self.base = self.base.selected(selected);
+    self
+  }
+
+  fn is_selected(&self) -> bool {
+    self.base.is_selected()
+  }
+}
+
+impl Disableable for Button {
+  fn disabled(mut self, disabled: bool) -> Self {
+    self.disabled = disabled;
+    self.base = self.base.disabled(disabled);
     self
   }
 }

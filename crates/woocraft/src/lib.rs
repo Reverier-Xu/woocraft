@@ -39,6 +39,10 @@ pub use assets::{
   Assets, BUILTIN_ASSET_PREFIX, CombinedSource, EmbeddedSource, has_asset, has_icon, list_assets,
   list_icons, register_fonts,
 };
+pub use base::{
+  Collapsible, Disableable, FocusableExt, RoleOverride, Selectable, StateStyle, StyledExt,
+  box_shadow, h_flex, v_flex,
+};
 pub use error::{Error, Result};
 pub use gpui;
 pub use gpui_base as base;
@@ -84,6 +88,10 @@ rust_i18n::i18n!("locales", fallback = "en-us");
 /// Safe to call once per [`gpui::App`]; font registration failures surface
 /// through the returned [`Result`] instead of aborting the application.
 pub fn init(cx: &mut gpui::App) -> Result<()> {
+  // foundation globals first: base state, reduce-motion, popover and focus
+  // infrastructure that styled widgets build on.
+  base::init(cx);
+
   #[cfg(feature = "resources")]
   register_fonts(cx.text_system())?;
 
@@ -91,4 +99,21 @@ pub fn init(cx: &mut gpui::App) -> Result<()> {
   i18n::init();
 
   Ok(())
+}
+
+#[cfg(test)]
+mod foundation_tests {
+  use super::{Button, Selectable, h_flex, v_flex};
+
+  #[test]
+  fn button_satisfies_shared_control_traits() {
+    let button = Button::new("foundation-test").selected(true);
+    assert!(button.is_selected());
+  }
+
+  #[test]
+  fn layout_helpers_are_available() {
+    let _row = h_flex();
+    let _column = v_flex();
+  }
 }
