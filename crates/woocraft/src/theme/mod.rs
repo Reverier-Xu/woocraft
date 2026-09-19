@@ -16,7 +16,7 @@
 //! Theme::sync_system_appearance(&mut cx);
 //! ```
 
-use gpui::{App, Global, Pixels, WindowAppearance, px};
+use gpui::{App, Global, Rems, WindowAppearance, rems};
 use serde::{Deserialize, Serialize};
 
 mod color;
@@ -86,18 +86,62 @@ impl From<WindowAppearance> for ThemeMode {
 /// visibility). Available globally via Theme::global(cx) and accessible
 /// through ActiveTheme trait. Colors update automatically when mode changes or
 /// tokens are reloaded.
+///
+/// All sizing is stored in rems and therefore follows the window root
+/// font-size (`1rem` defaults to `16px`), so a single font-size change scales
+/// the entire system. Outside rich-text rendering, components render at the
+/// medium/default size and `1rem` text.
+///
+/// `Theme` is deliberately not `Copy` (it is far beyond the 64-bit copy
+/// threshold): borrow it through [`ActiveTheme`] — `cx.theme()` — or clone
+/// explicitly at the few places a private snapshot is worth it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Theme {
   pub mode: ThemeMode,
   pub tokens: ThemeTokens,
   pub colors: ThemeColors,
-  pub font_size: Pixels,
-  pub icon_size: Pixels,
-  pub radius: Pixels,
-  pub radius_lg: Pixels,
-  pub radius_container: Pixels,
-  pub tile_grid_size: Pixels,
-  pub tile_radius: Pixels,
+  /// body font size; `1rem` by default.
+  #[serde(
+    serialize_with = "serialize_rems",
+    deserialize_with = "deserialize_rems"
+  )]
+  pub font_size: Rems,
+  /// icon size; `1rem` by default.
+  #[serde(
+    serialize_with = "serialize_rems",
+    deserialize_with = "deserialize_rems"
+  )]
+  pub icon_size: Rems,
+  /// control corner radius; `0.25rem` by default.
+  #[serde(
+    serialize_with = "serialize_rems",
+    deserialize_with = "deserialize_rems"
+  )]
+  pub radius: Rems,
+  /// large surface corner radius; `0.5rem` by default.
+  #[serde(
+    serialize_with = "serialize_rems",
+    deserialize_with = "deserialize_rems"
+  )]
+  pub radius_lg: Rems,
+  /// container corner radius; `0.375rem` by default.
+  #[serde(
+    serialize_with = "serialize_rems",
+    deserialize_with = "deserialize_rems"
+  )]
+  pub radius_container: Rems,
+  /// tile grid pitch; `0.625rem` by default.
+  #[serde(
+    serialize_with = "serialize_rems",
+    deserialize_with = "deserialize_rems"
+  )]
+  pub tile_grid_size: Rems,
+  /// tile corner radius; `0.375rem` by default.
+  #[serde(
+    serialize_with = "serialize_rems",
+    deserialize_with = "deserialize_rems"
+  )]
+  pub tile_radius: Rems,
   pub scrollbar_show: ScrollbarShow,
 }
 
@@ -106,21 +150,29 @@ impl Default for Theme {
     let tokens = ThemeTokens::default();
     Self {
       mode: ThemeMode::Light,
-      colors: ThemeColors::from_tokens(tokens, false),
+      colors: ThemeColors::from_tokens(&tokens, false),
       tokens,
-      font_size: px(16.),
-      icon_size: px(16.),
-      radius: px(4.),
-      radius_lg: px(8.),
-      radius_container: px(6.),
-      tile_grid_size: px(10.),
-      tile_radius: px(6.),
+      font_size: rems(1.),
+      icon_size: rems(1.),
+      radius: rems(0.25),
+      radius_lg: rems(0.5),
+      radius_container: rems(0.375),
+      tile_grid_size: rems(0.625),
+      tile_radius: rems(0.375),
       scrollbar_show: ScrollbarShow::default(),
     }
   }
 }
 
 impl Global for Theme {}
+
+fn serialize_rems<S: serde::Serializer>(rems: &Rems, serializer: S) -> Result<S::Ok, S::Error> {
+  serializer.serialize_f32(rems.0)
+}
+
+fn deserialize_rems<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Rems, D::Error> {
+  Ok(Rems(f32::deserialize(deserializer)?))
+}
 
 /// Trait providing access to the global active theme.
 ///
@@ -161,7 +213,7 @@ impl Theme {
   pub fn set_mode(mode: ThemeMode, cx: &mut App) {
     let theme = Theme::global_mut(cx);
     theme.mode = mode;
-    theme.colors = ThemeColors::from_tokens(theme.tokens, mode.is_dark());
+    theme.colors = ThemeColors::from_tokens(&theme.tokens, mode.is_dark());
     tracing::debug!(?mode, "theme mode changed");
     cx.refresh_windows();
   }
@@ -171,7 +223,7 @@ impl Theme {
     let theme = Theme::global_mut(cx);
     theme.tokens = tokens;
     theme.mode = mode;
-    theme.colors = ThemeColors::from_tokens(tokens, mode.is_dark());
+    theme.colors = ThemeColors::from_tokens(&theme.tokens, mode.is_dark());
     tracing::debug!(?mode, "theme tokens loaded");
     cx.refresh_windows();
   }

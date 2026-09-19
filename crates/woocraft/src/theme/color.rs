@@ -6,7 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// derived, mode-resolved colors of the design system.
+///
+/// not `Copy`; read individual colors through a borrowed [`Theme`] —
+/// `cx.theme().primary` — instead of moving the record around.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeColors {
   pub background: Hsla,
   pub foreground: Hsla,
@@ -61,7 +65,7 @@ pub struct ThemeColors {
 ///
 /// Chroma and lightness come from [`ThemeTokens::chroma`] and
 /// [`ThemeTokens::lightness`] to keep a coherent palette.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyntaxTokenHues {
   pub attribute: f32,
   pub boolean: f32,
@@ -161,7 +165,7 @@ impl Default for SyntaxTokenHues {
 /// (primary, success, warning, ...) plus shared lightness and chroma. every
 /// concrete color is derived from these numbers, so restyling the whole
 /// system amounts to editing a handful of values.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeTokens {
   pub primary: f32,
   pub error: f32,
@@ -294,7 +298,7 @@ fn pick_readable_text(background: Hsla, light_text: Hsla, dark_text: Hsla) -> Hs
 }
 
 impl ThemeColors {
-  pub fn from_tokens(tokens: ThemeTokens, is_dark: bool) -> Self {
+  pub fn from_tokens(tokens: &ThemeTokens, is_dark: bool) -> Self {
     let bg_lightness = if is_dark {
       tokens.dark_bg_lightness
     } else {
@@ -481,11 +485,11 @@ impl ThemeColors {
   }
 
   pub fn light() -> Self {
-    Self::from_tokens(ThemeTokens::default(), false)
+    Self::from_tokens(&ThemeTokens::default(), false)
   }
 
   pub fn dark() -> Self {
-    Self::from_tokens(ThemeTokens::default(), true)
+    Self::from_tokens(&ThemeTokens::default(), true)
   }
 }
 
@@ -505,7 +509,7 @@ mod tests {
 
   #[test]
   fn border_uses_text_alpha_rule() {
-    let colors = ThemeColors::from_tokens(ThemeTokens::default(), false);
+    let colors = ThemeColors::from_tokens(&ThemeTokens::default(), false);
     assert!((colors.border.a - 0.1).abs() < 1e-6);
     assert!((colors.border.h - colors.foreground.h).abs() < 1e-6);
     assert!((colors.border.s - colors.foreground.s).abs() < 1e-6);
@@ -514,7 +518,7 @@ mod tests {
 
   #[test]
   fn disabled_applies_uniform_alpha() {
-    let colors = ThemeColors::from_tokens(ThemeTokens::default(), true).disabled();
+    let colors = ThemeColors::from_tokens(&ThemeTokens::default(), true).disabled();
     assert!((colors.background.a - 0.6).abs() < 1e-6);
     assert!((colors.foreground.a - 0.6).abs() < 1e-6);
     assert!((colors.success.a - 0.6).abs() < 1e-6);
@@ -523,8 +527,8 @@ mod tests {
   #[test]
   fn text_lightness_is_inverse_of_bg_lightness() {
     let tokens = ThemeTokens::default();
-    let light_colors = ThemeColors::from_tokens(tokens, false);
-    let dark_colors = ThemeColors::from_tokens(tokens, true);
+    let light_colors = ThemeColors::from_tokens(&tokens, false);
+    let dark_colors = ThemeColors::from_tokens(&tokens, true);
 
     assert!((light_colors.foreground.l - (1.0 - tokens.light_bg_lightness)).abs() < 0.05);
     assert!((dark_colors.foreground.l - (1.0 - tokens.dark_bg_lightness)).abs() < 0.05);
@@ -533,8 +537,8 @@ mod tests {
   #[test]
   fn foreground_uses_light_or_dark_text_candidate() {
     let tokens = ThemeTokens::default();
-    let light_colors = ThemeColors::from_tokens(tokens, false);
-    let dark_colors = ThemeColors::from_tokens(tokens, true);
+    let light_colors = ThemeColors::from_tokens(&tokens, false);
+    let dark_colors = ThemeColors::from_tokens(&tokens, true);
 
     let light_candidate = super::with_lightness(
       super::to_hsla_from_oklch(1.0 - tokens.light_bg_lightness, 0.01, tokens.primary, 1.0),

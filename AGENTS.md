@@ -76,6 +76,7 @@ All Rust code changes **MUST pass the following checks before any commit**. No c
 - **Zero-Warning Enforcement**: All Clippy warnings are treated as errors (`-D warnings`). You **MUST fix every Clippy lint** before committing code. This includes pedantic and nursery lints where enabled in the workspace configuration.
 - **Unsafe Code Restrictions**: `unsafe` Rust is strictly forbidden unless explicitly requested by the user. Any approved `unsafe` code must include comprehensive safety comments documenting all invariants.
 - **Error Handling**: Never use `.unwrap()` or `.expect()` in production code. Use proper error propagation with `thiserror` (for libraries) or `anyhow` (for applications), with meaningful context for all error paths.
+- **Copy Discipline**: derive `Copy` only for types sized at or below 64 bits (scalars, small enums, gpui's own primitives). Anything larger exposes `Clone` and is duplicated explicitly where a copy is genuinely needed; larger records travel by reference (e.g. borrow `Theme` through `ActiveTheme`).
 
 ### 3.3 Testing & Validation
 
@@ -168,3 +169,12 @@ The following actions are **strictly prohibited** unless explicitly approved by 
 - Adding unnecessary dependencies or features beyond the scope of the requested task.
 - Pushing untested workflow changes to the remote repository without local `act` validation.
 - Using generic `find`, `grep`, `cat`, or `ls` commands when the preferred native tools are available.
+
+---
+
+## 8. Design System Norms
+
+- **Single Default Size**: outside rich-text rendering, every component renders at the medium/default size and its text at the default size — no size variants. Deviations are only permitted where the design system explicitly specifies an exception.
+- **rem-Driven Sizing**: `1rem` defaults to `16px`. Every size in the design system is expressed in rem and must follow the window root font-size; hard-coded pixel sizes in components are forbidden.
+- **Default Type Scale**: all component text renders at `1rem` unless the component is an explicitly specified exception.
+- **Reserved Vocabulary**: `dot-number` — a planned numeric-indicator component (compact digit/dot readouts) — is the canonical designated exception to the default size/type scale. until it ships, treat any proposed size or font deviation as a design-spec change requiring the same approval flow as this document.
