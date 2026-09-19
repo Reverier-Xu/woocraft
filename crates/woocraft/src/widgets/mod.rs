@@ -4,6 +4,7 @@ pub mod avatar;
 pub mod badge;
 pub mod button;
 pub mod checkbox;
+pub mod collapsible;
 pub mod divider;
 pub mod icon_label;
 pub mod kbd;

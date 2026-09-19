@@ -40,8 +40,8 @@ pub use assets::{
   list_icons, register_fonts,
 };
 pub use base::{
-  Collapsible, Disableable, FocusableExt, RoleOverride, Selectable, StateStyle, StyledExt,
-  box_shadow, h_flex, v_flex,
+  Disableable, FocusableExt, RoleOverride, Selectable, StateStyle, StyledExt, box_shadow, h_flex,
+  v_flex,
 };
 pub use error::{Error, Result};
 pub use gpui;
@@ -70,6 +70,7 @@ pub use widgets::{
   badge::Badge,
   button::{Button, ButtonVariant, ButtonVariants},
   checkbox::{Checkbox, CheckboxState},
+  collapsible::Collapsible,
   divider::{Divider, DividerStyle},
   icon_label::IconLabel,
   kbd::Kbd,
