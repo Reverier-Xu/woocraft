@@ -66,6 +66,7 @@ pub use tray::{
   Tray, TrayAppContext, TrayClickEvent, TrayEvent, TrayMenuItem, TrayMouseButton, tray_events,
 };
 pub use widgets::{
+  avatar::Avatar,
   badge::Badge,
   button::{Button, ButtonVariant, ButtonVariants},
   checkbox::{Checkbox, CheckboxState},

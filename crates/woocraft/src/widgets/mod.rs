@@ -1,5 +1,6 @@
 //! styled widgets built on the gpui-base behavioral foundations.
 
+pub mod avatar;
 pub mod badge;
 pub mod button;
 pub mod checkbox;
