@@ -1,17 +1,17 @@
-[tech.woooo.woocraft.common]
+[tech.woooo.craft.common]
 loading = "読み込み中..."
 
-[tech.woooo.woocraft.title_bar]
+[tech.woooo.craft.title_bar]
 untitled = "無題"
 
-[tech.woooo.woocraft.list]
+[tech.woooo.craft.list]
 search_placeholder = "検索..."
 
-[tech.woooo.woocraft.pagination]
+[tech.woooo.craft.pagination]
 next     = "次へ"
 previous = "前へ"
 
-[tech.woooo.woocraft.dock]
+[tech.woooo.craft.dock]
 close    = "閉じる"
 collapse = "折りたたむ"
 expand   = "展開"
@@ -19,7 +19,7 @@ unnamed  = "無題"
 zoom_in  = "拡大"
 zoom_out = "縮小"
 
-[tech.woooo.woocraft.editor.context_menu]
+[tech.woooo.craft.editor.context_menu]
 copy              = "コピー"
 cut               = "切り取り"
 go_to_definition  = "定義へ移動"
@@ -27,17 +27,17 @@ paste             = "貼り付け"
 select_all        = "すべて選択"
 show_code_actions = "コードアクションを表示"
 
-[tech.woooo.woocraft.editor.search]
+[tech.woooo.craft.editor.search]
 replace     = "置換"
 replace_all = "すべて置換"
 
-[tech.woooo.woocraft.input.context_menu]
+[tech.woooo.craft.input.context_menu]
 copy       = "コピー"
 cut        = "切り取り"
 paste      = "貼り付け"
 select_all = "すべて選択"
 
-[tech.woooo.woocraft.color_picker]
+[tech.woooo.craft.color_picker]
 alpha           = "不透明度"
 chroma          = "彩度"
 hex_placeholder = "#RRGGBBAA"
@@ -45,7 +45,7 @@ hue             = "色相"
 hue_unit        = "度"
 lightness       = "明度"
 
-[tech.woooo.woocraft.calendar.week]
+[tech.woooo.craft.calendar.week]
 friday    = "金"
 monday    = "月"
 saturday  = "土"
@@ -54,7 +54,7 @@ thursday  = "木"
 tuesday   = "火"
 wednesday = "水"
 
-[tech.woooo.woocraft.calendar.month]
+[tech.woooo.craft.calendar.month]
 april     = "4月"
 august    = "8月"
 december  = "12月"
@@ -68,13 +68,13 @@ november  = "11月"
 october   = "10月"
 september = "9月"
 
-[tech.woooo.woocraft.date_picker]
+[tech.woooo.craft.date_picker]
 placeholder = "日付を選択"
 
-[tech.woooo.woocraft.i18n]
+[tech.woooo.craft.i18n]
 name = "日本語"
 
-[tech.woooo.woocraft.menu]
+[tech.woooo.craft.menu]
 about            = "バージョン情報"
 close_file       = "ファイルを閉じる"
 copy             = "コピー"

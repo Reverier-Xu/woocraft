@@ -17,7 +17,7 @@ use rust_embed::RustEmbed;
 
 use crate::error::{Error, Result};
 
-pub const BUILTIN_ASSET_PREFIX: &str = "tech.woooo.woocraft/assets";
+pub const BUILTIN_ASSET_PREFIX: &str = "tech.woooo.craft/assets";
 
 const FONT_ASSET_PREFIX: &str = "fonts/";
 const ZSTD_EXTENSION: &str = ".zst";

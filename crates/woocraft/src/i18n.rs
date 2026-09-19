@@ -15,7 +15,7 @@ use std::{
 };
 
 pub const SUPPORTED_LOCALES: [&str; 4] = ["zh-hans", "zh-hant", "en-us", "ja-jp"];
-pub const WOOCRAFT_I18N_DOMAIN: &str = "tech.woooo.woocraft";
+pub const WOOCRAFT_I18N_DOMAIN: &str = "tech.woooo.craft";
 
 type LocaleTranslations = HashMap<String, String>;
 type CustomLocaleStore = HashMap<String, LocaleTranslations>;

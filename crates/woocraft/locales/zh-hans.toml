@@ -1,17 +1,17 @@
-[tech.woooo.woocraft.common]
+[tech.woooo.craft.common]
 loading = "加载中..."
 
-[tech.woooo.woocraft.title_bar]
+[tech.woooo.craft.title_bar]
 untitled = "未命名"
 
-[tech.woooo.woocraft.list]
+[tech.woooo.craft.list]
 search_placeholder = "搜索..."
 
-[tech.woooo.woocraft.pagination]
+[tech.woooo.craft.pagination]
 next     = "下一页"
 previous = "上一页"
 
-[tech.woooo.woocraft.dock]
+[tech.woooo.craft.dock]
 close    = "关闭"
 collapse = "折叠"
 expand   = "展开"
@@ -19,7 +19,7 @@ unnamed  = "未命名"
 zoom_in  = "放大"
 zoom_out = "缩小"
 
-[tech.woooo.woocraft.editor.context_menu]
+[tech.woooo.craft.editor.context_menu]
 copy              = "复制"
 cut               = "剪切"
 go_to_definition  = "转到定义"
@@ -27,17 +27,17 @@ paste             = "粘贴"
 select_all        = "全选"
 show_code_actions = "显示代码操作"
 
-[tech.woooo.woocraft.editor.search]
+[tech.woooo.craft.editor.search]
 replace     = "替换"
 replace_all = "全部替换"
 
-[tech.woooo.woocraft.input.context_menu]
+[tech.woooo.craft.input.context_menu]
 copy       = "复制"
 cut        = "剪切"
 paste      = "粘贴"
 select_all = "全选"
 
-[tech.woooo.woocraft.color_picker]
+[tech.woooo.craft.color_picker]
 alpha           = "透明度"
 chroma          = "彩度"
 hex_placeholder = "#RRGGBBAA"
@@ -45,7 +45,7 @@ hue             = "色相"
 hue_unit        = "度"
 lightness       = "明度"
 
-[tech.woooo.woocraft.calendar.week]
+[tech.woooo.craft.calendar.week]
 friday    = "五"
 monday    = "一"
 saturday  = "六"
@@ -54,7 +54,7 @@ thursday  = "四"
 tuesday   = "二"
 wednesday = "三"
 
-[tech.woooo.woocraft.calendar.month]
+[tech.woooo.craft.calendar.month]
 april     = "四月"
 august    = "八月"
 december  = "十二月"
@@ -68,13 +68,13 @@ november  = "十一月"
 october   = "十月"
 september = "九月"
 
-[tech.woooo.woocraft.date_picker]
+[tech.woooo.craft.date_picker]
 placeholder = "选择日期"
 
-[tech.woooo.woocraft.i18n]
+[tech.woooo.craft.i18n]
 name = "简体中文"
 
-[tech.woooo.woocraft.menu]
+[tech.woooo.craft.menu]
 about            = "关于"
 close_file       = "关闭文件"
 copy             = "复制"
