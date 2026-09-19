@@ -9,8 +9,9 @@
 //! keep controlled state without naming the base crate.
 
 use gpui::{
-  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, IntoElement, ParentElement,
-  Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
+  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
+  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder as _, px, rems,
 };
 pub use gpui_base::CheckboxState;
@@ -185,6 +186,12 @@ impl RenderOnce for Checkbox {
     let glyph_state = if marked { state } else { *glyph_slot.read(cx) };
     glyph_slot.update(cx, |slot, _| *slot = state);
 
+    // hover is tracked through a keyed slot so the box morph animates
+    // through the same motion transition as the mark; a hover style hook
+    // could only snap.
+    let hovered_slot = window.use_keyed_state((self.id.clone(), "hover"), cx, |_, _| false);
+    let hovered = !disabled && *hovered_slot.read(cx);
+
     let theme = cx.theme();
     let (background, border_color, muted, muted_foreground, primary, primary_foreground) = (
       theme.background,
@@ -212,9 +219,21 @@ impl RenderOnce for Checkbox {
     let mark_size = transition(
       (self.id.clone(), "mark"),
       if marked {
-        rems(0.875).to_pixels(window.rem_size())
+        // a quarter-rem inset on each side keeps the mark off the frame.
+        rems(0.5).to_pixels(window.rem_size())
       } else {
         px(0.)
+      },
+      Transition::new(duration::CONTROL),
+      window,
+      cx,
+    );
+    let box_size = transition(
+      (self.id.clone(), "box"),
+      if hovered {
+        rems(1.1).to_pixels(window.rem_size())
+      } else {
+        rems(1.).to_pixels(window.rem_size())
       },
       Transition::new(duration::CONTROL),
       window,
@@ -249,19 +268,34 @@ impl RenderOnce for Checkbox {
       .when(disabled, |this| {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
-      .child(
+      .child({
+        // fixed-size slot keeps the row layout stable while the box grows
+        // under hover.
+        let mut box_el = div()
+          .id((self.id.clone(), "box"))
+          .flex()
+          .items_center()
+          .justify_center()
+          .size(box_size)
+          .rounded(radius)
+          .border(border_width)
+          .border_color(border_color)
+          .bg(box_bg)
+          .child(mark_icon.size(mark_size).text_color(mark_color));
+        if !disabled {
+          let hovered_slot = hovered_slot.clone();
+          box_el = box_el.on_hover(move |entered: &bool, _, cx| {
+            hovered_slot.update(cx, |slot, _| *slot = *entered);
+          });
+        }
         div()
           .flex_none()
           .size(rems(1.))
           .flex()
           .items_center()
           .justify_center()
-          .rounded(radius)
-          .border(border_width)
-          .border_color(border_color)
-          .bg(box_bg)
-          .child(mark_icon.size(mark_size).text_color(mark_color)),
-      )
+          .child(box_el)
+      })
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);
 
