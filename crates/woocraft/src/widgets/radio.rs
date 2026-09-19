@@ -3,16 +3,18 @@
 //! this is a styled wrapper over [`gpui_base::Radio`], which owns every
 //! behavioral concern — activation, focus, keyboard support, and
 //! accessibility. the wrapper adds the design-system vocabulary: a `1rem`
-//! rounded-rectangle indicator that fills with muted while unchecked and
-//! carries a primary dot scaled in over the control duration while
-//! checked, an optional text label, and theme-driven state colors. pair
-//! it with [`RadioGroup`](crate::RadioGroup) and report positions through
+//! rounded-rectangle indicator mirroring the checkbox states — background
+//! fill while available, muted when disabled — with a square primary
+//! accent that scales in over the control duration while checked. the
+//! indicator morphs to 1.1x under hover. pair it with
+//! [`RadioGroup`](crate::RadioGroup) and report positions through
 //! [`Radio::set_position`] so assistive technology can announce
 //! "option 2 of 5".
 
 use gpui::{
-  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, IntoElement, ParentElement,
-  Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
+  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
+  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::{
@@ -152,6 +154,12 @@ impl RenderOnce for Radio {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
     let disabled = self.disabled;
+    // hover is tracked through a keyed slot so the ring morph animates
+    // through the same motion transition as the dot; a hover style hook
+    // could only snap.
+    let hovered_slot = window.use_keyed_state((self.id.clone(), "hover"), cx, |_, _| false);
+    let hovered = !disabled && *hovered_slot.read(cx);
+
     let theme = cx.theme();
     let (accent, border, muted, background, foreground, muted_foreground) = (
       if disabled {
@@ -183,6 +191,17 @@ impl RenderOnce for Radio {
       window,
       cx,
     );
+    let ring_size = transition(
+      (self.id.clone(), "ring"),
+      if hovered {
+        rems(1.1).to_pixels(window.rem_size())
+      } else {
+        rems(1.).to_pixels(window.rem_size())
+      },
+      Transition::new(duration::CONTROL),
+      window,
+      cx,
+    );
 
     let mut base = self.base;
 
@@ -201,19 +220,35 @@ impl RenderOnce for Radio {
       .when(disabled, |this| {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
-      .child(
+      .child({
+        // fixed-size slot keeps the row layout stable while the ring grows
+        // under hover; the inner square is inset a quarter rem, concentric
+        // with the ring radius.
+        let mut ring_el = div()
+          .id((self.id.clone(), "ring"))
+          .flex()
+          .items_center()
+          .justify_center()
+          .size(ring_size)
+          .rounded(radius)
+          .border(border_width)
+          .border_color(indicator_border)
+          .bg(if disabled { muted } else { background })
+          .child(div().size(dot_size).bg(accent));
+        if !disabled {
+          let hovered_slot = hovered_slot.clone();
+          ring_el = ring_el.on_hover(move |entered: &bool, _, cx| {
+            hovered_slot.update(cx, |slot, _| *slot = *entered);
+          });
+        }
         div()
           .flex_none()
           .size(rems(1.))
           .flex()
           .items_center()
           .justify_center()
-          .rounded(radius)
-          .border(border_width)
-          .border_color(indicator_border)
-          .bg(if checked { background } else { muted })
-          .child(div().size(dot_size).rounded_full().bg(accent)),
-      )
+          .child(ring_el)
+      })
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);
 
