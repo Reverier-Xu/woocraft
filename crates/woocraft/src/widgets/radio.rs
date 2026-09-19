@@ -15,7 +15,7 @@ use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
   IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, px, rems,
+  prelude::FluentBuilder as _, rems,
 };
 use gpui_base::{
   Radio as BaseRadio,
@@ -161,36 +161,23 @@ impl RenderOnce for Radio {
     let hovered = !disabled && *hovered_slot.read(cx);
 
     let theme = cx.theme();
-    let (accent, border, muted, background, foreground, muted_foreground) = (
-      if disabled {
-        with_alpha(theme.primary, opacity::DISABLED)
-      } else {
-        theme.primary
-      },
+    let (border, muted, background, foreground, muted_foreground, primary) = (
       theme.border,
       theme.muted,
       theme.background,
       theme.foreground,
       theme.muted_foreground,
+      theme.primary,
     );
     let (border_width, radius, font_size) = (theme.border_width, theme.radius, theme.font_size);
     let font_family = theme.font_family.clone();
 
-    // the dot scales in and out over the control duration. colors snap
-    // instead of easing: hue interpolation across near-neutral theme colors
-    // reads as a flash.
-    let indicator_border = if checked || disabled { accent } else { border };
-    let dot_size = transition(
-      (self.id.clone(), "dot"),
-      if checked {
-        rems(0.5).to_pixels(window.rem_size())
-      } else {
-        px(0.)
-      },
-      Transition::new(duration::CONTROL),
-      window,
-      cx,
-    );
+    // the inner square fills the content area behind a background-colored
+    // ring that carves a one-pixel gap — filling instead of computing an
+    // inset size keeps the ring uniform under fractional device scales. it
+    // shows only while checked, and keeps a whisper of primary when
+    // disabled so a checked state stays readable — the radio has no glyph
+    // to carry it.
     let ring_size = transition(
       (self.id.clone(), "ring"),
       if hovered {
@@ -202,6 +189,18 @@ impl RenderOnce for Radio {
       window,
       cx,
     );
+    let ring_border = if disabled {
+      muted
+    } else if checked {
+      primary
+    } else {
+      border
+    };
+    let dot_bg = if disabled {
+      with_alpha(primary, opacity::DISABLED)
+    } else {
+      primary
+    };
 
     let mut base = self.base;
 
@@ -222,8 +221,7 @@ impl RenderOnce for Radio {
       })
       .child({
         // fixed-size slot keeps the row layout stable while the ring grows
-        // under hover; the inner square is inset a quarter rem, concentric
-        // with the ring radius.
+        // under hover.
         let mut ring_el = div()
           .id((self.id.clone(), "ring"))
           .flex()
@@ -232,9 +230,18 @@ impl RenderOnce for Radio {
           .size(ring_size)
           .rounded(radius)
           .border(border_width)
-          .border_color(indicator_border)
+          .border_color(ring_border)
           .bg(if disabled { muted } else { background })
-          .child(div().size(dot_size).bg(accent));
+          .when(checked, |this| {
+            this.child(
+              div()
+                .size_full()
+                .rounded(radius)
+                .border(border_width * 2.)
+                .border_color(background)
+                .bg(dot_bg),
+            )
+          });
         if !disabled {
           let hovered_slot = hovered_slot.clone();
           ring_el = ring_el.on_hover(move |entered: &bool, _, cx| {

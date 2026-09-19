@@ -3,16 +3,17 @@
 //! this is a styled wrapper over [`gpui_base::Checkbox`], which owns every
 //! behavioral concern — toggle, focus, keyboard activation, and
 //! accessibility. the wrapper adds the design-system vocabulary: a `1rem`
-//! indicator box with check and indeterminate marks, an optional text
-//! label that joins the hit target, and theme-driven state colors. the
-//! [`CheckboxState`] semantic value is re-exported so applications can
-//! keep controlled state without naming the base crate.
+//! rounded frame whose checked state fills with an inset primary square
+//! behind a check mark (a subtract mark while indeterminate), an optional
+//! text label that joins the hit target, and theme-driven state colors.
+//! the [`CheckboxState`] semantic value is re-exported so applications
+//! can keep controlled state without naming the base crate.
 
 use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
   IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, px, rems,
+  prelude::FluentBuilder as _, rems,
 };
 pub use gpui_base::CheckboxState;
 use gpui_base::{
@@ -193,63 +194,56 @@ impl RenderOnce for Checkbox {
     let hovered = !disabled && *hovered_slot.read(cx);
 
     let theme = cx.theme();
-    let (background, border_color, muted, muted_foreground, primary, primary_foreground) = (
+    let (background, border_color, muted, muted_foreground, primary) = (
       theme.background,
       theme.border,
       theme.muted,
       theme.muted_foreground,
       theme.primary,
-      theme.primary_foreground,
     );
     let border_width = theme.border_width;
     let (radius, font_size) = (theme.radius, theme.font_size);
     let font_family = theme.font_family.clone();
     let foreground = theme.foreground;
 
-    // the mark scales in and out over the control duration. colors snap
-    // instead of easing: hue interpolation across near-neutral theme colors
-    // reads as a flash.
-    let box_bg = if disabled {
-      muted
-    } else if marked {
-      primary
-    } else {
-      background
-    };
-    let mark_size = transition(
-      (self.id.clone(), "mark"),
-      if marked {
-        // a quarter-rem inset on each side keeps the mark off the frame.
-        rems(0.5).to_pixels(window.rem_size())
-      } else {
-        px(0.)
-      },
-      Transition::new(duration::CONTROL),
-      window,
-      cx,
-    );
-    let box_size = transition(
+    // the check state paints as a primary panel inset a quarter rem inside
+    // the frame — concentric with the frame radius — and the mark rides on
+    // the hover growth runs through the control duration. colors snap
+    // instead of easing: hue interpolation across near-neutral theme
+    // colors reads as a flash.
+    let rem = window.rem_size();
+    let frame_size = transition(
       (self.id.clone(), "box"),
       if hovered {
-        rems(1.1).to_pixels(window.rem_size())
+        rems(1.1).to_pixels(rem)
       } else {
-        rems(1.).to_pixels(window.rem_size())
+        rems(1.).to_pixels(rem)
       },
       Transition::new(duration::CONTROL),
       window,
       cx,
     );
 
+    // the square fills the whole content area behind the frame border; the
+    // padding ring is simulated by the square's own background-colored
+    // border, and the mark is carved out of it in the same color. filling
+    // instead of computing an inset size keeps the ring uniform even under
+    // fractional device-pixel scales.
     let mark_icon = match glyph_state {
       CheckboxState::Checked => Icon::new(IconName::Checkmark),
       CheckboxState::Indeterminate => Icon::new(IconName::Subtract),
       CheckboxState::Unchecked => Icon::empty(),
     };
-    let mark_color = if disabled {
-      muted_foreground
+    let mark_color = background;
+    let frame_bg = if disabled { muted } else { background };
+    let frame_border = if disabled {
+      muted
+    } else if marked {
+      primary
     } else {
-      primary_foreground
+      border_color
     };
+    let square_bg = if disabled { muted } else { primary };
 
     let mut base = self.base;
 
@@ -269,22 +263,40 @@ impl RenderOnce for Checkbox {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
       .child({
-        // fixed-size slot keeps the row layout stable while the box grows
-        // under hover.
-        let mut box_el = div()
+        // fixed-size slot keeps the row layout stable while the frame grows
+        // under hover. the square scales in as a centered flex child and
+        // carries the mark as its own centered child — the mark renders at
+        // the surrounding text size, overflowing the square without ever
+        // leaving its center, so no absolute positioning is involved.
+        let mut frame = div()
           .id((self.id.clone(), "box"))
           .flex()
           .items_center()
           .justify_center()
-          .size(box_size)
+          .size(frame_size)
           .rounded(radius)
           .border(border_width)
-          .border_color(border_color)
-          .bg(box_bg)
-          .child(mark_icon.size(mark_size).text_color(mark_color));
+          .border_color(frame_border)
+          .bg(frame_bg)
+          .when(marked, |this| {
+            this.child(
+              div()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(radius)
+                // the background-colored ring carves the gap between the
+                // square and the frame border.
+                .border(border_width * 2.)
+                .border_color(mark_color)
+                .bg(square_bg)
+                .child(mark_icon.text_color(mark_color)),
+            )
+          });
         if !disabled {
           let hovered_slot = hovered_slot.clone();
-          box_el = box_el.on_hover(move |entered: &bool, _, cx| {
+          frame = frame.on_hover(move |entered: &bool, _, cx| {
             hovered_slot.update(cx, |slot, _| *slot = *entered);
           });
         }
@@ -294,7 +306,7 @@ impl RenderOnce for Checkbox {
           .flex()
           .items_center()
           .justify_center()
-          .child(box_el)
+          .child(frame)
       })
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);
