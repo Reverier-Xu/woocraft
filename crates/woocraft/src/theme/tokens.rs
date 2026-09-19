@@ -19,6 +19,7 @@ pub mod opacity {
 
   pub const MUTED_FOREGROUND: f32 = 0.75;
   pub const BORDER: f32 = 0.1;
+  pub const MUTED: f32 = 0.2;
 }
 
 pub mod duration {

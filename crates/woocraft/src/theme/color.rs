@@ -4,6 +4,7 @@ use gpui::{Hsla, Rgba};
 use palette::{FromColor, OklabHue, Oklch, Srgb};
 use serde::{Deserialize, Serialize};
 
+use super::tokens::opacity;
 use crate::error::Result;
 
 /// derived, mode-resolved colors of the design system.
@@ -295,6 +296,9 @@ fn pick_readable_text(background: Hsla, light_text: Hsla, dark_text: Hsla) -> Hs
   }
 }
 
+/// shared cyan hue behind the `cyan` palette entry and the secondary surface.
+const CYAN_HUE: f32 = 190.0;
+
 impl ThemeColors {
   pub fn from_tokens(tokens: &ThemeTokens, is_dark: bool) -> Self {
     let bg_lightness = if is_dark {
@@ -338,9 +342,9 @@ impl ThemeColors {
 
     let primary = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.primary, 1.0);
     let primary_foreground = pick_readable_text(primary, light_theme_text, dark_theme_text);
-    // muted is a pure grayscale step — the same character as border, no
-    // theme tint (hue is meaningless at zero chroma).
-    let muted = to_hsla_from_oklch(muted_lightness, 0.0, 0.0, 1.0);
+    // muted deepens the border wash: a neutral step inherited from the color
+    // family — pure gray reads yellow against the blue-cast scheme.
+    let muted = with_alpha(foreground, opacity::MUTED);
     let muted_foreground = with_alpha(foreground, 0.75);
 
     let border = with_alpha(foreground, 0.1);
@@ -353,7 +357,7 @@ impl ThemeColors {
     let green = success;
     let blue = ring;
     let yellow = warning;
-    let cyan = to_hsla_from_oklch(tokens.lightness, tokens.chroma, 190.0, 1.0);
+    let cyan = to_hsla_from_oklch(tokens.lightness, tokens.chroma, CYAN_HUE, 1.0);
     let scrollbar = with_alpha(background, 0.4);
     let scrollbar_thumb = with_alpha(foreground, 0.4);
     let scrollbar_thumb_hover = with_alpha(foreground, 0.6);
@@ -366,8 +370,9 @@ impl ThemeColors {
     let editor_line_number = with_alpha(foreground, if is_dark { 0.45 } else { 0.4 });
     let editor_active_line_number = foreground;
     let editor_invisible = with_alpha(foreground, 0.4);
-    let secondary = muted;
-    let secondary_hover = with_alpha(muted, 0.9);
+    // secondary is a faded cyan — a cool, clean counterpoint surface.
+    let secondary = to_hsla_from_oklch(muted_lightness, 0.04, CYAN_HUE, 1.0);
+    let secondary_hover = with_alpha(secondary, 0.9);
     let secondary_foreground = foreground;
     let tab_bar = card;
     let tab_bar_segmented = muted;
