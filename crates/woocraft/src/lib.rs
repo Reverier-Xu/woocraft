@@ -66,7 +66,14 @@ pub use tray::{
   Tray, TrayAppContext, TrayClickEvent, TrayEvent, TrayMenuItem, TrayMouseButton, tray_events,
 };
 pub use widgets::{
+  badge::Badge,
   button::{Button, ButtonVariant, ButtonVariants},
+  divider::{Divider, DividerStyle},
+  icon_label::IconLabel,
+  kbd::Kbd,
+  label::{HighlightsMatch, Label},
+  spinner::Spinner,
+  tag::{Tag, TagVariant},
   title_bar::TitleBar,
   window_border::{WindowBorder, window_paddings},
 };

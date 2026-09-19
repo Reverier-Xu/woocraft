@@ -8,12 +8,13 @@
 //! ```
 
 use gpui::{
-  App, AppContext, Bounds, Context, IntoElement, ParentElement, Point, Render, SharedString,
-  Styled, Window, WindowBounds, WindowOptions, div, px, rems, size,
+  App, AppContext, Bounds, Context, InteractiveElement, IntoElement, ParentElement, Point, Render,
+  SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds, WindowOptions, div,
+  prelude::FluentBuilder as _, px, rems, size,
 };
 use woocraft::{
-  ActiveTheme, Assets, Badge, Button, ButtonVariants, Divider, Icon, IconLabel, IconName, Kbd,
-  Label, Spinner, Tag, Theme, ThemeMode, application, init, logging,
+  ActiveTheme, Assets, Badge, Divider, Icon, IconLabel, IconName, Kbd, Label, Spinner, Tag, Theme,
+  ThemeMode, application, init, logging,
 };
 
 fn main() {
@@ -63,12 +64,12 @@ impl Render for PrimitivesGallery {
       .gap_6()
       .p_6()
       .child(header(theme))
-      .child(labels())
-      .child(dividers(theme))
-      .child(tags(theme))
-      .child(kbds())
-      .child(badges(theme))
-      .child(spinners_and_rows())
+      .child(section("labels", theme, labels()))
+      .child(section("dividers", theme, dividers(theme)))
+      .child(section("tags", theme, tags(theme)))
+      .child(section("keyboard", theme, kbds()))
+      .child(section("badges", theme, badges(theme)))
+      .child(section("spinners & rows", theme, spinners_and_rows()))
   }
 }
 
@@ -198,7 +199,7 @@ fn kbds() -> impl IntoElement {
     .items_center()
     .gap_2()
     .child(Kbd::new(ctrl_delete))
-    .child(Kbd::new(enter))
+    .child(Kbd::new(enter.clone()))
     .child(Kbd::new(cmd_shift_p).outline())
     .child(Kbd::new(enter).appearance(false))
 }
@@ -213,14 +214,14 @@ fn badges(theme: &Theme) -> impl IntoElement {
       div()
         .relative()
         .p_2()
-        .child(Icon::new(IconName::Bell))
+        .child(Icon::new(IconName::Alert))
         .child(Badge::new().count(5)),
     )
     .child(
       div()
         .relative()
         .p_2()
-        .child(Icon::new(IconName::Bell))
+        .child(Icon::new(IconName::Alert))
         .child(Badge::new().count(150).max(99)),
     )
     .child(
@@ -234,7 +235,7 @@ fn badges(theme: &Theme) -> impl IntoElement {
       div()
         .relative()
         .p_2()
-        .child(Icon::new(IconName::Message))
+        .child(Icon::new(IconName::Chat))
         .child(
           Badge::new()
             .icon(Icon::new(IconName::Pin))

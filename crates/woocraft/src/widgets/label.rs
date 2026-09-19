@@ -221,18 +221,18 @@ mod tests {
 
   #[test]
   fn full_highlights_match_case_insensitively() {
-    let label = Label::new("The Quick Brown Fox").highlights(HighlightsMatch::Full("brown"));
+    let label = Label::new("The Quick Brown Fox").highlights(HighlightsMatch::Full("brown".into()));
     let ranges = label.highlight_ranges();
 
-    assert_eq!(ranges, vec![4..9]);
+    assert_eq!(ranges, vec![10..15]);
   }
 
   #[test]
   fn prefix_highlights_match_only_at_the_start() {
-    let label = Label::new("woocraft").highlights(HighlightsMatch::Prefix("woo"));
+    let label = Label::new("woocraft").highlights(HighlightsMatch::Prefix("woo".into()));
     assert_eq!(label.highlight_ranges(), vec![0..3]);
 
-    let label = Label::new("woocraft").highlights(HighlightsMatch::Prefix("craft"));
+    let label = Label::new("woocraft").highlights(HighlightsMatch::Prefix("craft".into()));
     assert!(label.highlight_ranges().is_empty());
   }
 }
