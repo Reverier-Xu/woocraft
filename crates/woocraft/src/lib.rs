@@ -74,6 +74,7 @@ pub use widgets::{
   icon_label::IconLabel,
   kbd::Kbd,
   label::{HighlightsMatch, Label},
+  progress::Progress,
   radio::Radio,
   radio_group::RadioGroup,
   spinner::Spinner,
