@@ -140,8 +140,12 @@ impl RenderOnce for Avatar {
       None => theme.primary,
     });
 
+    let border_width = theme.border_width;
     let mut base = self.base;
 
+    // the accent wash covers the whole circle and the ring sits on top;
+    // children are inset by the border width so a full-bleed image never
+    // paints over the ring.
     base = base
       .size(rems(2.))
       .flex_none()
@@ -150,8 +154,13 @@ impl RenderOnce for Avatar {
       .justify_center()
       .overflow_hidden()
       .rounded_full()
+      .p(border_width)
+      .border(border_width)
+      .border_color(theme.border)
+      .bg(with_alpha(accent, opacity::MUTED))
       .text_size(theme.font_size)
-      .font_family(theme.font_family.clone());
+      .font_family(theme.font_family.clone())
+      .text_color(accent);
 
     base = match self.src {
       Some(src) => base.image(AvatarImage::new(src).size_full()),
@@ -166,12 +175,7 @@ impl RenderOnce for Avatar {
             .unwrap_or_else(|| Icon::new(IconName::Person))
             .into_any_element(),
         };
-        base.fallback(
-          AvatarFallback::new()
-            .bg(with_alpha(accent, opacity::MUTED))
-            .text_color(accent)
-            .child(content),
-        )
+        base.fallback(AvatarFallback::new().child(content))
       }
     };
 
