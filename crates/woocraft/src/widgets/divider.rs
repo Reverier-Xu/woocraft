@@ -6,7 +6,7 @@
 
 use gpui::{
   App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
-  StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
+  StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{ActiveTheme, base::StyledExt};
@@ -37,9 +37,12 @@ pub struct Divider {
 }
 
 impl Divider {
-  fn render_base(axis: Axis) -> Div {
+  fn render_base(axis: Axis, labeled: bool) -> Div {
     div().map(|this| match axis {
       Axis::Vertical => this.w(px(1.0)).h_full(),
+      // labeled horizontal dividers size themselves to the label chip so the
+      // absolutely-positioned line behind it never overlaps neighbours.
+      Axis::Horizontal if labeled => this.w_full(),
       Axis::Horizontal => this.h(px(1.0)).w_full(),
     })
   }
@@ -47,7 +50,7 @@ impl Divider {
   /// Creates a new vertical divider with default (solid) style.
   pub fn vertical() -> Self {
     Self {
-      base: Self::render_base(Axis::Vertical),
+      base: Self::render_base(Axis::Vertical, false),
       axis: Axis::Vertical,
       label: None,
       color: None,
@@ -59,7 +62,7 @@ impl Divider {
   /// Creates a new horizontal divider with default (solid) style.
   pub fn horizontal() -> Self {
     Self {
-      base: Self::render_base(Axis::Horizontal),
+      base: Self::render_base(Axis::Horizontal, false),
       axis: Axis::Horizontal,
       label: None,
       color: None,
@@ -140,25 +143,41 @@ impl Styled for Divider {
 impl RenderOnce for Divider {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let color = self.color.unwrap_or(cx.theme().border);
+    let labeled = self.label.clone().filter(|_| self.axis == Axis::Horizontal);
 
-    self
-      .base
-      .flex_shrink_0()
-      .refine_style(&self.style)
-      .child(match self.line_style {
-        DividerStyle::Solid => Self::render_solid(color).into_any_element(),
-        DividerStyle::Dashed => Self::render_dashed(self.axis, color).into_any_element(),
-      })
-      .when_some(self.label, |this, label| {
-        this.child(
-          div()
-            .px_2()
-            .py_1()
-            .mx_auto()
-            .bg(cx.theme().background)
-            .text_color(cx.theme().muted_foreground)
-            .child(label),
-        )
-      })
+    let mut base = match labeled {
+      Some(label) => {
+        // the line runs behind the label chip; the chip's background masks it
+        div()
+          .w_full()
+          .flex()
+          .items_center()
+          .justify_center()
+          .child(
+            div()
+              .absolute()
+              .left_0()
+              .right_0()
+              .top(relative(0.5))
+              .h(px(1.0))
+              .bg(color),
+          )
+          .child(
+            div()
+              .px_2()
+              .bg(cx.theme().background)
+              .text_color(cx.theme().muted_foreground)
+              .child(label),
+          )
+      }
+      None => Self::render_base(self.axis, false)
+        .flex_shrink_0()
+        .child(match self.line_style {
+          DividerStyle::Solid => Self::render_solid(color).into_any_element(),
+          DividerStyle::Dashed => Self::render_dashed(self.axis, color).into_any_element(),
+        }),
+    };
+
+    base.refine_style(&self.style)
   }
 }

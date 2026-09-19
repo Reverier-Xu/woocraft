@@ -123,14 +123,11 @@ impl RenderOnce for Badge {
 
     let overlay = match self.variant {
       BadgeVariant::Dot => h_flex()
-        .absolute()
         .justify_center()
         .items_center()
         .rounded_full()
         .bg(badge_color)
         .text_color(text_color)
-        .top_0()
-        .right_0()
         .size(rems(0.625))
         .into_any_element(),
       BadgeVariant::Number => {
@@ -141,29 +138,24 @@ impl RenderOnce for Badge {
         };
 
         h_flex()
-          .absolute()
           .justify_center()
           .items_center()
           .rounded_full()
           .bg(badge_color)
           .text_color(text_color)
-          .top(-rems(0.3125))
-          .right(-rems(0.375))
+          .h(rems(1.))
+          .min_w(rems(1.))
           .px(rems(0.25))
-          .min_w(rems(1.25))
-          .line_height(rems(0.75))
+          .line_height(rems(1.))
           .child(count)
           .into_any_element()
       }
       BadgeVariant::Icon(icon) => h_flex()
-        .absolute()
         .justify_center()
         .items_center()
         .rounded_full()
         .bg(badge_color)
         .text_color(text_color)
-        .right_0()
-        .bottom_0()
         .size(rems(1.25))
         .border_1()
         .border_color(cx.theme().background)
@@ -171,10 +163,21 @@ impl RenderOnce for Badge {
         .into_any_element(),
     };
 
+    // the badge is centered on the host's top-right corner (bottom-right for
+    // icon mode): its center then sits on the 45° diagonal from the host
+    // center, regardless of host or badge size. the anchor is a zero-size
+    // absolutely-positioned flex box, so the centering needs no per-variant
+    // pixel math.
     div()
       .relative()
       .refine_style(&self.style)
       .children(self.children)
-      .when(visible, |this| this.child(overlay))
+      .when(visible, |this| {
+        let anchor = match self.variant {
+          BadgeVariant::Icon(_) => div().absolute().bottom_0().right_0(),
+          _ => div().absolute().top_0().right_0(),
+        };
+        this.child(anchor.flex().items_center().justify_center().child(overlay))
+      })
   }
 }
