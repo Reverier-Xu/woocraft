@@ -294,9 +294,7 @@ impl RenderOnce for TitleBar {
       .flex_row()
       .items_center()
       .justify_between()
-      .h(rems(2.))
-      .px(rems(0.25))
-      .border_color(cx.theme().border)
+      .p(rems(0.25))
       .bg(cx.theme().card)
       .font_family(cx.theme().font_family.clone());
 
