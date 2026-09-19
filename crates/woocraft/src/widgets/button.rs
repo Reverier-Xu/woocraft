@@ -321,10 +321,15 @@ fn variant_colors(variant: ButtonVariant, outline: bool, theme: &Theme) -> Varia
       ButtonVariant::Default | ButtonVariant::Flat | ButtonVariant::Link
     )
   {
-    colors.bg = with_alpha(colors.fg, 0.0);
-    colors.border = Some(colors.fg);
-    colors.hover_bg = with_alpha(colors.fg, opacity::transparent::HOVER);
-    colors.active_bg = with_alpha(colors.fg, opacity::transparent::ACTIVE);
+    // outlined colored buttons read as accent-colored text and border on the
+    // page background — never on the solid variant foreground, which is
+    // tuned against the solid fill and turns unreadable in dark mode.
+    let accent = colors.bg;
+    colors.bg = with_alpha(accent, 0.0);
+    colors.fg = accent;
+    colors.border = Some(accent);
+    colors.hover_bg = with_alpha(accent, opacity::transparent::HOVER);
+    colors.active_bg = with_alpha(accent, opacity::transparent::ACTIVE);
   }
 
   colors
