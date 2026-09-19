@@ -149,19 +149,16 @@ impl RenderOnce for Toggle {
 
     // horizontal and vertical padding are synced at 0.5rem minus the always
     // present border so the control stays 2rem tall; the transparent border
-    // gains the ring color when focused without shifting geometry.
+    // gains the ring color when focused without shifting geometry. the
+    // pressed wash is the foreground overlay one step heavier than hover.
     let border_width = theme.border_width;
     let pad = rems(0.5).to_pixels(window.rem_size()) - border_width;
     let hover_bg = with_alpha(theme.foreground, opacity::transparent::HOVER);
     let active_bg = with_alpha(theme.foreground, opacity::transparent::ACTIVE);
+    let pressed_bg = with_alpha(theme.foreground, opacity::transparent::ACTIVE);
 
-    let (accent, accent_foreground, foreground, muted, muted_foreground) = (
-      theme.accent,
-      theme.accent_foreground,
-      theme.foreground,
-      theme.muted,
-      theme.muted_foreground,
-    );
+    let (foreground, muted, muted_foreground) =
+      (theme.foreground, theme.muted, theme.muted_foreground);
     let radius = theme.radius;
     let font_size = theme.font_size;
     let mut base = self.base;
@@ -180,17 +177,18 @@ impl RenderOnce for Toggle {
       .text_size(font_size)
       .font_family(theme.font_family.clone())
       .text_color(foreground)
-      .when(!pressed && !disabled, |this| {
-        this
-          .cursor_pointer()
-          .hover(move |s| s.bg(hover_bg))
-          .active(move |s| s.bg(active_bg))
+      .when(!disabled, |this| {
+        this.cursor_pointer().when(!pressed, |this| {
+          this
+            .hover(move |s| s.bg(hover_bg))
+            .active(move |s| s.bg(active_bg))
+        })
       })
       .when(disabled, |this| {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
       .styles(move |s| {
-        s.pressed(|st| st.bg(accent).text_color(accent_foreground))
+        s.pressed(move |st| st.bg(pressed_bg))
           .disabled(|st| st.bg(muted).text_color(muted_foreground))
       });
 
