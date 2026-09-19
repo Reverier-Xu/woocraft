@@ -26,15 +26,43 @@ toml               = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-rust-embed = { workspace = true, optional = true }
-zstd       = { workspace = true, optional = true }
+crossbeam-channel = { workspace = true, optional = true }
+rust-embed        = { workspace = true, optional = true }
+zstd              = { workspace = true, optional = true }
 
 [features]
-default   = ["resources"]
+default = ["resources"]
 resources = ["dep:rust-embed", "dep:zstd"]
+tray = [
+  "dep:crossbeam-channel",
+  "dep:image",
+  "dep:objc2",
+  "dep:objc2-app-kit",
+  "dep:objc2-foundation",
+  "dep:windows",
+  "dep:zbus",
+]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2            = { workspace = true, optional = true }
+objc2-app-kit    = { workspace = true, optional = true }
+objc2-foundation = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+image = { workspace = true, optional = true }
 
 [dev-dependencies]
 gpui-platform = { workspace = true }
+
+[[example]]
+name              = "window_tray"
+required-features = ["tray"]
 
 [lints]
 workspace = true

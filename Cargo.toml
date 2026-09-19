@@ -30,6 +30,7 @@ unsafe_code = "forbid"
 [workspace.dependencies]
 # zed's gpui runtime, republished on crates.io as `gpui-pre`; inherited by
 # members under the historical `gpui` alias so ported code stays unchanged.
+crossbeam-channel = "0.5"
 gpui = { version = "0.3", package = "gpui-pre" }
 gpui-base = "0.6"
 gpui-platform = { version = "0.3", package = "gpui-pre-platform", features = [
@@ -37,6 +38,22 @@ gpui-platform = { version = "0.3", package = "gpui-pre-platform", features = [
   "x11",
   "wayland",
 ] }
+image = { version = "0.25", default-features = false, features = [
+  "ico",
+  "jpeg",
+  "png",
+  "webp",
+] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = [
+  "NSApplication",
+  "NSImage",
+  "NSMenu",
+  "NSMenuItem",
+  "NSStatusBar",
+  "NSStatusItem",
+] }
+objc2-foundation = { version = "0.3", features = ["NSData", "NSString"] }
 palette = "0.7"
 rust-embed = { version = "8.12", features = [
   "interpolate-folder-path",
@@ -49,6 +66,15 @@ thiserror = "2.0"
 toml = "1.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+zbus = { version = "5", features = ["blocking"] }
 zstd = "0.14"
 
 woocraft = { path = "crates/woocraft" }

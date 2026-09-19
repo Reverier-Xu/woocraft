@@ -28,6 +28,9 @@ pub mod logging;
 pub mod theme;
 pub mod widgets;
 
+#[cfg(feature = "tray")]
+pub mod tray;
+
 #[cfg(feature = "resources")]
 pub mod assets;
 
@@ -54,7 +57,15 @@ pub use rust_i18n::{available_locales as available_locales_macro, t, tkv};
 pub use theme::{
   ActiveTheme, ScrollbarShow, SyntaxTokenHues, Theme, ThemeColors, ThemeMode, ThemeTokens,
 };
-pub use widgets::button::{Button, ButtonVariant, ButtonVariants};
+#[cfg(feature = "tray")]
+pub use tray::{
+  Tray, TrayAppContext, TrayClickEvent, TrayEvent, TrayMenuItem, TrayMouseButton, tray_events,
+};
+pub use widgets::{
+  button::{Button, ButtonVariant, ButtonVariants},
+  title_bar::TitleBar,
+  window_border::{WindowBorder, window_paddings},
+};
 
 pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono";
 
