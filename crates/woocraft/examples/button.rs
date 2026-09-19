@@ -183,10 +183,9 @@ fn header(theme: &Theme, scale: Pixels) -> impl IntoElement {
     .flex_wrap()
     .items_center()
     .gap_3()
-    .child(div().text_lg().child("woocraft button"))
+    .child(div().child("woocraft button"))
     .child(
       div()
-        .text_xs()
         .text_color(theme.muted_foreground)
         .child(SharedString::from(
           format!("{:?}", theme.mode).to_lowercase(),
@@ -199,7 +198,6 @@ fn header(theme: &Theme, scale: Pixels) -> impl IntoElement {
         .gap_2()
         .child(
           div()
-            .text_xs()
             .text_color(theme.muted_foreground)
             .child(SharedString::from(format!("rem {scale}"))),
         )
@@ -218,7 +216,6 @@ fn header(theme: &Theme, scale: Pixels) -> impl IntoElement {
         .border_color(theme.border)
         .px_3()
         .py_1()
-        .text_sm()
         .text_color(theme.foreground)
         .on_click(|_: &ClickEvent, _, cx| Theme::sync_system_appearance(cx))
         .child("sync system"),
@@ -253,7 +250,6 @@ fn mode_button(theme: &Theme, mode: ThemeMode, active: bool) -> impl IntoElement
     })
     .px_3()
     .py_1()
-    .text_sm()
     .on_click(move |_: &ClickEvent, _, cx| Theme::set_mode(mode, cx))
     .child(SharedString::from(label))
 }
@@ -271,12 +267,7 @@ fn section(
         .gap_1()
         .w(rems(9.))
         .child(button)
-        .child(
-          div()
-            .text_xs()
-            .text_color(theme.muted_foreground)
-            .child(name),
-        )
+        .child(div().text_color(theme.muted_foreground).child(name))
     })
     .collect::<Vec<_>>();
 
@@ -286,7 +277,6 @@ fn section(
     .gap_2()
     .child(
       div()
-        .text_xs()
         .text_color(theme.muted_foreground)
         .child(title.to_uppercase()),
     )

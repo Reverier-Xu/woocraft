@@ -141,16 +141,16 @@ impl RenderOnce for Badge {
           self.count.to_string()
         };
 
+        // auto-width pill: wider counts grow the pill sideways while the
+        // anchor keeps the center pinned on the 45° diagonal.
         h_flex()
           .justify_center()
           .items_center()
           .rounded_full()
           .bg(badge_color)
           .text_color(text_color)
-          .h(rems(1.))
-          .min_w(rems(1.))
-          .px(rems(0.25))
-          .line_height(rems(1.))
+          .px(rems(0.375))
+          .line_height(gpui::relative(1.0))
           .child(count)
           .into_any_element()
       }

@@ -81,10 +81,9 @@ fn header(theme: &Theme) -> impl IntoElement {
     .flex_wrap()
     .items_center()
     .gap_3()
-    .child(div().text_lg().child("woocraft primitives"))
+    .child(div().child("woocraft primitives"))
     .child(
       div()
-        .text_xs()
         .text_color(theme.muted_foreground)
         .child(SharedString::from(
           format!("{:?}", theme.mode).to_lowercase(),
@@ -109,7 +108,6 @@ fn mode_button(theme: &Theme, mode: ThemeMode, active: bool) -> impl IntoElement
     })
     .px_3()
     .py_1()
-    .text_sm()
     .on_click(move |_: &gpui::ClickEvent, _, cx| Theme::set_mode(mode, cx))
     .child(SharedString::from(label))
 }
@@ -121,7 +119,6 @@ fn section(title: &'static str, theme: &Theme, content: impl IntoElement) -> imp
     .gap_2()
     .child(
       div()
-        .text_xs()
         .text_color(theme.muted_foreground)
         .child(title.to_uppercase()),
     )

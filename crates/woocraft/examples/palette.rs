@@ -85,10 +85,9 @@ fn header(theme: &Theme) -> impl IntoElement {
     .flex_wrap()
     .items_center()
     .gap_3()
-    .child(div().text_lg().child("woocraft palette"))
+    .child(div().child("woocraft palette"))
     .child(
       div()
-        .text_xs()
         .text_color(theme.muted_foreground)
         .child(SharedString::from(
           format!("{:?}", theme.mode).to_lowercase(),
@@ -106,7 +105,6 @@ fn header(theme: &Theme) -> impl IntoElement {
         .border_color(theme.border)
         .px_3()
         .py_1()
-        .text_sm()
         .text_color(theme.foreground)
         .on_click(|_: &ClickEvent, _, cx| Theme::sync_system_appearance(cx))
         .child("sync system"),
@@ -127,7 +125,6 @@ fn mode_button(theme: &Theme, mode: ThemeMode, active: bool) -> impl IntoElement
     })
     .px_3()
     .py_1()
-    .text_sm()
     .on_click(move |_: &ClickEvent, _, cx| Theme::set_mode(mode, cx))
     .child(SharedString::from(label))
 }
@@ -147,19 +144,16 @@ fn text_preview(theme: &Theme) -> impl IntoElement {
     .gap_2()
     .child(
       div()
-        .text_lg()
         .text_color(colors.card_foreground)
         .child("the quick brown fox jumps over the lazy dog"),
     )
     .child(
       div()
-        .text_sm()
         .text_color(colors.muted_foreground)
         .child("muted foreground: 箱根の山々を望む 0123456789 —`\"'"),
     )
     .child(
       div()
-        .text_sm()
         .child("semantic accents: ")
         .child(accent_word("primary", colors.primary))
         .child(accent_word(" success", colors.success))
@@ -202,12 +196,7 @@ fn swatch(name: impl Into<SharedString>, color: Hsla, theme: &Theme) -> impl Int
         .border_color(theme.border)
         .bg(color),
     )
-    .child(
-      div()
-        .text_xs()
-        .text_color(theme.muted_foreground)
-        .child(name.into()),
-    )
+    .child(div().text_color(theme.muted_foreground).child(name.into()))
 }
 
 fn section(title: &'static str, theme: &Theme, content: impl IntoElement) -> impl IntoElement {
@@ -217,7 +206,6 @@ fn section(title: &'static str, theme: &Theme, content: impl IntoElement) -> imp
     .gap_2()
     .child(
       div()
-        .text_xs()
         .text_color(theme.muted_foreground)
         .child(SharedString::from(title.to_uppercase())),
     )
@@ -254,7 +242,6 @@ fn semantic_hues(theme: &Theme) -> impl IntoElement {
         )
         .child(
           div()
-            .text_xs()
             .text_color(theme.muted_foreground)
             .child(SharedString::from(format!("{name} · {hue}°"))),
         )
@@ -279,12 +266,7 @@ fn semantic_hues(theme: &Theme) -> impl IntoElement {
       .flex_col()
       .gap_2()
       .child(div().flex().flex_wrap().gap_2().children(cells))
-      .child(
-        div()
-          .text_xs()
-          .text_color(theme.muted_foreground)
-          .child(summary),
-      ),
+      .child(div().text_color(theme.muted_foreground).child(summary)),
   )
 }
 

@@ -153,13 +153,11 @@ impl Render for WindowTrayDemo {
                 .p(rems(2.))
                 .child(
                   div()
-                    .text_sm()
                     .text_color(theme.muted_foreground)
                     .child("this window is drawn by woocraft: shadow, resize edges, title bar drag, and window controls."),
                 )
                 .child(
                   div()
-                    .text_lg()
                     .text_color(theme.foreground)
                     .child(SharedString::from(format!(
                       "last tray event: {last_event}"

@@ -6,7 +6,7 @@
 
 use gpui::{
   App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
-  StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px, relative,
+  StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px, rems,
 };
 
 use crate::{ActiveTheme, base::StyledExt};
@@ -144,28 +144,16 @@ impl RenderOnce for Divider {
 
     let base = match labeled {
       Some(label) => {
-        // the line runs behind the label chip; the chip's background masks it
+        // classic divider-with-text: two line segments with the label between
+        // them — no background chip, the container sizes to the label.
         div()
           .w_full()
           .flex()
           .items_center()
-          .justify_center()
-          .child(
-            div()
-              .absolute()
-              .left_0()
-              .right_0()
-              .top(relative(0.5))
-              .h(px(1.0))
-              .bg(color),
-          )
-          .child(
-            div()
-              .px_2()
-              .bg(cx.theme().background)
-              .text_color(cx.theme().muted_foreground)
-              .child(label),
-          )
+          .gap(rems(0.5))
+          .child(div().flex_1().h(px(1.0)).bg(color))
+          .child(div().text_color(cx.theme().muted_foreground).child(label))
+          .child(div().flex_1().h(px(1.0)).bg(color))
       }
       None => Self::render_base(self.axis, false)
         .flex_shrink_0()
