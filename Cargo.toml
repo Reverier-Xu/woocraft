@@ -32,6 +32,11 @@ unsafe_code = "forbid"
 # members under the historical `gpui` alias so ported code stays unchanged.
 gpui = { version = "0.3", package = "gpui-pre" }
 gpui-base = "0.6"
+gpui-platform = { version = "0.3", package = "gpui-pre-platform", features = [
+  "font-kit",
+  "x11",
+  "wayland",
+] }
 palette = "0.7"
 rust-embed = { version = "8.12", features = [
   "interpolate-folder-path",

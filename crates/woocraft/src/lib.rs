@@ -2,13 +2,22 @@
 //! system.
 //!
 //! the foundation layer is [`gpui-base`]: style-free behavior, interaction,
-//! and infrastructure primitives, with the `gpui-pre` runtime snapshot
-//! re-exported as [`gpui`]. on top of it this crate ships its infrastructure:
-//! [`error`] for fallible operations, [`logging`] for telemetry bootstrap,
-//! [`theme`] for the oklch-defined design system, [`i18n`] for the
-//! domain-scoped translations, and — behind the default `resources` feature —
-//! [`assets`] embedding the built-in icons and fonts. versioning restarts at
-//! `0.6.0`.
+//! and infrastructure primitives. on top of it this crate ships its
+//! infrastructure: [`error`] for fallible operations, [`logging`] for
+//! telemetry bootstrap, [`theme`] for the oklch-defined design system,
+//! [`i18n`] for the domain-scoped translations, and — behind the default
+//! `resources` feature — [`assets`] embedding the built-in icons and fonts.
+//! versioning restarts at `0.6.0`.
+//!
+//! the `gpui-pre` runtime family stays an internal detail: both layers are
+//! re-exported so applications list `woocraft` alone, and a future migration
+//! back to the official gpui release only touches this crate.
+//!
+//! | path | crate | role |
+//! | --- | --- | --- |
+//! | [`gpui`] | `gpui-pre` | zed's gpui runtime snapshot |
+//! | [`platform`] | `gpui-pre-platform` | os platform backends |
+//! | [`application`] | `gpui-pre-platform` | desktop bootstrap helper |
 //!
 //! [`gpui-base`]: https://docs.rs/gpui-base
 
@@ -27,6 +36,8 @@ pub use assets::{
 };
 pub use error::{Error, Result};
 pub use gpui;
+pub use gpui_platform as platform;
+pub use gpui_platform::application;
 pub use i18n::{
   SUPPORTED_LOCALES, WOOCRAFT_I18N_DOMAIN, available_locales, extend_locale, load_locale, locale,
   locale_display_name, set_locale, translate, translate_in_locale, translate_woocraft,

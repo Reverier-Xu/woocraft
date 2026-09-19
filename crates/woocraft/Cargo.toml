@@ -15,6 +15,7 @@ version      = { workspace = true }
 [dependencies]
 gpui               = { workspace = true }
 gpui-base          = { workspace = true }
+gpui-platform      = { workspace = true }
 palette            = { workspace = true }
 rust-i18n          = { workspace = true }
 serde              = { workspace = true }
@@ -30,6 +31,9 @@ zstd       = { workspace = true, optional = true }
 [features]
 default   = ["resources"]
 resources = ["dep:rust-embed", "dep:zstd"]
+
+[dev-dependencies]
+gpui-platform = { workspace = true }
 
 [lints]
 workspace = true
