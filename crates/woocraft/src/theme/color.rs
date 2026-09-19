@@ -329,6 +329,8 @@ impl ThemeColors {
     let foreground = pick_readable_text(background, light_theme_text, dark_theme_text);
     let card = to_hsla_from_oklch(card_lightness, bg_chroma, tokens.primary, 1.0);
     let card_foreground = foreground;
+    // accent alone carries the primary overlay: gray lightness plus a whisper
+    // of the primary hue above the background chroma.
     let accent = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.02, tokens.primary, 1.0);
     let accent_foreground = foreground;
     let popover = background;
@@ -336,7 +338,9 @@ impl ThemeColors {
 
     let primary = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.primary, 1.0);
     let primary_foreground = pick_readable_text(primary, light_theme_text, dark_theme_text);
-    let muted = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.01, tokens.primary, 1.0);
+    // muted is a pure grayscale step — the same character as border, no
+    // theme tint (hue is meaningless at zero chroma).
+    let muted = to_hsla_from_oklch(muted_lightness, 0.0, 0.0, 1.0);
     let muted_foreground = with_alpha(foreground, 0.75);
 
     let border = with_alpha(foreground, 0.1);
