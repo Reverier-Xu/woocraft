@@ -10,9 +10,8 @@
 
 use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
-  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, px, rems,
+  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled,
+  Window, div, prelude::FluentBuilder as _, px, rems,
 };
 pub use gpui_base::CheckboxState;
 use gpui_base::{
@@ -20,10 +19,7 @@ use gpui_base::{
   motion::{Transition, transition},
 };
 
-use crate::{
-  ActiveTheme, Icon, IconName,
-  theme::{duration, opacity},
-};
+use crate::{ActiveTheme, Icon, IconName, theme::duration};
 
 /// interactive checkbox element styled by the woocraft design system.
 ///
@@ -203,23 +199,16 @@ impl RenderOnce for Checkbox {
     let font_family = theme.font_family.clone();
     let foreground = theme.foreground;
 
-    // the box fill morphs between the page background and the accent, and
-    // the mark scales in and out over the control duration; the base motion
-    // system retargets both mid-flight and short-circuits under the system
-    // reduce-motion preference.
-    let box_bg = transition(
-      (self.id.clone(), "box-bg"),
-      if disabled {
-        muted
-      } else if marked {
-        primary
-      } else {
-        background
-      },
-      Transition::new(duration::CONTROL),
-      window,
-      cx,
-    );
+    // the mark scales in and out over the control duration. colors snap
+    // instead of easing: hue interpolation across near-neutral theme colors
+    // reads as a flash.
+    let box_bg = if disabled {
+      muted
+    } else if marked {
+      primary
+    } else {
+      background
+    };
     let mark_size = transition(
       (self.id.clone(), "mark"),
       if marked {
@@ -256,27 +245,33 @@ impl RenderOnce for Checkbox {
       } else {
         foreground
       })
-      .when(!disabled, |this| {
-        this
-          .cursor_pointer()
-          .hover(|s| s.opacity(opacity::solid::HOVER))
-          .active(|s| s.opacity(opacity::solid::ACTIVE))
-      })
+      .when(!disabled, |this| this.cursor_pointer())
       .when(disabled, |this| {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
       .child(
+        // fixed-size slot keeps the row layout stable while the box grows
+        // under hover.
         div()
           .flex_none()
           .size(rems(1.))
           .flex()
           .items_center()
           .justify_center()
-          .rounded(radius)
-          .border(border_width)
-          .border_color(border_color)
-          .bg(box_bg)
-          .child(mark_icon.size(mark_size).text_color(mark_color)),
+          .child(
+            div()
+              .id((self.id.clone(), "box"))
+              .flex()
+              .items_center()
+              .justify_center()
+              .size(rems(1.))
+              .rounded(radius)
+              .border(border_width)
+              .border_color(border_color)
+              .bg(box_bg)
+              .when(!disabled, |this| this.hover(|s| s.size(rems(1.1))))
+              .child(mark_icon.size(mark_size).text_color(mark_color)),
+          ),
       )
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);

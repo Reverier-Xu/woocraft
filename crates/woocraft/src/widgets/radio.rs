@@ -11,9 +11,8 @@
 
 use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
-  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, px, rems,
+  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled,
+  Window, div, prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::{
   Radio as BaseRadio,
@@ -167,17 +166,10 @@ impl RenderOnce for Radio {
     let font_size = theme.font_size;
     let font_family = theme.font_family.clone();
 
-    // the ring color morphs toward the accent and the dot scales in and
-    // out over the control duration; the base motion system retargets both
-    // mid-flight and short-circuits under the system reduce-motion
-    // preference.
-    let indicator_border = transition(
-      (self.id.clone(), "border"),
-      if checked || disabled { accent } else { border },
-      Transition::new(duration::CONTROL),
-      window,
-      cx,
-    );
+    // the dot scales in and out over the control duration. colors snap
+    // instead of easing: hue interpolation across near-neutral theme colors
+    // reads as a flash.
+    let indicator_border = if checked || disabled { accent } else { border };
     let dot_size = transition(
       (self.id.clone(), "dot"),
       if checked {
@@ -203,26 +195,32 @@ impl RenderOnce for Radio {
       } else {
         foreground
       })
-      .when(!disabled, |this| {
-        this
-          .cursor_pointer()
-          .hover(|s| s.opacity(opacity::solid::HOVER))
-          .active(|s| s.opacity(opacity::solid::ACTIVE))
-      })
+      .when(!disabled, |this| this.cursor_pointer())
       .when(disabled, |this| {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
       .child(
+        // fixed-size slot keeps the row layout stable while the ring grows
+        // under hover.
         div()
           .flex_none()
           .size(rems(1.))
           .flex()
           .items_center()
           .justify_center()
-          .rounded_full()
-          .border(border_width)
-          .border_color(indicator_border)
-          .child(div().size(dot_size).rounded_full().bg(accent)),
+          .child(
+            div()
+              .id((self.id.clone(), "ring"))
+              .flex()
+              .items_center()
+              .justify_center()
+              .size(rems(1.))
+              .rounded_full()
+              .border(border_width)
+              .border_color(indicator_border)
+              .when(!disabled, |this| this.hover(|s| s.size(rems(1.1))))
+              .child(div().size(dot_size).rounded_full().bg(accent)),
+          ),
       )
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);
