@@ -130,7 +130,7 @@ impl Render for FormsGallery {
       .child(section(theme, "toggle", toggles(&cx.entity(), self, theme)))
       .child(section(theme, "radio", radios(&cx.entity(), self, theme)))
       .child(section(theme, "avatar", avatars(theme)))
-      .child(section(theme, "progress", progress(theme)))
+      .child(section(theme, "progress", progress()))
       .child(section(theme, "link", links(theme)))
       .child(section(
         theme,
@@ -417,7 +417,7 @@ fn avatars(theme: &Theme) -> impl IntoElement {
     )))
 }
 
-fn progress(theme: &Theme) -> impl IntoElement {
+fn progress() -> impl IntoElement {
   div()
     .flex()
     .flex_col()
@@ -425,17 +425,23 @@ fn progress(theme: &Theme) -> impl IntoElement {
     .w(rems(20.))
     .child(
       Progress::new("progress-quarter")
+        .icon(Icon::new(IconName::ArrowDownload))
+        .label("release asset")
         .value(25.)
-        .accessibility_label("quarter"),
+        .accessibility_label("downloading release asset"),
     )
-    .child(Progress::new("progress-half").value(60.))
-    .child(Progress::new("progress-done").value(100.))
     .child(
-      Progress::new("progress-success")
-        .value(80.)
-        .color(theme.success),
+      Progress::new("progress-half")
+        .icon(Icon::new(IconName::ArrowUpload))
+        .label("uploading log")
+        .value(60.),
     )
-    .child(Progress::new("progress-indeterminate").indeterminate(true))
+    .child(Progress::new("progress-done").label("synced").value(100.))
+    .child(
+      Progress::new("progress-indeterminate")
+        .label("working")
+        .indeterminate(true),
+    )
 }
 
 fn links(theme: &Theme) -> impl IntoElement {

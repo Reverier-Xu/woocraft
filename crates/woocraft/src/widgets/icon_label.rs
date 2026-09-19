@@ -1,8 +1,8 @@
 //! Compact icon-plus-text row for list entries, menu items, and captions.
 //!
-//! [`IconLabel`] is a display-only convenience: an icon and a truncated label
-//! on one line, optionally clickable. For fully interactive rows use
-//! [`Button`](crate::Button).
+//! [`IconLabel`] is a display-only convenience: an optional icon and a
+//! truncated label on one line, optionally clickable. For fully interactive
+//! rows use [`Button`](crate::Button).
 
 use std::rc::Rc;
 
@@ -13,7 +13,7 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Icon, IconName,
+  ActiveTheme, Icon,
   base::{StyledExt, h_flex},
   theme::opacity,
 };
@@ -52,7 +52,7 @@ impl IconLabel {
     self
   }
 
-  /// sets the leading icon. defaults to [`IconName::AddCircle`].
+  /// sets the leading icon.
   pub fn icon(mut self, icon: Icon) -> Self {
     self.icon = Some(icon);
     self
@@ -95,7 +95,6 @@ impl RenderOnce for IconLabel {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let theme = cx.theme();
     let clickable = !self.disabled && self.on_click.is_some();
-    let icon = self.icon.unwrap_or_else(|| Icon::new(IconName::AddCircle));
 
     let mut text_color = if self.selected {
       theme.primary
@@ -120,7 +119,7 @@ impl RenderOnce for IconLabel {
       .min_w_0()
       .text_color(text_color)
       .when(clickable, |this| this.cursor_pointer())
-      .child(icon)
+      .when_some(self.icon, |this, icon| this.child(icon))
       .when_some(self.label, |this, label| this.child(label))
       .children(self.children)
       .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
