@@ -16,7 +16,7 @@ use gpui::{
   StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_base::{
-  Button as BaseButton, RoleOverride, StateStyle,
+  Button as BaseButton, RoleOverride,
   motion::{
     Easing, IterationCount, Keyframe, Keyframes, MotionTransform, Timing, animate_keyframes,
   },
@@ -127,6 +127,7 @@ pub struct Button {
   base: BaseButton,
   variant: ButtonVariant,
   outline: bool,
+  disabled: bool,
   loading: bool,
   loading_icon: Option<Icon>,
   icon: Option<Icon>,
@@ -144,6 +145,7 @@ impl Button {
       id,
       variant: ButtonVariant::default(),
       outline: false,
+      disabled: false,
       loading: false,
       loading_icon: None,
       icon: None,
@@ -155,6 +157,7 @@ impl Button {
 
   /// sets whether the button ignores pointer and keyboard activation.
   pub fn disabled(mut self, disabled: bool) -> Self {
+    self.disabled = disabled;
     self.base = self.base.disabled(disabled);
     self
   }
@@ -350,6 +353,19 @@ impl RenderOnce for Button {
       None => rems(0.5).to_pixels(window.rem_size()),
     };
 
+    let disabled = self.disabled || self.loading;
+    let solid_family = !self.outline
+      && matches!(
+        self.variant,
+        ButtonVariant::Primary
+          | ButtonVariant::Success
+          | ButtonVariant::Warning
+          | ButtonVariant::Info
+          | ButtonVariant::Danger
+      );
+    let (muted, muted_foreground, primary) = (theme.muted, theme.muted_foreground, theme.primary);
+    let border_width = theme.border_width;
+
     base = base
       .min_w(rems(2.))
       .p(pad)
@@ -358,13 +374,26 @@ impl RenderOnce for Button {
       .text_size(rems(1.))
       .bg(colors.bg)
       .text_color(colors.fg)
-      .cursor_pointer()
       .hover(move |s| s.bg(colors.hover_bg))
       .active(move |s| s.bg(colors.active_bg))
       .when_some(colors.border, |this, border| {
-        this.border(theme.border_width).border_color(border)
+        this.border(border_width).border_color(border)
       })
-      .styles(|s| s.disabled(|st: StateStyle| st.opacity(opacity::DISABLED)));
+      .when(!disabled, |this| this.cursor_pointer())
+      .when(disabled, |this| {
+        this.cursor(gpui::CursorStyle::OperationNotAllowed)
+      })
+      .styles(|s| {
+        s.disabled(|st| st.bg(muted).text_color(muted_foreground))
+          .selected(|st| {
+            if solid_family {
+              st.bg(with_alpha(colors.bg, opacity::solid::ACTIVE))
+            } else {
+              st.bg(with_alpha(primary, opacity::transparent::ACTIVE))
+                .text_color(primary)
+            }
+          })
+      });
 
     // caller refinements win over the variant defaults.
     base.style().refine(&self.style);
