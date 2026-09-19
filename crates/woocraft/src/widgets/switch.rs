@@ -2,17 +2,16 @@
 //!
 //! this is a styled wrapper over [`gpui_base::Switch`], which owns every
 //! behavioral concern — toggle, focus, keyboard activation, and
-//! accessibility. the wrapper adds the design-system vocabulary: a pill
-//! track with a sliding thumb animated over the theme switch-toggle
-//! duration through the base motion system (which honors the system
-//! reduce-motion preference), an optional text label, and a semantic
-//! accent color.
+//! accessibility. the wrapper adds the design-system vocabulary: a `2rem`
+//! block whose centered `0.25rem` line carries the state color (accent
+//! when checked, muted otherwise) and a square knob that slides between
+//! rest positions and grows under hover — both animated through the base
+//! motion system, which honors the system reduce-motion preference.
 
 use gpui::{
-  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, Hsla, InteractiveElement as _,
-  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, rems,
+  AnyElement, App, ClickEvent, CursorStyle, ElementId, Hsla, InteractiveElement as _, IntoElement,
+  ParentElement, Refineable as _, RenderOnce, SharedString, StatefulInteractiveElement as _,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
 use gpui_base::{
   Disableable, Switch as BaseSwitch,
@@ -118,15 +117,6 @@ impl Switch {
     self.base = self.base.tab_stop(tab_stop);
     self
   }
-
-  /// resolves the focus handle the base control tracks, keyed by the
-  /// shared element identity.
-  fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
-    window
-      .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-      .read(cx)
-      .clone()
-  }
 }
 
 impl Disableable for Switch {
@@ -153,95 +143,124 @@ impl RenderOnce for Switch {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
     let disabled = self.disabled;
-    let focused = !disabled && self.focus_handle(window, cx).is_focused(window);
 
-    // geometry is rem-driven: a 2.5rem × 1.25rem pill, a 1rem thumb, and a
-    // 0.125rem inset on both rest positions. the thumb travels through the
-    // base motion transition, which retargets mid-flight and short-circuits
-    // under the system reduce-motion preference.
+    // hover is tracked through a keyed slot so the knob morph animates
+    // through the same motion transition as the slide; a hover style hook
+    // could only snap.
+    let hovered_slot = window.use_keyed_state((self.id.clone(), "hover"), cx, |_, _| false);
+    let hovered = !disabled && *hovered_slot.read(cx);
+
+    // geometry is rem-driven: a 2rem-wide, 1rem-tall block; the line runs
+    // centered, 0.25rem thick; the knob rests 0.25rem from its edge as a
+    // 0.25 × 0.5rem capsule and grows to a 0.5 × 0.5rem square under
+    // hover.
     let rem = window.rem_size();
-    let track_w = rems(2.5).to_pixels(rem);
-    let track_h = rems(1.25).to_pixels(rem);
-    let thumb = rems(1.).to_pixels(rem);
-    let inset = rems(0.125).to_pixels(rem);
-    let travel = track_w - thumb - inset * 2.;
-    let rest = inset;
-    let thumb_x = transition(
-      self.id.clone(),
-      if checked { rest + travel } else { rest },
+    let block_w = rems(2.).to_pixels(rem);
+    let block_h = rems(1.).to_pixels(rem);
+    let line_h = rems(0.25).to_pixels(rem);
+    let knob_h = rems(0.5).to_pixels(rem);
+    let inset = rems(0.25).to_pixels(rem);
+    let rest_w = rems(0.25).to_pixels(rem);
+    let hover_w = rems(0.5).to_pixels(rem);
+
+    let knob_w = transition(
+      (self.id.clone(), "knob-w"),
+      if hovered { hover_w } else { rest_w },
+      Transition::new(duration::CONTROL),
+      window,
+      cx,
+    );
+    let knob_center = transition(
+      (self.id.clone(), "knob-x"),
+      if checked {
+        block_w - inset - rest_w / 2.
+      } else {
+        inset + rest_w / 2.
+      },
       Transition::new(duration::SWITCH_TOGGLE),
       window,
       cx,
     );
 
     let theme = cx.theme();
-
     let accent = self.color.unwrap_or(theme.primary);
-    let track_bg = if disabled {
-      with_alpha(accent, opacity::DISABLED)
-    } else {
-      accent
-    };
-    let track_border = if disabled {
-      theme.border
-    } else if focused {
-      theme.ring
+    let (muted, foreground, muted_foreground, radius, font_size) = (
+      theme.muted,
+      theme.foreground,
+      theme.muted_foreground,
+      theme.radius,
+      theme.font_size,
+    );
+    let font_family = theme.font_family.clone();
+
+    let line_color = if disabled {
+      if checked {
+        with_alpha(accent, opacity::DISABLED)
+      } else {
+        muted
+      }
     } else if checked {
-      track_bg
+      accent
     } else {
-      theme.border
+      muted
+    };
+    let knob_color = if disabled {
+      with_alpha(foreground, opacity::DISABLED)
+    } else {
+      foreground
     };
 
-    let (foreground, muted_foreground, border_width) =
-      (theme.foreground, theme.muted_foreground, theme.border_width);
+    let mut track = div()
+      .id((self.id.clone(), "track"))
+      .relative()
+      .flex_none()
+      .w(block_w)
+      .h(block_h)
+      .child(
+        div()
+          .absolute()
+          .top((block_h - line_h) / 2.)
+          .left_0()
+          .w(block_w)
+          .h(line_h)
+          .rounded_full()
+          .bg(line_color),
+      )
+      .child(
+        div()
+          .absolute()
+          .top((block_h - knob_h) / 2.)
+          .left(knob_center - knob_w / 2.)
+          .w(knob_w)
+          .h(knob_h)
+          .rounded(radius)
+          .bg(knob_color),
+      );
+    if !disabled {
+      let hovered_slot = hovered_slot.clone();
+      track = track.on_hover(move |entered: &bool, _, cx| {
+        hovered_slot.update(cx, |slot, _| *slot = *entered);
+      });
+    }
+
     let mut base = self.base;
 
     base = base
       .flex()
       .items_center()
       .gap(rems(0.5))
-      .text_size(theme.font_size)
-      .font_family(theme.font_family.clone())
+      .text_size(font_size)
+      .font_family(font_family)
       .text_color(if disabled {
         muted_foreground
       } else {
         foreground
       })
-      .when(!disabled, |this| {
-        this
-          .cursor_pointer()
-          .hover(|s| s.opacity(opacity::solid::HOVER))
-          .active(|s| s.opacity(opacity::solid::ACTIVE))
-      })
+      .when(!disabled, |this| this.cursor_pointer())
       .when(disabled, |this| {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
-      .child(
-        div()
-          .flex_none()
-          .relative()
-          .w(track_w)
-          .h(track_h)
-          .rounded_full()
-          .border(border_width)
-          .border_color(track_border)
-          .bg(if checked { track_bg } else { theme.muted })
-          .child(
-            div()
-              .absolute()
-              .top((track_h - thumb) / 2.)
-              .left(thumb_x)
-              .size(thumb)
-              .rounded_full()
-              .border(border_width)
-              .border_color(if checked {
-                gpui::transparent_black()
-              } else {
-                theme.border
-              })
-              .bg(theme.background),
-          ),
-      )
+      .child(track)
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);
 
