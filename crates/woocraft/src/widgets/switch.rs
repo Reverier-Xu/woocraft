@@ -151,14 +151,13 @@ impl RenderOnce for Switch {
     let hovered = !disabled && *hovered_slot.read(cx);
 
     // geometry is rem-driven: a 2rem-wide, 1rem-tall block; the line runs
-    // centered, 0.25rem thick; the knob rests 0.25rem from its edge as a
-    // 0.25 × 0.5rem capsule and grows to a 0.5 × 0.5rem square under
-    // hover.
+    // centered, 0.25rem thick; the knob spans the full block height as a
+    // 0.25 × 1rem capsule and grows to a 0.5 × 1rem square under hover.
     let rem = window.rem_size();
     let block_w = rems(2.).to_pixels(rem);
     let block_h = rems(1.).to_pixels(rem);
     let line_h = rems(0.25).to_pixels(rem);
-    let knob_h = rems(0.5).to_pixels(rem);
+    let knob_h = rems(1.).to_pixels(rem);
     let inset = rems(0.25).to_pixels(rem);
     let rest_w = rems(0.25).to_pixels(rem);
     let hover_w = rems(0.5).to_pixels(rem);
