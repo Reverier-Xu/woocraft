@@ -15,7 +15,10 @@ use std::{borrow::Cow, collections::HashSet, marker::PhantomData, sync::Arc};
 use gpui::{AssetSource, SharedString};
 use rust_embed::RustEmbed;
 
-use crate::error::{Error, Result};
+use crate::{
+  error::{Error, Result},
+  icon::{IconName, IconNamed},
+};
 
 pub const BUILTIN_ASSET_PREFIX: &str = "tech.woooo.craft/assets";
 
@@ -261,6 +264,20 @@ pub fn list_assets(path_prefix: &str) -> Vec<SharedString> {
   list_builtin_assets(path_prefix)
 }
 
+/// Returns whether the built-in icon asset for `icon` exists.
+pub fn has_icon(icon: IconName) -> bool {
+  has_asset(icon.path().as_ref())
+}
+
+/// Lists built-in icons that resolve to an embedded asset.
+pub fn list_icons() -> Vec<IconName> {
+  IconName::all()
+    .iter()
+    .copied()
+    .filter(|icon| has_icon(*icon))
+    .collect()
+}
+
 /// Registers every embedded font face with the gpui text system.
 ///
 /// Stored zstd-compressed faces are decompressed on the way in.
@@ -304,6 +321,19 @@ mod tests {
         .all(|path| path.as_ref().starts_with(BUILTIN_ASSET_PREFIX)),
       "listed assets should carry the built-in namespace"
     );
+  }
+
+  #[test]
+  fn every_registered_icon_exists_in_assets() {
+    use crate::IconNamed;
+
+    for icon in crate::IconName::all() {
+      assert!(
+        super::has_icon(*icon),
+        "missing icon asset: {}",
+        icon.path()
+      );
+    }
   }
 
   #[derive(Default)]

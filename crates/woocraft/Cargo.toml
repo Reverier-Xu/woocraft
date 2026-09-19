@@ -1,4 +1,5 @@
 [package]
+build       = "build.rs"
 description = "GPUI components lib for Woocraft design system."
 name        = "woocraft"
 

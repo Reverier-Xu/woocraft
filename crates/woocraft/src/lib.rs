@@ -23,19 +23,22 @@
 
 pub mod error;
 pub mod i18n;
+pub mod icon;
 pub mod logging;
 pub mod theme;
+pub mod widgets;
 
 #[cfg(feature = "resources")]
 pub mod assets;
 
 #[cfg(feature = "resources")]
 pub use assets::{
-  Assets, BUILTIN_ASSET_PREFIX, CombinedSource, EmbeddedSource, has_asset, list_assets,
-  register_fonts,
+  Assets, BUILTIN_ASSET_PREFIX, CombinedSource, EmbeddedSource, has_asset, has_icon, list_assets,
+  list_icons, register_fonts,
 };
 pub use error::{Error, Result};
 pub use gpui;
+pub use gpui_base as base;
 pub use gpui_platform as platform;
 pub use gpui_platform::application;
 pub use i18n::{
@@ -44,10 +47,14 @@ pub use i18n::{
   translate_woocraft_in_locale, try_translate, try_translate_in_locale, try_translate_woocraft,
   try_translate_woocraft_in_locale, woocraft_key,
 };
+pub use icon::{
+  Icon, IconName, IconNamed, clear_custom_icons, custom_icon_path, register_icon, unregister_icon,
+};
 pub use rust_i18n::{available_locales as available_locales_macro, t, tkv};
 pub use theme::{
   ActiveTheme, ScrollbarShow, SyntaxTokenHues, Theme, ThemeColors, ThemeMode, ThemeTokens,
 };
+pub use widgets::button::{Button, ButtonVariant, ButtonVariants};
 
 pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono";
 

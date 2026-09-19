@@ -16,7 +16,7 @@
 //! Theme::sync_system_appearance(&mut cx);
 //! ```
 
-use gpui::{App, Global, Rems, WindowAppearance, rems};
+use gpui::{App, Global, Pixels, Rems, WindowAppearance, px, rems};
 use serde::{Deserialize, Serialize};
 
 mod color;
@@ -142,6 +142,10 @@ pub struct Theme {
     deserialize_with = "deserialize_rems"
   )]
   pub tile_radius: Rems,
+  /// border and outline width — the design system's single pixel exception.
+  /// components inset it from their padding so geometry stays on the rem
+  /// grid; `1px` by default, overridable per theme and inherited everywhere.
+  pub border_width: Pixels,
   pub scrollbar_show: ScrollbarShow,
 }
 
@@ -159,6 +163,7 @@ impl Default for Theme {
       radius_container: rems(0.375),
       tile_grid_size: rems(0.625),
       tile_radius: rems(0.375),
+      border_width: px(1.),
       scrollbar_show: ScrollbarShow::default(),
     }
   }
