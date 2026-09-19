@@ -190,13 +190,16 @@ impl RenderOnce for Tag {
     let rounded = self
       .rounded
       .unwrap_or(theme.radius.to_pixels(window.rem_size()));
+    // same padding contract as Button: 0.5rem all sides, inset by the border
+    // width so the outline never changes the geometry.
+    let pad = rems(0.5).to_pixels(window.rem_size()) - theme.border_width;
 
     div()
       .flex()
       .items_center()
       .border(theme.border_width)
       .line_height(gpui::relative(1.0))
-      .p(rems(0.25))
+      .p(pad)
       .bg(bg)
       .text_color(fg)
       .border_color(default_border)

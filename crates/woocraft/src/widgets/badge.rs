@@ -177,10 +177,12 @@ impl RenderOnce for Badge {
       .refine_style(&self.style)
       .children(self.children)
       .when(visible, |this| {
+        // explicit zero size: an absolute div with auto size would shrink-wrap
+        // the overlay and the flex centering would become a no-op.
         let anchor = if bottom_right_anchor {
-          div().absolute().bottom_0().right_0()
+          div().absolute().bottom_0().right_0().size(rems(0.))
         } else {
-          div().absolute().top_0().right_0()
+          div().absolute().top_0().right_0().size(rems(0.))
         };
         this.child(anchor.flex().items_center().justify_center().child(overlay))
       })
