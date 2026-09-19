@@ -236,7 +236,6 @@ fn semantic_hues(theme: &Theme) -> impl IntoElement {
     ("success", tokens.success),
     ("warning", tokens.warning),
     ("error", tokens.error),
-    ("accent", tokens.accent),
   ];
 
   let cells = hues
