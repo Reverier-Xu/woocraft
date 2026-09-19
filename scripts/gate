@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# the one and only quality gate. run ./scripts/gate before every commit.
+# exits non-zero on the first failure; never parses tool output for success.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+echo "[gate] taplo format --check"
+taplo format --check
+
+echo "[gate] cargo +nightly fmt --all -- --check"
+cargo +nightly fmt --all -- --check
+
+echo "[gate] cargo clippy --workspace --all-targets --all-features --locked -- -D warnings"
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+echo "[gate] cargo test --workspace --all-features --locked"
+cargo test --workspace --all-features --locked
+
+echo "[gate] cargo check -p woocraft --no-default-features --locked"
+cargo check -p woocraft --no-default-features --locked
+
+echo "[gate] all checks passed"

@@ -39,6 +39,7 @@ This document defines **non-negotiable standards and workflows** for all AI agen
 - **Zero-Warning Mandate**: All code must pass all quality checks with **zero warnings, errors, or pending suggestions** before any commit or task completion.
 - **Workspace Cleanliness**: The working directory must be left in a pristine state after every task. No leftover temporary files, uncommitted changes, or untracked assets are permitted.
 - **Local Tool Priority**: Always prefer pre-installed native system tools for file system operations, search, and inspection before falling back to generic cross-platform commands.
+- **No Scripted File Editing**: Never modify files through inline scripting (`python`, `perl`, `sed -i`, `awk` string replacement). scripted replacements fail silently on pattern mismatches and have repeatedly produced broken builds in this repository. use the editing tools for every change and verify the change landed before building.
 - **Atomic Changes**: One logical change per commit. Large refactors or feature implementations must be split into incremental, reviewable commits that each pass all quality gates.
 
 ---
@@ -169,6 +170,8 @@ The following actions are **strictly prohibited** unless explicitly approved by 
 - Adding unnecessary dependencies or features beyond the scope of the requested task.
 - Pushing untested workflow changes to the remote repository without local `act` validation.
 - Using generic `find`, `grep`, `cat`, or `ls` commands when the preferred native tools are available.
+- Editing files via `python`, `perl`, `sed -i`, or `awk` replacement scripts.
+- Declaring a gate green from parsed or piped tool output; the gate script's own exit code is the only accepted evidence.
 
 ---
 

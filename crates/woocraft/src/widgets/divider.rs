@@ -28,7 +28,6 @@ pub enum DividerStyle {
 /// single horizontal/vertical line, optionally with a centered label
 /// (horizontal only).
 pub struct Divider {
-  base: Div,
   style: StyleRefinement,
   label: Option<SharedString>,
   axis: Axis,
@@ -50,11 +49,10 @@ impl Divider {
   /// Creates a new vertical divider with default (solid) style.
   pub fn vertical() -> Self {
     Self {
-      base: Self::render_base(Axis::Vertical, false),
-      axis: Axis::Vertical,
-      label: None,
-      color: None,
       style: StyleRefinement::default(),
+      label: None,
+      axis: Axis::Vertical,
+      color: None,
       line_style: DividerStyle::Solid,
     }
   }
@@ -62,11 +60,10 @@ impl Divider {
   /// Creates a new horizontal divider with default (solid) style.
   pub fn horizontal() -> Self {
     Self {
-      base: Self::render_base(Axis::Horizontal, false),
-      axis: Axis::Horizontal,
-      label: None,
-      color: None,
       style: StyleRefinement::default(),
+      label: None,
+      axis: Axis::Horizontal,
+      color: None,
       line_style: DividerStyle::Solid,
     }
   }
@@ -145,7 +142,7 @@ impl RenderOnce for Divider {
     let color = self.color.unwrap_or(cx.theme().border);
     let labeled = self.label.clone().filter(|_| self.axis == Axis::Horizontal);
 
-    let mut base = match labeled {
+    let base = match labeled {
       Some(label) => {
         // the line runs behind the label chip; the chip's background masks it
         div()

@@ -121,6 +121,10 @@ impl RenderOnce for Badge {
     let badge_color = self.color.unwrap_or(cx.theme().danger);
     let text_color = cx.theme().primary_foreground;
 
+    // icon-mode badges hang on the bottom-right corner; all other modes on
+    // the top-right corner.
+    let bottom_right_anchor = matches!(self.variant, BadgeVariant::Icon(_));
+
     let overlay = match self.variant {
       BadgeVariant::Dot => h_flex()
         .justify_center()
@@ -173,9 +177,10 @@ impl RenderOnce for Badge {
       .refine_style(&self.style)
       .children(self.children)
       .when(visible, |this| {
-        let anchor = match self.variant {
-          BadgeVariant::Icon(_) => div().absolute().bottom_0().right_0(),
-          _ => div().absolute().top_0().right_0(),
+        let anchor = if bottom_right_anchor {
+          div().absolute().bottom_0().right_0()
+        } else {
+          div().absolute().top_0().right_0()
         };
         this.child(anchor.flex().items_center().justify_center().child(overlay))
       })
