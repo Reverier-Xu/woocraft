@@ -1,0 +1,55 @@
+name: quality_check
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            timeout_minutes: 45
+          - os: macos-latest
+            timeout_minutes: 60
+          - os: windows-latest
+            timeout_minutes: 60
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: install nightly rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+
+      - name: install stable rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo check
+        run: cargo check --workspace --all-targets --locked
+
+      - name: cargo fmt
+        run: cargo +nightly fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace --lib --tests --all-features --locked
