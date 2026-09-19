@@ -18,13 +18,17 @@
 - [x] Tray：SNI/dbusmenu（Linux）+ NSStatusItem（macOS）+ Shell_NotifyIcon
       （Windows），`tray` feature opt-in
 - [x] P2a 展示件：Label / Divider / Badge / Tag / Kbd / Spinner / IconLabel
+- [x] P2b 表单与开关件：Checkbox（含 indeterminate）/ Switch（motion 滑块）/
+      Toggle + ToggleGroup / Radio + RadioGroup / Avatar（首字母回退）/
+      Progress（indeterminate 滑动）/ Link（默认 open_url 策略）/
+      Collapsible（动画展开）
 - [x] 示例：palette（色盘）/ button（变体 + rem 缩放）/ primitives（展示件）/
-      window_tray（窗口 + 托盘）
+      window_tray（窗口 + 托盘）/ forms（表单开关件全画廊）
 
 ## 依赖关键路径
 
 ```
-styled/traits/geometry ──┬─→ 开关家族(checkbox/switch/toggle/radio)
+styled/traits/geometry ──┬─→ 开关家族 ✓
                          ├─→ 展示件 ✓
 positioner ──────────────┼─→ popover → tooltip/hover_card/popup → dialog/sheet/alert → toast
 scrollbar ───────────────┼─→ list/virtual_list/table/tree → dock
@@ -34,15 +38,16 @@ calendar → date_picker
 
 ## 阶段计划
 
-### P2b 表单与开关件（下一轮）
+### P2b 表单与开关件 ✓（已完成）
 
-- checkbox(705) / switch(729) / toggle(457) / toggle_group(67) —— base
-  `state_style` 语义态钩子已在 Button 上验证过
-- radio(414) / radio_group(67)
-- avatar(187) / progress(182) / link(466) / collapsible(112)
-- 示例：forms 画廊（沿用明暗切换 + rem 缩放控制）
+- checkbox / switch / toggle(+group) / radio(+group)：base 行为件 + 主题封装，
+  焦点指示统一走 keyed focus handle + `is_focused`，动画统一走 `gpui_base::motion`
+  （自动尊重系统 reduce-motion）
+- avatar / progress / link / collapsible：同上；共享 `theme::with_alpha` 助手，
+  新增 `REVEAL` / `INDETERMINATE` 时长 token
+- 示例：forms 画廊（受控状态 + 明暗切换 + rem 缩放）
 
-### P3 弹层家族
+### P3 弹层家族（下一轮）
 
 - positioner(736) 已可用（base）→ popover(473) → tooltip(347) / hover_card(406)
   / popup(271)
