@@ -73,6 +73,8 @@ pub use widgets::{
   icon_label::IconLabel,
   kbd::Kbd,
   label::{HighlightsMatch, Label},
+  radio::Radio,
+  radio_group::RadioGroup,
   spinner::Spinner,
   switch::Switch,
   tag::{Tag, TagVariant},

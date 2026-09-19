@@ -7,6 +7,8 @@ pub mod divider;
 pub mod icon_label;
 pub mod kbd;
 pub mod label;
+pub mod radio;
+pub mod radio_group;
 pub mod spinner;
 pub mod switch;
 pub mod tag;
