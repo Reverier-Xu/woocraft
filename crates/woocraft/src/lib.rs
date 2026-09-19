@@ -77,6 +77,8 @@ pub use widgets::{
   switch::Switch,
   tag::{Tag, TagVariant},
   title_bar::TitleBar,
+  toggle::Toggle,
+  toggle_group::ToggleGroup,
   window_border::{WindowBorder, window_paddings},
 };
 
