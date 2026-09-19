@@ -8,6 +8,7 @@ pub mod icon_label;
 pub mod kbd;
 pub mod label;
 pub mod spinner;
+pub mod switch;
 pub mod tag;
 pub mod title_bar;
 pub mod window_border;

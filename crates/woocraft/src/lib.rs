@@ -74,6 +74,7 @@ pub use widgets::{
   kbd::Kbd,
   label::{HighlightsMatch, Label},
   spinner::Spinner,
+  switch::Switch,
   tag::{Tag, TagVariant},
   title_bar::TitleBar,
   window_border::{WindowBorder, window_paddings},
