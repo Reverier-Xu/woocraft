@@ -68,6 +68,7 @@ pub use tray::{
 pub use widgets::{
   badge::Badge,
   button::{Button, ButtonVariant, ButtonVariants},
+  checkbox::{Checkbox, CheckboxState},
   divider::{Divider, DividerStyle},
   icon_label::IconLabel,
   kbd::Kbd,

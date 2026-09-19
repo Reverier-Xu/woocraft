@@ -4,6 +4,17 @@
 //! colors live in [`ThemeTokens`](crate::ThemeTokens) and are derived at
 //! runtime instead.
 
+use gpui::Hsla;
+
+/// returns `color` with its alpha channel replaced by `alpha` (clamped to
+/// `0.0..=1.0`).
+pub(crate) fn with_alpha(color: Hsla, alpha: f32) -> Hsla {
+  Hsla {
+    a: alpha.clamp(0.0, 1.0),
+    ..color
+  }
+}
+
 pub mod opacity {
   pub const DISABLED: f32 = 0.6;
 

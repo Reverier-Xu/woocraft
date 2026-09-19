@@ -2,6 +2,7 @@
 
 pub mod badge;
 pub mod button;
+pub mod checkbox;
 pub mod divider;
 pub mod icon_label;
 pub mod kbd;
