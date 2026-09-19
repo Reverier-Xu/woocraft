@@ -40,6 +40,7 @@ pub mod duration {
   pub const CARET_BLINK_ON: Duration = Duration::from_millis(700);
   pub const CARET_BLINK_OFF: Duration = Duration::from_millis(1200);
   pub const SWITCH_TOGGLE: Duration = Duration::from_millis(150);
+  pub const CONTROL: Duration = Duration::from_millis(150);
   pub const REVEAL: Duration = Duration::from_millis(150);
   pub const INDETERMINATE: Duration = Duration::from_millis(1200);
   pub const NOTIFICATION_DEFAULT: Duration = Duration::from_secs(5);

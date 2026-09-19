@@ -12,14 +12,17 @@ use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
   IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, rems,
+  prelude::FluentBuilder as _, px, rems,
 };
 pub use gpui_base::CheckboxState;
-use gpui_base::{Checkbox as BaseCheckbox, Disableable, RoleOverride};
+use gpui_base::{
+  Checkbox as BaseCheckbox, Disableable, RoleOverride,
+  motion::{Transition, transition},
+};
 
 use crate::{
   ActiveTheme, Icon, IconName,
-  theme::{opacity, with_alpha},
+  theme::{duration, opacity},
 };
 
 /// interactive checkbox element styled by the woocraft design system.
@@ -150,13 +153,6 @@ impl Checkbox {
     self.base = self.base.tab_stop(tab_stop);
     self
   }
-
-  fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
-    window
-      .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
-      .read(cx)
-      .clone()
-  }
 }
 
 impl Disableable for Checkbox {
@@ -184,40 +180,77 @@ impl RenderOnce for Checkbox {
     let state = self.state;
     let disabled = self.disabled;
     let marked = matches!(state, CheckboxState::Checked | CheckboxState::Indeterminate);
-    let focused = !disabled && self.focus_handle(window, cx).is_focused(window);
+
+    // remember the previous semantic state so the mark shrinks out with
+    // the shape it was checked in instead of vanishing mid-transition.
+    let glyph_slot = window.use_keyed_state((self.id.clone(), "glyph"), cx, |_, _| {
+      CheckboxState::Unchecked
+    });
+    let glyph_state = if marked { state } else { *glyph_slot.read(cx) };
+    glyph_slot.update(cx, |slot, _| *slot = state);
+
     let theme = cx.theme();
+    let (background, border_color, muted, muted_foreground, primary, primary_foreground) = (
+      theme.background,
+      theme.border,
+      theme.muted,
+      theme.muted_foreground,
+      theme.primary,
+      theme.primary_foreground,
+    );
+    let border_width = theme.border_width;
+    let (radius, font_size) = (theme.radius, theme.font_size);
+    let font_family = theme.font_family.clone();
+    let foreground = theme.foreground;
 
-    let accent = if focused { theme.ring } else { theme.primary };
-    let (box_bg, box_border, mark) = if disabled {
-      let faded = with_alpha(theme.primary, opacity::DISABLED);
-      (
-        if marked { faded } else { theme.background },
-        theme.border,
-        theme.muted_foreground,
-      )
-    } else if marked {
-      (accent, accent, theme.primary_foreground)
-    } else {
-      (theme.background, accent, theme.ring)
-    };
+    // the box fill morphs between the page background and the accent, and
+    // the mark scales in and out over the control duration; the base motion
+    // system retargets both mid-flight and short-circuits under the system
+    // reduce-motion preference.
+    let box_bg = transition(
+      (self.id.clone(), "box-bg"),
+      if disabled {
+        muted
+      } else if marked {
+        primary
+      } else {
+        background
+      },
+      Transition::new(duration::CONTROL),
+      window,
+      cx,
+    );
+    let mark_size = transition(
+      (self.id.clone(), "mark"),
+      if marked {
+        rems(0.875).to_pixels(window.rem_size())
+      } else {
+        px(0.)
+      },
+      Transition::new(duration::CONTROL),
+      window,
+      cx,
+    );
 
-    let mark_icon = match state {
+    let mark_icon = match glyph_state {
       CheckboxState::Checked => Icon::new(IconName::Checkmark),
       CheckboxState::Indeterminate => Icon::new(IconName::Subtract),
       CheckboxState::Unchecked => Icon::empty(),
     };
+    let mark_color = if disabled {
+      muted_foreground
+    } else {
+      primary_foreground
+    };
 
-    let (foreground, muted_foreground, border_width) =
-      (theme.foreground, theme.muted_foreground, theme.border_width);
-    let radius = theme.radius;
     let mut base = self.base;
 
     base = base
       .flex()
       .items_center()
       .gap(rems(0.5))
-      .text_size(theme.font_size)
-      .font_family(theme.font_family.clone())
+      .text_size(font_size)
+      .font_family(font_family)
       .text_color(if disabled {
         muted_foreground
       } else {
@@ -241,11 +274,9 @@ impl RenderOnce for Checkbox {
           .justify_center()
           .rounded(radius)
           .border(border_width)
-          .border_color(box_border)
+          .border_color(border_color)
           .bg(box_bg)
-          .when(marked, |this| {
-            this.child(mark_icon.size(rems(0.875)).text_color(mark))
-          }),
+          .child(mark_icon.size(mark_size).text_color(mark_color)),
       )
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);

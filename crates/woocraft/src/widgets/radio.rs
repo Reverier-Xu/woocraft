@@ -3,9 +3,9 @@
 //! this is a styled wrapper over [`gpui_base::Radio`], which owns every
 //! behavioral concern — activation, focus, keyboard support, and
 //! accessibility. the wrapper adds the design-system vocabulary: a `1rem`
-//! circular indicator with a primary dot in the checked state, an optional
-//! text label, and ring-colored focus indication. pair it with
-//! [`RadioGroup`](crate::RadioGroup) and report positions through
+//! circular indicator whose primary dot scales in and out over the control
+//! duration, an optional text label, and theme-driven state colors. pair it
+//! with [`RadioGroup`](crate::RadioGroup) and report positions through
 //! [`Radio::set_position`] so assistive technology can announce
 //! "option 2 of 5".
 
@@ -13,11 +13,17 @@ use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
   IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, rems,
+  prelude::FluentBuilder as _, px, rems,
 };
-use gpui_base::Radio as BaseRadio;
+use gpui_base::{
+  Radio as BaseRadio,
+  motion::{Transition, transition},
+};
 
-use crate::{ActiveTheme, theme::opacity};
+use crate::{
+  ActiveTheme,
+  theme::{duration, opacity, with_alpha},
+};
 
 /// interactive radio element styled by the woocraft design system.
 ///
@@ -128,13 +134,6 @@ impl Radio {
     self.base = self.base.tab_stop(tab_stop);
     self
   }
-
-  fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
-    window
-      .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
-      .read(cx)
-      .clone()
-  }
 }
 
 impl Styled for Radio {
@@ -153,27 +152,52 @@ impl RenderOnce for Radio {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
     let disabled = self.disabled;
-    let focused = !disabled && self.focus_handle(window, cx).is_focused(window);
     let theme = cx.theme();
+    let (accent, border, foreground, muted_foreground) = (
+      if disabled {
+        with_alpha(theme.primary, opacity::DISABLED)
+      } else {
+        theme.primary
+      },
+      theme.border,
+      theme.foreground,
+      theme.muted_foreground,
+    );
+    let border_width = theme.border_width;
+    let font_size = theme.font_size;
+    let font_family = theme.font_family.clone();
 
-    let accent = if disabled {
-      crate::theme::with_alpha(theme.primary, opacity::DISABLED)
-    } else if focused && !checked {
-      theme.ring
-    } else {
-      theme.primary
-    };
+    // the ring color morphs toward the accent and the dot scales in and
+    // out over the control duration; the base motion system retargets both
+    // mid-flight and short-circuits under the system reduce-motion
+    // preference.
+    let indicator_border = transition(
+      (self.id.clone(), "border"),
+      if checked || disabled { accent } else { border },
+      Transition::new(duration::CONTROL),
+      window,
+      cx,
+    );
+    let dot_size = transition(
+      (self.id.clone(), "dot"),
+      if checked {
+        rems(0.5).to_pixels(window.rem_size())
+      } else {
+        px(0.)
+      },
+      Transition::new(duration::CONTROL),
+      window,
+      cx,
+    );
 
-    let (foreground, muted_foreground, border_width) =
-      (theme.foreground, theme.muted_foreground, theme.border_width);
     let mut base = self.base;
 
     base = base
       .flex()
       .items_center()
       .gap(rems(0.5))
-      .text_size(theme.font_size)
-      .font_family(theme.font_family.clone())
+      .text_size(font_size)
+      .font_family(font_family)
       .text_color(if disabled {
         muted_foreground
       } else {
@@ -197,14 +221,8 @@ impl RenderOnce for Radio {
           .justify_center()
           .rounded_full()
           .border(border_width)
-          .border_color(if checked || disabled {
-            accent
-          } else {
-            theme.border
-          })
-          .when(checked, |this| {
-            this.child(div().size(rems(0.5)).rounded_full().bg(accent))
-          }),
+          .border_color(indicator_border)
+          .child(div().size(dot_size).rounded_full().bg(accent)),
       )
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);
