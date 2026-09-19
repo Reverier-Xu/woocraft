@@ -28,9 +28,22 @@ strip         = true
 unsafe_code = "forbid"
 
 [workspace.dependencies]
+# zed's gpui runtime, republished on crates.io as `gpui-pre`; inherited by
+# members under the historical `gpui` alias so ported code stays unchanged.
+gpui = { version = "0.3", package = "gpui-pre" }
 gpui-base = "0.6"
-serde     = { version = "1.0", features = ["derive"] }
+palette = "0.7"
+rust-embed = { version = "8.12", features = [
+  "interpolate-folder-path",
+  "include-exclude",
+] }
+rust-i18n = "4.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 thiserror = "2.0"
-tracing   = "0.1"
+toml = "1.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+zstd = "0.14"
 
 woocraft = { path = "crates/woocraft" }

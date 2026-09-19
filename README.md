@@ -8,9 +8,11 @@ A GPU-accelerated graphical component library for Rust, built on
 
 ## status
 
-the workspace builds on `gpui-base` 0.6 (style-free foundations from the
-gpui-kit family, with the `gpui-pre` gpui snapshot exposed internally) plus
-thiserror, serde, and tracing as infrastructure. manifest requirements pin to
+infrastructure is in place: thiserror-backed error type, tracing bootstrap,
+the oklch theme system, domain-scoped i18n (zh-hans / zh-hant / en-us /
+ja-jp), and embedded icon + font resources. the workspace builds on
+`gpui-base` 0.6 (style-free foundations from the gpui-kit family, with the
+`gpui-pre` gpui snapshot exposed internally). manifest requirements pin to
 the latest minor series; `cargo.lock` fixes patches. the component surface
 grows back under `crates/woocraft` module by module.
 
