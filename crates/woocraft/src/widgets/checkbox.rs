@@ -9,9 +9,9 @@
 //! keep controlled state without naming the base crate.
 
 use gpui::{
-  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
-  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled,
-  Window, div, prelude::FluentBuilder as _, px, rems,
+  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, IntoElement, ParentElement,
+  Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
+  prelude::FluentBuilder as _, px, rems,
 };
 pub use gpui_base::CheckboxState;
 use gpui_base::{
@@ -250,28 +250,17 @@ impl RenderOnce for Checkbox {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
       .child(
-        // fixed-size slot keeps the row layout stable while the box grows
-        // under hover.
         div()
           .flex_none()
           .size(rems(1.))
           .flex()
           .items_center()
           .justify_center()
-          .child(
-            div()
-              .id((self.id.clone(), "box"))
-              .flex()
-              .items_center()
-              .justify_center()
-              .size(rems(1.))
-              .rounded(radius)
-              .border(border_width)
-              .border_color(border_color)
-              .bg(box_bg)
-              .when(!disabled, |this| this.hover(|s| s.size(rems(1.1))))
-              .child(mark_icon.size(mark_size).text_color(mark_color)),
-          ),
+          .rounded(radius)
+          .border(border_width)
+          .border_color(border_color)
+          .bg(box_bg)
+          .child(mark_icon.size(mark_size).text_color(mark_color)),
       )
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);

@@ -3,16 +3,17 @@
 //! this is a styled wrapper over [`gpui_base::Radio`], which owns every
 //! behavioral concern — activation, focus, keyboard support, and
 //! accessibility. the wrapper adds the design-system vocabulary: a `1rem`
-//! circular indicator whose primary dot scales in and out over the control
-//! duration, an optional text label, and theme-driven state colors. pair it
-//! with [`RadioGroup`](crate::RadioGroup) and report positions through
+//! rounded-rectangle indicator that fills with muted while unchecked and
+//! carries a primary dot scaled in over the control duration while
+//! checked, an optional text label, and theme-driven state colors. pair
+//! it with [`RadioGroup`](crate::RadioGroup) and report positions through
 //! [`Radio::set_position`] so assistive technology can announce
 //! "option 2 of 5".
 
 use gpui::{
-  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, InteractiveElement as _,
-  IntoElement, ParentElement, Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled,
-  Window, div, prelude::FluentBuilder as _, px, rems,
+  AnyElement, App, ClickEvent, CursorStyle, ElementId, FocusHandle, IntoElement, ParentElement,
+  Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
+  prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::{
   Radio as BaseRadio,
@@ -152,18 +153,19 @@ impl RenderOnce for Radio {
     let checked = self.checked;
     let disabled = self.disabled;
     let theme = cx.theme();
-    let (accent, border, foreground, muted_foreground) = (
+    let (accent, border, muted, background, foreground, muted_foreground) = (
       if disabled {
         with_alpha(theme.primary, opacity::DISABLED)
       } else {
         theme.primary
       },
       theme.border,
+      theme.muted,
+      theme.background,
       theme.foreground,
       theme.muted_foreground,
     );
-    let border_width = theme.border_width;
-    let font_size = theme.font_size;
+    let (border_width, radius, font_size) = (theme.border_width, theme.radius, theme.font_size);
     let font_family = theme.font_family.clone();
 
     // the dot scales in and out over the control duration. colors snap
@@ -200,27 +202,17 @@ impl RenderOnce for Radio {
         this.cursor(CursorStyle::OperationNotAllowed)
       })
       .child(
-        // fixed-size slot keeps the row layout stable while the ring grows
-        // under hover.
         div()
           .flex_none()
           .size(rems(1.))
           .flex()
           .items_center()
           .justify_center()
-          .child(
-            div()
-              .id((self.id.clone(), "ring"))
-              .flex()
-              .items_center()
-              .justify_center()
-              .size(rems(1.))
-              .rounded_full()
-              .border(border_width)
-              .border_color(indicator_border)
-              .when(!disabled, |this| this.hover(|s| s.size(rems(1.1))))
-              .child(div().size(dot_size).rounded_full().bg(accent)),
-          ),
+          .rounded(radius)
+          .border(border_width)
+          .border_color(indicator_border)
+          .bg(if checked { background } else { muted })
+          .child(div().size(dot_size).rounded_full().bg(accent)),
       )
       .when_some(self.label, |this, label| this.child(div().child(label)))
       .children(self.children);
