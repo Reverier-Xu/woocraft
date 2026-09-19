@@ -14,8 +14,8 @@ use std::{
 };
 
 use gpui::{
-  AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
-  SharedString, StyleRefinement, Styled, Svg, Transformation, Window, img,
+  AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Refineable as _,
+  Render, RenderOnce, SharedString, StyleRefinement, Styled, Svg, Transformation, Window, img,
   prelude::FluentBuilder as _, svg,
 };
 /// Trait for types that can be converted to an icon path/name.
@@ -289,19 +289,20 @@ impl RenderOnce for Icon {
 
     if self.colorized {
       let mut base = self.base;
-      *base.style() = self.style;
-
-      base
+      base = base
         .flex_shrink_0()
         .text_color(text_color)
         .size(text_size)
-        .path(self.path)
-        .into_any_element()
+        .path(self.path);
+      // the surrounding text size is the default; an explicit caller size
+      // refinement wins over it.
+      base.style().refine(&self.style);
+      base.into_any_element()
     } else {
       let mut base = img(self.path);
-      *base.style() = self.style;
-
-      base.flex_shrink_0().size(text_size).into_any_element()
+      base = base.flex_shrink_0().size(text_size);
+      base.style().refine(&self.style);
+      base.into_any_element()
     }
   }
 }
@@ -322,22 +323,23 @@ impl Render for Icon {
 
     if self.colorized {
       let mut base = svg().flex_none();
-      *base.style() = self.style.clone();
-
-      base
+      base = base
         .flex_shrink_0()
         .text_color(text_color)
         .size(text_size)
         .path(self.path.clone())
         .when_some(self.rotation, |this, rotation| {
           this.with_transformation(Transformation::rotate(rotation))
-        })
-        .into_any_element()
+        });
+      base.style().refine(&self.style);
+
+      base.into_any_element()
     } else {
       let mut base = img(self.path.clone());
-      *base.style() = self.style.clone();
+      base = base.flex_shrink_0().size(text_size);
+      base.style().refine(&self.style);
 
-      base.flex_shrink_0().size(text_size).into_any_element()
+      base.into_any_element()
     }
   }
 }
