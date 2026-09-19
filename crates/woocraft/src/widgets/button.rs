@@ -5,8 +5,8 @@
 //! accessibility. the wrapper adds the design-system vocabulary: visual
 //! variants, outline styling, label/icon content helpers, and a loading
 //! state. geometry follows the design norms: a single default size rendered
-//! at `1rem` text, `2rem` tall for single-line content, and a `2rem` minimum
-//! width.
+//! at `1rem` text, `2rem` tall for single-line content and square `2rem ×
+//! 2rem` for icon-only content, with a `2rem` minimum width.
 
 use std::f32::consts::TAU;
 
@@ -341,19 +341,18 @@ impl RenderOnce for Button {
     let colors = variant_colors(self.variant, self.outline, theme);
     let mut base = self.base;
 
-    // the border is the design system's single pixel exception: inset it
-    // from the vertical padding so outlined buttons keep the exact same
-    // rem-based height as borderless ones, while multi-line content still
-    // grows the height naturally.
-    let pad_y = match colors.border {
+    // horizontal and vertical padding are synced at 0.5rem so single-line
+    // buttons are 2rem tall, icon-only buttons are square 2rem × 2rem, and
+    // multi-line content still grows the height naturally. the border is
+    // inset from the same padding so outlines never change the geometry.
+    let pad = match colors.border {
       Some(_) => rems(0.5).to_pixels(window.rem_size()) - theme.border_width,
       None => rems(0.5).to_pixels(window.rem_size()),
     };
 
     base = base
       .min_w(rems(2.))
-      .px(rems(1.))
-      .py(pad_y)
+      .p(pad)
       .gap(rems(0.5))
       .rounded(theme.radius)
       .text_size(rems(1.))
