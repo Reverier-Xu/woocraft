@@ -16,7 +16,7 @@
 //! Theme::sync_system_appearance(&mut cx);
 //! ```
 
-use gpui::{App, Global, Pixels, Rems, WindowAppearance, px, rems};
+use gpui::{App, Global, Pixels, Rems, SharedString, WindowAppearance, px, rems};
 use serde::{Deserialize, Serialize};
 
 mod color;
@@ -146,6 +146,11 @@ pub struct Theme {
   /// components inset it from their padding so geometry stays on the rem
   /// grid; `1px` by default, overridable per theme and inherited everywhere.
   pub border_width: Pixels,
+  /// default font family applied to component text; the embedded
+  /// [`crate::DEFAULT_FONT_FAMILY`] by default. components inject it at
+  /// their roots, and applications override it either here or through
+  /// per-element styles.
+  pub font_family: SharedString,
   pub scrollbar_show: ScrollbarShow,
 }
 
@@ -164,6 +169,7 @@ impl Default for Theme {
       tile_grid_size: rems(0.625),
       tile_radius: rems(0.375),
       border_width: px(1.),
+      font_family: SharedString::from(crate::DEFAULT_FONT_FAMILY),
       scrollbar_show: ScrollbarShow::default(),
     }
   }

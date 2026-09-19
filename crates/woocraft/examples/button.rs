@@ -8,14 +8,23 @@
 //! ```
 
 use gpui::{
-  App, AppContext, Bounds, ClickEvent, Context, InteractiveElement, IntoElement, ParentElement,
-  Point, Render, SharedString, StatefulInteractiveElement, Styled, Window, WindowBounds,
-  WindowOptions, div, prelude::FluentBuilder as _, px, rems, size,
+  App, AppContext, Bounds, ClickEvent, Context, Global, InteractiveElement, IntoElement,
+  ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement, Styled, Window,
+  WindowBounds, WindowOptions, div, prelude::FluentBuilder as _, px, rems, size,
 };
 use woocraft::{
   ActiveTheme, Assets, Button, ButtonVariants, Icon, IconName, Theme, ThemeMode, application, init,
   logging,
 };
+
+/// the current ui font size, adjustable from the gallery header.
+struct UiScale(Pixels);
+
+impl Global for UiScale {}
+
+const MIN_REM: f32 = 12.0;
+const MAX_REM: f32 = 28.0;
+const REM_STEP: f32 = 2.0;
 
 fn main() {
   let _ = logging::init();
@@ -25,6 +34,7 @@ fn main() {
       eprintln!("woocraft init failed: {err}");
       return;
     }
+    cx.set_global(UiScale(px(16.)));
 
     let bounds = Bounds {
       origin: Point {
@@ -51,18 +61,20 @@ struct ButtonGallery;
 impl Render for ButtonGallery {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let theme = cx.theme();
+    let scale = cx.global::<UiScale>().0;
 
     div()
       .id("button-gallery")
       .size_full()
       .overflow_y_scroll()
+      .font_family(theme.font_family.clone())
       .bg(theme.background)
       .text_color(theme.foreground)
       .flex()
       .flex_col()
       .gap_6()
       .p_6()
-      .child(header(theme))
+      .child(header(theme, scale))
       .child(section(
         theme,
         "solid variants",
@@ -163,7 +175,7 @@ impl Render for ButtonGallery {
   }
 }
 
-fn header(theme: &Theme) -> impl IntoElement {
+fn header(theme: &Theme, scale: Pixels) -> impl IntoElement {
   let dark = theme.mode.is_dark();
 
   div()
@@ -179,6 +191,20 @@ fn header(theme: &Theme) -> impl IntoElement {
         .child(SharedString::from(
           format!("{:?}", theme.mode).to_lowercase(),
         )),
+    )
+    .child(
+      div()
+        .flex()
+        .items_center()
+        .gap_2()
+        .child(
+          div()
+            .text_xs()
+            .text_color(theme.muted_foreground)
+            .child(SharedString::from(format!("rem {scale}"))),
+        )
+        .child(scale_button("scale-down", "\u{2212}", -REM_STEP))
+        .child(scale_button("scale-up", "+", REM_STEP)),
     )
     .child(div().flex_1())
     .child(mode_button(theme, ThemeMode::Light, !dark))
@@ -197,6 +223,20 @@ fn header(theme: &Theme) -> impl IntoElement {
         .on_click(|_: &ClickEvent, _, cx| Theme::sync_system_appearance(cx))
         .child("sync system"),
     )
+}
+
+fn scale_button(id: &'static str, label: &'static str, delta: f32) -> Button {
+  Button::new(id)
+    .label(label)
+    .default()
+    .on_click(move |_, window, cx| {
+      let next = (cx.global::<UiScale>().0 + px(delta))
+        .max(px(MIN_REM))
+        .min(px(MAX_REM));
+      cx.set_global(UiScale(next));
+      window.set_rem_size(next);
+      cx.refresh_windows();
+    })
 }
 
 fn mode_button(theme: &Theme, mode: ThemeMode, active: bool) -> impl IntoElement {

@@ -15,10 +15,7 @@ use gpui::{
   ParentElement, Point, Render, SharedString, StatefulInteractiveElement, Styled, Window,
   WindowBounds, WindowOptions, div, prelude::FluentBuilder as _, px, rems, size,
 };
-use woocraft::{
-  ActiveTheme, Assets, DEFAULT_FONT_FAMILY, Theme, ThemeColors, ThemeMode, application, init,
-  logging,
-};
+use woocraft::{ActiveTheme, Assets, Theme, ThemeColors, ThemeMode, application, init, logging};
 
 fn main() {
   let _ = logging::init();
@@ -59,7 +56,7 @@ impl Render for PaletteDemo {
       .id("palette-root")
       .size_full()
       .overflow_y_scroll()
-      .font_family(DEFAULT_FONT_FAMILY)
+      .font_family(theme.font_family.clone())
       .bg(theme.background)
       .text_color(theme.foreground)
       .flex()
