@@ -1,13 +1,14 @@
 [workspace]
-# members activate as soon as the first crate lands under crates/
-# members  = ["crates/*"]
+members  = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
 authors      = ["Reverier-Xu <reverier.xu@woooo.tech>"]
 description  = "A GPU-accelerated graphical component library built on GPUI."
 edition      = "2024"
+homepage     = "https://design.woooo.tech/"
 license      = "GPL-2.0-only"
+publish      = true
 readme       = "README.md"
 repository   = "https://github.com/Reverier-Xu/woocraft"
 rust-version = "1.96"
@@ -25,3 +26,8 @@ strip         = true
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+[workspace.dependencies]
+gpui = "0.2"
+
+woocraft = { path = "crates/woocraft" }
