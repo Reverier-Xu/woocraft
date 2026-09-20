@@ -1,5 +1,12 @@
 //! System tray integration for GPUI.
 //!
+//! This crate isolates every platform FFI boundary (AppKit, Win32 and
+//! freedesktop D-Bus) behind `unsafe`, so the rest of the Woocraft workspace
+//! keeps `unsafe_code = "forbid"`. Applications normally reach it through the
+//! `woocraft` crate, which re-exports this entire crate as `woocraft::tray`
+//! behind its opt-in `tray` feature; depending on `woocraft-tray` directly
+//! works too.
+//!
 //! Ported and adapted from [gpui-tray](https://github.com/Yamrc/gpui-tray)
 //! (MPL-2.0). Notable changes from upstream:
 //! - menu items use string ids instead of GPUI `Action`s, so the consuming app

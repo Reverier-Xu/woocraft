@@ -77,4 +77,5 @@ windows = { version = "0.62", features = [
 zbus = { version = "5", features = ["blocking"] }
 zstd = "0.14"
 
-woocraft = { path = "crates/woocraft" }
+woocraft      = { path = "crates/woocraft" }
+woocraft-tray = { path = "crates/woocraft-tray", version = "0.6.0" }

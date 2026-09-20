@@ -1,0 +1,42 @@
+[package]
+description = "System tray integration for GPUI applications, part of the Woocraft design system."
+name        = "woocraft-tray"
+
+authors      = { workspace = true }
+edition      = { workspace = true }
+homepage     = { workspace = true }
+license      = { workspace = true }
+publish      = { workspace = true }
+readme       = { workspace = true }
+repository   = { workspace = true }
+rust-version = { workspace = true }
+version      = { workspace = true }
+
+[dependencies]
+crossbeam-channel = { workspace = true }
+gpui              = { workspace = true }
+thiserror         = { workspace = true }
+tracing           = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+image = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2            = { workspace = true }
+objc2-app-kit    = { workspace = true }
+objc2-foundation = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true }
+
+# Cargo forbids extending inherited lints with per-crate overrides, so this
+# crate cannot use `lints.workspace = true` together with its `unsafe`
+# allowance; the workspace lint set is mirrored manually instead. The crate
+# is the workspace's single FFI boundary for tray backends: AppKit (objc2),
+# Win32 and the win32 shell APIs cannot be driven without `unsafe`.
+# Everything else in the workspace keeps `unsafe_code = "forbid"`.
+[lints.rust]
+unsafe_code = "allow"

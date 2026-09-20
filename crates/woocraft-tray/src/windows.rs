@@ -73,6 +73,8 @@ struct OwnedMenu(HMENU);
 impl Drop for OwnedMenu {
   fn drop(&mut self) {
     if !self.0.is_invalid() {
+      // SAFETY: `self.0` is a menu handle returned by `CreatePopupMenu` and
+      // uniquely owned by this value, so it cannot be destroyed twice.
       unsafe {
         let _ = DestroyMenu(self.0);
       }
@@ -108,6 +110,8 @@ impl TrayWindowState {
       registered: false,
       requested_icon_revision: 0,
       current_icon_key: None,
+      // SAFETY: the argument is a NUL-terminated wide string literal; the
+      // call only registers a message identifier.
       taskbar_restart_msg: unsafe { RegisterWindowMessageW(windows::core::w!("TaskbarCreated")) },
     }
   }
@@ -179,6 +183,8 @@ fn backend_thread_main(
     ..Default::default()
   };
 
+  // SAFETY: `wc` holds a valid window procedure and `lpszClassName` points
+  // into `class_name`, which outlives every use of the class.
   let atom = unsafe { RegisterClassW(&wc) };
   if atom == 0 {
     let _ = boot_tx.send(Err(
@@ -188,6 +194,8 @@ fn backend_thread_main(
   }
 
   let mut state = Box::new(TrayWindowState::new(event_tx, command_tx));
+  // SAFETY: the class was registered above; `lpCreateParams` passes the boxed
+  // state whose pointer `window_proc` installs on `WM_NCCREATE`.
   let hwnd = unsafe {
     CreateWindowExW(
       WINDOW_EX_STYLE(0),
@@ -212,6 +220,8 @@ fn backend_thread_main(
       let _ = boot_tx.send(Err(
         BackendError::platform("CreateWindowExW", format!("{err:?}")).into(),
       ));
+      // SAFETY: the class was registered above on this thread and no window
+      // was created, so unregistering cannot invalidate a live window.
       unsafe {
         let _ = UnregisterClassW(PCWSTR(class_name.as_ptr()), None);
       }
@@ -243,6 +253,8 @@ fn backend_thread_main(
   }
 
   cleanup(hwnd, state.as_mut());
+  // SAFETY: the class was registered above and its only window was destroyed
+  // by `cleanup`, so no window of this class remains.
   unsafe {
     let _ = UnregisterClassW(PCWSTR(class_name.as_ptr()), None);
   }
@@ -250,7 +262,10 @@ fn backend_thread_main(
 
 fn process_window_messages() {
   let mut msg = MSG::default();
+  // SAFETY: `msg` is a valid message record and the pump runs on the thread
+  // that owns the message-only window.
   while unsafe { PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() } {
+    // SAFETY: `msg` was filled by `PeekMessageW` and holds a pending message.
     unsafe {
       let _ = TranslateMessage(&msg);
       DispatchMessageW(&msg);
@@ -390,6 +405,8 @@ fn add_or_update_icon(hwnd: HWND, state: &mut TrayWindowState, force_add: bool) 
     uCallbackMessage: WM_TRAYICON,
     hIcon: hicon,
     szTip: tip,
+    // SAFETY: `NOTIFYICONDATAW` is a plain C record whose untouched fields
+    // may legitimately be all-zero bytes.
     ..unsafe { std::mem::zeroed() }
   };
 
@@ -399,6 +416,8 @@ fn add_or_update_icon(hwnd: HWND, state: &mut TrayWindowState, force_add: bool) 
     NIM_MODIFY
   };
 
+  // SAFETY: `nid` is fully initialized (`cbSize`, `hWnd`, `uID`, flags) and
+  // outlives the call.
   let result = unsafe { Shell_NotifyIconW(op, &nid) };
   if result != TRUE {
     return Err(
@@ -419,8 +438,11 @@ fn remove_tray_icon(hwnd: HWND, state: &mut TrayWindowState) {
     cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
     hWnd: hwnd,
     uID: TRAY_ID,
+    // SAFETY: `NOTIFYICONDATAW` is a plain C record whose untouched fields
+    // may legitimately be all-zero bytes.
     ..unsafe { std::mem::zeroed() }
   };
+  // SAFETY: `nid` names the icon registered above (`hWnd` + `uID`).
   let _ = unsafe { Shell_NotifyIconW(NIM_DELETE, &nid) };
   state.registered = false;
 }
@@ -430,18 +452,29 @@ fn cleanup(hwnd: HWND, state: &mut TrayWindowState) {
   state.current_icon = None;
   state.clear_menu();
 
+  // SAFETY: `hwnd` is the message-only window this thread created; no other
+  // thread destroys it.
   unsafe {
     let _ = DestroyWindow(hwnd);
   }
 }
 
+/// SAFETY: invoked by the OS on the message-loop thread that created the
+/// class' window. `GWLP_USERDATA` holds the `Box<TrayWindowState>` pointer
+/// installed during `WM_NCCREATE`; that allocation lives until `cleanup`
+/// destroys the window, and only this thread touches it, so dereferencing it
+/// here is exclusive and valid.
 unsafe extern "system" fn window_proc(
   hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM,
 ) -> LRESULT {
   if msg == WM_NCCREATE {
+    // SAFETY: during `WM_NCCREATE`, `lparam` points to the `CREATESTRUCTW`
+    // the OS assembled for this window.
     let create =
       unsafe { &*(lparam.0 as *const windows::Win32::UI::WindowsAndMessaging::CREATESTRUCTW) };
     let ptr = create.lpCreateParams as *mut TrayWindowState;
+    // SAFETY: `hwnd` is valid and the boxed state pointer lives as long as
+    // the window (released in `cleanup`).
     unsafe { SetWindowLongPtrW(hwnd, GWLP_USERDATA, ptr as isize) };
     return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
   }
@@ -451,6 +484,8 @@ unsafe extern "system" fn window_proc(
     return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
   }
 
+  // SAFETY: `ptr` is the `Box<TrayWindowState>` installed at `WM_NCCREATE`;
+  // it is valid and only ever dereferenced on this thread.
   let state = unsafe { &mut *ptr };
 
   match msg {
@@ -492,6 +527,7 @@ unsafe extern "system" fn window_proc(
 
 fn dispatch_click(state: &TrayWindowState, button: TrayMouseButton) {
   let mut pos = POINT::default();
+  // SAFETY: `pos` is a valid output record.
   let _ = unsafe { GetCursorPos(&mut pos) };
   let _ = state.event_tx.send(TrayEvent::Click {
     button,
@@ -518,7 +554,11 @@ fn show_context_menu(hwnd: HWND, state: &mut TrayWindowState) {
   state.menu_ids = menu_ids;
 
   let mut cursor = POINT::default();
+  // SAFETY: `cursor` is a valid output record.
   let _ = unsafe { GetCursorPos(&mut cursor) };
+  // SAFETY: `hwnd` is the live tray window this thread created, and `menu`
+  // is a handle returned by `CreatePopupMenu` that stays alive in
+  // `state.current_menu` for the duration of tracking.
   unsafe {
     let _ = SetForegroundWindow(hwnd);
     let _ = TrackPopupMenu(
@@ -537,17 +577,23 @@ fn show_context_menu(hwnd: HWND, state: &mut TrayWindowState) {
 fn build_menu(
   items: &[TrayMenuItem], next_id: &mut u16, menu_ids: &mut HashMap<u16, String>,
 ) -> Option<HMENU> {
+  // SAFETY: no arguments; a null handle is rejected via `ok()?`.
   let menu = unsafe { CreatePopupMenu().ok()? };
 
   for item in items {
     match item {
-      TrayMenuItem::Separator => unsafe {
-        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-      },
+      TrayMenuItem::Separator => {
+        // SAFETY: `menu` is a valid menu handle; a separator takes no text.
+        unsafe {
+          let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        }
+      }
       TrayMenuItem::Action { id, label, .. } => {
         *next_id = next_id.saturating_add(1);
         let menu_id = *next_id;
         let wide = encode_wide(label.as_str());
+        // SAFETY: `menu` is a valid menu handle and `wide` is a
+        // NUL-terminated wide string that outlives the call.
         let result =
           unsafe { AppendMenuW(menu, MF_STRING, menu_id as usize, PCWSTR(wide.as_ptr())) };
         if result.is_ok() {
@@ -557,6 +603,9 @@ fn build_menu(
       TrayMenuItem::Submenu { label, items } => {
         if let Some(sub) = build_menu(items, next_id, menu_ids) {
           let wide = encode_wide(label.as_str());
+          // SAFETY: `menu` is valid, `sub` is the submenu created by the
+          // recursive `build_menu` call above, and `wide` is NUL-terminated
+          // and outlives the call.
           let _ = unsafe { AppendMenuW(menu, MF_POPUP, sub.0 as usize, PCWSTR(wide.as_ptr())) };
         }
       }
@@ -591,6 +640,8 @@ struct OwnedIcon(HICON);
 impl Drop for OwnedIcon {
   fn drop(&mut self) {
     if !self.0.is_invalid() {
+      // SAFETY: `self.0` is an icon handle returned by `CreateIconIndirect`
+      // and uniquely owned by this value.
       unsafe {
         let _ = DestroyIcon(self.0);
       }
@@ -618,6 +669,12 @@ fn create_hicon(decoded: &DecodedIcon) -> Result<OwnedIcon> {
     core::BOOL,
   };
 
+  // SAFETY: driving the Win32 DIB/icon API. Invariants: `bits` is the
+  // surface of the DIB section created for `width * height` 32-bit pixels,
+  // so `copy_nonoverlapping` of the equally sized `bgra` buffer stays in
+  // bounds; `and_mask` is a live allocation for the duration of
+  // `CreateBitmap`; every GDI object is either adopted by the returned icon
+  // or destroyed with `DeleteObject` on all exit paths.
   unsafe {
     let hdc = GetDC(None);
     if hdc.is_invalid() {
@@ -654,7 +711,9 @@ fn create_hicon(decoded: &DecodedIcon) -> Result<OwnedIcon> {
 
     let bgra: Vec<u8> = decoded
       .rgba
-      .chunks_exact(4)
+      .as_chunks::<4>()
+      .0
+      .iter()
       .flat_map(|chunk| [chunk[2], chunk[1], chunk[0], chunk[3]])
       .collect();
     std::ptr::copy_nonoverlapping(bgra.as_ptr(), bits, bgra.len());
@@ -662,7 +721,7 @@ fn create_hicon(decoded: &DecodedIcon) -> Result<OwnedIcon> {
     let _ = ReleaseDC(None, hdc);
 
     let mut and_mask = vec![0xFFu8; (decoded.width.div_ceil(8) * decoded.height) as usize];
-    for (i, chunk) in decoded.rgba.chunks_exact(4).enumerate() {
+    for (i, chunk) in decoded.rgba.as_chunks::<4>().0.iter().enumerate() {
       let alpha = chunk[3];
       if alpha < 128 {
         let x = (i % decoded.width as usize) as u32;

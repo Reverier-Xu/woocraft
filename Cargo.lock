@@ -7546,14 +7546,9 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 name = "woocraft"
 version = "0.6.0"
 dependencies = [
- "crossbeam-channel",
  "gpui-base",
  "gpui-pre",
  "gpui-pre-platform",
- "image",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
  "palette",
  "rust-embed",
  "rust-i18n",
@@ -7563,9 +7558,24 @@ dependencies = [
  "toml 1.1.6+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
+ "woocraft-tray",
+ "zstd",
+]
+
+[[package]]
+name = "woocraft-tray"
+version = "0.6.0"
+dependencies = [
+ "crossbeam-channel",
+ "gpui-pre",
+ "image",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "thiserror 2.0.20",
+ "tracing",
  "windows 0.62.2",
  "zbus",
- "zstd",
 ]
 
 [[package]]

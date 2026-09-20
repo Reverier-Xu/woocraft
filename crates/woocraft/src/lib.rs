@@ -6,8 +6,9 @@
 //! infrastructure: [`error`] for fallible operations, [`logging`] for
 //! telemetry bootstrap, [`theme`] for the oklch-defined design system,
 //! [`i18n`] for the domain-scoped translations, and — behind the default
-//! `resources` feature — [`assets`] embedding the built-in icons and fonts.
-//! versioning restarts at `0.6.0`.
+//! `resources` feature — [`assets`] embedding the built-in icons and fonts,
+//! plus — behind the opt-in `tray` feature — the [`tray`] system-tray
+//! integration. versioning restarts at `0.6.0`.
 //!
 //! the `gpui-pre` runtime family stays an internal detail: both layers are
 //! re-exported so applications list `woocraft` alone, and a future migration
@@ -28,8 +29,13 @@ pub mod logging;
 pub mod theme;
 pub mod widgets;
 
+/// the tray feature re-exports the [`woocraft-tray`] crate (the workspace's
+/// only `unsafe`-allowing crate, home of the AppKit/Win32/D-Bus backends) so
+/// downstream paths stay `woocraft::tray::…`.
+///
+/// [`woocraft-tray`]: https://docs.rs/woocraft-tray
 #[cfg(feature = "tray")]
-pub mod tray;
+pub use woocraft_tray as tray;
 
 #[cfg(feature = "resources")]
 pub mod assets;
