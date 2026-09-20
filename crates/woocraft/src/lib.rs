@@ -93,6 +93,7 @@ pub use widgets::{
   switch::Switch,
   tag::{Tag, TagVariant},
   title_bar::TitleBar,
+  toast::{Toast, ToastVariant, Toaster},
   toggle::Toggle,
   toggle_group::ToggleGroup,
   tooltip::{Tooltip, TooltipExt},

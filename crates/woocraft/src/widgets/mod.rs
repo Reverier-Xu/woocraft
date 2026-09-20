@@ -21,6 +21,7 @@ pub mod spinner;
 pub mod switch;
 pub mod tag;
 pub mod title_bar;
+pub mod toast;
 pub mod toggle;
 pub mod toggle_group;
 pub mod tooltip;
