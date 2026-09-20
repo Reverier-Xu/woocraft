@@ -37,9 +37,11 @@ use gpui::{
 };
 use gpui_base::{
   Keyframe, Keyframes, StyledExt as _, Timing, Toast as BaseToast, ToastStack as BaseToastStack,
-  ToastStackState, ToastTransitionStatus, animate_keyframes, box_shadow,
+  animate_keyframes, box_shadow,
 };
-pub use gpui_base::{ToastAdvance, ToastManager, ToastMotion, ToastOptions};
+pub use gpui_base::{
+  ToastAdvance, ToastManager, ToastMotion, ToastOptions, ToastStackState, ToastTransitionStatus,
+};
 
 use crate::{
   icon::{Icon, IconName},

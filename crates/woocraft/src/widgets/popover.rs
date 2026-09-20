@@ -17,17 +17,18 @@
 //!
 //! ```rust,ignore
 //! use gpui::Anchor;
-//! use woocraft::{Button, Popover};
+//! use woocraft::{Button, Popover, v_flex};
 //!
 //! Popover::new("export")
 //!     .trigger(Button::new("export-trigger").label("Export…"))
 //!     .anchor(Anchor::BottomRight)
-//!     .content(|state, window, cx| {
+//!     .content(|state, _, cx| {
+//!         // the state handle lets controls inside dismiss the panel.
+//!         let popover = cx.entity();
 //!         v_flex().gap_2()
 //!             .child(Label::new("pick a format"))
-//!             // the state argument lets controls inside dismiss the panel.
 //!             .child(Button::new("close").on_click(move |_, window, cx| {
-//!                 state.dismiss(window, cx)
+//!                 popover.update(cx, |state, cx| state.dismiss(window, cx))
 //!             }))
 //!     });
 //! ```

@@ -21,7 +21,9 @@
 //!
 //! // anywhere else:
 //! div().id("save")
-//!     .tooltip(|window, cx| Tooltip::new("save the current file").build(window, cx));
+//!     .managed_tooltip(|window, cx| {
+//!         Tooltip::new("save the current file").build(window, cx)
+//!     });
 //! ```
 
 use std::{cell::Cell, collections::HashMap, rc::Rc};
@@ -50,9 +52,9 @@ impl Global for TooltipHosts {}
 /// creates the themed tooltip overlay for `window` and registers it.
 ///
 /// mount the returned entity once per window, near the root and outside any
-/// conditionals — every [`TooltipExt::tooltip`] trigger routes through the
-/// registry entry created here, and requests are dropped while no overlay is
-/// mounted.
+/// conditionals — every [`TooltipExt::managed_tooltip`] trigger routes
+/// through the registry entry created here, and requests are dropped while
+/// no overlay is mounted.
 pub fn host(window: &Window, cx: &mut App) -> Entity<BaseTooltipOverlay> {
   let overlay = cx.new(|_| BaseTooltipOverlay::new().render_with(themed_renderer()));
   if !cx.has_global::<TooltipHosts>() {
@@ -215,16 +217,20 @@ impl Render for Tooltip {
 
 /// attaches managed tooltips to stateful elements.
 ///
-/// the element's hover listener is taken over; do not combine with a manual
-/// `on_hover` on the same element.
+/// the method names deliberately avoid the native
+/// `StatefulInteractiveElement::tooltip`, which renders through a different
+/// (per-window native) path; the managed names route through the base
+/// overlay stack so the shared show delay, grace period, and placement
+/// policy apply. an element's hover listener is taken over; do not combine
+/// with a manual `on_hover` on the same element.
 pub trait TooltipExt: StatefulInteractiveElement + ParentElement + ElementExt + Sized {
   /// shows the built tooltip card while the pointer hovers this element.
   ///
   /// the closure runs lazily on each hover, so captured state is read at
   /// show time.
-  fn tooltip(self, build: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
+  fn managed_tooltip(self, build: impl Fn(&mut Window, &mut App) -> AnyView + 'static) -> Self {
     let build = Rc::new(build);
-    self.tooltip_with(move |bounds| {
+    self.managed_tooltip_with(move |bounds| {
       let build = build.clone();
       TooltipRequest::new(bounds, move |window, cx| build(window, cx))
     })
@@ -232,7 +238,9 @@ pub trait TooltipExt: StatefulInteractiveElement + ParentElement + ElementExt + 
 
   /// full-control variant: shapes the request from the captured trigger
   /// bounds, for example to pin a preferred placement side.
-  fn tooltip_with(self, request: impl Fn(Bounds<Pixels>) -> TooltipRequest + 'static) -> Self {
+  fn managed_tooltip_with(
+    self, request: impl Fn(Bounds<Pixels>) -> TooltipRequest + 'static,
+  ) -> Self {
     let bounds = Rc::new(Cell::new(Bounds::default()));
     self
       .on_prepaint({

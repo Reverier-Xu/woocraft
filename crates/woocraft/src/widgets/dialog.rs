@@ -45,6 +45,7 @@ pub(crate) fn scrim() -> gpui::Hsla {
 }
 
 /// dialog element styled by the woocraft design system.
+#[derive(IntoElement)]
 pub struct Dialog {
   base: BaseDialog,
   backdrop: Option<AnyElement>,

@@ -30,10 +30,11 @@ use gpui_base::{
 use crate::{
   theme::{ActiveTheme, with_alpha},
   v_flex,
-  widgets::button::{Button, ButtonVariants as _},
+  widgets::button::{Button, ButtonVariant, ButtonVariants as _},
 };
 
 /// themed alert dialog element.
+#[derive(IntoElement)]
 pub struct AlertDialog {
   base: BaseAlertDialog,
   backdrop: Option<AnyElement>,
@@ -227,6 +228,12 @@ impl AlertDialogAction {
           )
         }),
     }
+  }
+
+  /// styles the confirm button with the destructive intent.
+  pub fn danger(mut self) -> Self {
+    self.button = self.button.with_variant(ButtonVariant::Danger);
+    self
   }
 }
 

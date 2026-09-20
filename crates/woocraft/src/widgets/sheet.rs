@@ -28,6 +28,7 @@ use crate::{
 };
 
 /// sheet element styled by the woocraft design system.
+#[derive(IntoElement)]
 pub struct Sheet {
   base: BaseSheet,
   overlay: Option<AnyElement>,

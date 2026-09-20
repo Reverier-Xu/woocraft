@@ -296,6 +296,14 @@ impl ParentElement for Button {
   }
 }
 
+impl InteractiveElement for Button {
+  fn interactivity(&mut self) -> &mut gpui::Interactivity {
+    self.base.interactivity()
+  }
+}
+
+impl StatefulInteractiveElement for Button {}
+
 fn with_alpha(color: gpui::Hsla, alpha: f32) -> gpui::Hsla {
   gpui::Hsla {
     a: alpha.clamp(0.0, 1.0),
