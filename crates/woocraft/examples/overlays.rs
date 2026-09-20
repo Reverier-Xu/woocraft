@@ -19,7 +19,7 @@ use woocraft::{
   ActiveTheme, AlertDialog, AlertDialogAction, AlertDialogCancel, Button, ButtonVariants as _,
   Dialog, DialogClose, DialogDescription, DialogHandle, DialogTitle, Kbd, Popover, Sheet, Theme,
   ThemeMode, Toast, ToastManager, ToastOptions, ToastStackState, ToastVariant, Toaster, Tooltip,
-  TooltipExt, application, base, h_flex, init, logging, v_flex, widgets::tooltip,
+  application, base, h_flex, init, logging, v_flex,
 };
 
 /// the current ui font size, adjustable from the gallery header.
@@ -37,7 +37,6 @@ struct Draft {
 }
 
 struct OverlaysGallery {
-  tooltip_host: Option<Entity<base::TooltipOverlay>>,
   dialog_handle: DialogHandle,
   sheet_open: bool,
   alert_open: bool,
@@ -52,7 +51,6 @@ struct OverlaysGallery {
 impl OverlaysGallery {
   fn new(window: &Window, cx: &mut Context<Self>) -> Self {
     let gallery = Self {
-      tooltip_host: Some(tooltip::host(window, cx)),
       dialog_handle: DialogHandle::new(false),
       sheet_open: false,
       alert_open: false,
@@ -312,6 +310,8 @@ impl Render for OverlaysGallery {
       None
     };
 
+    // the toaster lives outside the scroll container: a scroll ancestor
+    // clips absolutely positioned children, which would hide the stack.
     let toast_elements = self.toast_elements(&gallery);
     let mut toaster = Toaster::new("gallery-toaster", self.toast_state.clone())
       .focus_handle(self.toast_focus.clone())
@@ -325,19 +325,24 @@ impl Render for OverlaysGallery {
 
     div()
       .id("overlays-gallery")
+      .relative()
       .size_full()
-      .overflow_y_scroll()
       .font_family(root_font)
       .bg(root_bg)
       .text_color(root_fg)
-      .flex()
-      .flex_col()
-      .child(sections)
+      .child(
+        div()
+          .id("overlays-scroll")
+          .size_full()
+          .overflow_y_scroll()
+          .flex()
+          .flex_col()
+          .child(sections),
+      )
       .children(sheet)
       .child(dialog)
       .child(alert)
       .child(toaster)
-      .children(self.tooltip_host.clone())
   }
 }
 
@@ -542,14 +547,14 @@ fn tooltips(theme: &Theme) -> impl IntoElement {
       "text",
       Button::new("tooltip-save")
         .label("save")
-        .managed_tooltip(|window, cx| Tooltip::new("save the current file").build(window, cx)),
+        .tooltip(|window, cx| Tooltip::new("save the current file").build(window, cx)),
     ))
     .child(labeled(
       theme,
       "key hint",
       Button::new("tooltip-kbd")
         .label("export")
-        .managed_tooltip(move |window, cx| {
+        .tooltip(move |window, cx| {
           Tooltip::new("export")
             .key_binding(Some(Kbd::new(save.clone())))
             .build(window, cx)
@@ -560,7 +565,7 @@ fn tooltips(theme: &Theme) -> impl IntoElement {
       "custom element",
       Button::new("tooltip-rich")
         .label("share")
-        .managed_tooltip(|window, cx| {
+        .tooltip(|window, cx| {
           Tooltip::element(|_, _| h_flex().gap_1().child("shared with").child("3 people"))
             .build(window, cx)
         }),

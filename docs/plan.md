@@ -47,28 +47,27 @@ calendar → date_picker
   新增 `REVEAL` / `INDETERMINATE` 时长 token
 - 示例：forms 画廊（受控状态 + 明暗切换 + rem 缩放）
 
-### P3 弹层家族 ✓（已完成）
+### P3 弹层家族 ✓（已完成；review 后返工一轮，对齐官方 component 写法）
 
-- 公开词汇收敛为 tooltip + popover 两种（2026-09-21 决策，后续补充：
-  hover card 能力整个不做，需要"悬停 + 交互内容"的用户从原语自行组合）：
-  - tooltip：按 base 全功能复现——TooltipOverlay 每窗口托管（`tooltip::host`
-    挂载 + 注册表路由），显示延迟/跨触发宽限期/移动端抑制全部继承；
-    主题卡片支持文字/自定义元素/按键提示（显式 kbd 或 action 解析）
-  - popover：按 base 全功能复现——受控/非受控开合、焦点捕获归还、
-    Escape/外点关闭、on_open_change、状态感知 content 构建器；主题面
-    （popover 色、radius_lg、hairline、阴影）+ REVEAL 时长入场淡入
-  - 分界线是内容可交互性，不是触发方式；tooltip 契约上不放可交互元素
-  - popup 不对外透出：内部化为 popover 的绘制宿主，高级用户经 `woocraft::base`
-    直用
-- dialog / sheet / alert_dialog：默认遮罩（scrim 共享一个深度台阶）+ 默认卡片
-  面，标题/描述/关闭部件主题化；alert 收敛 alert 角色 + 关闭背板点击 +
-  danger 确认部件；veto 型 on_ok/on_cancel 与 DialogHandle 原样透传
-- toast：ToastManager/Options/Motion 原样再导出（纯模型无外观）；主题卡片
-  带意图色/图标/标题描述/关闭按钮，进出场淡入跟随生命周期状态；Toaster 以
-  rem 重定 sonner 的 peek/gap 尺寸
-- 示例：overlays 画廊（弹层全家族 + tooltip 托管挂载 + toast 生命周期 tick）
-- 顺带修复：button 补齐 base 的 InteractiveElement/StatefulInteractiveElement
-  转发，交互扩展（managed_tooltip 等）可直接挂在按钮上
+- 对齐 gpui-kit 官方 styled 层（longbridge/gpui-kit crates/component）后的最终形态：
+  - popover：官方式薄组合——行为全部由 base Popover 承担，styled 层只贡
+    献主题 content 面（popover 色、radius_lg、hairline、阴影、p 1rem）+
+    children 槽；无自创状态镜像、无入场动画（官方注释明确：面板随状态
+    翻转同帧卸载，淡入需跨关闭续挂，留给 select/combobox/date_picker 的
+    dropdown 通道）
+  - tooltip：**走 gpui 原生 `.tooltip()`**（用户决策，2026-09-21）；woocraft
+    只出主题卡片 `Tooltip`（文字/自定义元素/kbd 提示，`build → AnyView`），
+    不建托管 overlay/注册表。base 的 TooltipOverlay 留给未来需要跨触发
+    宽限期动画时再接（官方经 Root 挂载）
+  - dialog / sheet / alert_dialog：默认遮罩（scrim 共享一个深度台阶）+
+    默认卡片面，标题/描述/关闭部件主题化；alert 收敛 alert 角色 + 禁背板
+    关闭 + danger 确认部件
+  - toast：ToastManager/Options/Motion 原样再导出；主题卡片带意图色/图标/
+    标题描述/关闭钮；Toaster 以 rem 重定 sonner 的 peek/gap。**宿主必须挂
+    在滚动容器外**（滚动祖先会裁剪 absolute 栈）
+- 示例：overlays 画廊（弹层全家族 + toast 生命周期 tick）
+- 基建顺带：button 补齐 InteractiveElement/StatefulInteractiveElement 转发，
+  原生 `.tooltip()` 等交互扩展可直接挂按钮
 - 回接项：TitleBar 的 `title_menu` 与语言切换按钮（menu 全功能组件就绪后接入
   `app_menu_bar` 插槽）
 

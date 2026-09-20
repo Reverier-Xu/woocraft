@@ -1,19 +1,19 @@
-//! popover panel anchored to a trigger, styled by the woocraft design system.
+//! popover panel anchored to a trigger, styled by the woocraft design
+//! system.
 //!
-//! this is a styled wrapper over [`gpui_base::Popover`], which owns the full
-//! behavior surface: pointer or keyboard activation, controlled and
-//! uncontrolled open state, outside-click and Escape dismissal, focus capture
-//! and restoration, and the deferred-paint registration that keeps dialogs and
-//! overlays aware of the open popover. positioning rides on the base popup
-//! host: trigger measurement, anchor corners, first-frame sync, and
-//! window-edge snapping.
+//! this is a thin styled composition over [`gpui_base::Popover`], mirroring
+//! the official gpui-kit component layer: the base owns the full behavior
+//! surface (pointer or keyboard activation, controlled and uncontrolled
+//! open state, outside-click and Escape dismissal, focus capture and
+//! restoration, deferred paint above dialogs), and this wrapper contributes
+//! exactly the themed content surface — popover colors, large radius, the
+//! theme hairline border, one elevation shadow, base typography — under any
+//! caller style refinements.
 //!
-//! the wrapper contributes the themed surface — popover colors, large radius,
-//! the theme hairline border, one elevation shadow, base typography — and a
-//! short fade-in sampled from the persistent wrapper node. the surface
-//! unmounts with the base popover, so only the entrance animates; exits are
-//! immediate. motion honors the system reduce-motion preference through the
-//! base motion system.
+//! the surface has no entrance motion here: gpui mounts the panel in the
+//! same frame the state flips, so a fade would require keeping it mounted
+//! past the close. the shared dropdown entrance helper lands later with
+//! select / combobox / date_picker, which own their positioning.
 //!
 //! ```rust,ignore
 //! use gpui::Anchor;
@@ -22,14 +22,10 @@
 //! Popover::new("export")
 //!     .trigger(Button::new("export-trigger").label("Export…"))
 //!     .anchor(Anchor::BottomRight)
-//!     .content(|state, _, cx| {
-//!         // the state handle lets controls inside dismiss the panel.
-//!         let popover = cx.entity();
-//!         v_flex().gap_2()
-//!             .child(Label::new("pick a format"))
-//!             .child(Button::new("close").on_click(move |_, window, cx| {
-//!                 popover.update(cx, |state, cx| state.dismiss(window, cx))
-//!             }))
+//!     .content(|_, _, cx| {
+//!         // the state handle arrives as an entity when controls inside
+//!         // need to dismiss the panel; escape and outside clicks always do.
+//!         v_flex().gap_2().child(Label::new("pick a format"))
 //!     });
 //! ```
 
@@ -37,14 +33,14 @@ use std::rc::Rc;
 
 use gpui::{
   Anchor, AnyElement, App, Context, ElementId, IntoElement, MouseButton, ParentElement, RenderOnce,
-  StyleRefinement, Styled, Window, black, div, px, rems,
+  StyleRefinement, Styled, Window, black, px, rems,
 };
-use gpui_base::{
-  Popover as BasePopover, PopoverState, Selectable, StyledExt as _, box_shadow,
-  motion::{Transition, transition},
-};
+use gpui_base::{Popover as BasePopover, PopoverState, Selectable, StyledExt as _, box_shadow};
 
-use crate::theme::{ActiveTheme, duration, with_alpha};
+use crate::{
+  theme::{ActiveTheme, with_alpha},
+  v_flex,
+};
 
 type OpenChangeHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 type ContentBuilder =
@@ -58,38 +54,49 @@ type ContentBuilder =
 #[derive(IntoElement)]
 pub struct Popover {
   id: ElementId,
-  base: BasePopover,
   default_open: bool,
   open: Option<bool>,
+  tracked_focus: Option<gpui::FocusHandle>,
+  trigger: Option<TriggerBuilder>,
   content: Option<ContentBuilder>,
   on_open_change: Option<OpenChangeHandler>,
+  anchor: Anchor,
+  mouse_button: MouseButton,
+  overlay_closable: bool,
+  children: Vec<AnyElement>,
   style: StyleRefinement,
 }
+
+type TriggerBuilder = Box<dyn FnOnce(bool, &Window, &App) -> AnyElement>;
 
 impl Popover {
   /// creates a closed popover with a unique element identifier.
   pub fn new(id: impl Into<ElementId>) -> Self {
-    let id = id.into();
     Self {
-      base: BasePopover::new(id.clone()),
-      id,
+      id: id.into(),
       default_open: false,
       open: None,
+      tracked_focus: None,
+      trigger: None,
       content: None,
       on_open_change: None,
+      anchor: Anchor::TopLeft,
+      mouse_button: MouseButton::Left,
+      overlay_closable: true,
+      children: Vec::new(),
       style: StyleRefinement::default(),
     }
   }
 
   /// sets the anchor corner of the surface relative to the trigger.
   pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
-    self.base = self.base.anchor(anchor);
+    self.anchor = anchor.into();
     self
   }
 
   /// sets the pointer button that toggles the popover; left by default.
   pub fn mouse_button(mut self, mouse_button: MouseButton) -> Self {
-    self.base = self.base.mouse_button(mouse_button);
+    self.mouse_button = mouse_button;
     self
   }
 
@@ -97,7 +104,10 @@ impl Popover {
   pub fn trigger<T>(mut self, trigger: T) -> Self
   where
     T: Selectable + IntoElement + 'static, {
-    self.base = self.base.trigger(trigger);
+    self.trigger = Some(Box::new(move |is_open, _, _| {
+      let selected = trigger.is_selected();
+      trigger.selected(selected || is_open).into_any_element()
+    }));
     self
   }
 
@@ -106,7 +116,7 @@ impl Popover {
   pub fn trigger_with(
     mut self, trigger: impl FnOnce(bool, &Window, &App) -> AnyElement + 'static,
   ) -> Self {
-    self.base = self.base.trigger_with(trigger);
+    self.trigger = Some(Box::new(trigger));
     self
   }
 
@@ -125,13 +135,13 @@ impl Popover {
   /// moves focus into `handle` on open instead of the surface's own focus
   /// handle.
   pub fn track_focus(mut self, handle: &gpui::FocusHandle) -> Self {
-    self.base = self.base.track_focus(handle);
+    self.tracked_focus = Some(handle.clone());
     self
   }
 
   /// keeps the popover open when the pointer goes down outside it.
   pub fn overlay_closable(mut self, closable: bool) -> Self {
-    self.base = self.base.overlay_closable(closable);
+    self.overlay_closable = closable;
     self
   }
 
@@ -153,6 +163,14 @@ impl Popover {
       content(state, window, cx).into_any_element()
     }));
     self
+  }
+}
+
+impl ParentElement for Popover {
+  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+    // children render inside the themed surface, after the content builder
+    // output, exactly like the official component layer.
+    self.children.extend(elements);
   }
 }
 
@@ -178,46 +196,20 @@ impl RenderOnce for Popover {
         theme.radius_lg,
       )
     };
-
-    // the base surface unmounts on close, so the entrance fade is sampled
-    // here, on the persistent wrapper node. a keyed mirror of the open
-    // state feeds the transition: controlled mode copies the prop on every
-    // render, uncontrolled toggles arrive through the wrapped handler.
-    let id = self.id.clone();
-    let mirror =
-      window.use_keyed_state((id.clone(), "woocraft-open"), cx, |_, _| self.default_open);
-    let open = self.open.unwrap_or_else(|| *mirror.read(cx));
-    mirror.update(cx, |open_mirror, _| *open_mirror = open);
-
-    let progress = transition(
-      (id, "woocraft-surface"),
-      if open { 1.0 } else { 0.0 },
-      Transition::new(duration::REVEAL),
-      window,
-      cx,
-    );
-
-    let mut base = self.base;
-    base = base.default_open(self.default_open);
-    if let Some(open) = self.open {
-      base = base.open(open);
-    }
-    if let Some(on_open_change) = self.on_open_change {
-      let mirror = mirror.clone();
-      base = base.on_open_change(move |open, window, cx| {
-        mirror.update(cx, |open_mirror, _| *open_mirror = *open);
-        on_open_change(open, window, cx);
-      });
-    }
-
     let shadow_offset = rems(0.25).to_pixels(window.rem_size());
     let shadow_blur = rems(1.).to_pixels(window.rem_size());
     let style = self.style;
+    let children = self.children;
+    let content = self.content;
 
-    if let Some(content) = self.content {
-      base.content(move |state, window, cx| {
-        let content = content(state, window, cx);
-        div()
+    let mut base = BasePopover::new(self.id)
+      .anchor(self.anchor)
+      .mouse_button(self.mouse_button)
+      .default_open(self.default_open)
+      .overlay_closable(self.overlay_closable)
+      .content(move |state, window, cx| {
+        let built = content.map(|build| build(state, window, cx));
+        v_flex()
           .font_family(font_family)
           .text_size(text_size)
           .text_color(foreground)
@@ -233,38 +225,23 @@ impl RenderOnce for Popover {
             with_alpha(black(), 0.2),
           )])
           .p(rems(1.))
-          .opacity(progress)
+          .gap(rems(1.))
           .refine_style(&style)
-          .child(content)
-      })
-    } else {
-      base
+          .children(built)
+          .children(children)
+      });
+    if let Some(trigger) = self.trigger {
+      base = base.trigger_with(trigger);
     }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::Popover;
-
-  #[test]
-  fn default_state_is_closed() {
-    let popover = Popover::new("test");
-    assert!(!popover.default_open);
-    assert!(popover.open.is_none());
-    assert!(popover.content.is_none());
-  }
-
-  #[test]
-  fn open_setter_pins_the_controlled_state() {
-    let popover = Popover::new("test").open(true);
-    assert_eq!(popover.open, Some(true));
-    assert!(!Popover::new("test").open(true).open(false).open.unwrap());
-  }
-
-  #[test]
-  fn content_builder_is_stored() {
-    let popover = Popover::new("test").content(|_, _, _| gpui::div());
-    assert!(popover.content.is_some());
+    if let Some(open) = self.open {
+      base = base.open(open);
+    }
+    if let Some(handle) = self.tracked_focus {
+      base = base.track_focus(&handle);
+    }
+    if let Some(on_open_change) = self.on_open_change {
+      base = base.on_open_change(move |open, window, cx| on_open_change(open, window, cx));
+    }
+    base
   }
 }

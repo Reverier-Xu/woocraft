@@ -99,7 +99,7 @@ pub use widgets::{
   },
   toggle::Toggle,
   toggle_group::ToggleGroup,
-  tooltip::{Tooltip, TooltipExt},
+  tooltip::Tooltip,
   window_border::{WindowBorder, window_paddings},
 };
 
