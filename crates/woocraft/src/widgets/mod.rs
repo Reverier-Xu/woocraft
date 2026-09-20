@@ -20,4 +20,5 @@ pub mod tag;
 pub mod title_bar;
 pub mod toggle;
 pub mod toggle_group;
+pub mod tooltip;
 pub mod window_border;

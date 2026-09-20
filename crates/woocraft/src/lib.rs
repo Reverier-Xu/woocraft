@@ -92,6 +92,7 @@ pub use widgets::{
   title_bar::TitleBar,
   toggle::Toggle,
   toggle_group::ToggleGroup,
+  tooltip::{Tooltip, TooltipExt},
   window_border::{WindowBorder, window_paddings},
 };
 
