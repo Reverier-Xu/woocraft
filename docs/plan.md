@@ -30,7 +30,7 @@
 ```
 styled/traits/geometry ──┬─→ 开关家族 ✓
                          ├─→ 展示件 ✓
-positioner ──────────────┼─→ popover → tooltip/hover_card/popup → dialog/sheet/alert → toast
+positioner ──────────────┼─→ popover → tooltip → dialog/sheet/alert → toast
 scrollbar ───────────────┼─→ list/virtual_list/table/tree → dock
 input(状态机) ───────────┴─→ number_input/otp_input → select/combobox → color_picker
 calendar → date_picker
@@ -49,8 +49,16 @@ calendar → date_picker
 
 ### P3 弹层家族（下一轮）
 
-- positioner(736) 已可用（base）→ popover(473) → tooltip(347) / hover_card(406)
-  / popup(271)
+- 公开词汇收敛为 tooltip + popover 两种（2026-09-21 决策）：
+  - tooltip：无状态（调用方视角）、悬停触发、内容仅展示（文字/kbd/图标），
+    `role=tooltip`，移动端抑制；base 经 TooltipOverlay 全局浮层实现，
+    封装层需在引导时挂载 overlay
+  - popover：点击触发、可内嵌任意交互内容，受控开合 + 焦点捕获归还
+  - 分界线是内容可交互性，不是触发方式；tooltip 契约上不放可交互元素
+  - popup 不对外透出：内部化为 popover 的绘制宿主，高级用户经 `woocraft::base`
+    直用；hover_card 不单列："悬停 + 交互内容"的 niche 留作 popover 未来
+    的 hover 触发模式（内部包 base HoverCard），出现真实用例再做
+- positioner(736) 已可用（base）→ popover(473) → tooltip(347)
 - dialog(825) / sheet(270) / alert_dialog(314)（focus_trap 已可用）
 - toast(1012)
 - 回接项：TitleBar 的 `title_menu` 与语言切换按钮（menu 全功能组件就绪后接入
