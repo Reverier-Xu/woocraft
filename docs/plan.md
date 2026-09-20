@@ -47,20 +47,28 @@ calendar → date_picker
   新增 `REVEAL` / `INDETERMINATE` 时长 token
 - 示例：forms 画廊（受控状态 + 明暗切换 + rem 缩放）
 
-### P3 弹层家族（下一轮）
+### P3 弹层家族 ✓（已完成）
 
-- 公开词汇收敛为 tooltip + popover 两种（2026-09-21 决策）：
-  - tooltip：无状态（调用方视角）、悬停触发、内容仅展示（文字/kbd/图标），
-    `role=tooltip`，移动端抑制；base 经 TooltipOverlay 全局浮层实现，
-    封装层需在引导时挂载 overlay
-  - popover：点击触发、可内嵌任意交互内容，受控开合 + 焦点捕获归还
+- 公开词汇收敛为 tooltip + popover 两种（2026-09-21 决策，后续补充：
+  hover card 能力整个不做，需要"悬停 + 交互内容"的用户从原语自行组合）：
+  - tooltip：按 base 全功能复现——TooltipOverlay 每窗口托管（`tooltip::host`
+    挂载 + 注册表路由），显示延迟/跨触发宽限期/移动端抑制全部继承；
+    主题卡片支持文字/自定义元素/按键提示（显式 kbd 或 action 解析）
+  - popover：按 base 全功能复现——受控/非受控开合、焦点捕获归还、
+    Escape/外点关闭、on_open_change、状态感知 content 构建器；主题面
+    （popover 色、radius_lg、hairline、阴影）+ REVEAL 时长入场淡入
   - 分界线是内容可交互性，不是触发方式；tooltip 契约上不放可交互元素
   - popup 不对外透出：内部化为 popover 的绘制宿主，高级用户经 `woocraft::base`
-    直用；hover_card 不单列："悬停 + 交互内容"的 niche 留作 popover 未来
-    的 hover 触发模式（内部包 base HoverCard），出现真实用例再做
-- positioner(736) 已可用（base）→ popover(473) → tooltip(347)
-- dialog(825) / sheet(270) / alert_dialog(314)（focus_trap 已可用）
-- toast(1012)
+    直用
+- dialog / sheet / alert_dialog：默认遮罩（scrim 共享一个深度台阶）+ 默认卡片
+  面，标题/描述/关闭部件主题化；alert 收敛 alert 角色 + 关闭背板点击 +
+  danger 确认部件；veto 型 on_ok/on_cancel 与 DialogHandle 原样透传
+- toast：ToastManager/Options/Motion 原样再导出（纯模型无外观）；主题卡片
+  带意图色/图标/标题描述/关闭按钮，进出场淡入跟随生命周期状态；Toaster 以
+  rem 重定 sonner 的 peek/gap 尺寸
+- 示例：overlays 画廊（弹层全家族 + tooltip 托管挂载 + toast 生命周期 tick）
+- 顺带修复：button 补齐 base 的 InteractiveElement/StatefulInteractiveElement
+  转发，交互扩展（managed_tooltip 等）可直接挂在按钮上
 - 回接项：TitleBar 的 `title_menu` 与语言切换按钮（menu 全功能组件就绪后接入
   `app_menu_bar` 插槽）
 
