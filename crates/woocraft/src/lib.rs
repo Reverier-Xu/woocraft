@@ -82,6 +82,7 @@ pub use widgets::{
   kbd::Kbd,
   label::{HighlightsMatch, Label},
   link::Link,
+  popover::Popover,
   progress::Progress,
   radio::Radio,
   radio_group::RadioGroup,
