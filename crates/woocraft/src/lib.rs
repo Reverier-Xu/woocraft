@@ -72,11 +72,13 @@ pub use tray::{
   Tray, TrayAppContext, TrayClickEvent, TrayEvent, TrayMenuItem, TrayMouseButton, tray_events,
 };
 pub use widgets::{
+  alert_dialog::{AlertDialog, AlertDialogAction, AlertDialogCancel},
   avatar::Avatar,
   badge::Badge,
   button::{Button, ButtonVariant, ButtonVariants},
   checkbox::{Checkbox, CheckboxState},
   collapsible::Collapsible,
+  dialog::{Dialog, DialogClose, DialogDescription, DialogTitle},
   divider::{Divider, DividerStyle},
   icon_label::IconLabel,
   kbd::Kbd,
@@ -86,6 +88,7 @@ pub use widgets::{
   progress::Progress,
   radio::Radio,
   radio_group::RadioGroup,
+  sheet::Sheet,
   spinner::Spinner,
   switch::Switch,
   tag::{Tag, TagVariant},
