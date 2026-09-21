@@ -38,13 +38,18 @@ pub(crate) fn extract_initials(name: &str) -> String {
 }
 
 /// derives a stable accent hue in `[0, 360)` from a display name so the
-/// same person keeps the same avatar color across renders.
+/// same person keeps the same avatar color across renders and across
+/// builds — fnv-1a, because `DefaultHasher` makes no cross-version
+/// stability guarantee.
 fn hue_for_name(name: &str) -> f32 {
-  use std::hash::{Hash as _, Hasher as _};
-
-  let mut hasher = std::collections::hash_map::DefaultHasher::new();
-  name.hash(&mut hasher);
-  (hasher.finish() % 360) as f32
+  const FNV_OFFSET: u64 = 0xCBF2_9CE4_8422_2325;
+  const FNV_PRIME: u64 = 0x0000_0100_0000_01B3;
+  let mut hash = FNV_OFFSET;
+  for byte in name.as_bytes() {
+    hash ^= u64::from(*byte);
+    hash = hash.wrapping_mul(FNV_PRIME);
+  }
+  (hash % 360) as f32
 }
 
 /// user avatar element styled by the woocraft design system.
@@ -166,10 +171,9 @@ impl RenderOnce for Avatar {
       Some(src) => base.image(AvatarImage::new(src).size_full()),
       None => {
         let content: gpui::AnyElement = match &self.name {
-          Some(_) => div()
-            .text_size(rems(0.75))
-            .child(self.initials.clone())
-            .into_any_element(),
+          // the initials inherit the base text size: the design system
+          // admits no smaller in-library type.
+          Some(_) => div().child(self.initials.clone()).into_any_element(),
           None => self
             .placeholder
             .unwrap_or_else(|| Icon::new(IconName::Person))
