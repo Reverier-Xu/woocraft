@@ -6,8 +6,8 @@
 //! an outline (hollow) presentation.
 
 use gpui::{
-  AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
-  StyleRefinement, Styled, Window, div, px, rems,
+  AnyElement, App, Hsla, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled,
+  Window, div, px, rems,
 };
 
 use crate::{ActiveTheme, base::StyledExt};
@@ -204,7 +204,6 @@ impl RenderOnce for Tag {
       .text_color(fg)
       .border_color(default_border)
       .rounded(rounded)
-      .hover(|this| this.opacity(0.9))
       .refine_style(&self.style)
       .children(self.children)
   }
