@@ -34,7 +34,7 @@ styled/traits/geometry ──┬─→ 开关家族 ✓
                          ├─→ 展示件 ✓
 positioner ──────────────┼─→ popover → tooltip → dialog/alert → toast
 scrollbar ───────────────┼─→ list/virtual_list/table/tree → dock
-input(状态机) ───────────┴─→ number_input/otp_input → select/combobox → color_picker
+input 引擎(base) ────────┴─→ number_input/otp_input → select/combobox → color_picker
 calendar → date_picker
 ```
 
@@ -100,12 +100,46 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
   `close_all_dialogs`）；栈拥有 open 状态、焦点柄与层号，仅最顶层显示
   scrim、响应背板与 Escape，关闭层自动归还焦点
 
-### P4 输入家族
+### P4 文本输入与编辑器家族（2026-09-21 调研改版：input 与 editor 合并立项）
 
-- input 状态机 → number_input(489) / otp_input(237)
-- select(507) / combobox(246)（依赖 P3 弹层）
-- calendar(1078) → date_picker(112)
-- color_picker(995)
+调研结论（对照 woocraft.old 与 gpui-base 0.6.4）：
+
+- **不自研 input 状态机**。base input 子系统（20.6k 行）已是“单引擎三门
+  面”：`InputBaseState<Mode>` + InputMode / TextareaMode / EditorMode。单行
+  input 就是引擎的单行 kind（无 wrap、无滚动、Enter 即提交），与“input 是
+  受限 editor”的设想同构，且三条门面行为由同一引擎天然一致。旧库
+  input(2.1k 行) 与 editor(12.2k 行) 两套独立实现正是要避免的重复
+- styled 层只做主题面（P3 同款路线）：base 门面自述“未样式化，宿主自行
+  包装”，接缝是 `InputStyles` / `StateStyle` 钩子
+- base 三个缺口，从旧库移植设计补齐：
+  1. **EditBackend / EditorSnapshot trait**（旧 backend.rs：revision + 可插
+     拔快照 + apply_edit 编辑沉积；base buffer 硬绑 `Rope`，超大文件按需
+     页入 / 编辑外送需要这层）
+  2. **ScrollbarPreview / ScrollbarMarker**（旧 marker.rs：轨道 1px 预览条
+     + 稀疏标记，后端供给，log/git/诊断多 strip 并存；VSCode 式字形缩略
+     图二期再评）
+  3. **tree-sitter 高亮链**：base 零 tree-sitter 依赖，只留 `LanguageProvider`
+     / `SyntaxContextProvider` / `set_highlighter` 注入缝；旧高亮链移植为
+     feature 隔离的集成件，不进 base
+- 性能对比：两边都做可见行虚拟化；base 有 display_map、折叠、按可见区间
+  过滤的 decoration 管线，旧库逐行物化 EditorLine/SharedString 开销更大。
+  最终结论以 M5 大文件压测的基线数据为准，不凭感觉
+
+里程碑（即依赖序；每步独立过 gate + 出画廊示例）：
+
+- [ ] M1 Input / Textarea 主题面：field 背景 / focus ring / 选区色 / caret
+      等 face token 一次定稿（Editor 复用）；校验、masked、前后缀、清除钮、
+      disabled 语义态；inputs 画廊示例
+- [ ] M2 number_input(489) / otp_input(237)：input 派生
+- [ ] M3 select(507) / combobox(246)：前置 dropdown 通道决策（跨关闭续挂
+      动画，P3 遗留）
+- [ ] M4 calendar(1078) → date_picker(112) → color_picker(995)：与 editor
+      无依赖，可穿插
+- [ ] M5 styled Editor：行号槽 / 折叠列 / 当前行 / 诊断 / 搜索面板（走
+      DialogStack + Popover）/ 右键菜单（依赖 menu 组件决策）；EditBackend
+      集成层；editor 画廊 + 大文件压测（第一期 ropey 全量载入出基线；真
+      file-sink 待上游 buffer 抽象或 woocraft windowed-rope 适配器 spike）
+- [ ] M6 滚动条预览条（ScrollbarPreview 移植）；字形 minimap 二期评估
 
 ### P5 容器与导航
 
@@ -115,11 +149,11 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
 
 ### P6 域组件（需单项决策）
 
-- **editor**：先 spike 验证 base `text`(15k) + `text_selection`(4.4k) 能否替代
-  旧 tree-sitter/ropey 链，避免整段照搬
 - **chart**：旧 `base/plot` 子系统（axis/grid/scale/shape）随迁
 - **terminal**：alacritty 依赖，单独 feature
 - **dock**(8325)：最后，依赖 P3 + P5 全部就绪
+- editor 已移交 P4（2026-09-21 调研：base input 子系统单引擎三门面即
+  editor，tree-sitter 高亮链走注入缝集成，不再走 text/text_selection spike）
 
 ## 设计规范速记（全文见 AGENTS.md §3.4 / §8）
 
@@ -137,7 +171,7 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
 
 - [ ] `feat/gpui-base-1.0` 旧实验分支清理（等确认删除）
 - [ ] origin/master 落后 24 个提交，择机推送
-- [ ] editor spike（P6 前完成）
+- [x] editor spike（2026-09-21 完成）：并入 P4 调研，结论见 P4 改版说明
 - [ ] 旧库 menu / list / form / notification / breadcrumb / title_bar 与
       P3–P5 阶段的逐项映射
 - [ ] `rust-i18n` 语言补全（kbd 示例等新增文案尚未进 locale 表）
