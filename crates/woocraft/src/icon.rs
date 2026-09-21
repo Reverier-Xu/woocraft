@@ -6,7 +6,7 @@
 //! color unless colorization is disabled. custom icon names can be
 //! registered to extend the built-in set.
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(test)))]
 use std::collections::HashSet;
 use std::{
   collections::HashMap,
@@ -27,19 +27,22 @@ pub trait IconNamed {
 }
 
 static CUSTOM_ICON_REGISTRY: OnceLock<RwLock<HashMap<String, SharedString>>> = OnceLock::new();
-#[cfg(debug_assertions)]
+// missing-icon validation is a development aid for real applications; the
+// crate's own unit tests run against gpui's empty test asset source, where
+// every icon would trip it, so they compile it out.
+#[cfg(all(debug_assertions, not(test)))]
 static VALIDATED_ICON_PATHS: OnceLock<RwLock<HashSet<SharedString>>> = OnceLock::new();
 
 fn custom_icon_registry() -> &'static RwLock<HashMap<String, SharedString>> {
   CUSTOM_ICON_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(test)))]
 fn validated_icon_paths() -> &'static RwLock<HashSet<SharedString>> {
   VALIDATED_ICON_PATHS.get_or_init(|| RwLock::new(HashSet::new()))
 }
 
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, not(test)))]
 fn debug_validate_icon_path(path: &SharedString, cx: &App) {
   if path.is_empty() {
     return;
@@ -281,7 +284,7 @@ impl Styled for Icon {
 
 impl RenderOnce for Icon {
   fn render(self, window: &mut Window, _cx: &mut App) -> impl IntoElement {
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, not(test)))]
     debug_validate_icon_path(&self.path, _cx);
 
     let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
@@ -315,7 +318,7 @@ impl From<Icon> for AnyElement {
 
 impl Render for Icon {
   fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, not(test)))]
     debug_validate_icon_path(&self.path, _cx);
 
     let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
