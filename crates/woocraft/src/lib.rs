@@ -97,6 +97,7 @@ pub use widgets::{
   radio_group::RadioGroup,
   spinner::Spinner,
   switch::Switch,
+  table::{Column, ColumnSort, ColumnWidth, Table, TableEvent, TableState},
   tag::{Tag, TagVariant},
   title_bar::{TITLE_BAR_HEIGHT, TitleBar},
   toast::{

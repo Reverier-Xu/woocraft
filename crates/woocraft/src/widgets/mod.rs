@@ -38,6 +38,7 @@ pub mod radio;
 pub mod radio_group;
 pub mod spinner;
 pub mod switch;
+pub mod table;
 pub mod tag;
 pub mod title_bar;
 pub mod toast;
