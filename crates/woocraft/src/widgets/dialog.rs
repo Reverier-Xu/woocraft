@@ -157,7 +157,7 @@ pub(crate) fn modal_card(
       px(0.),
       with_alpha(black(), 0.2),
     )])
-    .p(rems(1.5))
+    .p(rems(0.25))
     .refine_style(style)
     .child(
       // scrolling needs a stateful element; the layer key keeps every
@@ -168,7 +168,7 @@ pub(crate) fn modal_card(
         .flex_col()
         .flex_1()
         .min_h_0()
-        .gap(rems(1.))
+        .gap(rems(0.25))
         .overflow_y_scroll()
         .children(children),
     )
@@ -398,20 +398,32 @@ impl RenderOnce for Dialog {
   }
 }
 
-/// themed dialog heading: semibold weight at the base text size.
+/// themed dialog titlebar: the window title bar's contract inside the
+/// modal card — `0.25rem` padding and gap, title content on the left, and
+/// trailing controls (the close part, window-control style buttons)
+/// right-aligned through [`DialogTitle::action`].
 #[derive(IntoElement)]
 pub struct DialogTitle {
   style: StyleRefinement,
+  actions: Vec<AnyElement>,
   children: Vec<AnyElement>,
 }
 
 impl DialogTitle {
-  /// creates an empty heading.
+  /// creates an empty titlebar.
   pub fn new() -> Self {
     Self {
       style: StyleRefinement::default(),
+      actions: Vec::new(),
       children: Vec::new(),
     }
+  }
+
+  /// adds a trailing control, right-aligned in insertion order — typically
+  /// the [`DialogClose`] part.
+  pub fn action(mut self, action: impl IntoElement) -> Self {
+    self.actions.push(action.into_any_element());
+    self
   }
 }
 
@@ -440,11 +452,33 @@ impl RenderOnce for DialogTitle {
       (theme.font_family.clone(), theme.font_size, theme.foreground)
     };
     div()
-      .font_family(font_family)
-      .text_size(text_size)
-      .text_color(foreground)
-      .font_weight(gpui::FontWeight::SEMIBOLD)
-      .children(self.children)
+      .flex()
+      .flex_row()
+      .w_full()
+      .items_center()
+      .p(rems(0.25))
+      .gap(rems(0.25))
+      .child(
+        div()
+          .flex_1()
+          .min_w_0()
+          .font_family(font_family)
+          .text_size(text_size)
+          .text_color(foreground)
+          .font_weight(gpui::FontWeight::SEMIBOLD)
+          .children(self.children),
+      )
+      .when(!self.actions.is_empty(), |this| {
+        this.child(
+          div()
+            .flex()
+            .flex_row()
+            .flex_shrink_0()
+            .items_center()
+            .gap(rems(0.25))
+            .children(self.actions),
+        )
+      })
       .refine_style(&self.style)
   }
 }

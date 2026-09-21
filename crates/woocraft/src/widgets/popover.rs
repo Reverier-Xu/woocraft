@@ -254,8 +254,8 @@ impl RenderOnce for Popover {
             px(0.),
             with_alpha(black(), 0.2),
           )])
-          .p(rems(1.))
-          .gap(rems(1.))
+          .p(rems(0.25))
+          .gap(rems(0.25))
           .refine_style(&style)
           .children(built)
           .children(children)
