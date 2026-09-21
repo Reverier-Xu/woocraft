@@ -7,7 +7,7 @@
 use gpui::{
   AnyElement, App, Bounds, CursorStyle, Decorations, Edges, HitboxBehavior, Hsla,
   InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce,
-  ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px, rems,
+  ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme, base::v_flex};
@@ -24,7 +24,7 @@ pub(crate) fn window_shadow_size(_: &Window) -> Pixels {
 /// rem-driven like every other size in the design system.
 #[cfg(target_os = "linux")]
 pub(crate) fn window_shadow_size(window: &Window) -> Pixels {
-  rems(0.75).to_pixels(window.rem_size())
+  gpui::rems(0.75).to_pixels(window.rem_size())
 }
 
 /// returns the extra outer padding the window needs under client-side
