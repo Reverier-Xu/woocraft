@@ -111,9 +111,12 @@ impl Render for Tooltip {
       })
     });
 
-    div().child(
+    // the margin keeps the card off the cursor: gpui anchors the tooltip
+    // view at the pointer, and without margin the card hugs it.
+    div().m(rems(0.75)).child(
       BaseTooltip::new("woocraft-tooltip")
         .h_flex()
+        .max_w(rems(20.))
         .gap(rems(0.75))
         .px(rems(0.5))
         .py(rems(0.25))

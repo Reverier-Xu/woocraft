@@ -35,7 +35,8 @@ use gpui::{
   Anchor, AnyElement, App, Context, ElementId, IntoElement, MouseButton, ParentElement, RenderOnce,
   StyleRefinement, Styled, Window, black, px, rems,
 };
-use gpui_base::{Popover as BasePopover, PopoverState, Selectable, StyledExt as _, box_shadow};
+pub use gpui_base::PopoverState;
+use gpui_base::{Popover as BasePopover, Selectable, StyledExt as _, box_shadow};
 
 use crate::{
   theme::{ActiveTheme, with_alpha},
@@ -63,6 +64,7 @@ pub struct Popover {
   anchor: Anchor,
   mouse_button: MouseButton,
   overlay_closable: bool,
+  appearance: bool,
   children: Vec<AnyElement>,
   style: StyleRefinement,
 }
@@ -83,6 +85,7 @@ impl Popover {
       anchor: Anchor::TopLeft,
       mouse_button: MouseButton::Left,
       overlay_closable: true,
+      appearance: true,
       children: Vec::new(),
       style: StyleRefinement::default(),
     }
@@ -145,6 +148,15 @@ impl Popover {
     self
   }
 
+  /// strips the themed surface — no background, border, shadow, or padding
+  /// — leaving a bare panel for callers that style their own surface, the
+  /// way select and combobox dropdowns do. dismissal behavior is unchanged;
+  /// use [`Popover::overlay_closable`] for that.
+  pub fn appearance(mut self, appearance: bool) -> Self {
+    self.appearance = appearance;
+    self
+  }
+
   /// subscribes to every open-state transition.
   pub fn on_open_change(
     mut self, callback: impl Fn(&bool, &mut Window, &mut App) + 'static,
@@ -198,18 +210,36 @@ impl RenderOnce for Popover {
     };
     let shadow_offset = rems(0.25).to_pixels(window.rem_size());
     let shadow_blur = rems(1.).to_pixels(window.rem_size());
+    let anchor = self.anchor;
+    let appearance = self.appearance;
     let style = self.style;
     let children = self.children;
     let content = self.content;
 
     let mut base = BasePopover::new(self.id)
-      .anchor(self.anchor)
+      .anchor(anchor)
       .mouse_button(self.mouse_button)
       .default_open(self.default_open)
       .overlay_closable(self.overlay_closable)
       .content(move |state, window, cx| {
         let built = content.map(|build| build(state, window, cx));
-        v_flex()
+        let surface = v_flex();
+        // the surface breathes 0.25rem off the trigger on the side facing
+        // it, so the panel never hugs the control that opened it.
+        let surface = match anchor {
+          Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => surface.top(rems(0.25)),
+          Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => {
+            surface.bottom(rems(0.25))
+          }
+          Anchor::LeftCenter | Anchor::RightCenter => surface.top(rems(0.25)),
+        };
+        if !appearance {
+          return surface
+            .children(built)
+            .children(children)
+            .into_any_element();
+        }
+        surface
           .font_family(font_family)
           .text_size(text_size)
           .text_color(foreground)
@@ -229,6 +259,7 @@ impl RenderOnce for Popover {
           .refine_style(&style)
           .children(built)
           .children(children)
+          .into_any_element()
       });
     if let Some(trigger) = self.trigger {
       base = base.trigger_with(trigger);
