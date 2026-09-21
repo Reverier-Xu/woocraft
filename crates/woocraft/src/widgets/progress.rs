@@ -59,7 +59,8 @@ impl Progress {
 
   /// sets the controlled percentage value, clamped to `0..=100`.
   pub fn value(mut self, value: f32) -> Self {
-    self.value = value.clamp(0., 100.);
+    let value = value.clamp(0., 100.);
+    self.value = value;
     self.base = self.base.value(value);
     self
   }
