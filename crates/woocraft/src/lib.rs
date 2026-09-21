@@ -107,6 +107,7 @@ pub use widgets::{
   toggle::Toggle,
   toggle_group::ToggleGroup,
   tooltip::Tooltip,
+  tree::{Tree, TreeEntry, TreeEntryState, TreeEvent, TreeItem, TreeState},
   window_border::{WindowBorder, window_paddings},
 };
 
