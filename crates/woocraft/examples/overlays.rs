@@ -98,21 +98,23 @@ impl OverlaysGallery {
       .push(id, draft, ToastOptions { timeout }, Instant::now());
   }
 
-  /// the mounted toast cards, in display order with their live status.
-  fn toast_elements(&self, gallery: &Entity<Self>) -> Vec<gpui::AnyElement> {
+  /// the mounted toast cards keyed by their stable ids, in display order
+  /// with their live status.
+  fn toast_elements(&self, gallery: &Entity<Self>) -> Vec<(gpui::ElementId, gpui::AnyElement)> {
     self
       .toasts
       .iter()
       .map(|(id, draft, status)| {
         let gallery = gallery.clone();
         let close_id = id.clone();
+        let item_id = gpui::ElementId::from(id.clone());
         let remaining = draft
           .timeout
           .zip(draft.pushed_at)
           .map(|(timeout, pushed_at)| {
             (1. - pushed_at.elapsed().as_secs_f32() / timeout.as_secs_f32()).clamp(0., 1.)
           });
-        Toast::new(id.clone())
+        let card = Toast::new(id.clone())
           .variant(draft.variant)
           .title(draft.title)
           .when_some(draft.description, |toast, description| {
@@ -138,7 +140,8 @@ impl OverlaysGallery {
             });
             window.refresh();
           })
-          .into_any_element()
+          .into_any_element();
+        (item_id, card)
       })
       .collect()
   }
@@ -315,8 +318,10 @@ impl Render for OverlaysGallery {
       .top(rems(1.))
       .right(rems(1.))
       .w(rems(20.));
-    for (index, element) in toast_elements.into_iter().enumerate() {
-      toaster = toaster.item(("toast-item", index as u64), element);
+    // the item keys are the stable toast ids: with index keys, removing one
+    // toast would re-key every later card and replay its enter animation.
+    for (id, element) in toast_elements {
+      toaster = toaster.item(id, element);
     }
 
     div()

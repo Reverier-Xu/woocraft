@@ -112,9 +112,10 @@ impl RenderOnce for IconLabel {
     h_flex()
       .id(self.id)
       .items_center()
+      // the button's padding contract: 0.5rem on every side, so icon-label
+      // rows land on the same 2rem line as buttons.
+      .p(rems(0.5))
       .gap(rems(0.5))
-      .px(rems(0.25))
-      .py(rems(0.125))
       .min_w_0()
       .text_color(text_color)
       .when(clickable, |this| this.cursor_pointer())

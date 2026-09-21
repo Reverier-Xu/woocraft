@@ -562,8 +562,8 @@ impl RenderOnce for DialogDescription {
       )
     };
     div()
-      // a content block: it owns its 0.25rem chrome.
-      .p(rems(0.25))
+      // a pure-text content block: it owns the roomier 0.5rem chrome.
+      .p(rems(0.5))
       .font_family(font_family)
       .text_size(text_size)
       .text_color(muted_foreground)

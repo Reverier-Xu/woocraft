@@ -379,12 +379,15 @@ impl RenderOnce for Toast {
       None
     };
 
+    // pure-text content takes the roomier 0.5rem chrome; mixed content
+    // stays on the 0.25rem rhythm.
+    let text_only = description.is_some() && self.children.is_empty();
     let content = has_content.then(|| {
       div()
         .flex()
         .flex_col()
         .gap(rems(0.25))
-        .p(rems(0.25))
+        .p(if text_only { rems(0.5) } else { rems(0.25) })
         .children(description)
         .children(self.children)
         .into_any_element()
