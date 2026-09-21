@@ -30,7 +30,7 @@
 ```
 styled/traits/geometry ──┬─→ 开关家族 ✓
                          ├─→ 展示件 ✓
-positioner ──────────────┼─→ popover → tooltip → dialog/sheet/alert → toast
+positioner ──────────────┼─→ popover → tooltip → dialog/alert → toast
 scrollbar ───────────────┼─→ list/virtual_list/table/tree → dock
 input(状态机) ───────────┴─→ number_input/otp_input → select/combobox → color_picker
 calendar → date_picker
@@ -59,9 +59,9 @@ calendar → date_picker
     只出主题卡片 `Tooltip`（文字/自定义元素/kbd 提示，`build → AnyView`），
     不建托管 overlay/注册表。base 的 TooltipOverlay 留给未来需要跨触发
     宽限期动画时再接（官方经 Root 挂载）
-  - dialog / sheet / alert_dialog：默认遮罩（scrim 共享一个深度台阶）+
-    默认卡片面，标题/描述/关闭部件主题化；alert 收敛 alert 角色 + 禁背板
-    关闭 + danger 确认部件
+  - dialog / alert_dialog：默认遮罩（scrim 共享一个深度台阶）+ 默认卡片面，
+    标题/描述/关闭部件主题化；alert 收敛 alert 角色 + 禁背板关闭 + danger
+    确认部件
   - toast：ToastManager/Options/Motion 原样再导出；主题卡片带意图色/图标/
     标题描述/关闭钮；Toaster 以 rem 重定 sonner 的 peek/gap。**宿主必须挂
     在滚动容器外**（滚动祖先会裁剪 absolute 栈）
@@ -82,10 +82,17 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
 - popover：面板与 trigger 间 0.25rem 缝隙（按 anchor 方向）；新增
   `appearance(false)` 裸面板；再导出 PopoverState
 - tooltip：卡片外 margin 0.75rem（不贴光标）+ max_w 20rem
-- sheet：新增 `placement`（默认 Bottom 保持现设计）与 `size`（侧边默认
-  22rem）；文档注明 base Sheet 非 deferred，宿主需后挂
 - 回归测试：dialog 居中/钳制/默认关闭走 gpui test-support 的 debug_bounds
   （dev-only feature）
+
+设计决策备忘（2026-09-21）：
+
+- **不实现的组件**：sheet（设计系统无此形态）、hover_card（tooltip 已覆盖
+  场景）、popover arrow 指向三角（受尺寸制约的设计系统不需要）
+- **弹层间距规则**：与组件锚定关联的弹层（popover 族）默认与触发组件
+  边界拉开 0.25rem；随指针（tooltip）或全局弹出（dialog/toast）的不受影
+  响
+- dialog/sheet 入场动画维持“归应用层”决策，库内不加
 
 ### P4 输入家族
 

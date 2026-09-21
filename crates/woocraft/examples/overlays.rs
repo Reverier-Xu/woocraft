@@ -1,4 +1,4 @@
-//! overlays gallery — popover, tooltip, dialog, sheet, alert dialog, and
+//! overlays gallery — popover, tooltip, dialog, alert dialog, and
 //! toast reviewed against the active theme with controlled state, focus
 //! traps, and the managed tooltip overlay.
 //!
@@ -17,7 +17,7 @@ use gpui::{
 };
 use woocraft::{
   ActiveTheme, AlertDialog, AlertDialogAction, AlertDialogCancel, Button, ButtonVariants as _,
-  Dialog, DialogClose, DialogDescription, DialogHandle, DialogTitle, Kbd, Popover, Sheet, Theme,
+  Dialog, DialogClose, DialogDescription, DialogHandle, DialogTitle, Kbd, Popover, Theme,
   ThemeMode, Toast, ToastManager, ToastOptions, ToastStackState, ToastVariant, Toaster, Tooltip,
   application, base, h_flex, init, logging, v_flex,
 };
@@ -38,7 +38,6 @@ struct Draft {
 
 struct OverlaysGallery {
   dialog_handle: DialogHandle,
-  sheet_open: bool,
   alert_open: bool,
   popover_open: bool,
   decision: Option<&'static str>,
@@ -52,7 +51,6 @@ impl OverlaysGallery {
   fn new(window: &Window, cx: &mut Context<Self>) -> Self {
     let gallery = Self {
       dialog_handle: DialogHandle::new(false),
-      sheet_open: false,
       alert_open: false,
       popover_open: false,
       decision: None,
@@ -190,11 +188,6 @@ impl Render for OverlaysGallery {
         ))
         .child(section(
           &theme,
-          "sheet",
-          sheets(&gallery, self.sheet_open, &theme),
-        ))
-        .child(section(
-          &theme,
           "alert dialog",
           alerts(&gallery, self.decision, &theme),
         ))
@@ -287,29 +280,6 @@ impl Render for OverlaysGallery {
           .child(AlertDialogAction::new().child("delete").danger()),
       );
 
-    let sheet = if self.sheet_open {
-      Some(
-        Sheet::new(cx)
-          .on_close({
-            let gallery = gallery.clone();
-            move |_, _, cx| {
-              gallery.update(cx, |gallery, _| gallery.sheet_open = false);
-            }
-          })
-          .child(DialogTitle::new().child("filters"))
-          .child(DialogDescription::new().child("the scrim closes the sheet; escape does too."))
-          .child(
-            Button::new("sheet-close")
-              .label("done")
-              .on_click(|_, window, cx| {
-                window.dispatch_action(Box::new(base::actions::Cancel), cx);
-              }),
-          ),
-      )
-    } else {
-      None
-    };
-
     // the toaster lives outside the scroll container: a scroll ancestor
     // clips absolutely positioned children, which would hide the stack.
     let toast_elements = self.toast_elements(&gallery);
@@ -339,7 +309,6 @@ impl Render for OverlaysGallery {
           .flex_col()
           .child(sections),
       )
-      .children(sheet)
       .child(dialog)
       .child(alert)
       .child(toaster)
@@ -368,7 +337,7 @@ fn header(theme: &Theme, scale: f32) -> impl IntoElement {
         .child(
           div()
             .text_color(theme.muted_foreground)
-            .child("popover · tooltip · dialog · sheet · alert · toast"),
+            .child("popover · tooltip · dialog · alert · toast"),
         ),
     )
     .child(
@@ -591,24 +560,6 @@ fn dialogs(
         }),
     ))
     .child(labeled(theme, "decision readout", readout(theme, decision)))
-}
-
-fn sheets(gallery: &Entity<OverlaysGallery>, open: bool, theme: &Theme) -> impl IntoElement {
-  let opener = gallery.clone();
-  v_flex().gap_3().child(labeled(
-    theme,
-    if open {
-      "open · scrim and escape close"
-    } else {
-      "closed"
-    },
-    Button::new("open-sheet")
-      .label("open bottom sheet")
-      .outline(true)
-      .on_click(move |_, _, cx| {
-        opener.update(cx, |gallery, _| gallery.sheet_open = true);
-      }),
-  ))
 }
 
 fn alerts(

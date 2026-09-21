@@ -41,7 +41,7 @@ use crate::{
 
 /// scrim applied between the viewport content and a modal surface.
 ///
-/// dialogs and sheets share one wash so stacked modality reads as one depth
+/// every modal layer shares one wash so stacked modality reads as one depth
 /// step, not two.
 pub(crate) fn scrim() -> gpui::Hsla {
   with_alpha(black(), 0.4)

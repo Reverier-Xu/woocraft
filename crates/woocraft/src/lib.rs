@@ -91,7 +91,6 @@ pub use widgets::{
   progress::Progress,
   radio::Radio,
   radio_group::RadioGroup,
-  sheet::Sheet,
   spinner::Spinner,
   switch::Switch,
   tag::{Tag, TagVariant},
