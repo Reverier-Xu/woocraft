@@ -1,25 +1,30 @@
-//! modal sheet with themed scrim and bottom-sheet surface.
+//! modal sheet with themed scrim and an edge-anchored surface.
 //!
 //! this is a styled wrapper over [`gpui_base::Sheet`], which owns focus
 //! trapping, Escape handling, overlay dismissal, and close callback
 //! ordering. the wrapper contributes the design system's defaults: the
-//! shared modal scrim behind the surface and a bottom-anchored card surface
-//! for the content. callers who need a side panel or custom geometry pass
-//! their own overlay or surface, which replaces the matching default.
+//! shared modal scrim behind the surface and a themed card anchored to one
+//! window edge — bottom by default, any side through
+//! [`Sheet::placement`]. callers who need a custom geometry pass their own
+//! overlay or surface, which replaces the matching default.
+//!
+//! the base sheet paints in normal element order rather than through a
+//! deferred layer, so the host must render it after the content it covers.
 //!
 //! ```rust,ignore
-//! use woocraft::{Sheet, v_flex};
+//! use woocraft::{Sheet, base::Placement};
 //!
 //! Sheet::new(cx)
+//!     .placement(Placement::Right)
 //!     .on_close(|_, _, _| {})
-//!     .child(v_flex().child("filter settings"));
+//!     .child("filter settings");
 //! ```
 
 use gpui::{
-  AnyElement, App, ClickEvent, FocusHandle, IntoElement, ParentElement, Pixels, RenderOnce,
-  StyleRefinement, Styled, Window, div, rems,
+  AnyElement, App, ClickEvent, DefiniteLength, FocusHandle, IntoElement, ParentElement, Pixels,
+  RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
-use gpui_base::{Sheet as BaseSheet, StyledExt as _, box_shadow};
+use gpui_base::{Placement, Sheet as BaseSheet, StyledExt as _};
 
 use super::dialog::scrim;
 use crate::{
@@ -31,6 +36,8 @@ use crate::{
 #[derive(IntoElement)]
 pub struct Sheet {
   base: BaseSheet,
+  placement: Placement,
+  size: Option<DefiniteLength>,
   overlay: Option<AnyElement>,
   surface: Option<AnyElement>,
   children: Vec<AnyElement>,
@@ -43,11 +50,28 @@ impl Sheet {
   pub fn new(cx: &mut App) -> Self {
     Self {
       base: BaseSheet::new(cx),
+      placement: Placement::Bottom,
+      size: None,
       overlay: None,
       surface: None,
       children: Vec::new(),
       style: StyleRefinement::default(),
     }
+  }
+
+  /// sets the window edge the surface anchors to; the default is
+  /// [`Placement::Bottom`].
+  pub fn placement(mut self, placement: Placement) -> Self {
+    self.placement = placement;
+    self
+  }
+
+  /// sets the surface size along the placement axis: the height of a top or
+  /// bottom sheet, the width of a side sheet. the default is content-sized
+  /// for top and bottom, `22rem` for the sides.
+  pub fn size(mut self, size: impl Into<DefiniteLength>) -> Self {
+    self.size = Some(size.into());
+    self
   }
 
   /// replaces the themed scrim with a custom overlay element.
@@ -56,7 +80,7 @@ impl Sheet {
     self
   }
 
-  /// replaces the themed bottom sheet with a custom surface element.
+  /// replaces the themed surface with a custom element.
   pub fn surface(mut self, surface: impl IntoElement) -> Self {
     self.surface = Some(surface.into_any_element());
     self
@@ -142,27 +166,73 @@ impl RenderOnce for Sheet {
       Some(surface) => base = base.surface(surface),
       None if !self.children.is_empty() => {
         let children = self.children;
+        let placement = self.placement;
+        // the shadow lifts the surface off the content on the side facing
+        // the window's interior.
+        let shadow_offset = match placement {
+          Placement::Bottom => gpui::point(gpui::px(0.), gpui::px(-2.)),
+          Placement::Top => gpui::point(gpui::px(0.), gpui::px(2.)),
+          Placement::Left => gpui::point(gpui::px(2.), gpui::px(0.)),
+          Placement::Right => gpui::point(gpui::px(-2.), gpui::px(0.)),
+        };
+        // side sheets default to a 22rem panel; top and bottom sheets stay
+        // content-sized until the caller sets a height.
+        let size = self.size.or_else(|| match placement {
+          Placement::Left | Placement::Right => Some(rems(22.).into()),
+          Placement::Top | Placement::Bottom => None,
+        });
         base = base.surface(
           v_flex()
             .absolute()
-            .bottom_0()
-            .left_0()
-            .right_0()
+            .map(|this| match placement {
+              Placement::Bottom => this
+                .bottom_0()
+                .left_0()
+                .right_0()
+                .rounded_tl(radius)
+                .rounded_tr(radius),
+              Placement::Top => this
+                .top_0()
+                .left_0()
+                .right_0()
+                .rounded_bl(radius)
+                .rounded_br(radius),
+              Placement::Left => this
+                .left_0()
+                .top_0()
+                .bottom_0()
+                .rounded_tr(radius)
+                .rounded_br(radius),
+              Placement::Right => this
+                .right_0()
+                .top_0()
+                .bottom_0()
+                .rounded_tl(radius)
+                .rounded_bl(radius),
+            })
+            .when_some(size, |this, size| match placement.axis() {
+              // side sheets size their width, top and bottom their height.
+              gpui::Axis::Horizontal => this.w(size),
+              gpui::Axis::Vertical => this.h(size),
+            })
             .font_family(font_family)
             .text_size(text_size)
             .text_color(card_foreground)
             .bg(card)
-            .border_t(border_width)
             .border_color(border_color)
-            .rounded_tl(radius)
-            .rounded_tr(radius)
-            .shadow(vec![box_shadow(
-              gpui::px(0.),
-              gpui::px(-2.),
-              shadow_blur,
-              gpui::px(0.),
-              with_alpha(gpui::black(), 0.15),
-            )])
+            .map(|this| match placement {
+              Placement::Bottom => this.border_t(border_width),
+              Placement::Top => this.border_b(border_width),
+              Placement::Left => this.border_r(border_width),
+              Placement::Right => this.border_l(border_width),
+            })
+            .shadow(vec![gpui::BoxShadow {
+              color: with_alpha(gpui::black(), 0.15),
+              offset: shadow_offset,
+              blur_radius: shadow_blur,
+              spread_radius: gpui::px(0.),
+              inset: false,
+            }])
             .p(rems(1.5))
             .gap(rems(1.))
             .refine_style(&style)
