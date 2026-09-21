@@ -27,6 +27,11 @@ type ToolbarButtonHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 /// (close / minimize / zoom) so the title-bar content never overlaps them.
 const TRAFFIC_LIGHT_PADDING: f32 = 68.0;
 
+/// the rendered height of [`TitleBar`]: `2rem` of control row inside `0.25rem`
+/// of vertical padding. modal overlays default their backdrop dismissal
+/// cutoff to this value so the title bar never doubles as a close button.
+pub const TITLE_BAR_HEIGHT: gpui::Rems = rems(2.5);
+
 #[derive(IntoElement)]
 pub struct TitleBar {
   style: StyleRefinement,

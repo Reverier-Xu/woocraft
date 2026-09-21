@@ -39,6 +39,7 @@ resources = ["dep:rust-embed", "dep:zstd"]
 tray = ["dep:woocraft-tray"]
 
 [dev-dependencies]
+gpui-base     = { workspace = true, features = ["test-support"] }
 gpui-platform = { workspace = true }
 
 [[example]]
