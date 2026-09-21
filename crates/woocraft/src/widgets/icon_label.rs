@@ -128,9 +128,3 @@ impl RenderOnce for IconLabel {
       .refine_style(&self.style)
   }
 }
-
-impl From<IconLabel> for AnyElement {
-  fn from(value: IconLabel) -> Self {
-    value.into_any_element()
-  }
-}
