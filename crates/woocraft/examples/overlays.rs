@@ -11,9 +11,9 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-  Anchor, App, AppContext, Bounds, Context, Entity, FocusHandle, Global, InteractiveElement,
-  IntoElement, Keystroke, ParentElement, Point, Render, SharedString, StatefulInteractiveElement,
-  Styled, Window, WindowBounds, WindowOptions, div, prelude::FluentBuilder as _, px, rems, size,
+  Anchor, App, AppContext, Bounds, Context, Entity, Global, InteractiveElement, IntoElement,
+  Keystroke, ParentElement, Point, Render, SharedString, StatefulInteractiveElement, Styled,
+  Window, WindowBounds, WindowOptions, div, prelude::FluentBuilder as _, px, rems, size,
 };
 use woocraft::{
   ActiveTheme, AlertDialog, AlertDialogAction, AlertDialogCancel, Button, ButtonVariants as _,
@@ -35,7 +35,14 @@ struct Draft {
   description: Option<&'static str>,
   timeout: Option<Duration>,
   action: bool,
-  pushed_at: Option<Instant>,
+}
+
+/// the countdown state of one timed toast; the gallery owns the clock, so
+/// per-toast hover can hold and restart each timer independently.
+struct ToastTimer {
+  deadline: Instant,
+  duration: Duration,
+  hovered: bool,
 }
 
 struct OverlaysGallery {
@@ -45,8 +52,8 @@ struct OverlaysGallery {
   popover_open: bool,
   decision: Option<&'static str>,
   toasts: ToastManager<SharedString, Draft>,
+  toast_timers: std::collections::HashMap<SharedString, ToastTimer>,
   toast_state: ToastStackState,
-  toast_focus: FocusHandle,
 }
 
 impl OverlaysGallery {
@@ -58,15 +65,16 @@ impl OverlaysGallery {
       popover_open: false,
       decision: None,
       toasts: ToastManager::new(Default::default()),
+      toast_timers: std::collections::HashMap::new(),
       toast_state: ToastStackState::default(),
-      toast_focus: cx.focus_handle(),
     };
     gallery.spawn_tick(window, cx);
     gallery
   }
 
-  /// advances the toast lifecycle clock; the stack pauses auto-hide while
-  /// it is hovered or focused.
+  /// advances the toast lifecycle clock. the manager only keeps transition
+  /// bookkeeping; countdowns live in `toast_timers` so each toast can hold
+  /// and restart on hover.
   fn spawn_tick(&self, window: &Window, cx: &mut Context<Self>) {
     cx.spawn_in(window, async move |gallery, cx| {
       loop {
@@ -74,9 +82,28 @@ impl OverlaysGallery {
           .timer(Duration::from_millis(120))
           .await;
         let _ = gallery.update_in(cx, |gallery, _, cx| {
-          let paused = gallery.toast_state.is_expanded();
-          let advance = gallery.toasts.advance(Instant::now(), paused);
-          if advance.changed {
+          let now = Instant::now();
+          let advance = gallery.toasts.advance(now, false);
+          let mut changed = advance.changed;
+
+          let expired: Vec<_> = gallery
+            .toast_timers
+            .iter()
+            .filter(|(_, timer)| !timer.hovered && timer.deadline <= now)
+            .map(|(id, _)| id.clone())
+            .collect();
+          for id in expired {
+            gallery.toast_timers.remove(&id);
+            gallery.toasts.dismiss(&id, now);
+            changed = true;
+          }
+          // drop timers whose toast already left the manager.
+          gallery
+            .toast_timers
+            .retain(|id, _| gallery.toasts.get(id).is_some());
+
+          // the rails drain every tick, so any live timer means a repaint.
+          if changed || !gallery.toast_timers.is_empty() {
             cx.notify();
           }
         });
@@ -88,12 +115,19 @@ impl OverlaysGallery {
   fn push_toast(&mut self, draft: Draft) {
     // library-minted ids: unique across pushes without a local counter.
     let id = new_id("toast");
-    let mut draft = draft;
-    draft.pushed_at = Some(Instant::now());
-    let timeout = draft.timeout;
+    if let Some(duration) = draft.timeout {
+      self.toast_timers.insert(
+        id.clone(),
+        ToastTimer {
+          deadline: Instant::now() + duration,
+          duration,
+          hovered: false,
+        },
+      );
+    }
     self
       .toasts
-      .push(id, draft, ToastOptions { timeout }, Instant::now());
+      .push(id, draft, ToastOptions { timeout: None }, Instant::now());
   }
 
   /// the mounted toast cards keyed by their stable ids, in display order
@@ -106,12 +140,19 @@ impl OverlaysGallery {
         let gallery = gallery.clone();
         let close_id = id.clone();
         let item_id = gpui::ElementId::from(id.clone());
-        let remaining = draft
-          .timeout
-          .zip(draft.pushed_at)
-          .map(|(timeout, pushed_at)| {
-            (1. - pushed_at.elapsed().as_secs_f32() / timeout.as_secs_f32()).clamp(0., 1.)
-          });
+        let remaining = self.toast_timers.get(id).map(|timer| {
+          if timer.hovered {
+            1.0
+          } else {
+            timer
+              .deadline
+              .saturating_duration_since(Instant::now())
+              .as_secs_f32()
+              / timer.duration.as_secs_f32()
+          }
+        });
+        let hover_id = id.clone();
+        let hover_gallery = gallery.clone();
         let card = Toast::new(id.clone())
           .variant(draft.variant)
           .title(draft.title)
@@ -120,6 +161,18 @@ impl OverlaysGallery {
           })
           .when_some(remaining, |toast, remaining| {
             toast.timeout_progress(remaining)
+          })
+          .on_hover_change(move |hovered, window, cx| {
+            hover_gallery.update(cx, |gallery, _| {
+              if let Some(timer) = gallery.toast_timers.get_mut(&hover_id) {
+                timer.hovered = hovered;
+                if !hovered {
+                  // a held toast restarts its countdown from full.
+                  timer.deadline = Instant::now() + timer.duration;
+                }
+              }
+            });
+            window.refresh();
           })
           .transition_status(status)
           .when(draft.action, |toast| {
@@ -310,8 +363,10 @@ impl Render for OverlaysGallery {
     // the toaster lives outside the scroll container: a scroll ancestor
     // clips absolutely positioned children, which would hide the stack.
     let toast_elements = self.toast_elements(&gallery);
+    // expansion is purely hover-driven: pinning the stack's focus would
+    // keep it expanded after any click inside, and the countdowns are
+    // already managed per toast.
     let mut toaster = Toaster::new("gallery-toaster", self.toast_state.clone())
-      .focus_handle(self.toast_focus.clone())
       .absolute()
       .top(rems(1.))
       .right(rems(1.))
@@ -679,7 +734,6 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "workspace synced",
                   description: None,
                   action: false,
-                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -696,7 +750,6 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "project saved",
                   description: Some("all changes written to disk"),
                   action: false,
-                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -713,7 +766,6 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "deprecated dependency",
                   description: Some("left-pad 1.3.0 is deprecated"),
                   action: false,
-                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -730,7 +782,6 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "build failed",
                   description: Some("2 errors in main.rs"),
                   action: false,
-                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -747,7 +798,6 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "tip",
                   description: Some("hover the stack to pause timers"),
                   action: false,
-                  pushed_at: None,
                   timeout: None,
                 });
               });
@@ -764,7 +814,6 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "file deleted",
                   description: Some("notes/draft.md moved to trash"),
                   action: true,
-                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -785,7 +834,6 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                      five, six, seven, eight, nine, ten, eleven, twelve",
                   ),
                   action: false,
-                  pushed_at: None,
                   timeout: None,
                 });
               });

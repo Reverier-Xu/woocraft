@@ -56,6 +56,7 @@ use crate::{
 
 type CloseHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 type ActionHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+type HoverHandler = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 
 /// intent color of a themed toast card.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -106,6 +107,7 @@ pub struct Toast {
   timeout_progress: Option<f32>,
   action: Option<(SharedString, ActionHandler)>,
   on_close: Option<CloseHandler>,
+  on_hover_change: Option<HoverHandler>,
   children: Vec<AnyElement>,
   style: StyleRefinement,
 }
@@ -123,6 +125,7 @@ impl Toast {
       timeout_progress: None,
       action: None,
       on_close: None,
+      on_hover_change: None,
       children: Vec::new(),
       style: StyleRefinement::default(),
     }
@@ -197,6 +200,16 @@ impl Toast {
     self
   }
 
+  /// reports pointer hover over the card. a timed toast pins its rail at
+  /// full while hovered; the application, which owns the countdown clock,
+  /// uses the callback to stop the timer on entry and restart it on exit.
+  pub fn on_hover_change(
+    mut self, handler: impl Fn(bool, &mut Window, &mut App) + 'static,
+  ) -> Self {
+    self.on_hover_change = Some(Rc::new(handler));
+    self
+  }
+
   /// sets the lifecycle phase driving the card's fade presentation.
   pub fn transition_status(mut self, status: ToastTransitionStatus) -> Self {
     self.base = self.base.transition_status(status);
@@ -258,6 +271,11 @@ impl RenderOnce for Toast {
     let style = self.style;
     let id = self.id.clone();
 
+    // hover is tracked per card: it pins the timeout rail at full and is
+    // reported to the application's countdown clock.
+    let hovered_slot = window.use_keyed_state((self.id.clone(), "hover"), cx, |_, _| false);
+    let hovered = *hovered_slot.read(cx);
+
     // enter: one fade per card lifetime, keyed by the toast id — the card
     // mounts exactly once. exit: a retargeting fade the status flip starts
     // while the base stack keeps the card mounted.
@@ -294,7 +312,7 @@ impl RenderOnce for Toast {
     let timeout_track = self.timeout_progress.map(|progress| {
       let progress = gpui_base::transition(
         (self.id.clone(), "timeout"),
-        progress,
+        if hovered { 1.0 } else { progress },
         gpui_base::Transition::new(duration::CONTROL),
         window,
         cx,
@@ -341,9 +359,7 @@ impl RenderOnce for Toast {
     // chrome; the card's own stack adds nothing.
     let mut title_label = IconLabel::new((self.id.clone(), "title"))
       .icon(Icon::new(icon).text_color(accent))
-      .w_full()
-      .px(rems(0.))
-      .py(rems(0.));
+      .w_full();
     if let Some(title) = self.title {
       title_label = title_label.label(title);
     }
@@ -403,11 +419,23 @@ impl RenderOnce for Toast {
         .into_any_element()
     });
 
+    let on_hover_change = self.on_hover_change;
+    let on_hover_slot = hovered_slot.clone();
+
     self
       .base
       .refine_style(&style)
       .debug_selector(|| "woocraft-toast-card".into())
       .w_full()
+      // a toast is a wall, not a window: pointer events never fall through
+      // to whatever the stack happens to cover.
+      .occlude()
+      .on_hover(move |entered: &bool, window, cx| {
+        on_hover_slot.update(cx, |slot, _| *slot = *entered);
+        if let Some(handler) = on_hover_change.as_ref() {
+          handler(*entered, window, cx);
+        }
+      })
       .font_family(font_family)
       .text_size(text_size)
       .text_color(foreground)
@@ -636,6 +664,47 @@ mod tests {
       action.origin.x + action.size.width,
       card.origin.x + card.size.width - border - rems(0.25).to_pixels(rem),
       "the action block owns a 0.25rem chrome and right-aligns its button"
+    );
+  }
+
+  #[gpui::test]
+  fn hover_pins_the_rail_at_full(cx: &mut gpui::TestAppContext) {
+    let (_clicked, cx) = toast_window(cx);
+    let track = cx
+      .debug_bounds("woocraft-toast-timeout-track")
+      .expect("the timeout track paints");
+    let fill = cx
+      .debug_bounds("woocraft-toast-timeout-fill")
+      .expect("the timeout fill paints");
+    assert!(
+      fill.size.width < track.size.width,
+      "the rail starts mid-drain"
+    );
+
+    let card = cx
+      .debug_bounds("woocraft-toast-card")
+      .expect("the toast card paints");
+    // the pin animates over the control duration; reduced motion snaps it.
+    cx.update(|_, cx| cx.set_reduce_motion(true));
+    cx.simulate_mouse_move(
+      point(
+        card.origin.x + card.size.width / 2.,
+        card.origin.y + card.size.height / 2.,
+      ),
+      None,
+      Default::default(),
+    );
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    let fill = cx
+      .debug_bounds("woocraft-toast-timeout-fill")
+      .expect("the timeout fill paints");
+    let expected = track.size.width;
+    assert!(
+      (fill.size.width - expected).abs() <= gpui::px(1.),
+      "hovering pins the rail at full, got {:?} of {:?}",
+      fill.size.width,
+      track.size.width,
     );
   }
 
