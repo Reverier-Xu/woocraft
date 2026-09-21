@@ -14,6 +14,7 @@ rust-version = { workspace = true }
 version      = { workspace = true }
 
 [dependencies]
+fastrand           = { workspace = true }
 gpui               = { workspace = true }
 gpui-base          = { workspace = true }
 gpui-platform      = { workspace = true }

@@ -11,6 +11,8 @@
 - [x] 依赖基座：gpui-pre 家族经 `woocraft::gpui` / `woocraft::platform` /
       `woocraft::base` 再导出，`application()` 一键引导
 - [x] P1 基建：根级词汇再导出（traits / h_flex / v_flex）+ `base::init` 串联
+- [x] 通用 id 生成器：`new_id("toast")` → `toast-` + 21 位随机小写字母数
+      字，action/dock 等内管内容 id 的统一入口（fastrand 直依赖）
 - [x] Button：8 变体 + outline + loading（motion 驱动）+ disabled/selected 语义态
 - [x] Icon 系统：build.rs 生成 IconName + Icon widget + 自定义注册
 - [x] Window 家族：TitleBar（三平台窗口控制 + CSD 拖拽）+ WindowBorder

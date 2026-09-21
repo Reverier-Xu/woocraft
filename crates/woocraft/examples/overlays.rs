@@ -19,7 +19,7 @@ use woocraft::{
   ActiveTheme, AlertDialog, AlertDialogAction, AlertDialogCancel, Button, ButtonVariants as _,
   Dialog, DialogClose, DialogDescription, DialogHandle, DialogStack, DialogTitle, Kbd, Popover,
   Theme, ThemeMode, Toast, ToastManager, ToastOptions, ToastStackState, ToastVariant, Toaster,
-  Tooltip, WindowExt as _, application, base, h_flex, init, logging, v_flex,
+  Tooltip, WindowExt as _, application, base, h_flex, init, logging, new_id, v_flex,
 };
 
 /// the current ui font size, adjustable from the gallery header.
@@ -47,7 +47,6 @@ struct OverlaysGallery {
   toasts: ToastManager<SharedString, Draft>,
   toast_state: ToastStackState,
   toast_focus: FocusHandle,
-  toast_serial: usize,
 }
 
 impl OverlaysGallery {
@@ -61,7 +60,6 @@ impl OverlaysGallery {
       toasts: ToastManager::new(Default::default()),
       toast_state: ToastStackState::default(),
       toast_focus: cx.focus_handle(),
-      toast_serial: 0,
     };
     gallery.spawn_tick(window, cx);
     gallery
@@ -88,8 +86,8 @@ impl OverlaysGallery {
   }
 
   fn push_toast(&mut self, draft: Draft) {
-    self.toast_serial += 1;
-    let id = SharedString::from(format!("toast-{}", self.toast_serial));
+    // library-minted ids: unique across pushes without a local counter.
+    let id = new_id("toast");
     let mut draft = draft;
     draft.pushed_at = Some(Instant::now());
     let timeout = draft.timeout;

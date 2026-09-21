@@ -25,6 +25,7 @@
 pub mod error;
 pub mod i18n;
 pub mod icon;
+pub mod id;
 pub mod logging;
 pub mod theme;
 pub mod widgets;
@@ -63,6 +64,7 @@ pub use i18n::{
 pub use icon::{
   Icon, IconName, IconNamed, clear_custom_icons, custom_icon_path, register_icon, unregister_icon,
 };
+pub use id::new_id;
 pub use rust_i18n::{available_locales as available_locales_macro, t, tkv};
 pub use theme::{
   ActiveTheme, ScrollbarShow, SyntaxTokenHues, Theme, ThemeColors, ThemeMode, ThemeTokens,

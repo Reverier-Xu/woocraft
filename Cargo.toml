@@ -31,6 +31,7 @@ unsafe_code = "forbid"
 # zed's gpui runtime, republished on crates.io as `gpui-pre`; inherited by
 # members under the historical `gpui` alias so ported code stays unchanged.
 crossbeam-channel = "0.5"
+fastrand = "2.5"
 gpui = { version = "0.3", package = "gpui-pre" }
 gpui-base = "0.6"
 gpui-platform = { version = "0.3", package = "gpui-pre-platform", features = [
