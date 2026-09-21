@@ -40,6 +40,7 @@ pub struct Toggle {
   base: BaseToggle,
   pressed: bool,
   disabled: bool,
+  provided_focus: Option<FocusHandle>,
   icon: Option<Icon>,
   label: Option<SharedString>,
   children: Vec<AnyElement>,
@@ -55,6 +56,7 @@ impl Toggle {
       id,
       pressed: false,
       disabled: false,
+      provided_focus: None,
       icon: None,
       label: None,
       children: Vec::new(),
@@ -96,6 +98,7 @@ impl Toggle {
 
   /// uses a caller-owned focus handle instead of creating keyed state.
   pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+    self.provided_focus = Some(focus_handle.clone());
     self.base = self.base.track_focus(focus_handle);
     self
   }
@@ -121,10 +124,10 @@ impl Toggle {
   }
 
   fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
-    window
-      .use_keyed_state((self.id.clone(), "focus"), cx, |_, cx| cx.focus_handle())
-      .read(cx)
-      .clone()
+    // the keyed slot must match the base primitive's own key — a distinct
+    // key would read a handle nothing tracks, and the focus ring would
+    // never light up.
+    super::base_focus_handle(&self.id, self.provided_focus.as_ref(), window, cx)
   }
 }
 

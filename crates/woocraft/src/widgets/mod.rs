@@ -1,5 +1,23 @@
 //! styled widgets built on the gpui-base behavioral foundations.
 
+use gpui::{App, ElementId, FocusHandle, Window};
+
+/// resolves the focus handle the base control actually tracks: the
+/// caller-provided handle when `track_focus` set one, otherwise the keyed
+/// handle the base primitive creates under the control's element id.
+/// reading the same keyed slot is what lets the styled layer draw focus
+/// indication that follows the real focus target.
+pub(crate) fn base_focus_handle(
+  id: &ElementId, provided: Option<&FocusHandle>, window: &mut Window, cx: &mut App,
+) -> FocusHandle {
+  provided.cloned().unwrap_or_else(|| {
+    window
+      .use_keyed_state(id.clone(), cx, |_, cx| cx.focus_handle())
+      .read(cx)
+      .clone()
+  })
+}
+
 pub mod alert_dialog;
 pub mod avatar;
 pub mod badge;
