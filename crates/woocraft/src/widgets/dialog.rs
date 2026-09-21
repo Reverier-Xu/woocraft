@@ -505,8 +505,6 @@ impl RenderOnce for DialogTitle {
         IconLabel::new("woocraft-dialog-title")
           .icon(icon)
           .w_full()
-          .px(rems(0.))
-          .py(rems(0.))
           .children(self.children),
         self.actions,
         gpui::FontWeight::SEMIBOLD,

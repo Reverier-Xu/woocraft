@@ -9,7 +9,7 @@ use std::rc::Rc;
 use gpui::{
   AnyElement, App, ClickEvent, ElementId, Hsla, InteractiveElement as _, IntoElement,
   ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-  Styled, Window, div, prelude::FluentBuilder as _, rems,
+  Styled, Window, div, prelude::FluentBuilder as _, relative, rems,
 };
 
 use crate::{
@@ -112,8 +112,12 @@ impl RenderOnce for IconLabel {
     h_flex()
       .id(self.id)
       .items_center()
-      // the button's padding contract: 0.5rem on every side, so icon-label
-      // rows land on the same 2rem line as buttons.
+      // the button's geometry contract: a neutral line height so the text
+      // box is exactly the font size, plus 0.5rem padding on every side,
+      // landing the row on the same 2rem line as buttons. this padding is
+      // the component's own — layout blocks embedding an IconLabel keep
+      // their chrome to themselves and never strip it.
+      .line_height(relative(1.))
       .p(rems(0.5))
       .gap(rems(0.5))
       .min_w_0()
