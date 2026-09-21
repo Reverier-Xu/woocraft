@@ -9,7 +9,7 @@ use std::rc::Rc;
 use gpui::{
   AnyElement, App, ClickEvent, ElementId, Hsla, InteractiveElement as _, IntoElement,
   ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-  Styled, Window, prelude::FluentBuilder as _, rems,
+  Styled, Window, div, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{
@@ -115,12 +115,15 @@ impl RenderOnce for IconLabel {
       .gap(rems(0.5))
       .px(rems(0.25))
       .py(rems(0.125))
-      .truncate()
       .min_w_0()
       .text_color(text_color)
       .when(clickable, |this| this.cursor_pointer())
       .when_some(self.icon, |this, icon| this.child(icon))
-      .when_some(self.label, |this, label| this.child(label))
+      // truncation lives on the label's own wrapper: text-overflow only
+      // applies to an element's direct text runs, never to child elements.
+      .when_some(self.label, |this, label| {
+        this.child(div().min_w_0().truncate().child(label))
+      })
       .children(self.children)
       .when_some(self.on_click.filter(|_| clickable), |this, on_click| {
         this.on_click(move |event, window, cx| on_click(event, window, cx))
