@@ -5,8 +5,8 @@
 //! optional center labels (for horizontal dividers), and customizable colors.
 
 use gpui::{
-  App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
-  StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px, rems,
+  App, Axis, Div, Hsla, IntoElement, ParentElement, PathBuilder, Pixels, RenderOnce, SharedString,
+  StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{ActiveTheme, base::StyledExt};
@@ -36,13 +36,13 @@ pub struct Divider {
 }
 
 impl Divider {
-  fn render_base(axis: Axis, labeled: bool) -> Div {
+  fn render_base(axis: Axis, labeled: bool, thickness: Pixels) -> Div {
     div().map(|this| match axis {
-      Axis::Vertical => this.w(px(1.0)).h_full(),
+      Axis::Vertical => this.w(thickness).h_full(),
       // labeled horizontal dividers size themselves to the label chip so the
       // absolutely-positioned line behind it never overlaps neighbours.
       Axis::Horizontal if labeled => this.w_full(),
-      Axis::Horizontal => this.h(px(1.0)).w_full(),
+      Axis::Horizontal => this.h(thickness).w_full(),
     })
   }
 
@@ -100,20 +100,26 @@ impl Divider {
     div().size_full().bg(color)
   }
 
-  fn render_dashed(axis: Axis, color: Hsla) -> impl IntoElement {
+  fn render_dashed(axis: Axis, color: Hsla, thickness: Pixels) -> impl IntoElement {
     div().size_full().child(
       canvas(
         move |_, _, _| {},
         move |bounds, _, window, _| {
-          let mut builder = PathBuilder::stroke(px(1.0)).dash_array(&[px(4.0), px(2.0)]);
+          // the dash rhythm is rem-driven like every other size: a quarter
+          // rem on, an eighth off.
+          let rem = window.rem_size();
+          let dash = rems(0.25).to_pixels(rem);
+          let gap = rems(0.125).to_pixels(rem);
+          let mut builder = PathBuilder::stroke(thickness).dash_array(&[dash, gap]);
+          let half = thickness / 2.;
           let (start, end) = match axis {
             Axis::Horizontal => {
               let x = bounds.origin.x;
-              let y = bounds.origin.y + px(0.5);
+              let y = bounds.origin.y + half;
               (point(x, y), point(x + bounds.size.width, y))
             }
             Axis::Vertical => {
-              let x = bounds.origin.x + px(0.5);
+              let x = bounds.origin.x + half;
               let y = bounds.origin.y;
               (point(x, y), point(x, y + bounds.size.height))
             }
@@ -140,6 +146,7 @@ impl Styled for Divider {
 impl RenderOnce for Divider {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let color = self.color.unwrap_or(cx.theme().border);
+    let thickness = cx.theme().border_width;
     let labeled = self.label.clone().filter(|_| self.axis == Axis::Horizontal);
 
     let base = match labeled {
@@ -151,15 +158,17 @@ impl RenderOnce for Divider {
           .flex()
           .items_center()
           .gap(rems(0.5))
-          .child(div().flex_1().h(px(1.0)).bg(color))
+          .child(div().flex_1().h(thickness).bg(color))
           .child(div().text_color(cx.theme().muted_foreground).child(label))
-          .child(div().flex_1().h(px(1.0)).bg(color))
+          .child(div().flex_1().h(thickness).bg(color))
       }
-      None => Self::render_base(self.axis, false)
+      None => Self::render_base(self.axis, false, thickness)
         .flex_shrink_0()
         .child(match self.line_style {
           DividerStyle::Solid => Self::render_solid(color).into_any_element(),
-          DividerStyle::Dashed => Self::render_dashed(self.axis, color).into_any_element(),
+          DividerStyle::Dashed => {
+            Self::render_dashed(self.axis, color, thickness).into_any_element()
+          }
         }),
     };
 

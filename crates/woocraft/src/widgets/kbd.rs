@@ -233,7 +233,7 @@ impl RenderOnce for Kbd {
       .bg(cx.theme().muted)
       .when(self.outline, |this| {
         this
-          .border_1()
+          .border(cx.theme().border_width)
           .border_color(cx.theme().border)
           .bg(cx.theme().background)
       })
@@ -241,7 +241,7 @@ impl RenderOnce for Kbd {
       .px_1()
       .min_w_5()
       .text_center()
-      .rounded_sm()
+      .rounded(cx.theme().radius)
       .line_height(relative(1.))
       .whitespace_normal()
       .flex_shrink_0()

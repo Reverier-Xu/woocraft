@@ -7,20 +7,24 @@
 use gpui::{
   AnyElement, App, Bounds, CursorStyle, Decorations, Edges, HitboxBehavior, Hsla,
   InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce,
-  ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px,
+  ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px, rems,
 };
 
 use crate::{ActiveTheme, base::v_flex};
 
+/// the outer margin client-decorated windows reserve for the drop shadow,
+/// rem-driven like every other size in the design system; zero where the
+/// platform keeps server-side decorations.
 #[cfg(not(target_os = "linux"))]
-pub(crate) const WINDOW_SHADOW_SIZE: Pixels = px(0.0);
+pub(crate) fn window_shadow_size(_: &Window) -> Pixels {
+  px(0.0)
+}
+
+/// the outer margin client-decorated windows reserve for the drop shadow,
+/// rem-driven like every other size in the design system.
 #[cfg(target_os = "linux")]
-pub(crate) const WINDOW_SHADOW_SIZE: Pixels = px(12.0);
-
-const BORDER_SIZE: Pixels = px(1.0);
-
-pub fn window_border() -> WindowBorder {
-  WindowBorder::new()
+pub(crate) fn window_shadow_size(window: &Window) -> Pixels {
+  rems(0.75).to_pixels(window.rem_size())
 }
 
 /// returns the extra outer padding the window needs under client-side
@@ -29,7 +33,8 @@ pub fn window_paddings(window: &Window) -> Edges<Pixels> {
   match window.window_decorations() {
     Decorations::Server => Edges::all(px(0.0)),
     Decorations::Client { tiling } => {
-      let mut paddings = Edges::all(WINDOW_SHADOW_SIZE);
+      let shadow = window_shadow_size(window);
+      let mut paddings = Edges::all(shadow);
       if tiling.top {
         paddings.top = px(0.0);
       }
@@ -45,6 +50,10 @@ pub fn window_paddings(window: &Window) -> Edges<Pixels> {
       paddings
     }
   }
+}
+
+pub fn window_border() -> WindowBorder {
+  WindowBorder::new()
 }
 
 impl ParentElement for WindowBorder {
@@ -68,7 +77,9 @@ impl RenderOnce for WindowBorder {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let decorations = window.window_decorations();
     let border_radius = cx.theme().radius_container;
-    window.set_client_inset(WINDOW_SHADOW_SIZE);
+    let border_size = cx.theme().border_width;
+    let shadow_size = window_shadow_size(window);
+    window.set_client_inset(shadow_size);
 
     div()
       .id("window-backdrop")
@@ -91,7 +102,7 @@ impl RenderOnce for WindowBorder {
               move |_bounds, hitbox, window, _| {
                 let mouse = window.mouse_position();
                 let size = window.window_bounds().get_bounds().size;
-                let Some(edge) = resize_edge(mouse, WINDOW_SHADOW_SIZE, size) else {
+                let Some(edge) = resize_edge(mouse, shadow_size, size) else {
                   return;
                 };
                 window.set_cursor_style(
@@ -124,15 +135,15 @@ impl RenderOnce for WindowBorder {
           .when(!(tiling.bottom || tiling.right), |div| {
             div.rounded_br(border_radius)
           })
-          .when(!tiling.top, |div| div.pt(WINDOW_SHADOW_SIZE))
-          .when(!tiling.bottom, |div| div.pb(WINDOW_SHADOW_SIZE))
-          .when(!tiling.left, |div| div.pl(WINDOW_SHADOW_SIZE))
-          .when(!tiling.right, |div| div.pr(WINDOW_SHADOW_SIZE))
+          .when(!tiling.top, |div| div.pt(shadow_size))
+          .when(!tiling.bottom, |div| div.pb(shadow_size))
+          .when(!tiling.left, |div| div.pl(shadow_size))
+          .when(!tiling.right, |div| div.pr(shadow_size))
           .on_mouse_down(MouseButton::Left, move |_, window, _| {
             let size = window.window_bounds().get_bounds().size;
             let pos = window.mouse_position();
 
-            if let Some(edge) = resize_edge(pos, WINDOW_SHADOW_SIZE, size)
+            if let Some(edge) = resize_edge(pos, shadow_size, size)
               && !window.is_maximized()
               && !window.is_fullscreen()
             {
@@ -148,7 +159,7 @@ impl RenderOnce for WindowBorder {
             Decorations::Server => this
               .rounded(border_radius)
               .border_color(cx.theme().border)
-              .border_1(),
+              .border(border_size),
             Decorations::Client { tiling } => this
               .when(!(tiling.top || tiling.right), |div| {
                 div.rounded_tr(border_radius)
@@ -163,10 +174,10 @@ impl RenderOnce for WindowBorder {
                 div.rounded_br(border_radius)
               })
               .border_color(cx.theme().border)
-              .when(!tiling.top, |div| div.border_t(BORDER_SIZE))
-              .when(!tiling.bottom, |div| div.border_b(BORDER_SIZE))
-              .when(!tiling.left, |div| div.border_l(BORDER_SIZE))
-              .when(!tiling.right, |div| div.border_r(BORDER_SIZE))
+              .when(!tiling.top, |div| div.border_t(border_size))
+              .when(!tiling.bottom, |div| div.border_b(border_size))
+              .when(!tiling.left, |div| div.border_l(border_size))
+              .when(!tiling.right, |div| div.border_r(border_size))
               .when(!tiling.is_tiled(), |div| {
                 div.shadow(vec![gpui::BoxShadow {
                   color: Hsla {
@@ -175,7 +186,7 @@ impl RenderOnce for WindowBorder {
                     l: 0.,
                     a: 0.3,
                   },
-                  blur_radius: WINDOW_SHADOW_SIZE / 2.,
+                  blur_radius: shadow_size / 2.,
                   spread_radius: px(0.),
                   offset: point(px(0.0), px(0.0)),
                   inset: false,

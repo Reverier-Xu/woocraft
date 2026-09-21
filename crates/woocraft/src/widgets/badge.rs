@@ -161,7 +161,7 @@ impl RenderOnce for Badge {
         .bg(badge_color)
         .text_color(text_color)
         .size(rems(1.25))
-        .border_1()
+        .border(cx.theme().border_width)
         .border_color(cx.theme().background)
         .child(*icon)
         .into_any_element(),
