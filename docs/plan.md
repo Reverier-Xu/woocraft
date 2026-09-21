@@ -100,7 +100,32 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
   `close_all_dialogs`）；栈拥有 open 状态、焦点柄与层号，仅最顶层显示
   scrim、响应背板与 Escape，关闭层自动归还焦点
 
-### P4 文本输入与编辑器家族（2026-09-21 调研改版：input 与 editor 合并立项）
+### P4a 列表基座与 menu（2026-09-21 二次调整：提前于 input 家族）
+
+调研结论（base 0.6.4 + 旧库对照）：
+
+- base `virtual_list`（905 行）是真虚拟化原语（变高、双向、量测策略）；
+  等高场景由 gpui 自带 `uniform_list` 覆盖
+- base `tree`（654 行）已含完整行为模型：`TreeState`（展平 entry / 选中 /
+  右击 / reveal / 滚动定位）+ 键位导航 + `item()` 渲染接缝，且 `base::init`
+  已注册其键位；styled 层只做主题行面
+- base `table` 只有无样式 a11y 语义骨架（role 容器），无列模型 / 排序 /
+  选择——列模型与排序选择语义是 woocraft 要补的“基础模型”
+- 旧库 list(1.4k)/table(3.0k)/tree(0.8k) 的 delegate 模式偏重；woocraft
+  走薄路线：模型归组件（table）或 base（tree），数据与选择归应用；menu
+  后续直接复用 ListItem + Popover
+
+- [ ] list：`List` 容器 + `ListItem` 行面（选中 / hover / disabled 语义、
+      前后插槽）；虚拟化演示走 uniform_list + virtual_list 双示例
+- [ ] table：`TableState` 基础模型（列宽 Fixed/Fraction、排序描述符、行
+      选择）+ styled `Table`（表头排序交互 + uniform_list 虚拟行 + 主题
+      行/单元格面）；列拖宽 / 重排 / 多选后续增量
+- [ ] tree：base `TreeState` 再导出 + styled `Tree`（缩进导轨、折叠箭头、
+      主题行面）
+- [ ] menu：popup / context / dropdown 三形态，复用 ListItem + Popover；
+      TitleBar title_menu 回接；list 就绪后启动
+
+### P4b 输入家族（原 P4 主体，后移）
 
 调研结论（对照 woocraft.old 与 gpui-base 0.6.4）：
 
@@ -133,18 +158,13 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
 - [ ] M2 number_input(489) / otp_input(237)：input 派生
 - [ ] M3 select(507) / combobox(246)：前置 dropdown 通道决策（跨关闭续挂
       动画，P3 遗留）
-- [ ] M4 calendar(1078) → date_picker(112) → color_picker(995)：与 editor
-      无依赖，可穿插
-- [ ] M5 styled Editor：行号槽 / 折叠列 / 当前行 / 诊断 / 搜索面板（走
-      DialogStack + Popover）/ 右键菜单（依赖 menu 组件决策）；EditBackend
-      集成层；editor 画廊 + 大文件压测（第一期 ropey 全量载入出基线；真
-      file-sink 待上游 buffer 抽象或 woocraft windowed-rope 适配器 spike）
-- [ ] M6 滚动条预览条（ScrollbarPreview 移植）；字形 minimap 二期评估
+- [ ] M4 calendar(1078) → date_picker(112) → color_picker(995)：无依赖，
+      可穿插
 
 ### P5 容器与导航
 
-- tabs(428) / pagination(281) / list + virtual_list(905) / nav_stack(833) /
-  accordion(507) / table(424) / tree(654) / resizable(1485)
+- tabs(428) / pagination(281) / nav_stack(833) / accordion(507) /
+  resizable(1485)；list + virtual_list / table / tree 已提前至 P4a
 - scrollbar 样式化封装（base 行为已可用）
 
 ### P6 域组件（需单项决策）
@@ -152,8 +172,17 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
 - **chart**：旧 `base/plot` 子系统（axis/grid/scale/shape）随迁
 - **terminal**：alacritty 依赖，单独 feature
 - **dock**(8325)：最后，依赖 P3 + P5 全部就绪
-- editor 已移交 P4（2026-09-21 调研：base input 子系统单引擎三门面即
-  editor，tree-sitter 高亮链走注入缝集成，不再走 text/text_selection spike）
+- editor 后置为独立阶段（见下方 editor 小节；2026-09-21 调研：base input
+  子系统单引擎三门面即 editor，tree-sitter 高亮链走注入缝集成，不再走
+  text/text_selection spike）
+
+### editor（后置；原 P4 M5/M6，input 家族与 P5 主体就绪后启动）
+
+- [ ] styled Editor：行号槽 / 折叠列 / 当前行 / 诊断 / 搜索面板（走
+      DialogStack + Popover）/ 右键菜单（依赖 P4a menu）；EditBackend
+      集成层；editor 画廊 + 大文件压测（第一期 ropey 全量载入出基线；真
+      file-sink 待上游 buffer 抽象或 woocraft windowed-rope 适配器 spike）
+- [ ] 滚动条预览条（ScrollbarPreview 移植）；字形 minimap 二期评估
 
 ## 设计规范速记（全文见 AGENTS.md §3.4 / §8）
 
