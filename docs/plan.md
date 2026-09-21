@@ -71,6 +71,22 @@ calendar → date_picker
 - 回接项：TitleBar 的 `title_menu` 与语言切换按钮（menu 全功能组件就绪后接入
   `app_menu_bar` 插槽）
 
+P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
+
+- dialog/alert：卡片居中 + 默认宽 28rem + 视口钳制 + max_h 内滚动；默认
+  关闭（base 默认 open=true 是反直觉陷阱）；scrim 按 window_paddings 内缩
+  并挂 Drag 控制区；`dismiss_below_y` 默认 TITLE_BAR_HEIGHT；新增
+  width/max_w/margin_top；DialogClose 与 alert 按钮改走 DispatchAnchor
+  （焦点锚派发，焦点被弹层外持有时不失效）；再导出 DialogTrigger /
+  AlertDialogTrigger
+- popover：面板与 trigger 间 0.25rem 缝隙（按 anchor 方向）；新增
+  `appearance(false)` 裸面板；再导出 PopoverState
+- tooltip：卡片外 margin 0.75rem（不贴光标）+ max_w 20rem
+- sheet：新增 `placement`（默认 Bottom 保持现设计）与 `size`（侧边默认
+  22rem）；文档注明 base Sheet 非 deferred，宿主需后挂
+- 回归测试：dialog 居中/钳制/默认关闭走 gpui test-support 的 debug_bounds
+  （dev-only feature）
+
 ### P4 输入家族
 
 - input 状态机 → number_input(489) / otp_input(237)
