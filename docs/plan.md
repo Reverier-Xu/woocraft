@@ -115,12 +115,12 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
   走薄路线：模型归组件（table）或 base（tree），数据与选择归应用；menu
   后续直接复用 ListItem + Popover
 
-- [ ] list：`List` 容器 + `ListItem` 行面（选中 / hover / disabled 语义、
+- [x] list：`List` 容器 + `ListItem` 行面（选中 / hover / disabled 语义、
       前后插槽）；虚拟化演示走 uniform_list + virtual_list 双示例
-- [ ] table：`TableState` 基础模型（列宽 Fixed/Fraction、排序描述符、行
+- [x] table：`TableState` 基础模型（列宽 Fixed/Fraction、排序描述符、行
       选择）+ styled `Table`（表头排序交互 + uniform_list 虚拟行 + 主题
       行/单元格面）；列拖宽 / 重排 / 多选后续增量
-- [ ] tree：base `TreeState` 再导出 + styled `Tree`（缩进导轨、折叠箭头、
+- [x] tree：base `TreeState` 再导出 + styled `Tree`（缩进导轨、折叠箭头、
       主题行面）
 - [ ] menu：popup / context / dropdown 三形态，复用 ListItem + Popover；
       TitleBar title_menu 回接；list 就绪后启动
