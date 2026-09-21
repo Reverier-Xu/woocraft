@@ -34,6 +34,7 @@ struct Draft {
   title: &'static str,
   description: Option<&'static str>,
   timeout: Option<Duration>,
+  action: bool,
 }
 
 struct OverlaysGallery {
@@ -109,6 +110,16 @@ impl OverlaysGallery {
             toast.description(description)
           })
           .transition_status(status)
+          .when(draft.action, |toast| {
+            let undo_id = id.clone();
+            let undo_gallery = gallery.clone();
+            toast.action("undo", move |_, window, cx| {
+              undo_gallery.update(cx, |gallery, _| {
+                gallery.toasts.dismiss(&undo_id, Instant::now());
+              });
+              window.refresh();
+            })
+          })
           .on_close(move |window, cx| {
             gallery.update(cx, |gallery, _| {
               gallery.toasts.dismiss(&close_id, Instant::now());
@@ -624,6 +635,8 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
   let warning_push = gallery.clone();
   let danger_push = gallery.clone();
   let info_push = gallery.clone();
+  let action_push = gallery.clone();
+  let long_push = gallery.clone();
 
   v_flex()
     .gap_3()
@@ -642,6 +655,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   variant: ToastVariant::Default,
                   title: "workspace synced",
                   description: None,
+                  action: false,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -657,6 +671,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   variant: ToastVariant::Success,
                   title: "project saved",
                   description: Some("all changes written to disk"),
+                  action: false,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -672,6 +687,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   variant: ToastVariant::Warning,
                   title: "deprecated dependency",
                   description: Some("left-pad 1.3.0 is deprecated"),
+                  action: false,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -687,6 +703,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   variant: ToastVariant::Danger,
                   title: "build failed",
                   description: Some("2 errors in main.rs"),
+                  action: false,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -702,6 +719,43 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   variant: ToastVariant::Info,
                   title: "tip",
                   description: Some("hover the stack to pause timers"),
+                  action: false,
+                  timeout: None,
+                });
+              });
+            }),
+        )
+        .child(
+          Button::new("push-action")
+            .label("action")
+            .outline(true)
+            .on_click(move |_, _, cx| {
+              action_push.update(cx, |gallery, _| {
+                gallery.push_toast(Draft {
+                  variant: ToastVariant::Default,
+                  title: "file deleted",
+                  description: Some("notes/draft.md moved to trash"),
+                  action: true,
+                  timeout: Some(Duration::from_secs(5)),
+                });
+              });
+            }),
+        )
+        .child(
+          Button::new("push-long")
+            .label("long copy")
+            .outline(true)
+            .on_click(move |_, _, cx| {
+              long_push.update(cx, |gallery, _| {
+                gallery.push_toast(Draft {
+                  variant: ToastVariant::Info,
+                  title: "a title that runs well past the width the stack gives the card",
+                  description: Some(
+                    "a description long enough to wrap past three lines of body copy, so the \
+                     card clamps the block and lets the rest scroll: one, two, three, four, \
+                     five, six, seven, eight, nine, ten, eleven, twelve",
+                  ),
+                  action: false,
                   timeout: None,
                 });
               });

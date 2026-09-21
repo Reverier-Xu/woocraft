@@ -32,8 +32,9 @@
 use std::rc::Rc;
 
 use gpui::{
-  Anchor, AnyElement, App, ElementId, FocusHandle, IntoElement, ParentElement, RenderOnce,
-  SharedString, StyleRefinement, Styled, Window, black, div, prelude::FluentBuilder as _, px, rems,
+  Anchor, AnyElement, App, ClickEvent, ElementId, FocusHandle, InteractiveElement as _,
+  IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
+  StyleRefinement, Styled, Window, black, div, prelude::FluentBuilder as _, px, relative, rems,
 };
 use gpui_base::{
   Keyframe, Keyframes, StyledExt as _, Timing, Toast as BaseToast, ToastStack as BaseToastStack,
@@ -50,6 +51,7 @@ use crate::{
 };
 
 type CloseHandler = Rc<dyn Fn(&mut Window, &mut App)>;
+type ActionHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 /// intent color of a themed toast card.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -81,6 +83,12 @@ impl ToastVariant {
 }
 
 /// themed notification card rendered inside a toaster stack.
+///
+/// layout contract: the card fills the stack width; the title shares one
+/// row with the intent icon and ellipsizes; the description wraps to at
+/// most three lines and scrolls beyond them; the close control overlays the
+/// top-right corner with a `0.25rem` inset; an optional [`Toast::action`]
+/// button renders under the description.
 #[derive(IntoElement)]
 pub struct Toast {
   id: ElementId,
@@ -88,6 +96,7 @@ pub struct Toast {
   variant: ToastVariant,
   title: Option<SharedString>,
   description: Option<SharedString>,
+  action: Option<(SharedString, ActionHandler)>,
   on_close: Option<CloseHandler>,
   children: Vec<AnyElement>,
   style: StyleRefinement,
@@ -103,6 +112,7 @@ impl Toast {
       variant: ToastVariant::Default,
       title: None,
       description: None,
+      action: None,
       on_close: None,
       children: Vec::new(),
       style: StyleRefinement::default(),
@@ -145,9 +155,20 @@ impl Toast {
     self
   }
 
-  /// sets the secondary line of text.
+  /// sets the secondary line of text; it wraps to at most three lines and
+  /// scrolls beyond them.
   pub fn description(mut self, description: impl Into<SharedString>) -> Self {
     self.description = Some(description.into());
+    self
+  }
+
+  /// embeds an action button under the description, running `handler` when
+  /// activated — sonner's "undo" pattern.
+  pub fn action(
+    mut self, label: impl Into<SharedString>,
+    handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+  ) -> Self {
+    self.action = Some((label.into(), Rc::new(handler)));
     self
   }
 
@@ -247,21 +268,40 @@ impl RenderOnce for Toast {
 
     let shadow_blur = rems(1.).to_pixels(window.rem_size());
     let shadow_offset = rems(0.25).to_pixels(window.rem_size());
+    // the close control overlays the top-right corner with a 0.25rem inset;
+    // the body reserves its width so neither the title nor the description
+    // runs underneath it.
+    let has_close = self.on_close.is_some();
     let close_button = self.on_close.map(|on_close| {
-      Button::new("toast-close")
-        .icon(Icon::new(IconName::Dismiss))
-        .flat()
-        .on_click(move |_, window, cx| on_close(window, cx))
+      div()
+        .debug_selector(|| "woocraft-toast-close".into())
+        .absolute()
+        .top(rems(0.25))
+        .right(rems(0.25))
+        .child(
+          Button::new((self.id.clone(), "close"))
+            .icon(Icon::new(IconName::Dismiss))
+            .flat()
+            .on_click(move |_, window, cx| on_close(window, cx)),
+        )
+        .into_any_element()
+    });
+    let action_button = self.action.map(|(label, on_action)| {
+      div().pt(rems(0.25)).child(
+        Button::new((self.id.clone(), "action"))
+          .debug_selector(|| "woocraft-toast-action".into())
+          .label(label)
+          .outline(true)
+          .on_click(move |event, window, cx| on_action(event, window, cx)),
+      )
     });
 
     self
       .base
       .refine_style(&style)
-      .h_flex()
-      .items_start()
-      .gap(rems(0.75))
-      .px(rems(1.))
-      .py(rems(0.75))
+      .debug_selector(|| "woocraft-toast-card".into())
+      .relative()
+      .w_full()
       .font_family(font_family)
       .text_size(text_size)
       .text_color(foreground)
@@ -277,17 +317,46 @@ impl RenderOnce for Toast {
         with_alpha(black(), 0.2),
       )])
       .opacity(enter * exit)
-      .child(Icon::new(icon).text_color(accent))
       .child(
-        v_flex_toast_body()
-          .gap(rems(0.25))
-          .when_some(self.title, |body, title| {
-            body.child(div().font_weight(gpui::FontWeight::MEDIUM).child(title))
-          })
-          .when_some(self.description, |body, description| {
-            body.child(div().text_color(muted_foreground).child(description))
-          })
-          .children(self.children),
+        div()
+          .flex()
+          .flex_row()
+          .items_start()
+          .gap(rems(0.75))
+          .px(rems(1.))
+          .py(rems(0.75))
+          .child(Icon::new(icon).text_color(accent).flex_none())
+          .child(
+            v_flex_toast_body()
+              .flex_1()
+              .min_w_0()
+              .gap(rems(0.25))
+              .when(has_close, |body| body.pr(rems(2.25)))
+              .when_some(self.title, |body, title| {
+                body.child(
+                  div()
+                    .min_w_0()
+                    .truncate()
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .child(title),
+                )
+              })
+              .when_some(self.description, |body, description| {
+                body.child(
+                  div()
+                    .id((self.id.clone(), "description"))
+                    .debug_selector(|| "woocraft-toast-description".into())
+                    .line_height(relative(1.25))
+                    // three wrapped lines, then scroll.
+                    .max_h(rems(3.75))
+                    .overflow_y_scroll()
+                    .text_color(muted_foreground)
+                    .child(description),
+                )
+              })
+              .children(self.children)
+              .when_some(action_button, |body, action| body.child(action)),
+          ),
       )
       .when_some(close_button, |card, button| card.child(button))
   }
@@ -366,7 +435,12 @@ impl RenderOnce for Toaster {
 
 #[cfg(test)]
 mod tests {
+  use std::{cell::Cell, rc::Rc};
+
+  use gpui::{Context, IntoElement, ParentElement, Render, Styled, div, point, rems};
+
   use super::{Toast, ToastVariant};
+  use crate::theme::ActiveTheme;
 
   #[test]
   fn toast_starts_neutral_without_copy() {
@@ -374,6 +448,7 @@ mod tests {
     assert_eq!(toast.variant, ToastVariant::Default);
     assert!(toast.title.is_none());
     assert!(toast.description.is_none());
+    assert!(toast.action.is_none());
     assert!(toast.on_close.is_none());
   }
 
@@ -381,5 +456,98 @@ mod tests {
   fn variant_setters_update_the_intent() {
     let toast = Toast::new("test").success();
     assert_eq!(toast.variant, ToastVariant::Success);
+  }
+
+  struct Host {
+    clicked: Rc<Cell<bool>>,
+  }
+
+  impl Render for Host {
+    fn render(&mut self, _: &mut gpui::Window, _: &mut Context<Self>) -> impl IntoElement {
+      let clicked = self.clicked.clone();
+      div().w(rems(20.)).child(
+        Toast::new("test-toast")
+          .title("a title that runs well past the width the stack gives the card")
+          .description(
+            "a description long enough to wrap past three lines of body copy, so the card has \
+             to clamp the block and let the rest scroll: one, two, three, four, five, six, \
+             seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen",
+          )
+          .action("undo", move |_, _, _| clicked.set(true))
+          .on_close(|_, _| {}),
+      )
+    }
+  }
+
+  fn toast_window(cx: &mut gpui::TestAppContext) -> (Rc<Cell<bool>>, &mut gpui::VisualTestContext) {
+    cx.update(|cx| crate::init(cx).unwrap());
+    let clicked = Rc::new(Cell::new(false));
+    let host = clicked.clone();
+    let (_view, cx) = cx.add_window_view(|_, _| Host { clicked: host });
+    cx.update(|window, cx| {
+      window.draw(cx).clear(cx);
+      window.draw(cx).clear(cx);
+    });
+    (clicked, cx)
+  }
+
+  #[gpui::test]
+  fn the_card_fills_the_stack_width(cx: &mut gpui::TestAppContext) {
+    let (_clicked, cx) = toast_window(cx);
+    let rem = cx.update(|window, _| window.rem_size());
+    let card = cx
+      .debug_bounds("woocraft-toast-card")
+      .expect("the toast card paints");
+    assert_eq!(card.size.width, rems(20.).to_pixels(rem));
+  }
+
+  #[gpui::test]
+  fn the_description_clamps_to_three_lines(cx: &mut gpui::TestAppContext) {
+    let (_clicked, cx) = toast_window(cx);
+    let rem = cx.update(|window, _| window.rem_size());
+    let description = cx
+      .debug_bounds("woocraft-toast-description")
+      .expect("the description paints");
+    assert!(
+      description.size.height <= rems(3.75).to_pixels(rem),
+      "the description never exceeds three lines, got {:?}",
+      description.size.height,
+    );
+  }
+
+  #[gpui::test]
+  fn the_close_control_sits_in_the_top_right(cx: &mut gpui::TestAppContext) {
+    let (_clicked, cx) = toast_window(cx);
+    let (rem, border) = cx.update(|window, cx| (window.rem_size(), cx.theme().border_width));
+    let card = cx
+      .debug_bounds("woocraft-toast-card")
+      .expect("the toast card paints");
+    let close = cx
+      .debug_bounds("woocraft-toast-close")
+      .expect("the close control paints");
+    // the overlay insets from the card's padding box: the 0.25rem inset
+    // plus the hairline border.
+    let inset = rems(0.25).to_pixels(rem) + border;
+    assert_eq!(close.origin.y, card.origin.y + inset);
+    assert_eq!(
+      close.origin.x + close.size.width,
+      card.origin.x + card.size.width - inset
+    );
+  }
+
+  #[gpui::test]
+  fn the_action_runs_on_click(cx: &mut gpui::TestAppContext) {
+    let (clicked, cx) = toast_window(cx);
+    let action = cx
+      .debug_bounds("woocraft-toast-action")
+      .expect("the action button paints");
+    cx.simulate_click(
+      point(
+        action.origin.x + action.size.width / 2.,
+        action.origin.y + action.size.height / 2.,
+      ),
+      Default::default(),
+    );
+    assert!(clicked.get(), "the action handler ran");
   }
 }
