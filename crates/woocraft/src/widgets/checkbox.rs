@@ -43,6 +43,7 @@ pub struct Checkbox {
   base: BaseCheckbox,
   state: CheckboxState,
   disabled: bool,
+  provided_focus: Option<FocusHandle>,
   label: Option<SharedString>,
   children: Vec<AnyElement>,
   style: StyleRefinement,
@@ -57,6 +58,7 @@ impl Checkbox {
       id,
       state: CheckboxState::Unchecked,
       disabled: false,
+      provided_focus: None,
       label: None,
       children: Vec::new(),
       style: StyleRefinement::default(),
@@ -120,6 +122,7 @@ impl Checkbox {
 
   /// uses a caller-owned focus handle instead of creating keyed state.
   pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+    self.provided_focus = Some(focus_handle.clone());
     self.base = self.base.track_focus(focus_handle);
     self
   }
@@ -178,6 +181,9 @@ impl RenderOnce for Checkbox {
     let state = self.state;
     let disabled = self.disabled;
     let marked = matches!(state, CheckboxState::Checked | CheckboxState::Indeterminate);
+    let focused = !disabled
+      && super::base_focus_handle(&self.id, self.provided_focus.as_ref(), window, cx)
+        .is_focused(window);
 
     // remember the previous semantic state so the mark shrinks out with
     // the shape it was checked in instead of vanishing mid-transition.
@@ -201,6 +207,7 @@ impl RenderOnce for Checkbox {
       theme.muted_foreground,
       theme.primary,
     );
+    let ring = theme.ring;
     let border_width = theme.border_width;
     let (radius, font_size) = (theme.radius, theme.font_size);
     let font_family = theme.font_family.clone();
@@ -236,7 +243,9 @@ impl RenderOnce for Checkbox {
     };
     let mark_color = background;
     let frame_bg = if disabled { muted } else { background };
-    let frame_border = if disabled {
+    let frame_border = if focused && !disabled {
+      ring
+    } else if disabled {
       muted
     } else if marked {
       primary

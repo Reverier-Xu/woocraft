@@ -48,6 +48,7 @@ pub struct Radio {
   base: BaseRadio,
   checked: bool,
   disabled: bool,
+  provided_focus: Option<FocusHandle>,
   label: Option<SharedString>,
   children: Vec<AnyElement>,
   style: StyleRefinement,
@@ -62,6 +63,7 @@ impl Radio {
       id,
       checked: false,
       disabled: false,
+      provided_focus: None,
       label: None,
       children: Vec::new(),
       style: StyleRefinement::default(),
@@ -106,6 +108,7 @@ impl Radio {
 
   /// uses a caller-owned focus handle instead of creating keyed state.
   pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+    self.provided_focus = Some(focus_handle.clone());
     self.base = self.base.track_focus(focus_handle);
     self
   }
@@ -154,6 +157,9 @@ impl RenderOnce for Radio {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
     let disabled = self.disabled;
+    let focused = !disabled
+      && super::base_focus_handle(&self.id, self.provided_focus.as_ref(), window, cx)
+        .is_focused(window);
     // hover is tracked through a keyed slot so the ring morph animates
     // through the same motion transition as the dot; a hover style hook
     // could only snap.
@@ -171,6 +177,7 @@ impl RenderOnce for Radio {
     );
     let (border_width, radius, font_size) = (theme.border_width, theme.radius, theme.font_size);
     let font_family = theme.font_family.clone();
+    let ring_color = theme.ring;
 
     // the inner square fills the content area behind a background-colored
     // ring that carves a one-pixel gap — filling instead of computing an
@@ -189,7 +196,9 @@ impl RenderOnce for Radio {
       window,
       cx,
     );
-    let ring_border = if disabled {
+    let ring_border = if focused && !disabled {
+      ring_color
+    } else if disabled {
       muted
     } else if checked {
       primary

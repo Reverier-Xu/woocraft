@@ -11,10 +11,10 @@
 use gpui::{
   AnyElement, App, ClickEvent, CursorStyle, ElementId, Hsla, InteractiveElement as _, IntoElement,
   ParentElement, Refineable as _, RenderOnce, SharedString, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::{
-  Disableable, Switch as BaseSwitch,
+  Disableable, Switch as BaseSwitch, box_shadow,
   motion::{Transition, transition},
 };
 
@@ -143,6 +143,9 @@ impl RenderOnce for Switch {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
     let disabled = self.disabled;
+    // base switches only ever track the keyed handle under the element id.
+    let focused =
+      !disabled && super::base_focus_handle(&self.id, None, window, cx).is_focused(window);
 
     // hover is tracked through a keyed slot so the knob morph animates
     // through the same motion transition as the slide; a hover style hook
@@ -191,6 +194,7 @@ impl RenderOnce for Switch {
       theme.font_size,
     );
     let font_family = theme.font_family.clone();
+    let (ring, border_width) = (theme.ring, theme.border_width);
 
     let line_color = if disabled {
       if checked {
@@ -215,6 +219,11 @@ impl RenderOnce for Switch {
       .flex_none()
       .w(block_w)
       .h(block_h)
+      // a spread-only shadow rings the track without shifting the knob's
+      // pixel-computed positions.
+      .when(focused, |this| {
+        this.shadow(vec![box_shadow(px(0.), px(0.), px(0.), border_width, ring)])
+      })
       .child(
         div()
           .absolute()

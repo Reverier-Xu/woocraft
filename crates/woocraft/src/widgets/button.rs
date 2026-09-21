@@ -13,10 +13,10 @@ use std::f32::consts::TAU;
 use gpui::{
   AnyElement, App, ClickEvent, ElementId, FocusHandle, Hsla, InteractiveElement, IntoElement,
   ParentElement, Radians, Refineable as _, RenderOnce, SharedString, StatefulInteractiveElement,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, rems,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, rems,
 };
 use gpui_base::{
-  Button as BaseButton, Disableable, RoleOverride, Selectable,
+  Button as BaseButton, Disableable, RoleOverride, Selectable, box_shadow,
   motion::{
     Easing, IterationCount, Keyframe, Keyframes, MotionTransform, Timing, animate_keyframes,
   },
@@ -129,6 +129,7 @@ pub struct Button {
   outline: bool,
   disabled: bool,
   loading: bool,
+  provided_focus: Option<FocusHandle>,
   loading_icon: Option<Icon>,
   icon: Option<Icon>,
   label: Option<SharedString>,
@@ -147,6 +148,7 @@ impl Button {
       outline: false,
       disabled: false,
       loading: false,
+      provided_focus: None,
       loading_icon: None,
       icon: None,
       label: None,
@@ -190,6 +192,7 @@ impl Button {
 
   /// uses a caller-owned focus handle instead of creating keyed state.
   pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+    self.provided_focus = Some(focus_handle.clone());
     self.base = self.base.track_focus(focus_handle);
     self
   }
@@ -367,6 +370,10 @@ fn variant_colors(variant: ButtonVariant, outline: bool, theme: &Theme) -> Varia
 
 impl RenderOnce for Button {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    // the ring lights up from the same handle the base primitive tracks.
+    let focused = !self.disabled
+      && super::base_focus_handle(&self.id, self.provided_focus.as_ref(), window, cx)
+        .is_focused(window);
     let theme = cx.theme();
     let colors = variant_colors(self.variant, self.outline, theme);
     let mut base = self.base;
@@ -392,6 +399,7 @@ impl RenderOnce for Button {
       );
     let (muted, muted_foreground, primary) = (theme.muted, theme.muted_foreground, theme.primary);
     let border_width = theme.border_width;
+    let ring = theme.ring;
 
     base = base
       .min_w(rems(2.))
@@ -421,6 +429,11 @@ impl RenderOnce for Button {
                 .text_color(primary)
             }
           })
+      })
+      // the focus ring is a spread-only shadow so it never shifts geometry,
+      // whichever variant carries a border and whichever does not.
+      .when(focused, |this| {
+        this.shadow(vec![box_shadow(px(0.), px(0.), px(0.), border_width, ring)])
       });
 
     // caller refinements win over the variant defaults.
