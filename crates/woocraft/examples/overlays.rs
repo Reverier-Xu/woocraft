@@ -17,9 +17,9 @@ use gpui::{
 };
 use woocraft::{
   ActiveTheme, AlertDialog, AlertDialogAction, AlertDialogCancel, Button, ButtonVariants as _,
-  Dialog, DialogClose, DialogDescription, DialogHandle, DialogTitle, Kbd, Popover, Theme,
-  ThemeMode, Toast, ToastManager, ToastOptions, ToastStackState, ToastVariant, Toaster, Tooltip,
-  application, base, h_flex, init, logging, v_flex,
+  Dialog, DialogClose, DialogDescription, DialogHandle, DialogStack, DialogTitle, Kbd, Popover,
+  Theme, ThemeMode, Toast, ToastManager, ToastOptions, ToastStackState, ToastVariant, Toaster,
+  Tooltip, WindowExt as _, application, base, h_flex, init, logging, v_flex,
 };
 
 /// the current ui font size, adjustable from the gallery header.
@@ -38,6 +38,7 @@ struct Draft {
 
 struct OverlaysGallery {
   dialog_handle: DialogHandle,
+  dialogs: Entity<DialogStack>,
   alert_open: bool,
   popover_open: bool,
   decision: Option<&'static str>,
@@ -51,6 +52,7 @@ impl OverlaysGallery {
   fn new(window: &Window, cx: &mut Context<Self>) -> Self {
     let gallery = Self {
       dialog_handle: DialogHandle::new(false),
+      dialogs: DialogStack::new(cx),
       alert_open: false,
       popover_open: false,
       decision: None,
@@ -312,6 +314,7 @@ impl Render for OverlaysGallery {
       .child(dialog)
       .child(alert)
       .child(toaster)
+      .child(self.dialogs.clone())
   }
 }
 
@@ -557,6 +560,39 @@ fn dialogs(
         .on_click(move |_, window, cx| {
           let handle = opener.read(cx).dialog_handle.clone();
           handle.open(window, cx);
+        }),
+    ))
+    .child(labeled(
+      theme,
+      "stack driven · layers pile up, only the topmost dims",
+      Button::new("open-stacked-dialog")
+        .label("stack a dialog")
+        .outline(true)
+        .on_click(move |_, window, cx| {
+          window.open_dialog(cx, |dialog, _, _| {
+            dialog
+              .child(DialogTitle::new().child("layered"))
+              .child(
+                DialogDescription::new()
+                  .child("escape closes only this layer; focus returns underneath."),
+              )
+              .child(
+                Button::new("stack-another")
+                  .label("stack another")
+                  .outline(true)
+                  .on_click(|_, window, cx| {
+                    window.open_alert_dialog(cx, |alert, _, _| {
+                      alert
+                        .child(DialogTitle::new().child("topmost"))
+                        .child(
+                          DialogDescription::new()
+                            .child("an alert over a dialog; only this layer answers."),
+                        )
+                        .child(AlertDialogAction::new().child("done"))
+                    });
+                  }),
+              )
+          });
         }),
     ))
     .child(labeled(theme, "decision readout", readout(theme, decision)))

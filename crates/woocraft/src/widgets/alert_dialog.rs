@@ -21,7 +21,7 @@
 
 use gpui::{
   AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, ParentElement,
-  Pixels, RenderOnce, StyleRefinement, Styled, Window, div,
+  Pixels, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 pub use gpui_base::AlertDialogTrigger;
 use gpui_base::{AlertDialog as BaseAlertDialog, DialogChangeReason, DialogHandle};
@@ -43,6 +43,8 @@ pub struct AlertDialog {
   max_width: Option<Pixels>,
   margin_top: Option<Pixels>,
   dismiss_below_y: Option<Pixels>,
+  layer_ix: usize,
+  overlay_visible: bool,
   children: Vec<AnyElement>,
   style: StyleRefinement,
 }
@@ -59,6 +61,8 @@ impl AlertDialog {
       max_width: None,
       margin_top: None,
       dismiss_below_y: None,
+      layer_ix: 0,
+      overlay_visible: true,
       children: Vec::new(),
       style: StyleRefinement::default(),
     }
@@ -157,7 +161,16 @@ impl AlertDialog {
 
   #[doc(hidden)]
   pub fn layer(mut self, index: usize, topmost: bool) -> Self {
+    self.layer_ix = index;
     self.base = self.base.layer(index, topmost);
+    self
+  }
+
+  /// dims the backdrop; the dialog stack clears this on every layer but the
+  /// topmost so stacked modals share one depth step.
+  #[doc(hidden)]
+  pub fn overlay_visible(mut self, visible: bool) -> Self {
+    self.overlay_visible = visible;
     self
   }
 
@@ -196,6 +209,7 @@ impl RenderOnce for AlertDialog {
     let style = self.style;
 
     let mut base = self.base.dismiss_below_y(dismiss_below_y);
+    let overlay_visible = self.overlay_visible;
     let backdrop = match self.backdrop {
       Some(element) => element,
       None => {
@@ -208,7 +222,7 @@ impl RenderOnce for AlertDialog {
           .w(viewport.width - paddings.left - paddings.right)
           .h(viewport.height - paddings.top - paddings.bottom)
           .window_control_area(gpui::WindowControlArea::Drag)
-          .bg(scrim())
+          .when(overlay_visible, |this| this.bg(scrim()))
           .into_any_element()
       }
     };
@@ -218,7 +232,13 @@ impl RenderOnce for AlertDialog {
       None => {
         let children = self.children;
         base = base.popup(modal_card(
-          &geometry, max_width, &style, children, window, cx,
+          &geometry,
+          max_width,
+          &style,
+          self.layer_ix,
+          children,
+          window,
+          cx,
         ));
       }
     }
@@ -268,8 +288,8 @@ impl Styled for AlertDialogAction {
 }
 
 impl RenderOnce for AlertDialogAction {
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let anchor = DispatchAnchor::new("woocraft-alert-confirm", window, cx);
+  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    let anchor = DispatchAnchor::new(cx);
     let dispatch = anchor.clone();
     div()
       .child(anchor.element())
@@ -318,8 +338,8 @@ impl Styled for AlertDialogCancel {
 }
 
 impl RenderOnce for AlertDialogCancel {
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let anchor = DispatchAnchor::new("woocraft-alert-cancel", window, cx);
+  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    let anchor = DispatchAnchor::new(cx);
     let dispatch = anchor.clone();
     div().child(anchor.element()).child(
       self

@@ -25,6 +25,7 @@ pub mod button;
 pub mod checkbox;
 pub mod collapsible;
 pub mod dialog;
+pub mod dialog_stack;
 pub mod divider;
 pub mod icon_label;
 pub mod kbd;

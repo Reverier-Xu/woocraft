@@ -59,12 +59,12 @@ pub(crate) struct DispatchAnchor {
 }
 
 impl DispatchAnchor {
-  pub(crate) fn new(key: &'static str, window: &mut Window, cx: &mut App) -> Self {
-    let handle = window
-      .use_keyed_state(key, cx, |_, cx| cx.focus_handle())
-      .read(cx)
-      .clone();
-    Self { handle }
+  pub(crate) fn new(cx: &mut App) -> Self {
+    // a fresh handle per anchor instance: stacked dialogs each carry their
+    // own, so a dispatch never resolves into a sibling dialog's path.
+    Self {
+      handle: cx.focus_handle(),
+    }
   }
 
   /// a zero-size, out-of-flow node that sits inside the dialog's dispatch
@@ -115,7 +115,7 @@ pub(crate) fn modal_geometry(
 /// absolute placement from [`modal_geometry`], and a body that scrolls
 /// instead of outgrowing the window.
 pub(crate) fn modal_card(
-  geometry: &ModalGeometry, max_width: Option<Pixels>, style: &StyleRefinement,
+  geometry: &ModalGeometry, max_width: Option<Pixels>, style: &StyleRefinement, key: usize,
   children: Vec<AnyElement>, window: &mut Window, cx: &mut App,
 ) -> impl IntoElement {
   let (font_family, text_size, card, card_foreground, border_color, border_width, radius) = {
@@ -134,7 +134,7 @@ pub(crate) fn modal_card(
   let shadow_offset = rems(0.5).to_pixels(window.rem_size());
 
   v_flex()
-    .debug_selector(|| "woocraft-dialog-popup".into())
+    .debug_selector(|| format!("woocraft-dialog-popup-{key}"))
     .absolute()
     .occlude()
     .left(geometry.left)
@@ -160,10 +160,10 @@ pub(crate) fn modal_card(
     .p(rems(1.5))
     .refine_style(style)
     .child(
-      // scrolling needs a stateful element; dialogs are singular per window
-      // in practice, so one shared body id carries no state conflicts.
+      // scrolling needs a stateful element; the layer key keeps every
+      // stacked dialog's scroll state distinct.
       div()
-        .id("woocraft-dialog-body")
+        .id(("woocraft-dialog-body", key))
         .flex()
         .flex_col()
         .flex_1()
@@ -184,6 +184,8 @@ pub struct Dialog {
   max_width: Option<Pixels>,
   margin_top: Option<Pixels>,
   dismiss_below_y: Option<Pixels>,
+  layer_ix: usize,
+  overlay_visible: bool,
   children: Vec<AnyElement>,
   style: StyleRefinement,
 }
@@ -200,6 +202,8 @@ impl Dialog {
       max_width: None,
       margin_top: None,
       dismiss_below_y: None,
+      layer_ix: 0,
+      overlay_visible: true,
       children: Vec::new(),
       style: StyleRefinement::default(),
     }
@@ -305,7 +309,17 @@ impl Dialog {
 
   #[doc(hidden)]
   pub fn layer(mut self, index: usize, topmost: bool) -> Self {
+    self.layer_ix = index;
     self.base = self.base.layer(index, topmost);
+    self
+  }
+
+  /// dims the backdrop; the dialog stack clears this on every layer but the
+  /// topmost so stacked modals share one depth step. the backdrop element
+  /// stays mounted either way to intercept pointer input.
+  #[doc(hidden)]
+  pub fn overlay_visible(mut self, visible: bool) -> Self {
+    self.overlay_visible = visible;
     self
   }
 
@@ -344,6 +358,7 @@ impl RenderOnce for Dialog {
     let style = self.style;
 
     let mut base = self.base.dismiss_below_y(dismiss_below_y);
+    let overlay_visible = self.overlay_visible;
     let backdrop = match self.backdrop {
       Some(element) => element,
       None => {
@@ -359,7 +374,7 @@ impl RenderOnce for Dialog {
           .w(viewport.width - paddings.left - paddings.right)
           .h(viewport.height - paddings.top - paddings.bottom)
           .window_control_area(WindowControlArea::Drag)
-          .bg(scrim())
+          .when(overlay_visible, |this| this.bg(scrim()))
           .into_any_element()
       }
     };
@@ -369,7 +384,13 @@ impl RenderOnce for Dialog {
       None => {
         let children = self.children;
         base = base.popup(modal_card(
-          &geometry, max_width, &style, children, window, cx,
+          &geometry,
+          max_width,
+          &style,
+          self.layer_ix,
+          children,
+          window,
+          cx,
         ));
       }
     }
@@ -512,8 +533,8 @@ impl Styled for DialogClose {
 }
 
 impl RenderOnce for DialogClose {
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let anchor = DispatchAnchor::new("woocraft-dialog-close", window, cx);
+  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    let anchor = DispatchAnchor::new(cx);
     let dispatch = anchor.clone();
     div()
       .child(anchor.element())
@@ -571,7 +592,7 @@ mod tests {
     let (_view, cx) = cx.add_window_view(|_, _| Host { dialog: Some(None) });
     cx.update(|window, cx| window.draw(cx).clear(cx));
     assert!(
-      cx.debug_bounds("woocraft-dialog-popup").is_none(),
+      cx.debug_bounds("woocraft-dialog-popup-0").is_none(),
       "a fresh dialog renders nothing"
     );
   }
@@ -591,7 +612,7 @@ mod tests {
       "the host root paints"
     );
     let bounds = cx
-      .debug_bounds("woocraft-dialog-popup")
+      .debug_bounds("woocraft-dialog-popup-0")
       .expect("an open dialog renders its card");
 
     let expected_width = gpui::rems(28.).to_pixels(rem);

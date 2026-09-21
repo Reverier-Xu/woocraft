@@ -93,6 +93,10 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
   边界拉开 0.25rem；随指针（tooltip）或全局弹出（dialog/toast）的不受影
   响
 - dialog/sheet 入场动画维持“归应用层”决策，库内不加
+- **命令式弹层管理**：新增 `DialogStack`（每窗口一个，挂在根视图）+
+  `WindowExt`（`open_dialog`/`open_alert_dialog`/`close_dialog`/
+  `close_all_dialogs`）；栈拥有 open 状态、焦点柄与层号，仅最顶层显示
+  scrim、响应背板与 Escape，关闭层自动归还焦点
 
 ### P4 输入家族
 

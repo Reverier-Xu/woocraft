@@ -82,6 +82,7 @@ pub use widgets::{
     Dialog, DialogChangeReason, DialogClose, DialogDescription, DialogHandle, DialogTitle,
     DialogTrigger,
   },
+  dialog_stack::{DialogStack, WindowExt},
   divider::{Divider, DividerStyle},
   icon_label::IconLabel,
   kbd::Kbd,
