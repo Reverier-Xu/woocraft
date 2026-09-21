@@ -31,6 +31,7 @@ pub mod icon_label;
 pub mod kbd;
 pub mod label;
 pub mod link;
+pub mod list;
 pub mod popover;
 pub mod progress;
 pub mod radio;

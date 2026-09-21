@@ -90,6 +90,7 @@ pub use widgets::{
   kbd::Kbd,
   label::{HighlightsMatch, Label},
   link::Link,
+  list::{List, ListItem},
   popover::{Popover, PopoverState},
   progress::Progress,
   radio::Radio,
