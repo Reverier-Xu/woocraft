@@ -96,6 +96,7 @@ pub struct Toast {
   variant: ToastVariant,
   title: Option<SharedString>,
   description: Option<SharedString>,
+  timeout_progress: Option<f32>,
   action: Option<(SharedString, ActionHandler)>,
   on_close: Option<CloseHandler>,
   children: Vec<AnyElement>,
@@ -112,6 +113,7 @@ impl Toast {
       variant: ToastVariant::Default,
       title: None,
       description: None,
+      timeout_progress: None,
       action: None,
       on_close: None,
       children: Vec::new(),
@@ -162,6 +164,16 @@ impl Toast {
     self
   }
 
+  /// shows how much of the toast's lifetime remains: a hairline track
+  /// between the title and the content, muted rail under a fill in the
+  /// variant's intent color, draining from `1.0` to `0.0`. the application
+  /// owns the clock and passes the remaining fraction on every render;
+  /// sticky toasts simply never set it.
+  pub fn timeout_progress(mut self, progress: f32) -> Self {
+    self.timeout_progress = Some(progress.clamp(0., 1.));
+    self
+  }
+
   /// embeds an action button under the description, running `handler` when
   /// activated — sonner's "undo" pattern.
   pub fn action(
@@ -205,6 +217,7 @@ impl RenderOnce for Toast {
       text_size,
       foreground,
       muted_foreground,
+      muted,
       card,
       border_color,
       border_width,
@@ -225,6 +238,7 @@ impl RenderOnce for Toast {
         theme.font_size,
         theme.foreground,
         theme.muted_foreground,
+        theme.muted,
         theme.card,
         theme.border,
         theme.border_width,
@@ -268,6 +282,32 @@ impl RenderOnce for Toast {
 
     let shadow_blur = rems(1.).to_pixels(window.rem_size());
     let shadow_offset = rems(0.25).to_pixels(window.rem_size());
+    // the timeout rail drains with the toast's remaining lifetime; the
+    // motion transition just smooths the tick-to-tick steps.
+    let timeout_track = self.timeout_progress.map(|progress| {
+      let progress = gpui_base::transition(
+        (self.id.clone(), "timeout"),
+        progress,
+        gpui_base::Transition::new(duration::CONTROL),
+        window,
+        cx,
+      );
+      div()
+        .debug_selector(|| "woocraft-toast-timeout-track".into())
+        .h(border_width)
+        .w_full()
+        .rounded_full()
+        .bg(muted)
+        .child(
+          div()
+            .debug_selector(|| "woocraft-toast-timeout-fill".into())
+            .h_full()
+            .w(relative(progress))
+            .rounded_full()
+            .bg(accent),
+        )
+        .into_any_element()
+    });
     // the close control overlays the top-right corner with a 0.25rem inset;
     // the body reserves its width so neither the title nor the description
     // runs underneath it.
@@ -322,9 +362,8 @@ impl RenderOnce for Toast {
           .flex()
           .flex_row()
           .items_start()
-          .gap(rems(0.75))
-          .px(rems(1.))
-          .py(rems(0.75))
+          .gap(rems(0.25))
+          .p(rems(0.25))
           .child(Icon::new(icon).text_color(accent).flex_none())
           .child(
             v_flex_toast_body()
@@ -341,6 +380,7 @@ impl RenderOnce for Toast {
                     .child(title),
                 )
               })
+              .when_some(timeout_track, |body, track| body.child(track))
               .when_some(self.description, |body, description| {
                 body.child(
                   div()
@@ -474,6 +514,7 @@ mod tests {
              seven, eight, nine, ten, eleven, twelve, thirteen, fourteen, fifteen, sixteen",
           )
           .action("undo", move |_, _, _| clicked.set(true))
+          .timeout_progress(0.5)
           .on_close(|_, _| {}),
       )
     }
@@ -532,6 +573,24 @@ mod tests {
     assert_eq!(
       close.origin.x + close.size.width,
       card.origin.x + card.size.width - inset
+    );
+  }
+
+  #[gpui::test]
+  fn the_timeout_rail_drains_with_the_remaining_fraction(cx: &mut gpui::TestAppContext) {
+    let (_clicked, cx) = toast_window(cx);
+    let track = cx
+      .debug_bounds("woocraft-toast-timeout-track")
+      .expect("the timeout track paints when progress is set");
+    let fill = cx
+      .debug_bounds("woocraft-toast-timeout-fill")
+      .expect("the timeout fill paints");
+    let expected = track.size.width / 2.;
+    assert!(
+      (fill.size.width - expected).abs() <= gpui::px(1.),
+      "half the lifetime remains, got fill {:?} of track {:?}",
+      fill.size.width,
+      track.size.width,
     );
   }
 

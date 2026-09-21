@@ -35,6 +35,7 @@ struct Draft {
   description: Option<&'static str>,
   timeout: Option<Duration>,
   action: bool,
+  pushed_at: Option<Instant>,
 }
 
 struct OverlaysGallery {
@@ -89,6 +90,8 @@ impl OverlaysGallery {
   fn push_toast(&mut self, draft: Draft) {
     self.toast_serial += 1;
     let id = SharedString::from(format!("toast-{}", self.toast_serial));
+    let mut draft = draft;
+    draft.pushed_at = Some(Instant::now());
     let timeout = draft.timeout;
     self
       .toasts
@@ -103,11 +106,20 @@ impl OverlaysGallery {
       .map(|(id, draft, status)| {
         let gallery = gallery.clone();
         let close_id = id.clone();
+        let remaining = draft
+          .timeout
+          .zip(draft.pushed_at)
+          .map(|(timeout, pushed_at)| {
+            (1. - pushed_at.elapsed().as_secs_f32() / timeout.as_secs_f32()).clamp(0., 1.)
+          });
         Toast::new(id.clone())
           .variant(draft.variant)
           .title(draft.title)
           .when_some(draft.description, |toast, description| {
             toast.description(description)
+          })
+          .when_some(remaining, |toast, remaining| {
+            toast.timeout_progress(remaining)
           })
           .transition_status(status)
           .when(draft.action, |toast| {
@@ -228,10 +240,9 @@ impl Render for OverlaysGallery {
         }
       })
       .child(
-        h_flex()
-          .justify_between()
-          .child(DialogTitle::new().child("rename workspace"))
-          .child(DialogClose::new()),
+        DialogTitle::new()
+          .child("rename workspace")
+          .action(DialogClose::new()),
       )
       .child(DialogDescription::new().child(
         "pick a short, lowercase name. escape runs the cancel decision, \
@@ -656,6 +667,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "workspace synced",
                   description: None,
                   action: false,
+                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -672,6 +684,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "project saved",
                   description: Some("all changes written to disk"),
                   action: false,
+                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -688,6 +701,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "deprecated dependency",
                   description: Some("left-pad 1.3.0 is deprecated"),
                   action: false,
+                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -704,6 +718,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "build failed",
                   description: Some("2 errors in main.rs"),
                   action: false,
+                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -720,6 +735,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "tip",
                   description: Some("hover the stack to pause timers"),
                   action: false,
+                  pushed_at: None,
                   timeout: None,
                 });
               });
@@ -736,6 +752,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                   title: "file deleted",
                   description: Some("notes/draft.md moved to trash"),
                   action: true,
+                  pushed_at: None,
                   timeout: Some(Duration::from_secs(5)),
                 });
               });
@@ -756,6 +773,7 @@ fn toasts(gallery: &Entity<OverlaysGallery>, theme: &Theme) -> impl IntoElement 
                      five, six, seven, eight, nine, ten, eleven, twelve",
                   ),
                   action: false,
+                  pushed_at: None,
                   timeout: None,
                 });
               });
