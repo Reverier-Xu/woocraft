@@ -125,6 +125,43 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
 - [ ] menu：popup / context / dropdown 三形态，复用 ListItem + Popover；
       TitleBar title_menu 回接；list 就绪后启动
 
+#### 文件管理器需求评审（2026-09-21，重新立项前的现状记录）
+
+以“能否承接一个文件管理器”检验当前 list/table/tree，结论：**不能，且
+缺口的根因是三个控件的模型层碎片化**（table 模型在 woocraft、tree 模型
+在 base、list 模型在 app），不应逐控件打补丁。
+
+| 能力 | list | table | tree |
+|---|---|---|---|
+| 展示 | ✓ | ✓ | ✓ |
+| 多选 | ✓（app 自持） | ✗ 单选 | ✗ 单选，且 `TreeEvent` 无选择事件 |
+| 懒加载 walkdir | — | — | ✗ 三个硬缺口 |
+| loading 反馈 | — | — | ✗ `TreeItemState` 无此态 |
+| 热载刷新 | ✓ | ✓ | 部分：`set_items` 清空选择、expanded 需按 id 合并 |
+
+tree 懒加载三缺口（均在 base 0.6.4 源码核实）：
+
+1. `TreeItem::is_folder() = !children.is_empty()`：未 walk 的真实目录被
+   分类为叶子——无 chevron、不可展开，“空但存在”的目录无法表达；
+2. `TreeItemState` 只有 expanded/disabled：无 loading/未加载态，walkdir
+   进行中无法反馈；
+3. 展开同步翻转：`Expanded(id)` 事件虽可监听后回填，但加载中无法表达，
+   空目录与未加载不可区分。
+
+**架构结论（对齐 Qt 经验）**：list/table/tree 应共享同一套 item 模型与
+选择状态算法——对应 Qt 的 `QAbstractItemModel`（index/rows/columns/parent
+接口）+ `QItemSelectionModel`（range/ctrl-shift 选择算法）+
+`canFetchMore`/`fetchMore`（懒加载内建于协议）+ rowsInserted/dataChanged
+信号（热更新协议）；三个控件只是同一状态机的三种视图形状。需要重新立项
+“item 模型层”，并决定其归属（向上游 base 提案 vs woocraft 自建模型层，
+fork + `[patch.crates-io]` 工作流已验证可行），立项前 menu 暂不受阻
+（menu 只依赖 ListItem + Popover）。
+
+已核实的可用事实：`ClickEvent::modifiers()` 可取修饰键（ctrl/shift 选择
+语义可实现）；`TreeItem` 的 expanded 存于共享 `Rc<TreeItemState>`，按 id
+复用旧节点可实现热载时保留展开状态；占位子节点伪装 folder 的过渡 trick
+真实空目录会露假占位，不产品化。
+
 ### P4b 输入家族（原 P4 主体，后移）
 
 调研结论（对照 woocraft.old 与 gpui-base 0.6.4）：
