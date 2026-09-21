@@ -36,8 +36,46 @@ use crate::{
   icon::{Icon, IconName},
   theme::{ActiveTheme, with_alpha},
   v_flex,
-  widgets::button::{Button, ButtonVariants as _},
+  widgets::{
+    button::{Button, ButtonVariants as _},
+    divider::Divider,
+    icon_label::IconLabel,
+  },
 };
+
+/// the shared titlebar chrome of modal surfaces: `0.25rem` padding and
+/// gap, the leading content on the left, trailing controls right-aligned.
+/// a layout block, not a container — it owns its padding and expects the
+/// parent stack to add none.
+pub(crate) fn title_row(
+  left: impl IntoElement, actions: Vec<AnyElement>, weight: gpui::FontWeight,
+) -> impl IntoElement {
+  div()
+    .flex()
+    .flex_row()
+    .w_full()
+    .items_center()
+    .p(rems(0.25))
+    .gap(rems(0.25))
+    .child(
+      div()
+        .flex_1()
+        .min_w_0()
+        .font_weight(weight)
+        .child(left.into_any_element()),
+    )
+    .when(!actions.is_empty(), |this| {
+      this.child(
+        div()
+          .flex()
+          .flex_row()
+          .flex_shrink_0()
+          .items_center()
+          .gap(rems(0.25))
+          .children(actions),
+      )
+    })
+}
 
 /// scrim applied between the viewport content and a modal surface.
 ///
@@ -157,18 +195,18 @@ pub(crate) fn modal_card(
       px(0.),
       with_alpha(black(), 0.2),
     )])
-    .p(rems(0.25))
     .refine_style(style)
     .child(
-      // scrolling needs a stateful element; the layer key keeps every
-      // stacked dialog's scroll state distinct.
+      // the body stack holds no padding and no gap: title, content, and
+      // action blocks each own their 0.25rem chrome. scrolling needs a
+      // stateful element; the layer key keeps every stacked dialog's
+      // scroll state distinct.
       div()
         .id(("woocraft-dialog-body", key))
         .flex()
         .flex_col()
         .flex_1()
         .min_h_0()
-        .gap(rems(0.25))
         .overflow_y_scroll()
         .children(children),
     )
@@ -399,12 +437,15 @@ impl RenderOnce for Dialog {
 }
 
 /// themed dialog titlebar: the window title bar's contract inside the
-/// modal card — `0.25rem` padding and gap, title content on the left, and
-/// trailing controls (the close part, window-control style buttons)
-/// right-aligned through [`DialogTitle::action`].
+/// modal card. an [`IconLabel`] row (default icon [`IconName::AddCircle`],
+/// semibold title) on the left, trailing controls right-aligned through
+/// [`DialogTitle::action`], and a hairline divider separating the block
+/// from the content below. the block owns its `0.25rem` chrome; the parent
+/// stack adds none.
 #[derive(IntoElement)]
 pub struct DialogTitle {
   style: StyleRefinement,
+  icon: Option<Icon>,
   actions: Vec<AnyElement>,
   children: Vec<AnyElement>,
 }
@@ -414,9 +455,17 @@ impl DialogTitle {
   pub fn new() -> Self {
     Self {
       style: StyleRefinement::default(),
+      icon: None,
       actions: Vec::new(),
       children: Vec::new(),
     }
+  }
+
+  /// overrides the leading icon; the default is [`IconName::AddCircle`],
+  /// matching the window title bar's fallback.
+  pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
+    self.icon = Some(icon.into());
+    self
   }
 
   /// adds a trailing control, right-aligned in insertion order — typically
@@ -446,39 +495,23 @@ impl Styled for DialogTitle {
 }
 
 impl RenderOnce for DialogTitle {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-    let (font_family, text_size, foreground) = {
-      let theme = cx.theme();
-      (theme.font_family.clone(), theme.font_size, theme.foreground)
-    };
+  fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    let icon = self.icon.unwrap_or_else(|| Icon::new(IconName::AddCircle));
     div()
       .flex()
-      .flex_row()
+      .flex_col()
       .w_full()
-      .items_center()
-      .p(rems(0.25))
-      .gap(rems(0.25))
-      .child(
-        div()
-          .flex_1()
-          .min_w_0()
-          .font_family(font_family)
-          .text_size(text_size)
-          .text_color(foreground)
-          .font_weight(gpui::FontWeight::SEMIBOLD)
+      .child(title_row(
+        IconLabel::new("woocraft-dialog-title")
+          .icon(icon)
+          .w_full()
+          .px(rems(0.))
+          .py(rems(0.))
           .children(self.children),
-      )
-      .when(!self.actions.is_empty(), |this| {
-        this.child(
-          div()
-            .flex()
-            .flex_row()
-            .flex_shrink_0()
-            .items_center()
-            .gap(rems(0.25))
-            .children(self.actions),
-        )
-      })
+        self.actions,
+        gpui::FontWeight::SEMIBOLD,
+      ))
+      .child(Divider::horizontal())
       .refine_style(&self.style)
   }
 }
@@ -529,6 +562,8 @@ impl RenderOnce for DialogDescription {
       )
     };
     div()
+      // a content block: it owns its 0.25rem chrome.
+      .p(rems(0.25))
       .font_family(font_family)
       .text_size(text_size)
       .text_color(muted_foreground)

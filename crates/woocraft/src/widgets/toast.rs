@@ -34,7 +34,7 @@ use std::rc::Rc;
 use gpui::{
   Anchor, AnyElement, App, ClickEvent, ElementId, FocusHandle, InteractiveElement as _,
   IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, Window, black, div, prelude::FluentBuilder as _, px, relative, rems,
+  StyleRefinement, Styled, Window, black, div, px, relative, rems,
 };
 use gpui_base::{
   Keyframe, Keyframes, StyledExt as _, Timing, Toast as BaseToast, ToastStack as BaseToastStack,
@@ -47,7 +47,11 @@ pub use gpui_base::{
 use crate::{
   icon::{Icon, IconName},
   theme::{ActiveTheme, duration, with_alpha},
-  widgets::button::{Button, ButtonVariants as _},
+  widgets::{
+    button::{Button, ButtonVariants as _},
+    divider::Divider,
+    icon_label::IconLabel,
+  },
 };
 
 type CloseHandler = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -84,11 +88,14 @@ impl ToastVariant {
 
 /// themed notification card rendered inside a toaster stack.
 ///
-/// layout contract: the card fills the stack width; the title shares one
-/// row with the intent icon and ellipsizes; the description wraps to at
-/// most three lines and scrolls beyond them; the close control overlays the
-/// top-right corner with a `0.25rem` inset; an optional [`Toast::action`]
-/// button renders under the description.
+/// layout contract, shared with the modal family: title — divider —
+/// content — actions, each block owning its `0.25rem` chrome while the
+/// card's own stack adds none. the title is an [`IconLabel`] row (intent
+/// icon, ellipsizing title, right-aligned controls); the divider is the
+/// timeout rail when [`Toast::timeout_progress`] is set, a hairline
+/// otherwise; the description wraps to at most three lines and scrolls
+/// beyond them; [`Toast::action`] right-aligns its button in the actions
+/// block.
 #[derive(IntoElement)]
 pub struct Toast {
   id: ElementId,
@@ -308,16 +315,11 @@ impl RenderOnce for Toast {
         )
         .into_any_element()
     });
-    // the close control overlays the top-right corner with a 0.25rem inset;
-    // the body reserves its width so neither the title nor the description
-    // runs underneath it.
-    let has_close = self.on_close.is_some();
+    // the close control joins the title row's right-aligned controls.
     let close_button = self.on_close.map(|on_close| {
       div()
         .debug_selector(|| "woocraft-toast-close".into())
-        .absolute()
-        .top(rems(0.25))
-        .right(rems(0.25))
+        .flex_shrink_0()
         .child(
           Button::new((self.id.clone(), "close"))
             .icon(Icon::new(IconName::Dismiss))
@@ -327,20 +329,81 @@ impl RenderOnce for Toast {
         .into_any_element()
     });
     let action_button = self.action.map(|(label, on_action)| {
-      div().pt(rems(0.25)).child(
-        Button::new((self.id.clone(), "action"))
-          .debug_selector(|| "woocraft-toast-action".into())
-          .label(label)
-          .outline(true)
-          .on_click(move |event, window, cx| on_action(event, window, cx)),
-      )
+      Button::new((self.id.clone(), "action"))
+        .debug_selector(|| "woocraft-toast-action".into())
+        .label(label)
+        .outline(true)
+        .on_click(move |event, window, cx| on_action(event, window, cx))
+        .into_any_element()
+    });
+
+    // title — divider — content — actions, each block owning its 0.25rem
+    // chrome; the card's own stack adds nothing.
+    let mut title_label = IconLabel::new((self.id.clone(), "title"))
+      .icon(Icon::new(icon).text_color(accent))
+      .w_full()
+      .px(rems(0.))
+      .py(rems(0.));
+    if let Some(title) = self.title {
+      title_label = title_label.label(title);
+    }
+    let title_row = super::dialog::title_row(
+      title_label,
+      close_button.into_iter().collect(),
+      gpui::FontWeight::MEDIUM,
+    )
+    .into_any_element();
+
+    let description = self.description.map(|description| {
+      div()
+        .id((self.id.clone(), "description"))
+        .debug_selector(|| "woocraft-toast-description".into())
+        .line_height(relative(1.25))
+        // three wrapped lines, then scroll.
+        .max_h(rems(3.75))
+        .overflow_y_scroll()
+        .text_color(muted_foreground)
+        .child(description)
+        .into_any_element()
+    });
+    let has_content = description.is_some() || !self.children.is_empty();
+
+    // the timeout rail doubles as the title/content divider; without a
+    // timeout, a plain hairline takes its place — but only when there is
+    // content below to separate from.
+    let divider = if timeout_track.is_some() {
+      timeout_track
+    } else if has_content || action_button.is_some() {
+      Some(Divider::horizontal().into_any_element())
+    } else {
+      None
+    };
+
+    let content = has_content.then(|| {
+      div()
+        .flex()
+        .flex_col()
+        .gap(rems(0.25))
+        .p(rems(0.25))
+        .children(description)
+        .children(self.children)
+        .into_any_element()
+    });
+    let actions = action_button.map(|action| {
+      div()
+        .flex()
+        .flex_row()
+        .w_full()
+        .justify_end()
+        .p(rems(0.25))
+        .child(action)
+        .into_any_element()
     });
 
     self
       .base
       .refine_style(&style)
       .debug_selector(|| "woocraft-toast-card".into())
-      .relative()
       .w_full()
       .font_family(font_family)
       .text_size(text_size)
@@ -360,52 +423,14 @@ impl RenderOnce for Toast {
       .child(
         div()
           .flex()
-          .flex_row()
-          .items_start()
-          .gap(rems(0.25))
-          .p(rems(0.25))
-          .child(Icon::new(icon).text_color(accent).flex_none())
-          .child(
-            v_flex_toast_body()
-              .flex_1()
-              .min_w_0()
-              .gap(rems(0.25))
-              .when(has_close, |body| body.pr(rems(2.25)))
-              .when_some(self.title, |body, title| {
-                body.child(
-                  div()
-                    .min_w_0()
-                    .truncate()
-                    .font_weight(gpui::FontWeight::MEDIUM)
-                    .child(title),
-                )
-              })
-              .when_some(timeout_track, |body, track| body.child(track))
-              .when_some(self.description, |body, description| {
-                body.child(
-                  div()
-                    .id((self.id.clone(), "description"))
-                    .debug_selector(|| "woocraft-toast-description".into())
-                    .line_height(relative(1.25))
-                    // three wrapped lines, then scroll.
-                    .max_h(rems(3.75))
-                    .overflow_y_scroll()
-                    .text_color(muted_foreground)
-                    .child(description),
-                )
-              })
-              .children(self.children)
-              .when_some(action_button, |body, action| body.child(action)),
-          ),
+          .flex_col()
+          .w_full()
+          .child(title_row)
+          .children(divider)
+          .children(content)
+          .children(actions),
       )
-      .when_some(close_button, |card, button| card.child(button))
   }
-}
-
-// a column that stretches its rows; toasts are the one place the stack
-// gesture needs the body taller than its content before text wraps.
-fn v_flex_toast_body() -> gpui::Div {
-  div().flex().flex_col()
 }
 
 /// themed toaster stack with rem-scaled motion defaults.
@@ -591,6 +616,23 @@ mod tests {
       "half the lifetime remains, got fill {:?} of track {:?}",
       fill.size.width,
       track.size.width,
+    );
+  }
+
+  #[gpui::test]
+  fn the_action_aligns_to_the_right_edge(cx: &mut gpui::TestAppContext) {
+    let (_clicked, cx) = toast_window(cx);
+    let (rem, border) = cx.update(|window, cx| (window.rem_size(), cx.theme().border_width));
+    let card = cx
+      .debug_bounds("woocraft-toast-card")
+      .expect("the toast card paints");
+    let action = cx
+      .debug_bounds("woocraft-toast-action")
+      .expect("the action button paints");
+    assert_eq!(
+      action.origin.x + action.size.width,
+      card.origin.x + card.size.width - border - rems(0.25).to_pixels(rem),
+      "the action block owns a 0.25rem chrome and right-aligns its button"
     );
   }
 

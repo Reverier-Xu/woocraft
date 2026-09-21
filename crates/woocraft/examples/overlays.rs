@@ -251,7 +251,8 @@ impl Render for OverlaysGallery {
       .child(
         h_flex()
           .justify_end()
-          .gap_2()
+          .p(rems(0.25))
+          .gap(rems(0.25))
           .child(
             Button::new("dialog-cancel")
               .label("cancel")
@@ -299,7 +300,8 @@ impl Render for OverlaysGallery {
       .child(
         h_flex()
           .justify_end()
-          .gap_2()
+          .p(rems(0.25))
+          .gap(rems(0.25))
           .child(AlertDialogCancel::new().child("keep branch"))
           .child(AlertDialogAction::new().child("delete").danger()),
       );
@@ -599,20 +601,27 @@ fn dialogs(
                   .child("escape closes only this layer; focus returns underneath."),
               )
               .child(
-                Button::new("stack-another")
-                  .label("stack another")
-                  .outline(true)
-                  .on_click(|_, window, cx| {
-                    window.open_alert_dialog(cx, |alert, _, _| {
-                      alert
-                        .child(DialogTitle::new().child("topmost"))
-                        .child(
-                          DialogDescription::new()
-                            .child("an alert over a dialog; only this layer answers."),
-                        )
-                        .child(AlertDialogAction::new().child("done"))
-                    });
-                  }),
+                h_flex().justify_end().p(rems(0.25)).child(
+                  Button::new("stack-another")
+                    .label("stack another")
+                    .outline(true)
+                    .on_click(|_, window, cx| {
+                      window.open_alert_dialog(cx, |alert, _, _| {
+                        alert
+                          .child(DialogTitle::new().child("topmost"))
+                          .child(
+                            DialogDescription::new()
+                              .child("an alert over a dialog; only this layer answers."),
+                          )
+                          .child(
+                            h_flex()
+                              .justify_end()
+                              .p(rems(0.25))
+                              .child(AlertDialogAction::new().child("done")),
+                          )
+                      });
+                    }),
+                ),
               )
           });
         }),

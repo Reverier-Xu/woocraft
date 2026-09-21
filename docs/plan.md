@@ -124,6 +124,9 @@ P3 复审返工（2026-09-21，对照官方 component 与 base 源码）：
 - 组件唯一 default 尺寸；全部尺寸 rem 基准，1rem 默认 16px
 - 文字继承 base 1rem；`text_xs/sm/lg` 原语保留语义仅供应用层
 - border/outline 1px 是唯一 px 例外，宽度走 `theme.border_width`，内缩补偿
+- 弹层布局契约：主垂直堆栈零 padding 零 gap；title / content / actions
+  区块各持 `0.25rem` padding 与 gap；title 走 IconLabel（默认图标 +
+  省略号），actions 右对齐；title 与 content 之间必有 hairline 分割
 - Badge 中心锚定 45° 对角线（零尺寸 anchor + flex 居中模式可复用）
 - 例外词汇预留：`dot-number`
 
