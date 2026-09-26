@@ -200,25 +200,27 @@ fn demo_tree_items() -> Vec<TreeItem> {
 
 #[cfg(debug_assertions)]
 fn setup_inspector_renderer(cx: &mut App) {
-  cx.register_inspector_element::<gpui::DivInspectorState, _>(|_id, state, _window, cx| {
-    v_flex()
-      .gap_1()
-      .p_2()
-      .border_1()
-      .border_color(cx.theme().border)
-      .child(div().text_xs().font_semibold().child("Div"))
-      .child(
-        div()
-          .text_xs()
-          .text_color(cx.theme().muted_foreground)
-          .child(format!("bounds: {:?}", state.bounds)),
-      )
-      .child(
-        div()
-          .text_xs()
-          .text_color(cx.theme().muted_foreground)
-          .child(format!("content_size: {:?}", state.content_size)),
-      )
+  cx.register_inspector_element::<gpui::DivInspectorState, _, _>(|_window, _app| {
+    |_id, state, _window, cx| {
+      v_flex()
+        .gap_1()
+        .p_2()
+        .border_1()
+        .border_color(cx.theme().border)
+        .child(div().text_xs().font_semibold().child("Div"))
+        .child(
+          div()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child(format!("bounds: {:?}", state.bounds)),
+        )
+        .child(
+          div()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child(format!("content_size: {:?}", state.content_size)),
+        )
+    }
   });
 
   cx.set_inspector_renderer(Box::new(|inspector, window, cx| {
