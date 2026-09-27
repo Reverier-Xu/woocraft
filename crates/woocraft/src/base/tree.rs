@@ -22,13 +22,23 @@ pub struct TreeItem {
 }
 
 /// A flattened entry used by tree-like renderers.
+///
+/// The entry's item is a shallow copy: it shares expand/disabled/loading
+/// state with the model's item but intentionally carries **no children** —
+/// a full copy here would deep-clone a whole subtree per entry on every
+/// rebuild. Read the complete item (with children) from the tree's roots
+/// instead.
 #[derive(Clone)]
 pub struct TreeEntry {
   item: TreeItem,
+  /// Whether the source item has children (entries never carry them).
+  is_folder: bool,
   depth: usize,
 }
 
 impl TreeEntry {
+  /// The entry's item. Shallow: children are absent, while expanded/
+  /// disabled/loading state is shared with the model's item.
   #[inline]
   pub fn item(&self) -> &TreeItem {
     &self.item
@@ -46,7 +56,7 @@ impl TreeEntry {
 
   #[inline]
   pub fn is_folder(&self) -> bool {
-    self.item.is_folder()
+    self.is_folder
   }
 
   #[inline]
@@ -149,6 +159,19 @@ impl TreeItem {
     self.state.borrow().expanded
   }
 
+  /// Shallow copy used for flattened [`TreeEntry`] values: clones scalars,
+  /// shares the `Rc`-held state, and drops children so a rebuild stays O(1)
+  /// per entry instead of deep-cloning subtrees.
+  fn clone_for_entry(&self) -> Self {
+    Self {
+      id: self.id.clone(),
+      label: self.label.clone(),
+      icon: self.icon,
+      children: Vec::new(),
+      state: Rc::clone(&self.state),
+    }
+  }
+
   fn find_ancestors(&self, target_id: &SharedString) -> Option<Vec<TreeItem>> {
     if self.id == *target_id {
       return Some(vec![]);
@@ -204,6 +227,15 @@ pub struct TreeModel {
   subtree_ends: Vec<usize>,
   /// Precomputed next-sibling flag for each entry.
   has_next_sibling_flags: Vec<bool>,
+  /// Flat flags for precomputed ancestor guide lines: for entry `ix`, the
+  /// slice `ancestor_guide_flags[ranges[ix].0..ranges[ix].1]` is indexed by
+  /// ancestor depth (0 = root level) and tells whether the ancestor at that
+  /// depth has a next sibling (so the row must render a vertical
+  /// continuation line there). The immediate parent is excluded; its line is
+  /// replaced by the row's own branch segment.
+  ancestor_guide_flags: Vec<bool>,
+  /// Start/end offsets of each entry's slice in `ancestor_guide_flags`.
+  ancestor_guide_ranges: Vec<(usize, usize)>,
 }
 
 impl TreeModel {
@@ -327,6 +359,8 @@ impl TreeModel {
     }
   }
 
+  /// The selected entry's item. Shallow like all flattened entries: it
+  /// carries no children — see [`TreeEntry::item`].
   pub fn selected_item(&self) -> Option<&TreeItem> {
     self
       .selected_ix
@@ -366,6 +400,13 @@ impl TreeModel {
     }
   }
 
+  /// Select exactly one index, replacing any multi-selection.
+  pub fn select_only(&mut self, ix: usize) {
+    self.selected_indices.clear();
+    self.selected_indices.insert(ix);
+    self.selected_ix = Some(ix);
+  }
+
   /// Toggle an index in the multi-selection set.
   pub fn toggle_selected(&mut self, ix: usize) {
     if !self.selected_indices.remove(&ix) {
@@ -395,7 +436,8 @@ impl TreeModel {
     self.selected_indices.clear();
   }
 
-  /// Return selected items in multi-select mode.
+  /// Return selected items in multi-select mode. Shallow like all flattened
+  /// entries: they carry no children — see [`TreeEntry::item`].
   pub fn selected_items(&self) -> Vec<&TreeItem> {
     self
       .selected_indices
@@ -427,6 +469,17 @@ impl TreeModel {
       .get(ix)
       .copied()
       .unwrap_or(false)
+  }
+
+  /// Returns the precomputed ancestor guide-line flags for an entry,
+  /// indexed by ancestor depth (index 0 = ancestor at depth 0). `true`
+  /// means the row renders a vertical continuation line at that depth.
+  /// Empty when the entry has no ancestors above its parent.
+  pub fn ancestor_guides(&self, ix: usize) -> &[bool] {
+    let Some(&(start, end)) = self.ancestor_guide_ranges.get(ix) else {
+      return &[];
+    };
+    self.ancestor_guide_flags.get(start..end).unwrap_or(&[])
   }
 
   pub fn toggle_expand(&mut self, ix: usize) {
@@ -463,9 +516,8 @@ impl TreeModel {
 
   fn rebuild_entries(&mut self) {
     self.entries.clear();
-    let roots = self.roots.clone();
-    for root in roots {
-      self.add_entry(root, 0);
+    for root in &self.roots {
+      Self::add_entry(&mut self.entries, root, 0);
     }
 
     self.parent_indices = vec![None; self.entries.len()];
@@ -484,6 +536,8 @@ impl TreeModel {
   }
 
   fn compute_structural_cache(&mut self) {
+    self.ancestor_guide_flags.clear();
+    self.ancestor_guide_ranges.clear();
     let n = self.entries.len();
     if n == 0 {
       return;
@@ -515,17 +569,44 @@ impl TreeModel {
       let end = self.subtree_ends[i];
       self.has_next_sibling_flags[i] = end < n && self.entries[end].depth == self.entries[i].depth;
     }
+
+    // Precompute ancestor continuation-guide flags so the renderer can map
+    // rows to lines without walking the parent chain every frame.
+    for i in 0..n {
+      let start = self.ancestor_guide_flags.len();
+      // Continuation lines start above the immediate parent (which gets a
+      // branch segment instead): collect ancestors from depth - 2 up to 0.
+      let mut cursor = self.parent_indices[i].and_then(|p| self.parent_indices[p]);
+      while let Some(parent_ix) = cursor {
+        let guide = self.has_next_sibling(parent_ix);
+        self.ancestor_guide_flags.push(guide);
+        cursor = self.parent_indices[parent_ix];
+      }
+      // Collected deepest-first; restore ascending depth order so the slice
+      // can be indexed by ancestor depth.
+      self.ancestor_guide_flags[start..].reverse();
+      self
+        .ancestor_guide_ranges
+        .push((start, self.ancestor_guide_flags.len()));
+    }
   }
 
-  fn add_entry(&mut self, item: TreeItem, depth: usize) {
-    self.entries.push(TreeEntry {
-      item: item.clone(),
+  /// Pushes `item` and its expanded descendants into `entries`.
+  ///
+  /// Takes the entry list as a separate parameter and the item by reference
+  /// so [`TreeModel::rebuild_entries`] can walk `self.roots` in place.
+  /// Entries receive shallow copies ([`TreeItem::clone_for_entry`]): a full
+  /// clone here cost O(subtree) per visible entry per rebuild.
+  fn add_entry(entries: &mut Vec<TreeEntry>, item: &TreeItem, depth: usize) {
+    entries.push(TreeEntry {
+      item: item.clone_for_entry(),
+      is_folder: !item.children.is_empty(),
       depth,
     });
 
     if item.is_expanded() {
-      for child in item.children {
-        self.add_entry(child, depth + 1);
+      for child in &item.children {
+        Self::add_entry(entries, child, depth + 1);
       }
     }
   }
@@ -565,6 +646,15 @@ mod tests {
         )
       })
       .collect()
+  }
+
+  fn assert_entries_shallow(model: &TreeModel) {
+    for entry in model.entries() {
+      assert!(
+        entry.item().children.is_empty(),
+        "flattened entries must not carry children"
+      );
+    }
   }
 
   #[test]
@@ -625,5 +715,84 @@ mod tests {
       model.selected_item().map(|item| item.id.as_ref()),
       Some("target")
     );
+  }
+
+  #[test]
+  fn update_items_rebuilds_entries_preserving_state() {
+    let mut model = TreeModel::new().items(sample_items());
+    model.set_multi_selectable(true);
+    model.toggle_expand(1); // collapse "src/ui"
+    model.toggle_selected(0); // multi-select "src"
+    model.set_selected_index(Some(3)); // primary: "Cargo.toml"
+
+    // Replace with a differently shaped tree whose "src/ui" is constructed
+    // expanded; it must inherit the collapsed state of the old "src/ui".
+    model.update_items(vec![
+      TreeItem::new("src", "src").expanded(true).child(
+        TreeItem::new("src/ui", "ui")
+          .expanded(true)
+          .child(TreeItem::new("src/ui/new.rs", "new.rs")),
+      ),
+      TreeItem::new("Cargo.toml", "Cargo.toml"),
+    ]);
+
+    // Entries are rebuilt from the new roots only; the stale constructed
+    // `expanded(true)` on the new "src/ui" is overridden by the old state.
+    assert_eq!(flatten_labels(&model), vec!["src", "    ui", "Cargo.toml"]);
+    assert!(!model.entries()[1].is_expanded());
+    // Selection survived by id remapping (not by index); "Cargo.toml" sits
+    // at index 2 because "src/ui" is collapsed and hides "src/ui/new.rs".
+    assert_eq!(model.selected_index(), Some(2));
+    assert_eq!(model.selected_indices().len(), 1);
+    assert!(model.selected_indices().contains(&0));
+
+    // Expanding again flattens newly added descendants correctly.
+    model.toggle_expand(1);
+    assert_eq!(
+      flatten_labels(&model),
+      vec!["src", "    ui", "        new.rs", "Cargo.toml"]
+    );
+  }
+
+  #[test]
+  fn entries_are_shallow_but_behavior_preserved() {
+    let mut model = TreeModel::new().items(sample_items());
+    assert_entries_shallow(&model);
+    assert!(model.entries()[0].is_folder());
+    assert!(!model.entries()[5].is_folder()); // leaf "src/lib.rs"
+
+    model.toggle_expand(1); // collapse "src/ui"
+    assert_entries_shallow(&model);
+    assert_eq!(
+      flatten_labels(&model),
+      vec![
+        "src",
+        "    ui",
+        "    lib.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+        "README.md",
+      ]
+    );
+
+    // Selection still works on flattened (shallow) items.
+    model.toggle_selected(2); // "src/lib.rs"
+    assert!(model.is_selected(2));
+    assert_eq!(model.selected_items().len(), 1);
+    assert_eq!(model.selected_items()[0].id.as_ref(), "src/lib.rs");
+    assert!(model.selected_items()[0].children.is_empty());
+
+    // Lazy loading: a loading folder refuses to toggle.
+    let mut lazy = TreeModel::new().items(vec![
+      TreeItem::new("dir", "dir")
+        .expanded(true)
+        .loading(true)
+        .child(TreeItem::new("dir/x", "x")),
+    ]);
+    assert_eq!(lazy.len(), 2);
+    lazy.toggle_expand(0);
+    assert!(lazy.entries()[0].is_expanded());
+    assert_eq!(lazy.len(), 2);
+    assert_entries_shallow(&lazy);
   }
 }
