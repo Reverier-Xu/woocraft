@@ -1131,6 +1131,11 @@ impl Render for InputState {
     let caret_color = cx.theme().primary;
     let selection_color = cx.theme().primary.opacity(0.25);
 
+    // Refresh before anything reads the cache: `ensure_cursor_visible` may
+    // early-return when the first frame has not assigned input bounds yet,
+    // which used to leave `cached_display` below staring at an empty cache.
+    // Refreshing is fingerprint-guarded, so this is a no-op afterwards.
+    self.refresh_display_cache(window);
     self.ensure_cursor_visible(window);
     let (display, shaped) = self.cached_display();
 
