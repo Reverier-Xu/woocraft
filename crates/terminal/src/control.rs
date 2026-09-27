@@ -52,9 +52,19 @@ pub async fn wait_for_text(
     }
     check_not_expired(deadline, needle)?;
     match events.try_recv() {
-      Ok(TerminalEvent::Exit) => bail!(exited_before_match(needle, session)),
+      Ok(TerminalEvent::Exit) => {
+        if let Some(text) = text_after_exit(session, needle) {
+          return Ok(text);
+        }
+        bail!(exited_before_match(needle, session));
+      }
       Ok(_) => {}
-      Err(TryRecvError::Closed) => bail!(exited_before_match(needle, session)),
+      Err(TryRecvError::Closed) => {
+        if let Some(text) = text_after_exit(session, needle) {
+          return Ok(text);
+        }
+        bail!(exited_before_match(needle, session));
+      }
       Err(TryRecvError::Empty) => {}
     }
     sleep_until(deadline.min(Instant::now() + POLL_INTERVAL)).await;
@@ -73,12 +83,32 @@ pub fn wait_for_text_blocking(
     }
     check_not_expired(deadline, needle)?;
     match events.try_recv() {
-      Ok(TerminalEvent::Exit) => bail!(exited_before_match(needle, session)),
+      Ok(TerminalEvent::Exit) => {
+        if let Some(text) = text_after_exit(session, needle) {
+          return Ok(text);
+        }
+        bail!(exited_before_match(needle, session));
+      }
       Ok(_) => {}
-      Err(TryRecvError::Closed) => bail!(exited_before_match(needle, session)),
+      Err(TryRecvError::Closed) => {
+        if let Some(text) = text_after_exit(session, needle) {
+          return Ok(text);
+        }
+        bail!(exited_before_match(needle, session));
+      }
       Err(TryRecvError::Empty) => thread::sleep(POLL_INTERVAL),
     }
   }
+}
+
+/// Final `needle` check once the terminal exited: the PTY event loop applies
+/// every pending output byte before it queues `Exit`, so a poll that raced
+/// the exit event only needs one last look before reporting a failure.
+/// Without this, a fast `echo … && exit` child makes CI flake with
+/// "terminal exited before output appeared" even though the text is there.
+fn text_after_exit(session: &TerminalSession, needle: &str) -> Option<String> {
+  let text = session.text();
+  text.contains(needle).then_some(text)
 }
 
 /// Waits until the child process exits, returning its exit code
