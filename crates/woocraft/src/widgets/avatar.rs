@@ -193,9 +193,11 @@ impl RenderOnce for Avatar {
       })
       .map(|this| match self.src {
         None => this.when(self.name.is_some(), |this| {
-          let color = self
-            .bg_color
-            .unwrap_or_else(|| get_color_for_name(&self.short_name, cx));
+          // Hash the full name, not the initials, so distinct names keep
+          // distinct colors (initials like "SL" would collide).
+          let color = self.bg_color.unwrap_or_else(|| {
+            get_color_for_name(self.name.as_deref().unwrap_or_default(), cx)
+          });
 
           this.bg(color.opacity(BG_OPACITY)).text_color(color).child(
             div()

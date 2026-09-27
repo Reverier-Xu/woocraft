@@ -54,19 +54,26 @@ pub struct Label {
   masked: bool,
   highlights_text: Option<HighlightsMatch>,
   cached_full_text: SharedString,
+  // Render-time caches rebuilt by `refresh_caches` after every builder
+  // mutation, so `render` never re-derives them per frame.
+  cached_full_text_lowercase: Option<SharedString>,
+  cached_match_lowercase: Option<SharedString>,
+  cached_masked_text: Option<SharedString>,
 }
 
 impl Label {
   pub fn new(label: impl Into<SharedString>) -> Self {
     let label: SharedString = label.into();
-    let cached_full_text = label.clone();
     Self {
       style: StyleRefinement::default(),
-      label,
+      label: label.clone(),
       secondary: None,
       masked: false,
       highlights_text: None,
-      cached_full_text,
+      cached_full_text: label,
+      cached_full_text_lowercase: None,
+      cached_match_lowercase: None,
+      cached_masked_text: None,
     }
   }
 
@@ -74,17 +81,41 @@ impl Label {
     let secondary: SharedString = secondary.into();
     self.cached_full_text = format!("{} {}", self.label, secondary).into();
     self.secondary = Some(secondary);
+    self.refresh_caches();
     self
   }
 
   pub fn masked(mut self, masked: bool) -> Self {
     self.masked = masked;
+    self.refresh_caches();
     self
   }
 
   pub fn highlights(mut self, text: impl Into<HighlightsMatch>) -> Self {
     self.highlights_text = Some(text.into());
+    self.refresh_caches();
     self
+  }
+
+  /// Rebuilds the render-time caches after a builder mutation. Lowercase
+  /// forms are only computed when highlights are present, and the masked
+  /// form only when masking is enabled, so labels without those features
+  /// never pay for them.
+  fn refresh_caches(&mut self) {
+    if self.highlights_text.is_some() {
+      self.cached_full_text_lowercase = Some(self.cached_full_text.to_lowercase().into());
+      self.cached_match_lowercase = self
+        .highlights_text
+        .as_ref()
+        .map(|matched| matched.as_str().to_lowercase().into());
+    } else {
+      self.cached_full_text_lowercase = None;
+      self.cached_match_lowercase = None;
+    }
+
+    self.cached_masked_text = self
+      .masked
+      .then(|| MASKED.repeat(self.cached_full_text.chars().count()).into());
   }
 
   fn full_text(&self) -> &SharedString {
@@ -104,16 +135,24 @@ impl Label {
     if let Some(matched) = &self.highlights_text {
       let matched_str = matched.as_str();
       if !matched_str.is_empty() {
-        let search_lower = matched_str.to_lowercase();
-        let full_text_lower = full_text_str.to_lowercase();
+        // Lowercase forms are cached at builder time (see `refresh_caches`);
+        // the fallbacks keep the lookup correct if the cache is missing.
+        let search_lower = self
+          .cached_match_lowercase
+          .clone()
+          .unwrap_or_else(|| matched_str.to_lowercase().into());
+        let full_text_lower = self
+          .cached_full_text_lowercase
+          .clone()
+          .unwrap_or_else(|| full_text_str.to_lowercase().into());
 
         if matched.is_prefix() {
-          if full_text_lower.starts_with(&search_lower) {
+          if full_text_lower.starts_with(&*search_lower) {
             ranges.push(0..matched_str.len());
           }
         } else {
           let mut search_start = 0;
-          while let Some(pos) = full_text_lower[search_start..].find(&search_lower) {
+          while let Some(pos) = full_text_lower[search_start..].find(&*search_lower) {
             let match_start = search_start + pos;
             let match_end = match_start + matched_str.len();
             if match_end <= full_text_str.len() {
@@ -176,21 +215,25 @@ impl_styled!(Label);
 
 impl RenderOnce for Label {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-    let full_text = self.cached_full_text.clone();
-    let mut text = full_text;
-
-    if self.masked {
-      text = MASKED.repeat(text.chars().count()).into();
-    }
+    let highlights = self.measure_highlights(cx);
+    let text = if self.masked {
+      // Masked form is cached at builder time; the fallback keeps masked
+      // rendering correct if the cache was not refreshed.
+      self.cached_masked_text.unwrap_or_else(|| {
+        MASKED
+          .repeat(self.cached_full_text.chars().count())
+          .into()
+      })
+    } else {
+      self.cached_full_text
+    };
 
     div()
       .line_height(gpui::relative(1.25))
       .text_color(cx.theme().foreground)
       .refine_style(&self.style)
-      .child(
-        StyledText::new(&text).when_some(self.measure_highlights(cx), |this, hl| {
-          this.with_highlights(hl)
-        }),
-      )
+      .child(StyledText::new(&text).when_some(highlights, |this, hl| {
+        this.with_highlights(hl)
+      }))
   }
 }

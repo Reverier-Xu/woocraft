@@ -246,6 +246,13 @@ impl ParentElement for TitleBar {
   }
 }
 
+/// Drag-gesture flag for the title bar.
+///
+/// This deliberately stays an `Entity` instead of an `Rc<Cell<bool>>`
+/// recreated on every render: the flag is set on mouse-down and consumed on a
+/// later mouse-move, and a re-render between those events (hover, animation,
+/// any `cx.notify()`) would reset a per-render value and silently cancel an
+/// in-progress window drag.
 struct TitleBarState {
   should_move: bool,
 }
@@ -442,15 +449,18 @@ impl RenderOnce for TitleBar {
                     cx.stop_propagation();
                     if let Some(handler) = on_theme_button_click.as_ref() {
                       handler(event, window, cx);
+                      window.refresh();
                     } else {
                       let next = if cx.theme().mode.is_dark() {
                         ThemeMode::Light
                       } else {
                         ThemeMode::Dark
                       };
+                      // Theme::set_mode already calls cx.refresh_windows();
+                      // an extra window.refresh() here would just trigger a
+                      // second full redraw of the same frame.
                       Theme::set_mode(next, cx);
                     }
-                    window.refresh();
                   }),
               )
             })

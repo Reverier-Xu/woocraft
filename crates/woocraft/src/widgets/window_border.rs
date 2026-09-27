@@ -69,7 +69,6 @@ impl RenderOnce for WindowBorder {
       .map(|this| match decorations {
         Decorations::Server => this,
         Decorations::Client { tiling, .. } => this
-          .bg(gpui::transparent_black())
           .child(
             canvas(
               |_bounds, window, _| {
