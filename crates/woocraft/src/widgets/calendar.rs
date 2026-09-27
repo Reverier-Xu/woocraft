@@ -31,12 +31,13 @@
 //! ```
 //!
 //! # Performance Notes
-//! Calendar renders efficiently even for large date ranges. The disabled
-//! matcher is evaluated per cell, so keep matcher predicates fast. Navigation
-//! between months/years is instant as date calculations happen in-place without
-//! re-rendering the entire grid.
+//! The day grids for the visible month window are cached on `CalendarState`
+//! and rebuilt only when the visible year, month, or month count changes.
+//! Month name labels are translated once per locale and reused across
+//! renders. The disabled matcher is still evaluated per day cell, so keep
+//! matcher predicates fast.
 
-use std::rc::Rc;
+use std::{rc::Rc, sync::Mutex};
 
 use chrono::{Datelike, NaiveDate};
 use gpui::{
@@ -51,6 +52,78 @@ use crate::{
   Selectable, Sizable, Size, StyledExt as _, h_flex, local_today, month_days, translate_woocraft,
   v_flex,
 };
+
+/// i18n keys of the twelve month names, January first.
+const MONTH_KEYS: [&str; 12] = [
+  "calendar.month.january",
+  "calendar.month.february",
+  "calendar.month.march",
+  "calendar.month.april",
+  "calendar.month.may",
+  "calendar.month.june",
+  "calendar.month.july",
+  "calendar.month.august",
+  "calendar.month.september",
+  "calendar.month.october",
+  "calendar.month.november",
+  "calendar.month.december",
+];
+
+/// Single-entry per-locale cache for render-path translations.
+///
+/// `translate_woocraft` normalizes the locale and allocates a fresh `String`
+/// on every call, which adds up on widgets that translate labels every frame
+/// (calendar and date picker). Cached values are rebuilt automatically when
+/// the active locale changes.
+pub(crate) struct LocaleCache<T: Clone> {
+  cached: Mutex<Option<(String, T)>>,
+}
+
+impl<T: Clone> LocaleCache<T> {
+  pub(crate) const fn new() -> Self {
+    Self {
+      cached: Mutex::new(None),
+    }
+  }
+
+  /// Returns the cached value for the active locale, rebuilding it via
+  /// `build` when the locale changed or nothing was cached yet.
+  pub(crate) fn get(&self, build: impl FnOnce() -> T) -> T {
+    let locale = crate::locale();
+    let locale: &str = &locale;
+    let mut cached = self
+      .cached
+      .lock()
+      .unwrap_or_else(|poisoned| poisoned.into_inner());
+    match cached.as_ref() {
+      Some((cached_locale, value)) if cached_locale.as_str() == locale => value.clone(),
+      _ => {
+        let value = build();
+        *cached = Some((locale.to_string(), value.clone()));
+        value
+      }
+    }
+  }
+}
+
+static MONTH_NAMES: LocaleCache<[SharedString; 12]> = LocaleCache::new();
+
+/// Translated month names for the active locale, cached per locale.
+fn month_names() -> [SharedString; 12] {
+  MONTH_NAMES.get(|| MONTH_KEYS.map(|key| SharedString::from(translate_woocraft(key))))
+}
+
+/// Cached month day matrices for the calendar day grid.
+///
+/// `key` is the `(current_year, current_month, number_of_months)` window the
+/// `months` grids were built for. [`CalendarState::sync_days_cache`] rebuilds
+/// `months` whenever the key differs, which covers month navigation,
+/// `set_date`, and month-count changes without dedicated invalidation call
+/// sites.
+struct DaysCache {
+  key: (i32, u8, usize),
+  months: Vec<Vec<Vec<NaiveDate>>>,
+}
 
 /// Events emitted by the calendar component.
 pub enum CalendarEvent {
@@ -124,6 +197,8 @@ pub struct CalendarState {
   /// Number of the months view to show.
   number_of_months: usize,
   pub(crate) disabled_matcher: Option<Rc<Matcher>>,
+  /// Day grids for the currently visible month window.
+  days_cache: DaysCache,
 }
 
 impl CalendarState {
@@ -144,6 +219,10 @@ impl CalendarState {
       today,
       number_of_months: 1,
       disabled_matcher: None,
+      days_cache: DaysCache {
+        key: (today.year(), today.month() as u8, 1),
+        months: vec![month_days(today.year(), today.month())],
+      },
     }
     .year_range((today.year() - 50, today.year() + 50))
   }
@@ -251,11 +330,30 @@ impl CalendarState {
     (year, month as u32)
   }
 
-  /// Returns the month day matrices for rendering.
-  fn days(&self) -> Vec<Vec<NaiveDate>> {
-    (0..self.number_of_months)
-      .flat_map(|offset| month_days(self.current_year, self.current_month as u32 + offset as u32))
-      .collect()
+  /// Returns the cached month day matrices, one grid per visible month.
+  fn days(&self) -> &[Vec<Vec<NaiveDate>>] {
+    &self.days_cache.months
+  }
+
+  /// Rebuilds the cached day grids when the visible month window changed.
+  ///
+  /// Called from `Calendar::render` before the day grid is rendered; the key
+  /// comparison picks up every mutation of `current_year`/`current_month`/
+  /// `number_of_months`, including direct field writes from click handlers.
+  /// Never notifies: this is pure cache maintenance.
+  fn sync_days_cache(&mut self) {
+    let key = (self.current_year, self.current_month, self.number_of_months);
+    if self.days_cache.key == key {
+      return;
+    }
+
+    self.days_cache.months = (0..self.number_of_months)
+      .map(|offset| {
+        let (year, month) = self.offset_year_month(offset);
+        month_days(year, month)
+      })
+      .collect();
+    self.days_cache.key = key;
   }
 
   fn has_prev_year_page(&self) -> bool {
@@ -313,25 +411,8 @@ impl CalendarState {
   }
 
   fn month_name(&self, offset_month: usize) -> SharedString {
-    const MONTH_KEYS: [&str; 12] = [
-      "calendar.month.january",
-      "calendar.month.february",
-      "calendar.month.march",
-      "calendar.month.april",
-      "calendar.month.may",
-      "calendar.month.june",
-      "calendar.month.july",
-      "calendar.month.august",
-      "calendar.month.september",
-      "calendar.month.october",
-      "calendar.month.november",
-      "calendar.month.december",
-    ];
-
     let (_, month) = self.offset_year_month(offset_month);
-    SharedString::from(translate_woocraft(
-      MONTH_KEYS[(month.saturating_sub(1)) as usize],
-    ))
+    month_names()[(month.saturating_sub(1)) as usize].clone()
   }
 
   fn year_name(&self, offset_month: usize) -> SharedString {
@@ -344,26 +425,8 @@ impl CalendarState {
     cx.notify();
   }
 
-  fn months(&self) -> Vec<SharedString> {
-    const MONTH_KEYS: [&str; 12] = [
-      "calendar.month.january",
-      "calendar.month.february",
-      "calendar.month.march",
-      "calendar.month.april",
-      "calendar.month.may",
-      "calendar.month.june",
-      "calendar.month.july",
-      "calendar.month.august",
-      "calendar.month.september",
-      "calendar.month.october",
-      "calendar.month.november",
-      "calendar.month.december",
-    ];
-
-    MONTH_KEYS
-      .iter()
-      .map(|key| SharedString::from(translate_woocraft(*key)))
-      .collect()
+  fn months(&self) -> [SharedString; 12] {
+    month_names()
   }
 }
 
@@ -392,10 +455,9 @@ impl Calendar {
   }
 
   fn render_day(
-    &self, day_date: &NaiveDate, offset_month: usize, window: &mut Window, cx: &mut App,
+    &self, day_date: &NaiveDate, offset_month: usize, month: u32, window: &mut Window, cx: &App,
   ) -> Stateful<Div> {
     let state = self.state.read(cx);
-    let (_, month) = state.offset_year_month(offset_month);
     let day = day_date.day();
     let is_current_month = day_date.month() == month;
     let is_active = state.date.is_active(day_date);
@@ -457,7 +519,7 @@ impl Calendar {
       })
   }
 
-  fn render_header(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render_header(&self, window: &mut Window, cx: &App) -> impl IntoElement {
     let state = self.state.read(cx);
     let current_year = state.current_year;
     let view_mode = state.view_mode;
@@ -564,7 +626,7 @@ impl Calendar {
   #[allow(clippy::too_many_arguments)]
   fn item_button(
     &self, id: impl Into<ElementId>, label: impl Into<SharedString>, active: bool,
-    secondary_active: bool, muted: bool, disabled: bool, _: &mut Window, cx: &mut App,
+    secondary_active: bool, muted: bool, disabled: bool, _: &mut Window, cx: &App,
   ) -> Stateful<Div> {
     h_flex()
       .id(id.into())
@@ -605,7 +667,7 @@ impl Calendar {
       .child(label.into())
   }
 
-  fn render_days(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render_days(&self, window: &mut Window, cx: &App) -> impl IntoElement {
     let state = self.state.read(cx);
     let week_keys = [
       "calendar.week.sunday",
@@ -624,33 +686,30 @@ impl Calendar {
         _ => this.gap_4().text_sm(),
       })
       .justify_between()
-      .children(
-        state
-          .days()
-          .chunks(5)
-          .enumerate()
-          .map(|(offset_month, days)| {
-            v_flex()
-              .gap_0p5()
-              .child(
-                h_flex().gap_0p5().justify_between().children(
-                  week_keys
-                    .iter()
-                    .map(|week| self.render_week(translate_woocraft(*week), window, cx)),
-                ),
-              )
-              .children(days.iter().map(|week| {
-                h_flex().gap_0p5().justify_between().children(
-                  week
-                    .iter()
-                    .map(|day_date| self.render_day(day_date, offset_month, window, cx)),
-                )
-              }))
-          }),
-      )
+      .children(state.days().iter().enumerate().map(|(offset_month, days)| {
+        // The month number only depends on the offset; resolve it once per
+        // visible month instead of once per day cell.
+        let (_, month) = state.offset_year_month(offset_month);
+        v_flex()
+          .gap_0p5()
+          .child(
+            h_flex().gap_0p5().justify_between().children(
+              week_keys
+                .iter()
+                .map(|week| self.render_week(translate_woocraft(*week), window, cx)),
+            ),
+          )
+          .children(days.iter().map(|week| {
+            h_flex().gap_0p5().justify_between().children(
+              week
+                .iter()
+                .map(|day_date| self.render_day(day_date, offset_month, month, window, cx)),
+            )
+          }))
+      }))
   }
 
-  fn render_week(&self, week: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> Div {
+  fn render_week(&self, week: impl Into<SharedString>, _: &mut Window, cx: &App) -> Div {
     h_flex()
       .map(|this| match self.size {
         Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
@@ -663,7 +722,7 @@ impl Calendar {
       .child(week.into())
   }
 
-  fn render_months(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render_months(&self, window: &mut Window, cx: &App) -> impl IntoElement {
     let state = self.state.read(cx);
     let months = state.months();
     let current_month = state.current_month;
@@ -704,10 +763,10 @@ impl Calendar {
       }))
   }
 
-  fn render_years(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render_years(&self, window: &mut Window, cx: &App) -> impl IntoElement {
     let state = self.state.read(cx);
     let current_year = state.current_year;
-    let current_page_years = &self.state.read(cx).years[state.year_page as usize].clone();
+    let current_page_years = &state.years[state.year_page as usize];
 
     h_flex()
       .id("years")
@@ -755,7 +814,12 @@ impl RenderOnce for Calendar {
     let view_mode = self.state.read(cx).view_mode;
     let number_of_months = self.number_of_months;
     self.state.update(cx, |state, _| {
-      state.number_of_months = number_of_months;
+      // Write back only on change to avoid a redundant state update every
+      // frame, then refresh the cached day grids for the new month window.
+      if state.number_of_months != number_of_months {
+        state.number_of_months = number_of_months;
+      }
+      state.sync_days_cache();
     });
 
     v_flex()

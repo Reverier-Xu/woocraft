@@ -230,9 +230,24 @@ pub fn local_today() -> NaiveDate {
   Local::now().date_naive()
 }
 
+/// Number of days in `month` of `year` (month must be in 1..=12).
+fn days_in_month(year: i32, month: u32) -> u32 {
+  let (next_year, next_month) = if month == 12 {
+    (year + 1, 1)
+  } else {
+    (year, month + 1)
+  };
+  NaiveDate::from_ymd_opt(next_year, next_month, 1)
+    .expect("invalid first day of next month")
+    .pred_opt()
+    .expect("date out of representable range")
+    .day()
+}
+
 /// Build a month matrix for calendar display, including adjacent month days.
 ///
-/// Returns a fixed 5-week grid with 7 days each.
+/// Returns whole-week rows (Sunday-first): 5 weeks normally, 6 weeks when the
+/// month starts late enough that 5 rows would truncate its last days.
 pub fn month_days(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
   let mut year = year;
   let mut month = month as i32;
@@ -248,13 +263,17 @@ pub fn month_days(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
   let month = month as u32;
   let date = NaiveDate::from_ymd_opt(year, month, 1).expect("invalid month start");
-  let start_weekday = date.weekday().num_days_from_sunday();
+  let start_weekday = date.weekday().num_days_from_sunday() as i32;
 
-  let mut days = Vec::with_capacity(5);
-  for week in 0..5 {
+  // Whole weeks needed to fit the leading offset plus every day of the month;
+  // keep at least 5 weeks so the grid height stays stable across months.
+  let weeks = ((start_weekday + days_in_month(year, month) as i32 + 6) / 7).max(5);
+
+  let mut days = Vec::with_capacity(weeks as usize);
+  for week in 0..weeks {
     let mut week_days = Vec::with_capacity(7);
     for weekday in 0..7 {
-      let day = week * 7 + weekday - start_weekday as i32;
+      let day = week * 7 + weekday - start_weekday;
       let current = date
         .checked_add_signed(Duration::days(day as i64))
         .expect("invalid shifted day in calendar grid");
@@ -316,32 +335,34 @@ mod tests {
     );
   }
 
+  /// Render a month matrix the same way the calendar widget lays it out, one
+  /// string per week row.
+  #[track_caller]
+  fn assert_case(date: NaiveDate, expected: Vec<&str>) {
+    let out = month_days(date.year(), date.month())
+      .iter()
+      .map(|week| {
+        week
+          .iter()
+          .map(|d| {
+            if d.year() == date.year() && d.month() == date.month() {
+              format!("{:2}", d.day())
+            } else if d.year() == date.year() {
+              format!("{}-{}", d.month(), d.day())
+            } else {
+              format!("{}-{}-{}", d.year(), d.month(), d.day())
+            }
+          })
+          .collect::<Vec<_>>()
+          .join("|")
+      })
+      .collect::<Vec<_>>();
+
+    assert_eq!(out, expected);
+  }
+
   #[test]
   fn test_month_days_grid() {
-    #[track_caller]
-    fn assert_case(date: NaiveDate, expected: Vec<&str>) {
-      let out = month_days(date.year(), date.month())
-        .iter()
-        .map(|week| {
-          week
-            .iter()
-            .map(|d| {
-              if d.year() == date.year() && d.month() == date.month() {
-                format!("{:2}", d.day())
-              } else if d.year() == date.year() {
-                format!("{}-{}", d.month(), d.day())
-              } else {
-                format!("{}-{}-{}", d.year(), d.month(), d.day())
-              }
-            })
-            .collect::<Vec<_>>()
-            .join("|")
-        })
-        .collect::<Vec<_>>();
-
-      assert_eq!(out, expected);
-    }
-
     assert_case(
       NaiveDate::from_ymd_opt(2024, 8, 1).unwrap(),
       vec![
@@ -380,6 +401,36 @@ mod tests {
         "12|13|14|15|16|17|18",
         "19|20|21|22|23|24|25",
         "26|27|28|3-1|3-2|3-3|3-4",
+      ],
+    );
+  }
+
+  #[test]
+  fn test_month_days_grid_heights() {
+    // February 2015 starts on a Sunday with 28 days: it would fit in 4 weeks,
+    // but the grid keeps a stable 5-week height.
+    let grid = month_days(2015, 2);
+    assert_eq!(grid.len(), 5);
+    assert_eq!(grid[3][6], NaiveDate::from_ymd_opt(2015, 2, 28).unwrap());
+    assert_eq!(grid[4][0], NaiveDate::from_ymd_opt(2015, 3, 1).unwrap());
+
+    // August 2026 starts on a Saturday with 31 days: needs 6 whole weeks.
+    assert_eq!(month_days(2026, 8).len(), 6);
+  }
+
+  #[test]
+  fn test_month_days_six_week_grid() {
+    // August 2026: the 1st is a Saturday and the month has 31 days, so a
+    // fixed 5-week grid would truncate the 30th and the 31st.
+    assert_case(
+      NaiveDate::from_ymd_opt(2026, 8, 1).unwrap(),
+      vec![
+        "7-26|7-27|7-28|7-29|7-30|7-31| 1",
+        " 2| 3| 4| 5| 6| 7| 8",
+        " 9|10|11|12|13|14|15",
+        "16|17|18|19|20|21|22",
+        "23|24|25|26|27|28|29",
+        "30|31|9-1|9-2|9-3|9-4|9-5",
       ],
     );
   }
