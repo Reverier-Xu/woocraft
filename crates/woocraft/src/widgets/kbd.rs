@@ -7,11 +7,77 @@
 //! on Linux/Windows).
 
 use gpui::{
-  Action, AsKeystroke, FocusHandle, IntoElement, KeyContext, Keystroke, ParentElement as _,
-  RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative,
+  Action, AsKeystroke, FocusHandle, IntoElement, KeyBinding, KeyContext, Keystroke,
+  ParentElement as _, RenderOnce, StyleRefinement, Styled, Window, div,
+  prelude::FluentBuilder as _, relative,
 };
 
 use crate::{ActiveTheme, StyledExt};
+
+/// Platform-specific display symbols for special keys and modifier names,
+/// keyed by the lowercase gpui key name. The modifier pass in `format` looks
+/// up the same table ("ctrl"/"alt"/"shift", plus "cmd" for the platform
+/// modifier) so modifiers and standalone modifier keys always render
+/// identically.
+#[cfg(target_os = "macos")]
+const SPECIAL_KEY_SYMBOLS: &[(&str, &str)] = &[
+  ("ctrl", "⌃"),
+  ("alt", "⌥"),
+  ("shift", "⇧"),
+  ("cmd", "⌘"),
+  ("space", "Space"),
+  ("backspace", "⌫"),
+  ("delete", "⌫"),
+  ("escape", "⎋"),
+  ("enter", "⏎"),
+  ("pagedown", "Page Down"),
+  ("pageup", "Page Up"),
+  ("left", "←"),
+  ("right", "→"),
+  ("up", "↑"),
+  ("down", "↓"),
+];
+
+#[cfg(not(target_os = "macos"))]
+const SPECIAL_KEY_SYMBOLS: &[(&str, &str)] = &[
+  ("ctrl", "Ctrl"),
+  ("alt", "Alt"),
+  ("shift", "Shift"),
+  ("cmd", "Win"),
+  ("backspace", "Backspace"),
+  ("delete", "Delete"),
+  ("escape", "Esc"),
+  ("enter", "Enter"),
+  ("pagedown", "Page Down"),
+  ("pageup", "Page Up"),
+  ("left", "Left"),
+  ("right", "Right"),
+  ("up", "Up"),
+  ("down", "Down"),
+];
+
+/// Looks up the display symbol for a special key or modifier name; returns
+/// `None` for regular keys, which are capitalized for display instead.
+fn special_key_symbol(key: &str) -> Option<&'static str> {
+  SPECIAL_KEY_SYMBOLS
+    .iter()
+    .find(|(name, _)| *name == key)
+    .map(|(_, symbol)| *symbol)
+}
+
+/// Capitalizes a regular key name for display ("home" -> "Home"); single
+/// characters are fully uppercased.
+fn capitalize_first(key: &str) -> String {
+  if key.len() == 1 {
+    return key.to_uppercase();
+  }
+
+  let mut chars = key.chars();
+  match chars.next() {
+    Some(first) => format!("{}{}", first.to_uppercase(), chars.collect::<String>()),
+    None => key.to_string(),
+  }
+}
 
 #[derive(IntoElement, Clone, Debug)]
 /// Visual keyboard key or shortcut display.
@@ -78,10 +144,7 @@ impl Kbd {
       None => window.highest_precedence_binding_for_action(action),
     }?;
 
-    binding
-      .keystrokes()
-      .first()
-      .map(|key| Self::new(key.as_keystroke().clone()))
+    Self::from_binding(&binding)
   }
 
   /// Looks up the highest-precedence keybinding for an action in a specific
@@ -91,7 +154,11 @@ impl Kbd {
   pub fn binding_for_action_in(
     action: &dyn Action, focus_handle: &FocusHandle, window: &Window,
   ) -> Option<Self> {
-    let binding = window.highest_precedence_binding_for_action_in(action, focus_handle)?;
+    Self::from_binding(&window.highest_precedence_binding_for_action_in(action, focus_handle)?)
+  }
+
+  /// Extracts the first keystroke of a binding and wraps it in a Kbd.
+  fn from_binding(binding: &KeyBinding) -> Option<Self> {
     binding
       .keystrokes()
       .first()
@@ -109,112 +176,25 @@ impl Kbd {
     #[cfg(not(target_os = "macos"))]
     const DIVIDER: &str = "+";
 
-    let mut parts = vec![];
-
-    if key.modifiers.control {
-      #[cfg(target_os = "macos")]
-      parts.push("⌃");
-
-      #[cfg(not(target_os = "macos"))]
-      parts.push("Ctrl");
-    }
-
-    if key.modifiers.alt {
-      #[cfg(target_os = "macos")]
-      parts.push("⌥");
-
-      #[cfg(not(target_os = "macos"))]
-      parts.push("Alt");
-    }
-
-    if key.modifiers.shift {
-      #[cfg(target_os = "macos")]
-      parts.push("⇧");
-
-      #[cfg(not(target_os = "macos"))]
-      parts.push("Shift");
-    }
-
-    if key.modifiers.platform {
-      #[cfg(target_os = "macos")]
-      parts.push("⌘");
-
-      #[cfg(not(target_os = "macos"))]
-      parts.push("Win");
-    }
-
-    let mut keys = String::new();
-    let key_str = key.key.as_str();
-    match key_str {
-      #[cfg(target_os = "macos")]
-      "ctrl" => keys.push('⌃'),
-      #[cfg(not(target_os = "macos"))]
-      "ctrl" => keys.push_str("Ctrl"),
-      #[cfg(target_os = "macos")]
-      "alt" => keys.push('⌥'),
-      #[cfg(not(target_os = "macos"))]
-      "alt" => keys.push_str("Alt"),
-      #[cfg(target_os = "macos")]
-      "shift" => keys.push('⇧'),
-      #[cfg(not(target_os = "macos"))]
-      "shift" => keys.push_str("Shift"),
-      #[cfg(target_os = "macos")]
-      "cmd" => keys.push('⌘'),
-      #[cfg(not(target_os = "macos"))]
-      "cmd" => keys.push_str("Win"),
-      #[cfg(target_os = "macos")]
-      "space" => keys.push_str("Space"),
-      #[cfg(target_os = "macos")]
-      "backspace" => keys.push('⌫'),
-      #[cfg(not(target_os = "macos"))]
-      "backspace" => keys.push_str("Backspace"),
-      #[cfg(target_os = "macos")]
-      "delete" => keys.push('⌫'),
-      #[cfg(not(target_os = "macos"))]
-      "delete" => keys.push_str("Delete"),
-      #[cfg(target_os = "macos")]
-      "escape" => keys.push('⎋'),
-      #[cfg(not(target_os = "macos"))]
-      "escape" => keys.push_str("Esc"),
-      #[cfg(target_os = "macos")]
-      "enter" => keys.push('⏎'),
-      #[cfg(not(target_os = "macos"))]
-      "enter" => keys.push_str("Enter"),
-      "pagedown" => keys.push_str("Page Down"),
-      "pageup" => keys.push_str("Page Up"),
-      #[cfg(target_os = "macos")]
-      "left" => keys.push('←'),
-      #[cfg(not(target_os = "macos"))]
-      "left" => keys.push_str("Left"),
-      #[cfg(target_os = "macos")]
-      "right" => keys.push('→'),
-      #[cfg(not(target_os = "macos"))]
-      "right" => keys.push_str("Right"),
-      #[cfg(target_os = "macos")]
-      "up" => keys.push('↑'),
-      #[cfg(not(target_os = "macos"))]
-      "up" => keys.push_str("Up"),
-      #[cfg(target_os = "macos")]
-      "down" => keys.push('↓'),
-      #[cfg(not(target_os = "macos"))]
-      "down" => keys.push_str("Down"),
-      _ => {
-        if key_str.len() == 1 {
-          keys.push_str(&key_str.to_uppercase());
-        } else {
-          let mut chars = key_str.chars();
-          if let Some(first_char) = chars.next() {
-            keys.push_str(&format!(
-              "{}{}",
-              first_char.to_uppercase(),
-              chars.collect::<String>()
-            ));
-          } else {
-            keys.push_str(key_str);
-          }
-        }
+    let mut parts = Vec::new();
+    // Modifier display order: Ctrl, Alt, Shift, then the platform key.
+    for (enabled, name) in [
+      (key.modifiers.control, "ctrl"),
+      (key.modifiers.alt, "alt"),
+      (key.modifiers.shift, "shift"),
+      (key.modifiers.platform, "cmd"),
+    ] {
+      if enabled
+        && let Some(symbol) = special_key_symbol(name)
+      {
+        parts.push(symbol);
       }
     }
+
+    let key_str = key.key.as_str();
+    let keys = special_key_symbol(key_str)
+      .map(str::to_string)
+      .unwrap_or_else(|| capitalize_first(key_str));
 
     parts.push(&keys);
     parts.join(DIVIDER)

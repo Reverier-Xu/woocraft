@@ -50,9 +50,10 @@
 //! ```
 //!
 //! # Performance Notes
-//! Button rendering is optimized for rapid state updates. The component
-//! recomputes styling on variant or state changes but caches icon animations.
-//! For buttons in large lists (100+), consider using `virtual_list` to only
+//! Button rendering recomputes variant and state styling on each render; the
+//! loading spinner animates through gpui's local `with_animation`, which
+//! repaints only the spinner element rather than the whole button. For
+//! buttons in large lists (100+), consider using `virtual_list` to only
 //! render visible buttons.
 
 use std::rc::Rc;
@@ -549,19 +550,8 @@ fn compute_button_colors(
     border
   };
 
-  let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) = if disabled
+  let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) = if !disabled
   {
-    (
-      bg.opacity(opacity::DISABLED),
-      fg.opacity(opacity::DISABLED),
-      border.opacity(opacity::DISABLED),
-      hover_bg.opacity(opacity::DISABLED),
-      active_bg.opacity(opacity::DISABLED),
-      selected_bg.opacity(opacity::DISABLED),
-      selected_fg.opacity(opacity::DISABLED),
-      selected_border.opacity(opacity::DISABLED),
-    )
-  } else {
     (
       bg,
       fg,
@@ -572,26 +562,42 @@ fn compute_button_colors(
       selected_fg,
       selected_border,
     )
-  };
-
-  let (bg, border) = if disabled && matches!(variant, ButtonVariant::Link | ButtonVariant::Default)
-  {
-    (theme.foreground.opacity(0.1), transparent)
   } else {
-    (bg, border)
-  };
-
-  let (bg, border, hover_bg, active_bg, selected_bg) = if disabled && variant == ButtonVariant::Flat
-  {
-    (
-      transparent,
-      transparent,
-      theme.foreground.opacity(0.05),
-      theme.foreground.opacity(0.05),
-      theme.foreground.opacity(0.05),
-    )
-  } else {
-    (bg, border, hover_bg, active_bg, selected_bg)
+    // Disabled styling needs variant-specific overrides on top of the
+    // blanket opacity pass, expressed as one match instead of layered
+    // remappings that silently overwrite each other.
+    match variant {
+      ButtonVariant::Link | ButtonVariant::Default => (
+        theme.foreground.opacity(0.1),
+        fg.opacity(opacity::DISABLED),
+        transparent,
+        hover_bg.opacity(opacity::DISABLED),
+        active_bg.opacity(opacity::DISABLED),
+        selected_bg.opacity(opacity::DISABLED),
+        selected_fg.opacity(opacity::DISABLED),
+        selected_border.opacity(opacity::DISABLED),
+      ),
+      ButtonVariant::Flat => (
+        transparent,
+        fg.opacity(opacity::DISABLED),
+        transparent,
+        theme.foreground.opacity(0.05),
+        theme.foreground.opacity(0.05),
+        theme.foreground.opacity(0.05),
+        selected_fg.opacity(opacity::DISABLED),
+        selected_border.opacity(opacity::DISABLED),
+      ),
+      _ => (
+        bg.opacity(opacity::DISABLED),
+        fg.opacity(opacity::DISABLED),
+        border.opacity(opacity::DISABLED),
+        hover_bg.opacity(opacity::DISABLED),
+        active_bg.opacity(opacity::DISABLED),
+        selected_bg.opacity(opacity::DISABLED),
+        selected_fg.opacity(opacity::DISABLED),
+        selected_border.opacity(opacity::DISABLED),
+      ),
+    }
   };
 
   ButtonColors {
@@ -626,6 +632,7 @@ impl RenderOnce for Button {
     let has_only_icon = self.label.is_none() && self.children.is_empty() && self.icon.is_some();
     let clickable = self.clickable();
     let hoverable = self.hoverable();
+    let id = self.id;
     let icon = if self.loading {
       self.loading_icon.or(Some(Icon::new(IconName::SpinnerIos)))
     } else {
@@ -662,12 +669,12 @@ impl RenderOnce for Button {
     };
 
     let focus_handle = window
-      .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+      .use_keyed_state(id.clone(), cx, |_, cx| cx.focus_handle())
       .read(cx)
       .clone();
 
     h_flex()
-      .id(self.id)
+      .id(id)
       .justify_center()
       .when(!is_flat, |this| this.border_1())
       .bg(bg)

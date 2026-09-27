@@ -257,10 +257,11 @@ impl RenderOnce for Field {
           .id(self.id)
           .gap(inner_gap)
           .map(|this| match self.align_items {
+            // `align_items` can only be set to Start/End/Center via the
+            // `items_*` setters, so `AlignItems::Baseline` is unreachable.
             Some(AlignItems::Start) => this.items_start(),
             Some(AlignItems::End) => this.items_end(),
             Some(AlignItems::Center) => this.items_center(),
-            Some(AlignItems::Baseline) => this.items_baseline(),
             _ => this,
           })
           .when(reserve_label_space || has_label, |this| {

@@ -144,47 +144,32 @@ where
 
   /// Undo the last change and return the changes that were undone.
   pub fn undo(&mut self) -> Option<Vec<I>> {
-    if let Some(first_change) = self.undos.pop() {
-      let mut changes = vec![first_change.clone()];
-      // pick the next all changes with the same version
-      while self
-        .undos
-        .iter()
-        .filter(|c| c.version() == first_change.version())
-        .count()
-        > 0
-      {
-        let change = self.undos.pop().unwrap();
-        changes.push(change);
-      }
-
-      self.redos.extend(changes.clone());
-      Some(changes)
-    } else {
-      None
+    let first_change = self.undos.pop()?;
+    let version = first_change.version();
+    let mut changes = vec![first_change.clone()];
+    // Versions are pushed in non-decreasing order (and `retain` in `push`
+    // preserves that), so all entries sharing a version are contiguous at the
+    // top of the stack: pop while the top entry still matches instead of
+    // rescanning the whole stack per popped entry.
+    while self.undos.last().is_some_and(|c| c.version() == version) {
+      changes.push(self.undos.pop().unwrap());
     }
+
+    self.redos.extend(changes.clone());
+    Some(changes)
   }
 
   /// Redo the last undone change and return the changes that were redone.
   pub fn redo(&mut self) -> Option<Vec<I>> {
-    if let Some(first_change) = self.redos.pop() {
-      let mut changes = vec![first_change.clone()];
-      // pick the next all changes with the same version
-      while self
-        .redos
-        .iter()
-        .filter(|c| c.version() == first_change.version())
-        .count()
-        > 0
-      {
-        let change = self.redos.pop().unwrap();
-        changes.push(change);
-      }
-      self.undos.extend(changes.clone());
-      Some(changes)
-    } else {
-      None
+    let first_change = self.redos.pop()?;
+    let version = first_change.version();
+    let mut changes = vec![first_change.clone()];
+    // See `undo`: same-version entries are contiguous at the top.
+    while self.redos.last().is_some_and(|c| c.version() == version) {
+      changes.push(self.redos.pop().unwrap());
     }
+    self.undos.extend(changes.clone());
+    Some(changes)
   }
 }
 
@@ -313,5 +298,47 @@ mod tests {
     // Check the undo stack is empty and redo stack has all changes
     assert_eq!(history.undos().len(), 0);
     assert_eq!(history.redos().len(), 4);
+  }
+
+  #[test]
+  fn test_grouped_history() {
+    let mut history: History<TabIndex> = History::new();
+    history.start_grouping();
+    history.push(1.into());
+    history.push(2.into());
+    history.push(3.into());
+    history.end_grouping();
+    history.push(4.into());
+
+    // Grouped pushes share one version (0); the ungrouped push gets its own (1).
+    assert_eq!(history.version(), 1);
+    assert_eq!(history.undos().len(), 4);
+    assert_eq!(history.undos().first().unwrap().version(), 0);
+    assert_eq!(history.undos().last().unwrap().version(), 1);
+
+    // The ungrouped entry is undone on its own.
+    let changes = history.undo().unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].tab_index, 4);
+    assert_eq!(history.undos().len(), 3);
+
+    // The three grouped entries are undone together as one version.
+    let changes = history.undo().unwrap();
+    assert_eq!(changes.len(), 3);
+    assert_eq!(changes[0].tab_index, 3);
+    assert_eq!(changes[2].tab_index, 1);
+    assert!(history.undo().is_none());
+
+    // Redo replays whole groups back in push order.
+    let changes = history.redo().unwrap();
+    assert_eq!(changes.len(), 3);
+    assert_eq!(changes[0].tab_index, 1);
+    assert_eq!(changes[2].tab_index, 3);
+
+    let changes = history.redo().unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].tab_index, 4);
+    assert!(history.redo().is_none());
+    assert_eq!(history.undos().len(), 4);
   }
 }

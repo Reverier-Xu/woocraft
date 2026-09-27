@@ -69,22 +69,18 @@ impl RenderOnce for Link {
           .cursor_pointer()
           .hover(|this| this.opacity(0.85))
           .active(|this| this.opacity(0.7))
-      })
-      .when(!self.disabled, |this| {
-        this.on_mouse_down(MouseButton::Left, |_, _, cx| {
-          cx.stop_propagation();
-        })
-      })
-      .when(!self.disabled, |this| {
-        this.on_click(move |event, window, cx| {
-          if let Some(href) = href.as_ref() {
-            cx.open_url(href);
-          }
+          .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            cx.stop_propagation();
+          })
+          .on_click(move |event, window, cx| {
+            if let Some(href) = href.as_ref() {
+              cx.open_url(href);
+            }
 
-          if let Some(on_click) = on_click.as_ref() {
-            on_click(event, window, cx);
-          }
-        })
+            if let Some(on_click) = on_click.as_ref() {
+              on_click(event, window, cx);
+            }
+          })
       })
       .children(self.children)
       .refine_style(&self.style)
