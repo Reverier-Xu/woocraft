@@ -167,17 +167,32 @@ impl_disableable!(Switch);
 impl RenderOnce for Switch {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
-    let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
-    let prev_checked = *toggle_state.read(cx);
+    let id = self.id.clone();
+    // (settled state, pending animation target, epoch of the pending timer)
+    let toggle_state = window.use_keyed_state(id.clone(), cx, |_, _| (checked, None::<bool>, 0u32));
+    let (prev_checked, pending_target, epoch) = *toggle_state.read(cx);
     let should_animate = !self.disabled && prev_checked != checked;
     let animation_duration = duration::SWITCH_TOGGLE;
 
-    if should_animate {
+    // Spawn the settle timer only once per animation target, so parent
+    // re-renders during an animation do not accumulate duplicate timers.
+    if should_animate && pending_target != Some(checked) {
+      let epoch = epoch + 1;
+      toggle_state.update(cx, |state, _| {
+        state.1 = Some(checked);
+        state.2 = epoch;
+      });
       cx.spawn({
         let toggle_state = toggle_state.clone();
         async move |cx| {
           cx.background_executor().timer(animation_duration).await;
-          toggle_state.update(cx, |state, _| *state = checked);
+          toggle_state.update(cx, |state, _| {
+            // A newer animation target superseded this timer.
+            if state.2 == epoch {
+              state.0 = checked;
+              state.1 = None;
+            }
+          });
         }
       })
       .detach();
@@ -286,13 +301,13 @@ impl RenderOnce for Switch {
       });
 
     h_flex()
-      .id(self.id.clone())
+      .id(id.clone())
       .h(track_h)
       .items_center()
       .component_gap(self.size)
       .child(
         div()
-          .id((self.id.clone(), "track"))
+          .id((id, "track"))
           .relative()
           .w(track_w)
           .h(track_h)
