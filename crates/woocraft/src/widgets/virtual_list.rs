@@ -185,6 +185,10 @@ where
     })
   };
 
+  // `item_sizes` is immutable once the `VirtualList` is built, so its hash
+  // is computed once here instead of on every layout pass.
+  let size_hash = VirtualList::compute_size_hash(&item_sizes);
+
   VirtualList {
     id: id.clone(),
     axis,
@@ -196,6 +200,7 @@ where
     scroll_handle,
     items_count: item_sizes.len(),
     item_sizes,
+    size_hash,
     render_items: Box::new(render_range),
     sizing_behavior: ListSizingBehavior::default(),
   }
@@ -210,6 +215,7 @@ pub struct VirtualList {
   scroll_handle: VirtualListScrollHandle,
   items_count: usize,
   item_sizes: Rc<Vec<Size<Pixels>>>,
+  size_hash: u64,
   render_items: Box<RenderItemsCallback>,
   sizing_behavior: ListSizingBehavior,
 }
@@ -238,6 +244,28 @@ fn last_visible_index(origins: &[Pixels], visible_end: Pixels, items_count: usiz
       .saturating_add(1),
     items_count,
   )
+}
+
+/// Resolve the final layout size for [`ListSizingBehavior::Infer`].
+///
+/// Known dimensions from the parent take precedence, then a definite
+/// available space on that axis, falling back to the measured content size.
+/// The same resolution applies to both axes; axis-specific semantics live
+/// entirely in the measured `content_size`.
+fn resolve_infer_size(
+  known_dimensions: Size<Option<Pixels>>, available_space: Size<AvailableSpace>,
+  content_size: Size<Pixels>,
+) -> Size<Pixels> {
+  Size {
+    width: known_dimensions.width.unwrap_or(match available_space.width {
+      AvailableSpace::Definite(x) => x,
+      AvailableSpace::MinContent | AvailableSpace::MaxContent => content_size.width,
+    }),
+    height: known_dimensions.height.unwrap_or(match available_space.height {
+      AvailableSpace::Definite(x) => x,
+      AvailableSpace::MinContent | AvailableSpace::MaxContent => content_size.height,
+    }),
+  }
 }
 
 impl Styled for VirtualList {
@@ -281,13 +309,10 @@ impl VirtualList {
   }
 
   fn scroll_to_deferred_item(
-    &self, scroll_offset: Point<Pixels>, items_bounds: &[Bounds<Pixels>],
+    &self, scroll_offset: Point<Pixels>, target_bounds: Option<Bounds<Pixels>>,
     content_bounds: &Bounds<Pixels>, scroll_to_item: DeferredScrollToItem,
   ) -> Point<Pixels> {
-    let Some(bounds) = items_bounds
-      .get(scroll_to_item.item_index + scroll_to_item.offset)
-      .cloned()
-    else {
+    let Some(bounds) = target_bounds else {
       return scroll_offset;
     };
 
@@ -323,16 +348,22 @@ impl VirtualList {
     scroll_offset
   }
 
+  /// Measure the first item by really rendering and laying it out.
+  ///
+  /// Takes the involved fields instead of `&self` so it can be called from
+  /// the layout closure while `interactivity()` holds `&mut self.base`.
+  ///
   /// Ref from: https://github.com/zed-industries/zed/blob/83f9f9d9e3f5914392cab9a09e3472711a1d7b38/crates/gpui/src/elements/uniform_list.rs#L660
   fn measure_item(
-    &self, list_width: Option<Pixels>, window: &mut Window, cx: &mut App,
+    render_items: &RenderItemsCallback, items_count: usize, list_width: Option<Pixels>,
+    window: &mut Window, cx: &mut App,
   ) -> Size<Pixels> {
-    if self.items_count == 0 {
+    if items_count == 0 {
       return Size::default();
     }
 
     let item_ix = 0;
-    let mut items = (self.render_items)(item_ix..item_ix + 1, window, cx);
+    let mut items = (render_items)(item_ix..item_ix + 1, window, cx);
     let Some(mut item_to_measure) = items.pop() else {
       return Size::default();
     };
@@ -353,12 +384,17 @@ pub struct VirtualListFrameState {
   size_layout: ItemSizeLayout,
 }
 
+/// Cached sizing state of a [`VirtualList`], kept in the window element
+/// state and cloned every frame; the bulk collections are `Rc` so cloning
+/// stays O(1).
 #[derive(Default, Clone)]
 pub struct ItemSizeLayout {
   size_hash: u64,
+  items_count: usize,
   content_size: Size<Pixels>,
-  sizes: Vec<Pixels>,
-  origins: Vec<Pixels>,
+  sizes: Rc<[Pixels]>,
+  origins: Rc<[Pixels]>,
+  longest_item_size: Size<Pixels>,
   last_layout_bounds: Bounds<Pixels>,
 }
 
@@ -389,7 +425,6 @@ impl Element for VirtualList {
     let rem_size = window.rem_size();
     let font_size = window.text_style().font_size.to_pixels(rem_size);
     let mut size_layout = ItemSizeLayout::default();
-    let longest_item_size = self.measure_item(None, window, cx);
 
     let layout_id = self.base.interactivity().request_layout(
       global_id,
@@ -399,7 +434,7 @@ impl Element for VirtualList {
       |style, window, cx| {
         size_layout = window.with_element_state(
           global_id.unwrap(),
-          |state: Option<ItemSizeLayout>, _window| {
+          |state: Option<ItemSizeLayout>, window| {
             let mut state = state.unwrap_or_default();
 
             // Including the gap between items for calculate the item size
@@ -408,9 +443,16 @@ impl Element for VirtualList {
               .along(self.axis)
               .to_pixels(font_size.into(), rem_size);
 
-            let current_hash = Self::compute_size_hash(&self.item_sizes);
-            if state.size_hash != current_hash {
+            // `item_sizes` is immutable once the `VirtualList` is built, so
+            // its hash is computed once at construction time.
+            let current_hash = self.size_hash;
+            if state.size_hash != current_hash || state.items_count != self.items_count {
+              // Re-measure the first item only when the item data changed.
+              state.longest_item_size =
+                Self::measure_item(&self.render_items, self.items_count, None, window, cx);
+              state.items_count = self.items_count;
               state.size_hash = current_hash;
+
               // Prepare each item's size by axis
               state.sizes = self
                 .item_sizes
@@ -424,34 +466,27 @@ impl Element for VirtualList {
                     size + gap
                   }
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
               // Prepare each item's origin by axis
               state.origins = state
                 .sizes
                 .iter()
-                .scan(px(0.), |cumulative, size| match self.axis {
-                  Axis::Horizontal => {
-                    let x = *cumulative;
-                    *cumulative += *size;
-                    Some(x)
-                  }
-                  Axis::Vertical => {
-                    let y = *cumulative;
-                    *cumulative += *size;
-                    Some(y)
-                  }
+                .scan(px(0.), |cumulative, size| {
+                  let origin = *cumulative;
+                  *cumulative += *size;
+                  Some(origin)
                 })
-                .collect::<Vec<_>>();
+                .collect();
 
               state.content_size = if matches!(self.axis, Axis::Horizontal) {
                 Size {
                   width: px(state.sizes.iter().map(|size| size.as_f32()).sum::<f32>()),
-                  height: longest_item_size.height,
+                  height: state.longest_item_size.height,
                 }
               } else {
                 Size {
-                  width: longest_item_size.width,
+                  width: state.longest_item_size.width,
                   height: px(state.sizes.iter().map(|size| size.as_f32()).sum::<f32>()),
                 }
               };
@@ -461,52 +496,14 @@ impl Element for VirtualList {
           },
         );
 
-        let axis = self.axis;
         match self.sizing_behavior {
           ListSizingBehavior::Infer => {
             window.with_text_style(style.text_style().cloned(), |window| {
-              let size_layout = size_layout.clone();
+              let content_size = size_layout.content_size;
 
               window.request_measured_layout(style, {
                 move |known_dimensions, available_space, _, _| {
-                  let mut size = Size::default();
-                  if matches!(axis, Axis::Horizontal) {
-                    size.width = known_dimensions
-                      .width
-                      .unwrap_or(match available_space.width {
-                        AvailableSpace::Definite(x) => x,
-                        AvailableSpace::MinContent | AvailableSpace::MaxContent => {
-                          size_layout.content_size.width
-                        }
-                      });
-                    size.height = known_dimensions
-                      .width
-                      .unwrap_or(match available_space.height {
-                        AvailableSpace::Definite(x) => x,
-                        AvailableSpace::MinContent | AvailableSpace::MaxContent => {
-                          size_layout.content_size.height
-                        }
-                      });
-                  } else {
-                    size.width = known_dimensions
-                      .width
-                      .unwrap_or(match available_space.width {
-                        AvailableSpace::Definite(x) => x,
-                        AvailableSpace::MinContent | AvailableSpace::MaxContent => {
-                          size_layout.content_size.width
-                        }
-                      });
-                    size.height = known_dimensions
-                      .height
-                      .unwrap_or(match available_space.height {
-                        AvailableSpace::Definite(x) => x,
-                        AvailableSpace::MinContent | AvailableSpace::MaxContent => {
-                          size_layout.content_size.height
-                        }
-                      });
-                  }
-
-                  size
+                  resolve_infer_size(known_dimensions, available_space, content_size)
                 }
               })
             })
@@ -560,26 +557,6 @@ impl Element for VirtualList {
         ),
     );
 
-    // Update scroll_handle with the item bounds
-    let items_bounds = item_origins
-      .iter()
-      .enumerate()
-      .map(|(i, &origin)| {
-        let item_size = item_sizes[i];
-
-        Bounds {
-          origin: match self.axis {
-            Axis::Horizontal => point(content_bounds.left() + origin, px(0.)),
-            Axis::Vertical => point(px(0.), content_bounds.top() + origin),
-          },
-          size: match self.axis {
-            Axis::Horizontal => size(item_size, content_bounds.size.height),
-            Axis::Vertical => size(content_bounds.size.width, item_size),
-          },
-        }
-      })
-      .collect::<Vec<_>>();
-
     let axis = self.axis;
 
     let mut scroll_state = self.scroll_handle.state.borrow_mut();
@@ -588,9 +565,26 @@ impl Element for VirtualList {
 
     let mut scroll_offset = self.scroll_handle.offset();
     if let Some(scroll_to_item) = scroll_state.deferred_scroll_to_item.take() {
+      // Only the deferred target's bounds are needed, so build them lazily
+      // instead of collecting the bounds of every item on each frame.
+      let target_ix = scroll_to_item.item_index + scroll_to_item.offset;
+      let target_bounds = item_origins
+        .get(target_ix)
+        .zip(item_sizes.get(target_ix))
+        .map(|(&origin, &item_size)| Bounds {
+          origin: match axis {
+            Axis::Horizontal => point(content_bounds.left() + origin, px(0.)),
+            Axis::Vertical => point(px(0.), content_bounds.top() + origin),
+          },
+          size: match axis {
+            Axis::Horizontal => size(item_size, content_bounds.size.height),
+            Axis::Vertical => size(content_bounds.size.width, item_size),
+          },
+        });
+
       scroll_offset = self.scroll_to_deferred_item(
         scroll_offset,
-        &items_bounds,
+        target_bounds,
         &content_bounds,
         scroll_to_item,
       );
@@ -708,5 +702,63 @@ impl Element for VirtualList {
         }
       },
     )
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn infer_size_prefers_known_dimensions_over_space_and_content() {
+    let content_size = size(px(500.), px(30.));
+    let resolved = resolve_infer_size(
+      size(Some(px(200.)), Some(px(120.))),
+      size(
+        AvailableSpace::Definite(px(320.)),
+        AvailableSpace::Definite(px(64.)),
+      ),
+      content_size,
+    );
+    assert_eq!(resolved, size(px(200.), px(120.)));
+  }
+
+  #[test]
+  fn infer_size_uses_definite_available_space_when_unknown() {
+    let content_size = size(px(500.), px(30.));
+    let resolved = resolve_infer_size(
+      size(None, None),
+      size(
+        AvailableSpace::Definite(px(320.)),
+        AvailableSpace::Definite(px(64.)),
+      ),
+      content_size,
+    );
+    assert_eq!(resolved, size(px(320.), px(64.)));
+  }
+
+  #[test]
+  fn infer_size_falls_back_to_content_size_for_unconstrained_space() {
+    let content_size = size(px(500.), px(30.));
+    let resolved = resolve_infer_size(
+      size(None, None),
+      size(AvailableSpace::MinContent, AvailableSpace::MaxContent),
+      content_size,
+    );
+    assert_eq!(resolved, content_size);
+  }
+
+  #[test]
+  fn infer_size_resolves_height_from_known_height_not_known_width() {
+    // Regression test for the horizontal branch of
+    // `ListSizingBehavior::Infer`, which used to resolve `height` from
+    // `known_dimensions.width`.
+    let content_size = size(px(500.), px(30.));
+    let resolved = resolve_infer_size(
+      size(Some(px(200.)), None),
+      size(AvailableSpace::MinContent, AvailableSpace::MinContent),
+      content_size,
+    );
+    assert_eq!(resolved, size(px(200.), px(30.)));
   }
 }
