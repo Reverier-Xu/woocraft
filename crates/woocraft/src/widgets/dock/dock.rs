@@ -54,6 +54,11 @@ pub struct Dock {
   /// preview-size computation is deferred to the next frame render so that
   /// high-frequency mouse reports are coalesced into one layout pass.
   pending_resize_position: Option<Point<Pixels>>,
+  /// Cached style refinements used to enable child view caching in render.
+  /// They are identical every frame, so they are built once and cloned
+  /// instead of being re-allocated per frame.
+  panel_cache_style: StyleRefinement,
+  single_panel_cache_style: StyleRefinement,
 }
 
 impl Dock {
@@ -112,6 +117,8 @@ impl Dock {
       resizing: false,
       last_resize_position: None,
       pending_resize_position: None,
+      panel_cache_style: StyleRefinement::default().size_full(),
+      single_panel_cache_style: StyleRefinement::default().absolute().size_full(),
     };
 
     let dock_entity = cx.entity().clone();
@@ -186,6 +193,8 @@ impl Dock {
       resizing: false,
       last_resize_position: None,
       pending_resize_position: None,
+      panel_cache_style: StyleRefinement::default().size_full(),
+      single_panel_cache_style: StyleRefinement::default().absolute().size_full(),
     };
 
     let dock_entity = cx.entity().clone();
@@ -383,30 +392,13 @@ impl Dock {
       DockPlacement::Bottom => area_bounds.bottom() - mouse_position.y,
       DockPlacement::Center => unreachable!(),
     };
-    match self.placement {
-      DockPlacement::Left => {
-        let max_size = area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size;
-        let next_size = size.clamp(self.min_size(), max_size).round();
-        if self.preview_size != Some(next_size) {
-          self.preview_size = Some(next_size);
-        }
-      }
-      DockPlacement::Right => {
-        let max_size = area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size;
-        let next_size = size.clamp(self.min_size(), max_size).round();
-        if self.preview_size != Some(next_size) {
-          self.preview_size = Some(next_size);
-        }
-      }
-      DockPlacement::Bottom => {
-        let max_size = area_bounds.size.height - PANEL_MIN_SIZE;
-        let next_size = size.clamp(self.min_size(), max_size).round();
-        if self.preview_size != Some(next_size) {
-          self.preview_size = Some(next_size);
-        }
-      }
+    let max_size = match self.placement {
+      DockPlacement::Left => area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size,
+      DockPlacement::Right => area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size,
+      DockPlacement::Bottom => area_bounds.size.height - PANEL_MIN_SIZE,
       DockPlacement::Center => unreachable!(),
-    }
+    };
+    self.preview_size = Some(size.clamp(self.min_size(), max_size).round());
     // This runs during render; the current frame already picks up the new
     // preview_size, so do not schedule another notification here.
   }
@@ -427,9 +419,6 @@ impl Dock {
 impl Render for Dock {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
     self.apply_pending_resize(cx);
-
-    let panel_cache_style = StyleRefinement::default().size_full();
-    let single_panel_cache_style = StyleRefinement::default().absolute().size_full();
 
     let collapsed_width = px(40.0);
     let view = cx.entity().clone();
@@ -501,14 +490,13 @@ impl Render for Dock {
           })
           .map(|this| match self.panel.clone() {
             DockItem::Split { view, .. } => {
-              this.child(AnyView::from(view).cached(panel_cache_style.clone()))
+              this.child(AnyView::from(view).cached(self.panel_cache_style.clone()))
             }
             DockItem::Tabs { view, .. } => {
-              this.child(AnyView::from(view).cached(panel_cache_style.clone()))
+              this.child(AnyView::from(view).cached(self.panel_cache_style.clone()))
             }
-            DockItem::Panel { view, .. } => {
-              this.child(view.view().cached(single_panel_cache_style.clone()))
-            }
+            DockItem::Panel { view, .. } => this
+              .child(view.view().cached(self.single_panel_cache_style.clone())),
             DockItem::Tiles { .. } => this,
           });
 

@@ -55,7 +55,7 @@ impl Render for DragMoving {
   }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum ResizeSide {
   Left,
   Right,
@@ -414,23 +414,11 @@ impl Tiles {
     // Apply boundary constraints after snapping
     new_origin = self.apply_boundary_constraints(new_origin);
 
-    // Update position without grid rounding (smooth dragging)
+    // Update position without grid rounding (smooth dragging). The final
+    // aligned position is pushed to history once on mouse up (see
+    // `on_mouse_up`), so intermediate ticks do not create undo records.
     if new_origin != previous_bounds.origin {
       self.panels[item_ix].bounds.origin = new_origin;
-      let item = &self.panels[item_ix];
-      let bounds = item.bounds;
-      let entity_id = item.panel.view().entity_id();
-
-      if !self.history.ignore {
-        self.history.push(TileChange {
-          tile_id: entity_id,
-          old_bounds: Some(previous_bounds),
-          new_bounds: Some(bounds),
-          old_order: None,
-          new_order: None,
-          version: 0,
-        });
-      }
       cx.notify();
     }
   }
@@ -446,30 +434,35 @@ impl Tiles {
       return;
     };
 
+    // Read the grid size once for the whole resize pass instead of once per
+    // axis inside `round_to_nearest_ten`.
+    let grid_size = cx.theme().tile_grid_size;
     let previous_bounds = item.bounds;
     let final_x = if let Some(x) = new_x {
-      round_to_nearest_ten(x, cx)
+      round_to_nearest_ten(x, grid_size)
     } else {
       previous_bounds.origin.x
     };
     let final_y = if let Some(y) = new_y {
-      round_to_nearest_ten(y, cx)
+      round_to_nearest_ten(y, grid_size)
     } else {
       previous_bounds.origin.y
     };
     let final_width = if let Some(width) = new_width {
-      round_to_nearest_ten(width, cx)
+      round_to_nearest_ten(width, grid_size)
     } else {
       previous_bounds.size.width
     };
 
     let final_height = if let Some(height) = new_height {
-      round_to_nearest_ten(height, cx)
+      round_to_nearest_ten(height, grid_size)
     } else {
       previous_bounds.size.height
     };
 
-    // Only push to history if size has changed
+    // Only apply if the rect has changed. The final bounds are pushed to
+    // history once on mouse up (see `on_mouse_up`), so intermediate ticks do
+    // not create undo records.
     if final_width != item.bounds.size.width
       || final_height != item.bounds.size.height
       || final_x != item.bounds.origin.x
@@ -479,18 +472,6 @@ impl Tiles {
       item.bounds.origin.y = final_y;
       item.bounds.size.width = final_width;
       item.bounds.size.height = final_height;
-
-      // Only push if not during history operations
-      if !self.history.ignore {
-        self.history.push(TileChange {
-          tile_id: item.panel.view().entity_id(),
-          old_bounds: Some(previous_bounds),
-          new_bounds: Some(item.bounds),
-          old_order: None,
-          new_order: None,
-          version: 0,
-        });
-      }
       cx.notify();
     }
   }
@@ -635,319 +616,25 @@ impl Tiles {
     })
   }
 
-  /// Produce a vector of AnyElement representing the three possible resize
-  /// handles
+  /// Produce the resize handles for one tile.
+  ///
+  /// The five handles share the same mouse-down / drag / drag-move wiring;
+  /// geometry, cursor and drag-delta math are all derived from the
+  /// [`ResizeSide`] in [`resize_handle`].
   fn render_resize_handles(
     &mut self, _: &mut Window, cx: &mut Context<Self>, entity_id: EntityId, item: &TileItem,
   ) -> Vec<AnyElement> {
-    let item_id = item.id;
-    let item_bounds = item.bounds;
-    let handle_offset = -HANDLE_SIZE + px(1.);
-
-    let mut elements = Vec::new();
-
-    // Left resize handle
-    elements.push(
-      div()
-        .id("left-resize-handle")
-        .cursor_ew_resize()
-        .absolute()
-        .top_0()
-        .left(handle_offset)
-        .w(HANDLE_SIZE)
-        .h(item_bounds.size.height)
-        .on_mouse_down(
-          MouseButton::Left,
-          cx.listener({
-            move |this, event: &MouseDownEvent, window, cx| {
-              this.on_resize_handle_mouse_down(
-                ResizeSide::Left,
-                item_id,
-                item_bounds,
-                event,
-                window,
-                cx,
-              );
-            }
-          }),
-        )
-        .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-          cx.stop_propagation();
-          cx.new(|_| drag.clone())
-        })
-        .on_drag_move(
-          cx.listener(
-            move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-              DragResizing(id) => {
-                if *id != entity_id {
-                  return;
-                }
-
-                let Some(ref drag_data) = this.resizing_drag_data else {
-                  return;
-                };
-                if drag_data.side != ResizeSide::Left {
-                  return;
-                }
-
-                let pos = e.event.position;
-                let delta = drag_data.last_position.x - pos.x;
-                let new_x = (drag_data.last_bounds.origin.x - delta).max(px(0.0));
-                let size_delta = drag_data.last_bounds.origin.x - new_x;
-                let new_width =
-                  (drag_data.last_bounds.size.width + size_delta).max(MINIMUM_SIZE.width);
-                this.resize(Some(new_x), None, Some(new_width), None, window, cx);
-              }
-            },
-          ),
-        )
-        .into_any_element(),
-    );
-
-    // Right resize handle
-    elements.push(
-      div()
-        .id("right-resize-handle")
-        .cursor_ew_resize()
-        .absolute()
-        .top_0()
-        .right(handle_offset)
-        .w(HANDLE_SIZE)
-        .h(item_bounds.size.height)
-        .on_mouse_down(
-          MouseButton::Left,
-          cx.listener({
-            move |this, event: &MouseDownEvent, window, cx| {
-              this.on_resize_handle_mouse_down(
-                ResizeSide::Right,
-                item_id,
-                item_bounds,
-                event,
-                window,
-                cx,
-              );
-            }
-          }),
-        )
-        .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-          cx.stop_propagation();
-          cx.new(|_| drag.clone())
-        })
-        .on_drag_move(
-          cx.listener(
-            move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-              DragResizing(id) => {
-                if *id != entity_id {
-                  return;
-                }
-
-                let Some(ref drag_data) = this.resizing_drag_data else {
-                  return;
-                };
-
-                if drag_data.side != ResizeSide::Right {
-                  return;
-                }
-
-                let pos = e.event.position;
-                let delta = pos.x - drag_data.last_position.x;
-                let new_width = (drag_data.last_bounds.size.width + delta).max(MINIMUM_SIZE.width);
-                this.resize(None, None, Some(new_width), None, window, cx);
-              }
-            },
-          ),
-        )
-        .into_any_element(),
-    );
-
-    // Top resize handle
-    elements.push(
-      div()
-        .id("top-resize-handle")
-        .cursor_ns_resize()
-        .absolute()
-        .left(px(0.0))
-        .top(handle_offset)
-        .w(item_bounds.size.width)
-        .h(HANDLE_SIZE)
-        .on_mouse_down(
-          MouseButton::Left,
-          cx.listener({
-            move |this, event: &MouseDownEvent, window, cx| {
-              this.on_resize_handle_mouse_down(
-                ResizeSide::Top,
-                item_id,
-                item_bounds,
-                event,
-                window,
-                cx,
-              );
-            }
-          }),
-        )
-        .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-          cx.stop_propagation();
-          cx.new(|_| drag.clone())
-        })
-        .on_drag_move(
-          cx.listener(
-            move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-              DragResizing(id) => {
-                if *id != entity_id {
-                  return;
-                }
-
-                let Some(ref drag_data) = this.resizing_drag_data else {
-                  return;
-                };
-                if drag_data.side != ResizeSide::Top {
-                  return;
-                }
-
-                let pos = e.event.position;
-                let delta = drag_data.last_position.y - pos.y;
-                let new_y = (drag_data.last_bounds.origin.y - delta).max(px(0.));
-                let size_delta = drag_data.last_position.y - new_y;
-                let new_height =
-                  (drag_data.last_bounds.size.height + size_delta).max(MINIMUM_SIZE.width);
-                this.resize(None, Some(new_y), None, Some(new_height), window, cx);
-              }
-            },
-          ),
-        )
-        .into_any_element(),
-    );
-
-    // Bottom resize handle
-    elements.push(
-      div()
-        .id("bottom-resize-handle")
-        .cursor_ns_resize()
-        .absolute()
-        .left(px(0.0))
-        .bottom(handle_offset)
-        .w(item_bounds.size.width)
-        .h(HANDLE_SIZE)
-        .on_mouse_down(
-          MouseButton::Left,
-          cx.listener({
-            move |this, event: &MouseDownEvent, window, cx| {
-              this.on_resize_handle_mouse_down(
-                ResizeSide::Bottom,
-                item_id,
-                item_bounds,
-                event,
-                window,
-                cx,
-              );
-            }
-          }),
-        )
-        .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-          cx.stop_propagation();
-          cx.new(|_| drag.clone())
-        })
-        .on_drag_move(
-          cx.listener(
-            move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
-              DragResizing(id) => {
-                if *id != entity_id {
-                  return;
-                }
-
-                let Some(ref drag_data) = this.resizing_drag_data else {
-                  return;
-                };
-
-                if drag_data.side != ResizeSide::Bottom {
-                  return;
-                }
-
-                let pos = e.event.position;
-                let delta = pos.y - drag_data.last_position.y;
-                let new_height =
-                  (drag_data.last_bounds.size.height + delta).max(MINIMUM_SIZE.width);
-                this.resize(None, None, None, Some(new_height), window, cx);
-              }
-            },
-          ),
-        )
-        .into_any_element(),
-    );
-
-    // Corner resize handle
-    elements.push(
-      div()
-        .child(
-          Icon::new(IconName::ResizeLarge)
-            .size_3()
-            .absolute()
-            .right(px(1.))
-            .bottom(px(1.))
-            .text_color(cx.theme().muted_foreground.opacity(0.5)),
-        )
-        .child(
-          div()
-            .id("corner-resize-handle")
-            .cursor_nwse_resize()
-            .absolute()
-            .right(handle_offset)
-            .bottom(handle_offset)
-            .size_3()
-            .on_mouse_down(
-              MouseButton::Left,
-              cx.listener({
-                move |this, event: &MouseDownEvent, window, cx| {
-                  this.on_resize_handle_mouse_down(
-                    ResizeSide::BottomRight,
-                    item_id,
-                    item_bounds,
-                    event,
-                    window,
-                    cx,
-                  );
-                }
-              }),
-            )
-            .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
-              cx.stop_propagation();
-              cx.new(|_| drag.clone())
-            })
-            .on_drag_move(
-              cx.listener(move |this, e: &DragMoveEvent<DragResizing>, window, cx| {
-                match e.drag(cx) {
-                  DragResizing(id) => {
-                    if *id != entity_id {
-                      return;
-                    }
-
-                    let Some(ref drag_data) = this.resizing_drag_data else {
-                      return;
-                    };
-
-                    if drag_data.side != ResizeSide::BottomRight {
-                      return;
-                    }
-
-                    let pos = e.event.position;
-                    let delta_x = pos.x - drag_data.last_position.x;
-                    let delta_y = pos.y - drag_data.last_position.y;
-                    let new_width =
-                      (drag_data.last_bounds.size.width + delta_x).max(MINIMUM_SIZE.width);
-                    let new_height =
-                      (drag_data.last_bounds.size.height + delta_y).max(MINIMUM_SIZE.height);
-                    this.resize(None, None, Some(new_width), Some(new_height), window, cx);
-                  }
-                }
-              }),
-            ),
-        )
-        .into_any_element(),
-    );
-
-    elements
+    [
+      ResizeSide::Left,
+      ResizeSide::Right,
+      ResizeSide::Top,
+      ResizeSide::Bottom,
+      ResizeSide::BottomRight,
+    ]
+    .into_iter()
+    .map(|side| resize_handle(side, entity_id, item.id, item.bounds, -HANDLE_SIZE + px(1.), cx))
+    .collect()
   }
-
   fn on_resize_handle_mouse_down(
     &mut self, side: ResizeSide, item_id: EntityId, item_bounds: Bounds<Pixels>,
     event: &MouseDownEvent, _: &mut Window, cx: &mut Context<'_, Self>,
@@ -1083,7 +770,8 @@ impl Tiles {
         let current_bounds = self.panels[idx].bounds;
 
         // Apply grid alignment to final position
-        let aligned_origin = round_point_to_nearest_ten(current_bounds.origin, cx);
+        let grid_size = cx.theme().tile_grid_size;
+        let aligned_origin = round_point_to_nearest_ten(current_bounds.origin, grid_size);
 
         if initial_bounds.origin != aligned_origin || initial_bounds.size != current_bounds.size {
           self.panels[idx].bounds.origin = aligned_origin;
@@ -1135,16 +823,164 @@ impl Tiles {
 }
 
 #[inline]
-fn round_to_nearest_ten(value: Pixels, cx: &App) -> Pixels {
-  (value / cx.theme().tile_grid_size).round() * cx.theme().tile_grid_size
+fn round_to_nearest_ten(value: Pixels, grid_size: Pixels) -> Pixels {
+  (value / grid_size).round() * grid_size
 }
 
 #[inline]
-fn round_point_to_nearest_ten(point: Point<Pixels>, cx: &App) -> Point<Pixels> {
+fn round_point_to_nearest_ten(point: Point<Pixels>, grid_size: Pixels) -> Point<Pixels> {
   Point::new(
-    round_to_nearest_ten(point.x, cx),
-    round_to_nearest_ten(point.y, cx),
+    round_to_nearest_ten(point.x, grid_size),
+    round_to_nearest_ten(point.y, grid_size),
   )
+}
+
+/// The element id of the resize handle for each side.
+fn resize_handle_id(side: ResizeSide) -> &'static str {
+  match side {
+    ResizeSide::Left => "left-resize-handle",
+    ResizeSide::Right => "right-resize-handle",
+    ResizeSide::Top => "top-resize-handle",
+    ResizeSide::Bottom => "bottom-resize-handle",
+    ResizeSide::BottomRight => "corner-resize-handle",
+  }
+}
+
+/// Build the positioned, cursor-styled container for one resize handle.
+fn resize_handle_container(side: ResizeSide, offset: Pixels, item_bounds: &Bounds<Pixels>) -> Div {
+  let container = div().absolute();
+  match side {
+    ResizeSide::Left => container
+      .top_0()
+      .left(offset)
+      .w(HANDLE_SIZE)
+      .h(item_bounds.size.height)
+      .cursor_ew_resize(),
+    ResizeSide::Right => container
+      .top_0()
+      .right(offset)
+      .w(HANDLE_SIZE)
+      .h(item_bounds.size.height)
+      .cursor_ew_resize(),
+    ResizeSide::Top => container
+      .left(px(0.0))
+      .top(offset)
+      .w(item_bounds.size.width)
+      .h(HANDLE_SIZE)
+      .cursor_ns_resize(),
+    ResizeSide::Bottom => container
+      .left(px(0.0))
+      .bottom(offset)
+      .w(item_bounds.size.width)
+      .h(HANDLE_SIZE)
+      .cursor_ns_resize(),
+    ResizeSide::BottomRight => container
+      .right(offset)
+      .bottom(offset)
+      .size_3()
+      .cursor_nwse_resize(),
+  }
+}
+
+/// Compute the target rect components for a resize drag of `side`, as
+/// `(x, y, width, height)` where `None` means "keep the current value".
+fn resize_drag_target(
+  side: ResizeSide, drag: &ResizeDrag, position: Point<Pixels>,
+) -> (Option<Pixels>, Option<Pixels>, Option<Pixels>, Option<Pixels>) {
+  match side {
+    ResizeSide::Left => {
+      let delta = drag.last_position.x - position.x;
+      let new_x = (drag.last_bounds.origin.x - delta).max(px(0.0));
+      let size_delta = drag.last_bounds.origin.x - new_x;
+      let new_width = (drag.last_bounds.size.width + size_delta).max(MINIMUM_SIZE.width);
+      (Some(new_x), None, Some(new_width), None)
+    }
+    ResizeSide::Right => {
+      let delta = position.x - drag.last_position.x;
+      let new_width = (drag.last_bounds.size.width + delta).max(MINIMUM_SIZE.width);
+      (None, None, Some(new_width), None)
+    }
+    ResizeSide::Top => {
+      let delta = drag.last_position.y - position.y;
+      let new_y = (drag.last_bounds.origin.y - delta).max(px(0.));
+      let size_delta = drag.last_position.y - new_y;
+      let new_height = (drag.last_bounds.size.height + size_delta).max(MINIMUM_SIZE.width);
+      (None, Some(new_y), None, Some(new_height))
+    }
+    ResizeSide::Bottom => {
+      let delta = position.y - drag.last_position.y;
+      let new_height = (drag.last_bounds.size.height + delta).max(MINIMUM_SIZE.width);
+      (None, None, None, Some(new_height))
+    }
+    ResizeSide::BottomRight => {
+      let delta_x = position.x - drag.last_position.x;
+      let delta_y = position.y - drag.last_position.y;
+      let new_width = (drag.last_bounds.size.width + delta_x).max(MINIMUM_SIZE.width);
+      let new_height = (drag.last_bounds.size.height + delta_y).max(MINIMUM_SIZE.height);
+      (None, None, Some(new_width), Some(new_height))
+    }
+  }
+}
+
+/// Build one resize handle.
+///
+/// The handle starts the resize on mouse down, emits [`DragResizing`] while
+/// dragging and feeds the drag delta into [`Tiles::resize`], scoped to `side`
+/// of the given tile.
+fn resize_handle(
+  side: ResizeSide, entity_id: EntityId, item_id: EntityId, item_bounds: Bounds<Pixels>,
+  offset: Pixels, cx: &Context<Tiles>,
+) -> AnyElement {
+  let handle = resize_handle_container(side, offset, &item_bounds)
+    .id(resize_handle_id(side))
+    .on_mouse_down(
+      MouseButton::Left,
+      cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+        this.on_resize_handle_mouse_down(side, item_id, item_bounds, event, window, cx);
+      }),
+    )
+    .on_drag(DragResizing(entity_id), |drag, _, _, cx| {
+      cx.stop_propagation();
+      cx.new(|_| drag.clone())
+    })
+    .on_drag_move(cx.listener(move |this, e: &DragMoveEvent<DragResizing>, window, cx| {
+      match e.drag(cx) {
+        DragResizing(id) => {
+          if *id != entity_id {
+            return;
+          }
+
+          let Some(drag_data) = this.resizing_drag_data.as_ref() else {
+            return;
+          };
+          if drag_data.side != side {
+            return;
+          }
+
+          let (new_x, new_y, new_width, new_height) =
+            resize_drag_target(side, drag_data, e.event.position);
+          this.resize(new_x, new_y, new_width, new_height, window, cx);
+        }
+      }
+    }));
+
+  if side == ResizeSide::BottomRight {
+    // The corner handle renders a visual resize affordance on top of the
+    // hit area.
+    div()
+      .child(
+        Icon::new(IconName::ResizeLarge)
+          .size_3()
+          .absolute()
+          .right(px(1.))
+          .bottom(px(1.))
+          .text_color(cx.theme().muted_foreground.opacity(0.5)),
+      )
+      .child(handle)
+      .into_any_element()
+  } else {
+    handle.into_any_element()
+  }
 }
 
 impl Focusable for Tiles {
@@ -1157,11 +993,9 @@ impl EventEmitter<DismissEvent> for Tiles {}
 impl Render for Tiles {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let view = cx.entity().clone();
-    let panel_ids = self.panels.iter().map(|item| item.id).collect::<Vec<_>>();
-    let panels = panel_ids
-      .into_iter()
-      .filter_map(|item_id| self.panel(&item_id).cloned())
-      .collect::<Vec<_>>();
+    // `TileItem` is `Clone` and `self.panels` is already kept in z-order, so
+    // a straight clone is enough; no id collection + O(N²) re-lookup needed.
+    let panels = self.panels.clone();
     let scroll_bounds = self
       .panels
       .iter()
