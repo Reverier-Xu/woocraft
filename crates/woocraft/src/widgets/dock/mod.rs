@@ -215,9 +215,7 @@ pub enum DockItemSnapshot {
 impl std::fmt::Debug for DockItemSnapshot {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      Self::Split {
-        axis, sizes, items,
-      } => f
+      Self::Split { axis, sizes, items } => f
         .debug_struct("Split")
         .field("axis", axis)
         .field("sizes", sizes)
@@ -599,7 +597,12 @@ impl DockItem {
     }
     let any_view = view.view();
     if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
-      tab_panel.read(cx).panels.iter().find(|p| *p == panel).cloned()
+      tab_panel
+        .read(cx)
+        .panels
+        .iter()
+        .find(|p| *p == panel)
+        .cloned()
     } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
       stack_panel
         .read(cx)
@@ -1724,5 +1727,104 @@ mod tests {
       !after_parked,
       "pending_layout_change should be reset after spawned task completes"
     );
+  }
+
+  // Regression anchors for the dock layout convergence: UI-driven changes
+  // (dropping a panel into a tab group, closing it from its ✕) mutate only
+  // the entities, so structural reads must traverse the entity graph — the
+  // `DockItem` mirror fields stay frozen at their construction-time values
+  // (see `docs/dock-layout-refactor.md`).
+  //
+  // The window hosts a bare root: the test asset source is empty, so letting
+  // `DockArea` render would panic on icon validation. Its construction and
+  // event flow only need a `Window` handle; the dock is never drawn.
+  struct TestRoot;
+
+  impl Render for TestRoot {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+      div()
+    }
+  }
+
+  #[gpui::test]
+  async fn entity_reads_track_ui_changes_the_mirrors_miss(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    cx.update(PanelRegistry::init);
+
+    let panel = cx.new(|cx| TestPanel {
+      focus_handle: cx.focus_handle(),
+    });
+
+    let window = cx
+      .update(|app| app.open_window(Default::default(), |_, cx| cx.new(|_| TestRoot)))
+      .unwrap();
+
+    window
+      .update(cx, |_, window, cx| {
+        let dock_area = cx.new(|cx| DockArea::new("test", None, window, cx));
+
+        // The center is `Split { items: [Tabs { items: [] }] }` with one
+        // empty placeholder TabPanel; both mirror and entity agree: empty.
+        // Cloned: the enum is all Arc handles behind, so the clone still
+        // reflects live entity state without borrowing the DockArea.
+        let center = dock_area.read(cx).center().clone();
+        assert!(!center.has_real_panels(cx));
+        assert!(center.find_panel(Arc::new(panel.clone()), cx).is_none());
+
+        // Simulate the drop path: the panel lands in the placeholder's
+        // TabPanel entity, bypassing `DockItem::add_panel` entirely.
+        let center_tab = match &center {
+          DockItem::Split { view, .. } => view
+            .read(cx)
+            .panels
+            .first()
+            .unwrap()
+            .view()
+            .downcast::<TabPanel>()
+            .expect("center placeholder must be a TabPanel"),
+          _ => unreachable!("center is always a Split"),
+        };
+        center_tab.update(cx, |tab_panel, cx| {
+          tab_panel.add_panel(Arc::new(panel.clone()), window, cx);
+        });
+
+        // The construction-time mirror is now stale — and must stay stale.
+        let DockItem::Split { items, .. } = &center else {
+          unreachable!("center is always a Split")
+        };
+        let DockItem::Tabs { items: mirror, .. } = &items[0] else {
+          unreachable!("center child is a Tabs")
+        };
+        assert!(mirror.is_empty(), "mirror must not track UI changes");
+
+        // …but the entity-graph readers see the panel.
+        assert!(
+          center.has_real_panels(cx),
+          "has_real_panels must traverse the live entity graph"
+        );
+        assert!(
+          center.find_panel(Arc::new(panel.clone()), cx).is_some(),
+          "find_panel must traverse the live entity graph"
+        );
+
+        // The snapshot projection reports the live panel too.
+        let DockItemSnapshot::Split { items, .. } = center.snapshot(cx) else {
+          unreachable!("center snapshot is a Split")
+        };
+        let DockItemSnapshot::Tabs { panels, active_ix } = &items[0] else {
+          unreachable!("center snapshot child is a Tabs")
+        };
+        assert_eq!(panels.len(), 1);
+        assert_eq!(*active_ix, 0);
+
+        // Closing via the TabPanel (the ✕ path) empties the live graph;
+        // the placeholder TabPanel itself is kept as a drop target.
+        center_tab.update(cx, |tab_panel, cx| {
+          tab_panel.remove_panel(Arc::new(panel.clone()), window, cx);
+        });
+        assert!(!center.has_real_panels(cx));
+        assert!(center.find_panel(Arc::new(panel.clone()), cx).is_none());
+      })
+      .unwrap();
   }
 }
