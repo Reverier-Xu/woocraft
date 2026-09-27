@@ -17,7 +17,7 @@ use gpui::{
   AnyElement, AnyView, App, AppContext, Bounds, Context, Edges, Empty, Entity, EntityId,
   EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
   Point, Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
-  prelude::FluentBuilder,
+  prelude::FluentBuilder, px,
 };
 pub(crate) use layout::{
   DockLayout, EditResult, InsertTarget, NodeId, PaneRef, PaneTree, PanelId, RootKind,
@@ -29,7 +29,7 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::{AnyDrag, DragDrop, DragMoving, DragResizing, TileItem, Tiles};
 
-use crate::{DockPlacement, ElementExt, TabBarDirection};
+use crate::{ActiveTheme as _, DockPlacement, ElementExt, TabBarDirection};
 
 pub(crate) fn init(cx: &mut App) {
   PanelRegistry::init(cx);
@@ -167,6 +167,17 @@ impl DockArea {
         CreatedMirror::Tab(tp) => this.subscribe_panel(&tp, window, cx),
         CreatedMirror::Split(sp) => this.subscribe_panel(&sp, window, cx),
       }
+    }
+    // The dock/center dividers depend on each dock's collapsed state, so the
+    // area re-renders whenever a dock changes.
+    for dock in [
+      this.left_dock.clone(),
+      this.right_dock.clone(),
+      this.bottom_dock.clone(),
+    ] {
+      this
+        ._subscriptions
+        .push(cx.observe(&dock, |_, _, cx| cx.notify()));
     }
     this.update_toggle_button_tab_panels(window, cx);
 
@@ -1076,6 +1087,11 @@ impl Render for DockArea {
               .h_full()
               // Left dock (always present)
               .child(div().flex().flex_none().child(left_dock.clone()))
+              // Divider between the left dock and the center; hidden while
+              // the dock is collapsed.
+              .when(!left_dock.read(cx).collapsed, |this| {
+                this.child(div().flex_none().w(px(1.)).h_full().bg(cx.theme().border))
+              })
               // Center column
               .child(
                 div()
@@ -1092,9 +1108,19 @@ impl Render for DockArea {
                         this.child(self.render_items(window, cx))
                       }),
                   )
+                  // Divider between the center content and the bottom dock;
+                  // hidden while the bottom dock is collapsed.
+                  .when(!bottom_dock.read(cx).collapsed, |this| {
+                    this.child(div().flex_none().h(px(1.)).w_full().bg(cx.theme().border))
+                  })
                   // Bottom Dock (always present)
                   .child(bottom_dock.clone()),
               )
+              // Divider between the center and the right dock; hidden while
+              // the dock is collapsed.
+              .when(!right_dock.read(cx).collapsed, |this| {
+                this.child(div().flex_none().w(px(1.)).h_full().bg(cx.theme().border))
+              })
               // Right Dock (always present)
               .child(div().flex().flex_none().child(right_dock.clone())),
           )

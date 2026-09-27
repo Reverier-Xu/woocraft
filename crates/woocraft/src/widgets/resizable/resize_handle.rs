@@ -6,8 +6,6 @@ use gpui::{
   Render, StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::ActiveTheme as _;
-
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);
 pub(crate) const HANDLE_HIT_PADDING: Pixels = px(3.);
 
@@ -93,11 +91,9 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
     window.with_element_state(id.unwrap(), |state, window| {
       let state = state.unwrap_or(ResizeHandleState::default());
 
-      let bg_color = if state.is_active() {
-        cx.theme().primary
-      } else {
-        cx.theme().border
-      };
+      // The 1px divider is drawn by the panel itself (in-flow); this legacy
+      // handle only carries the hit area, so it stays invisible.
+      let bg_color = gpui::transparent_black();
 
       let handle_total = HANDLE_SIZE + HANDLE_HIT_PADDING * 2.;
 

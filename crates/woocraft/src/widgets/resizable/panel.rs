@@ -11,7 +11,7 @@ use gpui::{
 };
 
 use super::{PANEL_MIN_SIZE, ResizableState, resizable_panel, resize_handle};
-use crate::{ElementExt, h_flex, v_flex};
+use crate::{ActiveTheme as _, ElementExt, h_flex, v_flex};
 
 type ResizeHandler = dyn Fn(&Entity<ResizableState>, &mut Window, &mut App);
 
@@ -186,12 +186,29 @@ impl RenderOnce for ResizablePanelGroup {
           .children
           .into_iter()
           .enumerate()
-          .map(|(ix, mut panel)| {
+          .flat_map(|(ix, mut panel)| {
+            let mut items = Vec::with_capacity(2);
+            if ix > 0 {
+              items.push(
+                div()
+                  .flex_shrink_0()
+                  .when(matches!(self.axis, Axis::Horizontal), |this| {
+                    this.w(px(1.)).h_full()
+                  })
+                  .when(matches!(self.axis, Axis::Vertical), |this| {
+                    this.h(px(1.)).w_full()
+                  })
+                  .bg(cx.theme().border)
+                  .into_any_element(),
+              );
+            }
             panel.panel_ix = ix;
             panel.axis = self.axis;
             panel.state = Some(state.clone());
-            panel
-          }),
+            items.push(panel.into_any_element());
+            items
+          })
+          .collect::<Vec<_>>(),
       )
       .on_prepaint({
         let state = state.clone();
