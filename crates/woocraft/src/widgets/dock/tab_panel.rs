@@ -29,6 +29,10 @@ struct TabState {
   draggable: bool,
   droppable: bool,
   active_panel: Option<Arc<dyn PanelView>>,
+  /// Number of visible panels, computed once per render.
+  visible_count: usize,
+  /// Whether the owning dock is collapsed, computed once per render.
+  is_dock_collapsed: bool,
 }
 
 #[derive(Clone)]
@@ -138,21 +142,7 @@ impl Panel for TabPanel {
   }
 
   fn closable(&self, cx: &App) -> bool {
-    if !self.closable {
-      return false;
-    }
-
-    // 1. When is the final panel in the dock, it will not able to close.
-    // 2. When is in the Tiles, it will always able to close (by active panel
-    //    state).
-    if !self.in_tiles && !self.closable_by_layout(cx) {
-      return false;
-    }
-
-    self
-      .active_panel(cx)
-      .map(|panel| panel.closable(cx))
-      .unwrap_or(false)
+    self.closable_with(self.active_panel(cx).as_deref(), cx)
   }
 
   fn zoomable(&self, cx: &App) -> Option<PanelControl> {
@@ -164,7 +154,7 @@ impl Panel for TabPanel {
     if self.panels.is_empty() {
       return true;
     }
-    self.visible_panels(cx).next().is_some()
+    self.visible_panel_indices(cx).next().is_some()
   }
 
   fn dropdown_menu(
@@ -189,6 +179,10 @@ impl Panel for TabPanel {
     let mut state = PanelState::new(self);
     for panel in self.panels.iter() {
       state.add_child(panel.dump(cx));
+    }
+    // Only meaningful with children: an empty TabPanel keeps the default
+    // `Panel(Null)` info so that dump/load round-trips stay unchanged.
+    if !self.panels.is_empty() {
       state.info = PanelInfo::tabs(self.active_ix);
     }
     state
@@ -268,7 +262,8 @@ impl TabPanel {
         Some(panel.clone())
       } else {
         // Return the first visible panel
-        self.visible_panels(cx).next()
+        let first_visible_ix = self.visible_panel_indices(cx).next()?;
+        self.panels.get(first_visible_ix).cloned()
       }
     } else {
       None
@@ -337,20 +332,15 @@ impl TabPanel {
     self.tab_bar_scroll_handle.scroll_to_item(ix);
     self.focus_active_panel(window, cx);
 
-    // Sync the active state to all panels
-    cx.spawn_in(window, async move |view, cx| {
-      _ = cx.update(|window, cx| {
-        _ = view.update(cx, |view, cx| {
-          if let Some(last_active) = view.panels.get(last_active_ix) {
-            last_active.set_active(false, window, cx);
-          }
-          if let Some(active) = view.panels.get(view.active_ix) {
-            active.set_active(true, window, cx);
-          }
-        });
-      });
-    })
-    .detach();
+    // Sync the active state to all panels. This is safe to do synchronously:
+    // the panels are distinct entities (never this TabPanel itself), so
+    // updating them here cannot re-enter this update.
+    if let Some(last_active) = self.panels.get(last_active_ix) {
+      last_active.set_active(false, window, cx);
+    }
+    if let Some(active) = self.panels.get(self.active_ix) {
+      active.set_active(true, window, cx);
+    }
 
     cx.notify();
   }
@@ -550,10 +540,14 @@ impl TabPanel {
   }
 
   fn is_locked(&self, cx: &App) -> bool {
-    self.is_locked_with_dock_area_locked(self.dock_area_locked(cx))
+    self.is_locked_with_dock_area(self.dock_area_locked(cx))
   }
 
-  fn is_locked_with_dock_area_locked(&self, dock_area_locked: bool) -> bool {
+  /// Whether this panel's layout is locked.
+  ///
+  /// Same as [`TabPanel::is_locked`] but accepts the parent [`DockArea`]'s
+  /// locked value directly so callers can avoid re-entering the DockArea read.
+  pub(crate) fn is_locked_with_dock_area(&self, dock_area_locked: bool) -> bool {
     if dock_area_locked {
       return true;
     }
@@ -567,12 +561,6 @@ impl TabPanel {
     }
 
     self.stack_panel.is_none() && self.dock.is_none()
-  }
-
-  /// Same as [`TabPanel::is_locked`] but accepts the parent [`DockArea`]'s
-  /// locked value directly so callers can avoid re-entering the DockArea read.
-  pub(crate) fn is_locked_with_dock_area(&self, dock_area_locked: bool) -> bool {
-    self.is_locked_with_dock_area_locked(dock_area_locked)
   }
 
   pub(crate) fn allows_split_drop(&self) -> bool {
@@ -597,6 +585,12 @@ impl TabPanel {
     self.will_split_placement = None;
     self.center_drop_active = false;
     cx.notify();
+  }
+
+  /// Whether a split drop preview or center drop highlight is currently
+  /// shown, i.e. whether [`TabPanel::clear_split_preview`] would do work.
+  pub(crate) fn has_pending_preview(&self) -> bool {
+    self.will_split_placement.is_some() || self.center_drop_active
   }
 
   pub(crate) fn set_center_drop_active(&mut self, active: bool, cx: &mut Context<Self>) {
@@ -624,7 +618,7 @@ impl TabPanel {
   }
 
   fn closable_by_layout_with_dock_area_locked(&self, dock_area_locked: bool, cx: &App) -> bool {
-    if self.is_locked_with_dock_area_locked(dock_area_locked) {
+    if self.is_locked_with_dock_area(dock_area_locked) {
       return false;
     }
 
@@ -649,15 +643,36 @@ impl TabPanel {
     self.panels.len() <= 1
   }
 
-  /// Return all visible panels
-  fn visible_panels<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = Arc<dyn PanelView>> + 'a {
-    self.panels.iter().filter_map(|panel| {
-      if panel.visible(cx) {
-        Some(panel.clone())
-      } else {
-        None
-      }
-    })
+  /// Iterate the indices of the visible panels without cloning their
+  /// handles.
+  ///
+  /// Callers that only need to count or locate visible panels should prefer
+  /// this over cloning an `Arc` per panel; clone the panel only after the
+  /// index is known to be needed.
+  fn visible_panel_indices<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = usize> + 'a {
+    self
+      .panels
+      .iter()
+      .enumerate()
+      .filter_map(|(ix, panel)| panel.visible(cx).then_some(ix))
+  }
+
+  /// Shared body of [`Panel::closable`] parameterized by the active panel so
+  /// the render path can reuse the panel resolved once per frame instead of
+  /// resolving it (and re-running the user `visible` predicates) again.
+  fn closable_with(&self, active_panel: Option<&dyn PanelView>, cx: &App) -> bool {
+    if !self.closable {
+      return false;
+    }
+
+    // 1. When is the final panel in the dock, it will not able to close.
+    // 2. When is in the Tiles, it will always able to close (by active panel
+    //    state).
+    if !self.in_tiles && !self.closable_by_layout(cx) {
+      return false;
+    }
+
+    active_panel.is_some_and(|panel| panel.closable(cx))
   }
 
   /// Return true if the tab panel is draggable.
@@ -687,7 +702,7 @@ impl TabPanel {
   fn render_toolbar(
     &mut self, state: &TabState, window: &mut Window, cx: &mut Context<Self>,
   ) -> impl IntoElement {
-    if self.is_dock_collapsed(cx) {
+    if state.is_dock_collapsed {
       return div();
     }
 
@@ -945,7 +960,7 @@ impl TabPanel {
 
     let panel_style = dock_area.read(cx).panel_style;
     let tab_bar_direction = self.get_tab_bar_direction(cx);
-    let visible_panel_count = self.visible_panels(cx).count();
+    let visible_panel_count = state.visible_count;
 
     let show_single_title = tab_bar_direction.is_vertical()
       || (visible_panel_count <= 1 && panel_style == PanelStyle::default());
@@ -953,7 +968,7 @@ impl TabPanel {
     let show_bottom_divider = !is_bottom_dock_collapsed || tab_bar_direction.is_bottom();
 
     if show_single_title {
-      let Some(panel) = self.active_panel(cx) else {
+      let Some(panel) = state.active_panel.clone() else {
         if !self.is_empty_tab_panel() {
           return div().into_any_element();
         }
@@ -991,23 +1006,11 @@ impl TabPanel {
               }),
           );
 
-        return v_flex()
-          .w_full()
-          .min_w_0()
-          .overflow_hidden()
-          .when(!show_bottom_divider, |this| {
-            this.child(Divider::horizontal())
-          })
-          .child(title_content)
-          .when(show_bottom_divider, |this| {
-            this.child(Divider::horizontal())
-          })
-          .into_any_element();
+        return title_bar_shell(title_content, show_bottom_divider).into_any_element();
       };
 
-      if !panel.visible(cx) {
-        return div().into_any_element();
-      }
+      // `active_panel` already guarantees a visible panel, so no visibility
+      // re-check is needed here.
 
       let icon = panel.icon(cx);
       let title = panel.title(cx);
@@ -1065,20 +1068,10 @@ impl TabPanel {
         .children(panel.title_suffix(window, cx))
         .child(self.render_toolbar(state, window, cx));
 
-      return v_flex()
-        .w_full()
-        .min_w_0()
-        .overflow_hidden()
-        .when(!show_bottom_divider, |this| {
-          this.child(Divider::horizontal())
-        })
-        .child(title_content)
-        .when(show_bottom_divider, |this| {
-          this.child(Divider::horizontal())
-        })
-        .into_any_element();
+      return title_bar_shell(title_content, show_bottom_divider).into_any_element();
     }
 
+    let is_collapsed = state.is_dock_collapsed;
     let tab_bar = div()
       .relative()
       .on_prepaint({
@@ -1112,7 +1105,6 @@ impl TabPanel {
           })
           .children(self.panels.iter().enumerate().filter_map(|(ix, panel)| {
             let mut active = state.active_panel.as_ref() == Some(panel);
-            let is_collapsed = self.is_dock_collapsed(cx);
 
             if !panel.visible(cx) {
               return None;
@@ -1166,7 +1158,7 @@ impl TabPanel {
               .flex_grow(1.)
               .min_w_16(),
           )
-          .when(!self.is_dock_collapsed(cx), |this| {
+          .when(!state.is_dock_collapsed, |this| {
             this.suffix(
               h_flex()
                 .flex_none()
@@ -1175,8 +1167,9 @@ impl TabPanel {
                 .top_0()
                 .right_0()
                 .children(
-                  self
-                    .active_panel(cx)
+                  state
+                    .active_panel
+                    .clone()
                     .and_then(|panel| panel.title_suffix(window, cx)),
                 )
                 .child(self.render_toolbar(state, window, cx)),
@@ -1184,18 +1177,7 @@ impl TabPanel {
           }),
       );
 
-    v_flex()
-      .w_full()
-      .min_w_0()
-      .overflow_hidden()
-      .when(!show_bottom_divider, |this| {
-        this.child(Divider::horizontal())
-      })
-      .child(tab_bar)
-      .when(show_bottom_divider, |this| {
-        this.child(Divider::horizontal())
-      })
-      .into_any_element()
+    title_bar_shell(tab_bar, show_bottom_divider).into_any_element()
   }
 
   fn render_vertical_tab_bar(
@@ -1206,7 +1188,7 @@ impl TabPanel {
 
     let collapse_button = self.render_dock_collapse_button(window, cx);
 
-    let is_dock_collapsed = self.is_dock_collapsed(cx);
+    let is_dock_collapsed = state.is_dock_collapsed;
 
     let tab_bar = TabBar::new("vertical-tab-bar")
       .vertical(true)
@@ -1315,7 +1297,7 @@ impl TabPanel {
   ) -> AnyElement {
     self.panel_content_bounds = None;
     let view = cx.entity().clone();
-    let is_dock_collapsed = self.is_dock_collapsed(cx);
+    let is_dock_collapsed = state.is_dock_collapsed;
     let is_vertical = self.get_tab_bar_direction(cx).is_vertical();
     let allows_split_drop = self.allows_split_drop();
 
@@ -1452,7 +1434,7 @@ impl TabPanel {
   ) {
     self.clear_split_preview(cx);
     let relative_x = position.x - bounds.left();
-    let visible_tabs = self.visible_panels(cx).count();
+    let visible_tabs = self.visible_panel_indices(cx).count();
     if visible_tabs == 0 {
       if self.pending_drop_index != Some(0) {
         self.pending_drop_index = Some(0);
@@ -1472,7 +1454,7 @@ impl TabPanel {
   ) {
     self.clear_split_preview(cx);
     let relative_y = position.y - bounds.top();
-    let visible_tabs = self.visible_panels(cx).count();
+    let visible_tabs = self.visible_panel_indices(cx).count();
     if visible_tabs == 0 {
       if self.pending_drop_index != Some(0) {
         self.pending_drop_index = Some(0);
@@ -1567,7 +1549,10 @@ impl TabPanel {
       });
     }
 
-    self.remove_self_if_empty(window, cx);
+    // No `remove_self_if_empty` for `self` here: the target always ends up
+    // holding at least one panel (the dropped panel is inserted above, or is
+    // already kept when the insert dedupes). The emptied source panel was
+    // already removed by its own check above.
   }
 
   /// Add panel with split placement
@@ -1577,10 +1562,20 @@ impl TabPanel {
   ) {
     let dock_area = self.dock_area.clone();
     // wrap the panel in a TabPanel
+    let panel_view = panel.view();
     let new_tab_panel = cx.new(|cx| Self::new(None, dock_area.clone(), window, cx));
+    let new_tab_panel_id = new_tab_panel.entity_id();
     new_tab_panel.update(cx, |view, cx| {
       view.add_panel(panel, window, cx);
     });
+    debug_assert!(
+      new_tab_panel
+        .read(cx)
+        .panels
+        .iter()
+        .any(|p| p.view() == panel_view),
+      "split_panel must move the panel into the new TabPanel"
+    );
 
     let stack_panel = match self.stack_panel.as_ref().and_then(|panel| panel.upgrade()) {
       Some(panel) => panel,
@@ -1608,6 +1603,14 @@ impl TabPanel {
         );
       });
       new_tab_panel.update(cx, |view, _| view.set_parent(stack_panel_weak));
+      debug_assert!(
+        stack_panel
+          .read(cx)
+          .panels
+          .iter()
+          .any(|p| p.view().entity_id() == cx.entity().entity_id()),
+        "split source must remain registered in its parent StackPanel"
+      );
     } else if parent_axis.is_horizontal() && placement.is_horizontal() {
       let stack_panel_weak = stack_panel.downgrade();
       stack_panel.update(cx, |view, cx| {
@@ -1622,6 +1625,14 @@ impl TabPanel {
         );
       });
       new_tab_panel.update(cx, |view, _| view.set_parent(stack_panel_weak));
+      debug_assert!(
+        stack_panel
+          .read(cx)
+          .panels
+          .iter()
+          .any(|p| p.view().entity_id() == cx.entity().entity_id()),
+        "split source must remain registered in its parent StackPanel"
+      );
     } else {
       // 1. Create new StackPanel with new axis
       // 2. Move cx.entity() from parent StackPanel to the new StackPanel
@@ -1632,6 +1643,7 @@ impl TabPanel {
       // panel is immediately able to split again, instead of relying on the
       // deferred parent update inside add_panel.
       let tab_panel = cx.entity().clone();
+      let self_id = tab_panel.entity_id();
 
       // Try to use the old stack panel, not just create a new one, to avoid too
       // many nested stack panels
@@ -1688,6 +1700,20 @@ impl TabPanel {
         });
       }
 
+      debug_assert!(
+        new_stack_panel
+          .read(cx)
+          .panels
+          .iter()
+          .any(|p| p.view().entity_id() == self_id)
+          && new_stack_panel
+            .read(cx)
+            .panels
+            .iter()
+            .any(|p| p.view().entity_id() == new_tab_panel_id),
+        "split must register both the source and the new panel in the parent StackPanel"
+      );
+
       cx.spawn_in(window, async move |_, cx| {
         cx.update(|window, cx| {
           tab_panel.update(cx, |view, cx| view.remove_self_if_empty(window, cx))
@@ -1717,17 +1743,10 @@ impl TabPanel {
     }
     self.zoomed = !self.zoomed;
 
-    cx.spawn_in(window, {
-      let zoomed = self.zoomed;
-      async move |view, cx| {
-        _ = cx.update(|window, cx| {
-          _ = view.update(cx, |view, cx| {
-            view.set_zoomed(zoomed, window, cx);
-          });
-        });
-      }
-    })
-    .detach();
+    // Propagate synchronously: there is no cross-await dependency and the
+    // panels are distinct entities, so no re-entrancy is possible.
+    let zoomed = self.zoomed;
+    self.set_zoomed(zoomed, window, cx);
   }
 
   fn on_action_close_panel(&mut self, _: &ClosePanel, window: &mut Window, cx: &mut Context<Self>) {
@@ -1754,13 +1773,32 @@ impl TabPanel {
   }
 
   // Bind actions to the tab panel, only when the tab panel is not collapsed.
-  fn bind_actions(&self, cx: &mut Context<Self>) -> Div {
-    v_flex().when(!self.is_dock_collapsed(cx), |this| {
+  fn bind_actions(&self, state: &TabState, cx: &mut Context<Self>) -> Div {
+    v_flex().when(!state.is_dock_collapsed, |this| {
       this
         .on_action(cx.listener(Self::on_action_toggle_zoom))
         .on_action(cx.listener(Self::on_action_close_panel))
     })
   }
+}
+
+/// Wrap a title-bar content with the horizontal divider that separates it
+/// from the panel content below.
+///
+/// When `show_bottom_divider` is true the divider sits after the content
+/// (bottom dock expanded / bottom tab bar), otherwise before it.
+fn title_bar_shell(content: impl IntoElement, show_bottom_divider: bool) -> Div {
+  v_flex()
+    .w_full()
+    .min_w_0()
+    .overflow_hidden()
+    .when(!show_bottom_divider, |this| {
+      this.child(Divider::horizontal())
+    })
+    .child(content)
+    .when(show_bottom_divider, |this| {
+      this.child(Divider::horizontal())
+    })
 }
 
 impl Focusable for TabPanel {
@@ -1777,24 +1815,32 @@ impl EventEmitter<PanelEvent> for TabPanel {}
 impl Render for TabPanel {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
     let focus_handle = self.focus_handle(cx);
+    // Compute the per-frame tab state once at the render entry: the user
+    // callbacks below (closable/zoomable/active_panel/visible) must run
+    // exactly once per frame, and the derived values are threaded through
+    // every render helper instead of being re-resolved per call site.
     let active_panel = self.active_panel(cx);
     let state = TabState {
-      closable: self.closable(cx),
+      closable: self.closable_with(active_panel.as_deref(), cx),
+      // Reuse the resolved active panel instead of calling
+      // `Panel::zoomable`, which would resolve it again.
+      zoomable: active_panel.as_ref().and_then(|panel| panel.zoomable(cx)),
       draggable: self.draggable(cx),
       droppable: self.droppable(cx),
-      zoomable: self.zoomable(cx),
       active_panel,
+      visible_count: self.visible_panel_indices(cx).count(),
+      is_dock_collapsed: self.is_dock_collapsed(cx),
     };
 
     let direction = self.get_tab_bar_direction(cx);
 
     if direction.is_vertical() {
-      let is_dock_collapsed = self.is_dock_collapsed(cx);
+      let is_dock_collapsed = state.is_dock_collapsed;
       let vertical_tab_bar = self.render_vertical_tab_bar(&state, window, cx);
 
       if is_dock_collapsed {
         return self
-          .bind_actions(cx)
+          .bind_actions(&state, cx)
           .id("tab-panel")
           .track_focus(&focus_handle)
           .tab_group()
@@ -1832,7 +1878,7 @@ impl Render for TabPanel {
       };
 
       return self
-        .bind_actions(cx)
+        .bind_actions(&state, cx)
         .id("tab-panel")
         .track_focus(&focus_handle)
         .tab_group()
@@ -1863,7 +1909,7 @@ impl Render for TabPanel {
     };
 
     self
-      .bind_actions(cx)
+      .bind_actions(&state, cx)
       .id("tab-panel")
       .track_focus(&focus_handle)
       .tab_group()

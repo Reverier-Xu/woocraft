@@ -340,11 +340,7 @@ impl DockItem {
     items: Vec<Arc<dyn PanelView>>, dock_area: &WeakEntity<DockArea>, window: &mut Window,
     cx: &mut App,
   ) -> Self {
-    let mut new_items: Vec<Arc<dyn PanelView>> = vec![];
-    for item in items.into_iter() {
-      new_items.push(item)
-    }
-    Self::new_tabs(new_items, None, dock_area, window, cx)
+    Self::new_tabs(items, None, dock_area, window, cx)
   }
 
   pub fn tab<P: Panel>(
@@ -408,28 +404,59 @@ impl DockItem {
   ) {
     match self {
       Self::Tabs { view, items, .. } => {
+        let panel_id = panel.view().entity_id();
         items.push(panel.clone());
         view.update(cx, |tab_panel, cx| {
           tab_panel.add_panel(panel, window, cx);
         });
+        // Transitional double-bookkeeping guard: `DockItem::items` mirrors
+        // `TabPanel.panels` until the layout tree converges into the entity;
+        // catch desyncs in debug builds.
+        debug_assert!(
+          items.iter().any(|p| p.view().entity_id() == panel_id)
+            && view
+              .read(cx)
+              .panels
+              .iter()
+              .any(|p| p.view().entity_id() == panel_id),
+          "panel must be registered on both DockItem items and TabPanel.panels after add_panel"
+        );
       }
       Self::Split { view, items, .. } => {
         // Iter items to add panel to the first tabs
         for item in items.iter_mut() {
           if let DockItem::Tabs { view, .. } = item {
+            let panel_id = panel.view().entity_id();
             view.update(cx, |tab_panel, cx| {
               tab_panel.add_panel(panel.clone(), window, cx);
             });
+            debug_assert!(
+              view
+                .read(cx)
+                .panels
+                .iter()
+                .any(|p| p.view().entity_id() == panel_id),
+              "panel must be added to the target TabPanel entity"
+            );
             return;
           }
         }
 
         // Unable to find tabs, create new tabs
         let new_item = Self::tabs(vec![panel.clone()], dock_area, window, cx);
+        let new_item_id = new_item.view().entity_id(cx);
         items.push(new_item.clone());
         view.update(cx, |stack_panel, cx| {
           stack_panel.add_panel(new_item.view(), None, dock_area.clone(), window, cx);
         });
+        debug_assert!(
+          view
+            .read(cx)
+            .panels
+            .iter()
+            .any(|p| p.view().entity_id() == new_item_id),
+          "new tabs item must be added to the StackPanel entity"
+        );
       }
       Self::Tiles { view, items, .. } => {
         let tile_item = TileItem::new(
@@ -440,11 +467,20 @@ impl DockItem {
           })),
           bounds.unwrap_or_else(|| TileMeta::default().bounds),
         );
+        let tile_panel_id = tile_item.panel.view().entity_id();
 
         items.push(tile_item.clone());
         view.update(cx, |tiles, cx| {
           tiles.add_item(tile_item, dock_area, window, cx);
         });
+        debug_assert!(
+          view
+            .read(cx)
+            .panels()
+            .iter()
+            .any(|item| item.panel.view().entity_id() == tile_panel_id),
+          "new tile item must be added to the Tiles entity"
+        );
       }
       Self::Panel { .. } => {}
     }
@@ -454,9 +490,18 @@ impl DockItem {
   pub fn remove_panel(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) {
     match self {
       DockItem::Tabs { view, .. } => {
+        let panel_id = panel.view().entity_id();
         view.update(cx, |tab_panel, cx| {
           tab_panel.remove_panel(panel, window, cx);
         });
+        debug_assert!(
+          !view
+            .read(cx)
+            .panels
+            .iter()
+            .any(|p| p.view().entity_id() == panel_id),
+          "panel must be removed from TabPanel.panels by remove_panel"
+        );
       }
       DockItem::Split { items, view, .. } => {
         // For each child item, set collapsed state
@@ -468,9 +513,18 @@ impl DockItem {
         });
       }
       DockItem::Tiles { view, .. } => {
+        let panel_id = panel.entity_id(cx);
         view.update(cx, |tiles, cx| {
           tiles.remove(panel, window, cx);
         });
+        debug_assert!(
+          !view
+            .read(cx)
+            .panels()
+            .iter()
+            .any(|item| item.panel.view().entity_id() == panel_id),
+          "tile must be removed from Tiles by remove_panel"
+        );
       }
       DockItem::Panel { .. } => {}
     }
@@ -799,25 +853,6 @@ impl DockArea {
     }
   }
 
-  /// Set whether each dock edge is collapsible.
-  ///
-  /// Only the left, bottom, right dock can be configured.
-  ///
-  /// DEPRECATED: Docks are now always collapsible. This method is a no-op.
-  #[deprecated(note = "Docks are now always collapsible. This method is a no-op.")]
-  pub fn set_dock_collapsible(
-    &mut self, _collapsible_edges: Edges<bool>, _window: &mut Window, _cx: &mut Context<Self>,
-  ) {
-  }
-
-  /// Determine if the dock at the given placement is collapsible.
-  ///
-  /// DEPRECATED: Docks are now always collapsible. Always returns true.
-  #[deprecated(note = "Docks are now always collapsible. Always returns true.")]
-  pub fn is_dock_collapsible(&self, _placement: DockPlacement, _cx: &App) -> bool {
-    true
-  }
-
   /// Toggle the dock at the given placement.
   pub fn toggle_dock(&self, placement: DockPlacement, window: &mut Window, cx: &mut Context<Self>) {
     let dock = match placement {
@@ -979,10 +1014,17 @@ impl DockArea {
       && let Some(panel) = panel.upgrade()
     {
       panel.update(cx, |panel, cx| {
+        // The zone match above already guaranteed the bounds were recorded
+        // during prepaint, but keep this defensive: a panel that has not
+        // been prepainted yet (e.g. right after a zoom switch) has no bounds
+        // and simply cannot be updated this frame.
         let bounds = match zone {
-          TabPanelDropZone::TabBar => panel.tab_bar_bounds.unwrap(),
-          TabPanelDropZone::VerticalTabBar => panel.vertical_tab_bar_bounds.unwrap(),
-          TabPanelDropZone::PanelContent => panel.panel_content_bounds.unwrap(),
+          TabPanelDropZone::TabBar => panel.tab_bar_bounds,
+          TabPanelDropZone::VerticalTabBar => panel.vertical_tab_bar_bounds,
+          TabPanelDropZone::PanelContent => panel.panel_content_bounds,
+        };
+        let Some(bounds) = bounds else {
+          return;
         };
         match zone {
           TabPanelDropZone::TabBar => panel.on_tab_bar_drag_move(position, bounds, cx),
@@ -1037,11 +1079,6 @@ impl DockArea {
     }
 
     None
-  }
-
-  /// Alias of [`DockArea::panel_by_id`].
-  pub fn get_panel_by_id(&self, panel_id: &str, cx: &App) -> Option<Arc<dyn PanelView>> {
-    self.panel_by_id(panel_id, cx)
   }
 
   /// Activate a panel by user-defined panel id.
@@ -1305,8 +1342,15 @@ impl Render for DockArea {
       .on_mouse_up(
         MouseButton::Left,
         cx.listener(|this, _, _, cx| {
-          for tab_panel in this.all_tab_panels(cx) {
-            tab_panel.update(cx, |panel, cx| panel.clear_split_preview(cx));
+          // Split previews are only ever set on the panel currently hovered
+          // by a drag (see `apply_pending_drag_move`), so read-check that
+          // single panel instead of sweeping and updating every TabPanel:
+          // entity updates are far more expensive than reads.
+          if let Some((panel, _)) = this.last_drag_hover.as_ref()
+            && let Some(panel) = panel.upgrade()
+            && panel.read(cx).has_pending_preview()
+          {
+            panel.update(cx, |panel, cx| panel.clear_split_preview(cx));
           }
         }),
       )
