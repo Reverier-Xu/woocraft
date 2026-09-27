@@ -299,11 +299,23 @@ impl Dock {
     cx.notify();
   }
 
-  pub(super) fn set_resizing(&mut self, resizing: bool) {
+  pub(super) fn set_resizing(&mut self, resizing: bool, cx: &mut Context<Self>) {
+    if self.resizing == resizing {
+      return;
+    }
     self.resizing = resizing;
     if resizing {
       self.last_resize_position = None;
     }
+    // The owning `DockArea` draws the dock/center divider and observes this
+    // dock, so notifying lets it switch the divider to the primary highlight.
+    cx.notify();
+  }
+
+  /// Whether the user is currently dragging this dock's resize handle.
+  #[inline]
+  pub(super) fn is_resizing(&self) -> bool {
+    self.resizing
   }
 
   fn resize(
@@ -386,8 +398,10 @@ impl Dock {
       && self.size != preview_size
     {
       self.size = preview_size;
-      cx.notify();
     }
+    // Always notify: the divider highlight has to clear even when the drag
+    // ended on the original size.
+    cx.notify();
   }
 }
 
@@ -403,7 +417,7 @@ impl Render for Dock {
       let handle = resize_handle::<ResizePanel, ResizePanel>("dock-resize", self.placement.axis())
         .on_drag(ResizePanel, move |info, _, _, cx| {
           cx.stop_propagation();
-          dock.update(cx, |dock, _| dock.set_resizing(true));
+          dock.update(cx, |dock, cx| dock.set_resizing(true, cx));
           cx.new(|_| info.deref().clone())
         });
 

@@ -118,60 +118,7 @@ impl RenderOnce for ResizablePanelGroup {
       state.sync_panels_count(self.axis, panels_count, cx);
       state.apply_pending_resize(cx);
     });
-    let resize_handles = {
-      let display_sizes = state.read(cx).display_sizes();
-      let mut offset = px(0.);
-
-      display_sizes
-        .into_iter()
-        .take(panels_count.saturating_sub(1))
-        .enumerate()
-        .map(|(ix, size)| {
-          offset += size;
-
-          match self.axis {
-            Axis::Horizontal => div()
-              .absolute()
-              .left(offset)
-              .top_0()
-              .bottom_0()
-              .w(px(0.))
-              .child(
-                resize_handle(("resizable-handle", ix), self.axis).on_drag(DragPanel, {
-                  let state = state.clone();
-                  move |drag_panel, _, _, cx| {
-                    cx.stop_propagation();
-                    state.update(cx, |state, _| {
-                      state.resizing_panel_ix = Some(ix);
-                    });
-                    cx.new(|_| drag_panel.deref().clone())
-                  }
-                }),
-              )
-              .into_any_element(),
-            Axis::Vertical => div()
-              .absolute()
-              .top(offset)
-              .left_0()
-              .right_0()
-              .h(px(0.))
-              .child(
-                resize_handle(("resizable-handle", ix), self.axis).on_drag(DragPanel, {
-                  let state = state.clone();
-                  move |drag_panel, _, _, cx| {
-                    cx.stop_propagation();
-                    state.update(cx, |state, _| {
-                      state.resizing_panel_ix = Some(ix);
-                    });
-                    cx.new(|_| drag_panel.deref().clone())
-                  }
-                }),
-              )
-              .into_any_element(),
-          }
-        })
-        .collect::<Vec<_>>()
-    };
+    let resizing_panel_ix = state.read(cx).resizing_panel_ix;
 
     container
       .id(self.id)
@@ -189,8 +136,17 @@ impl RenderOnce for ResizablePanelGroup {
           .flat_map(|(ix, mut panel)| {
             let mut items = Vec::with_capacity(2);
             if ix > 0 {
+              // The 1px visual divider goes through flex layout, and the
+              // resize handle hit area is nested inside it so both always
+              // share the same position. Positioning the hit area with an
+              // absolute offset derived from the render-time divider sizes
+              // lagged a layout change (the sizes are corrected during
+              // prepaint, after the handle element was built).
+              let divider_ix = ix - 1;
+              let drag_state = state.clone();
               items.push(
                 div()
+                  .debug_selector(move || format!("resizable-handle-{divider_ix}"))
                   .flex_shrink_0()
                   .when(matches!(self.axis, Axis::Horizontal), |this| {
                     this.w(px(1.)).h_full()
@@ -198,7 +154,24 @@ impl RenderOnce for ResizablePanelGroup {
                   .when(matches!(self.axis, Axis::Vertical), |this| {
                     this.h(px(1.)).w_full()
                   })
-                  .bg(cx.theme().border)
+                  .bg(if resizing_panel_ix == Some(divider_ix) {
+                    cx.theme().primary
+                  } else {
+                    cx.theme().border
+                  })
+                  .child(
+                    resize_handle(("resizable-handle", divider_ix), self.axis).on_drag(
+                      DragPanel,
+                      move |drag_panel, _, _, cx| {
+                        cx.stop_propagation();
+                        drag_state.update(cx, |state, cx| {
+                          state.resizing_panel_ix = Some(divider_ix);
+                          cx.notify();
+                        });
+                        cx.new(|_| drag_panel.deref().clone())
+                      },
+                    ),
+                  )
                   .into_any_element(),
               );
             }
@@ -229,7 +202,6 @@ impl RenderOnce for ResizablePanelGroup {
         axis: self.axis,
         on_resize: self.on_resize.clone(),
       })
-      .children(resize_handles)
   }
 }
 
@@ -423,5 +395,98 @@ impl Element for ResizePanelGroupElement {
         }
       }
     })
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use gpui::{
+    Context, Entity, IntoElement, Modifiers, MouseButton, Render, TestAppContext, Window, div,
+    point, px,
+  };
+
+  use super::*;
+  use crate::Theme;
+
+  struct TestRoot {
+    width: Entity<f32>,
+    state: Entity<ResizableState>,
+  }
+
+  impl Render for TestRoot {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+      let w = *self.width.read(cx);
+      div().w(px(w)).h_full().child(
+        ResizablePanelGroup::new("group")
+          .with_state(&self.state)
+          .children([resizable_panel(), resizable_panel()]),
+      )
+    }
+  }
+
+  #[gpui::test]
+  fn handle_hit_area_follows_container_resize(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    let (root, cx) = cx.add_window_view(|_, cx| TestRoot {
+      width: cx.new(|_| 800.0f32),
+      state: cx.new(|_| ResizableState::default()),
+    });
+    cx.run_until_parked();
+
+    let before = cx
+      .debug_bounds("resizable-handle-0")
+      .expect("handle before");
+    println!("handle before: {before:?}");
+
+    // Grow the container, mirroring the center when a side dock collapses.
+    let width = cx.update(|_, cx| root.read(cx).width.clone());
+    cx.update(|_, cx| {
+      width.update(cx, |w, cx| {
+        *w = 1200.0;
+        cx.notify();
+      });
+    });
+    cx.run_until_parked();
+
+    let after = cx.debug_bounds("resizable-handle-0").expect("handle after");
+    println!("handle after: {after:?}");
+
+    // The two equal panels meet at ~600px; the hit area must be there.
+    assert!(
+      (after.origin.x - px(600.)).abs() < px(4.),
+      "hit area at {:?}, expected near 600",
+      after.origin.x
+    );
+
+    // The hit area still captures a drag anywhere across its 7px width,
+    // including the 3px that reach over the following panel.
+    for x in [598.0, 600.0, 602.0] {
+      cx.simulate_mouse_down(
+        point(px(x), px(300.)),
+        MouseButton::Left,
+        Modifiers::default(),
+      );
+      cx.simulate_mouse_move(
+        point(px(x + 20.), px(300.)),
+        MouseButton::Left,
+        Modifiers::default(),
+      );
+      let resizing = cx.update(|_, cx| root.read(cx).state.read(cx).resizing_panel_ix);
+      println!("drag from x={x}: resizing_panel_ix={resizing:?}");
+      assert_eq!(resizing, Some(0), "drag from x={x} did not grab the handle");
+      let state = cx.update(|_, cx| root.read(cx).state.clone());
+      cx.update(|_, cx| {
+        state.update(cx, |state, cx| {
+          state.resizing_panel_ix = None;
+          cx.notify();
+        });
+      });
+      cx.simulate_mouse_up(
+        point(px(x + 20.), px(300.)),
+        MouseButton::Left,
+        Modifiers::default(),
+      );
+      cx.run_until_parked();
+    }
   }
 }
