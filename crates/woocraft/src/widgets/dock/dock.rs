@@ -10,7 +10,7 @@ use gpui::{
 
 use super::{
   super::resizable::{PANEL_MIN_SIZE, resize_handle},
-  DockArea, DockItem, PanelView, TabPanel,
+  DockArea, DockItem, PanelView, StackPanel, TabPanel, Tiles,
 };
 use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 
@@ -99,8 +99,6 @@ impl Dock {
 
     let panel = DockItem::Tabs {
       size: None,
-      items: Vec::new(),
-      active_ix: 0,
       view: tab_panel.clone(),
     };
 
@@ -159,19 +157,7 @@ impl Dock {
     Self::subscribe_panel_events(dock_area.clone(), &panel, window, cx);
 
     if collapsed {
-      match panel.clone() {
-        DockItem::Tabs { view, .. } => {
-          view.update(cx, |panel, cx| {
-            panel.set_collapsed(true, window, cx);
-          });
-        }
-        DockItem::Split { items, .. } => {
-          for item in items {
-            item.set_collapsed(true, window, cx);
-          }
-        }
-        _ => {}
-      }
+      panel.set_collapsed(true, window, cx);
     }
 
     let tab_bar_direction = match placement {
@@ -204,18 +190,33 @@ impl Dock {
   }
 
   fn set_dock_reference(panel: &DockItem, dock: WeakEntity<Self>, cx: &mut App) {
-    match panel {
-      DockItem::Tabs { view, .. } => {
-        view.update(cx, |tab_panel, _| {
-          tab_panel.set_dock(dock);
-        });
+    if let DockItem::Tabs { view, .. } = panel {
+      view.update(cx, |tab_panel, _| {
+        tab_panel.set_dock(dock);
+      });
+    } else if let DockItem::Split { view, .. } = panel {
+      let children = view.read(cx).panels.to_vec();
+      for child in children {
+        Self::set_dock_reference_for_view(&child, dock.clone(), cx);
       }
-      DockItem::Split { items, .. } => {
-        for item in items {
-          Self::set_dock_reference(item, dock.clone(), cx);
-        }
+    }
+  }
+
+  /// Entity-graph variant of [`Self::set_dock_reference`] for panels held by
+  /// a [`StackPanel`].
+  fn set_dock_reference_for_view(
+    panel_view: &Arc<dyn PanelView>, dock: WeakEntity<Self>, cx: &mut App,
+  ) {
+    let any_view = panel_view.view();
+    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
+      tab_panel.update(cx, |tab_panel, _| {
+        tab_panel.set_dock(dock);
+      });
+    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
+      let children = stack_panel.read(cx).panels.to_vec();
+      for child in children {
+        Self::set_dock_reference_for_view(&child, dock.clone(), cx);
       }
-      _ => {}
     }
   }
 
@@ -223,7 +224,11 @@ impl Dock {
     dock_area: WeakEntity<DockArea>, panel: &DockItem, window: &mut Window, cx: &mut Context<Self>,
   ) {
     match panel {
-      DockItem::Tabs { view, .. } => {
+      DockItem::Split { view, .. } => {
+        let children = view.read(cx).panels.to_vec();
+        for child in children {
+          Self::subscribe_panel_view_events(dock_area.clone(), &child, window, cx);
+        }
         window.defer(cx, {
           let view = view.clone();
           move |window, cx| {
@@ -233,10 +238,7 @@ impl Dock {
           }
         });
       }
-      DockItem::Split { items, view, .. } => {
-        for item in items {
-          Self::subscribe_panel_events(dock_area.clone(), item, window, cx);
-        }
+      DockItem::Tabs { view, .. } => {
         window.defer(cx, {
           let view = view.clone();
           move |window, cx| {
@@ -259,6 +261,44 @@ impl Dock {
       DockItem::Panel { .. } => {
         // Not supported
       }
+    }
+  }
+
+  /// Entity-graph variant of [`Self::subscribe_panel_events`] for panels
+  /// held by a [`StackPanel`].
+  fn subscribe_panel_view_events(
+    dock_area: WeakEntity<DockArea>, panel_view: &Arc<dyn PanelView>, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    let any_view = panel_view.view();
+    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
+      window.defer(cx, {
+        move |window, cx| {
+          _ = dock_area.update(cx, |this, cx| {
+            this.subscribe_panel(&tab_panel, window, cx);
+          });
+        }
+      });
+    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
+      let children = stack_panel.read(cx).panels.to_vec();
+      for child in children {
+        Self::subscribe_panel_view_events(dock_area.clone(), &child, window, cx);
+      }
+      window.defer(cx, {
+        move |window, cx| {
+          _ = dock_area.update(cx, |this, cx| {
+            this.subscribe_panel(&stack_panel, window, cx);
+          });
+        }
+      });
+    } else if let Ok(tiles) = any_view.downcast::<Tiles>() {
+      window.defer(cx, {
+        move |window, cx| {
+          _ = dock_area.update(cx, |this, cx| {
+            this.subscribe_panel(&tiles, window, cx);
+          });
+        }
+      });
     }
   }
 

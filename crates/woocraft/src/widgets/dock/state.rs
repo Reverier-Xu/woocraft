@@ -218,10 +218,11 @@ impl PanelState {
           return items[0].clone();
         }
 
+        // Flatten child tab groups through their live entities.
         let items = items
           .iter()
           .flat_map(|item| match item {
-            DockItem::Tabs { items, .. } => items.clone(),
+            DockItem::Tabs { view, .. } => view.read(cx).panels.clone(),
             _ => {
               // ignore invalid panels in tabs
               vec![]

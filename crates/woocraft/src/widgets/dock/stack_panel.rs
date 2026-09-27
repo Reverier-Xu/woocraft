@@ -385,7 +385,7 @@ impl StackPanel {
   ///
   /// Reads the children and the current divider sizes from the entities, so
   /// runtime splits and resizes are reflected (unlike the construction-time
-  /// `DockItem::Split` mirrors).
+  /// `size` hint carried by [`DockItem::Split`]).
   pub(crate) fn snapshot(&self, cx: &App) -> DockItemSnapshot {
     DockItemSnapshot::Split {
       axis: self.axis,
