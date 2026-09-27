@@ -36,12 +36,6 @@ impl LineItem {
   pub(super) fn lines_len(&self) -> usize {
     self.wrapped_lines.len()
   }
-
-  /// Get the height of this line item with given line height.
-  #[allow(dead_code)]
-  pub(super) fn height(&self, line_height: Pixels) -> Pixels {
-    self.lines_len() as f32 * line_height
-  }
 }
 
 #[derive(Debug, Default)]
@@ -190,35 +184,6 @@ impl TextWrapper {
     }
 
     false
-  }
-
-  pub(super) fn set_wrap_width(
-    &mut self, wrap_width: Option<Pixels>, window: &Window, cx: &mut App,
-  ) {
-    if wrap_width == self.wrap_width {
-      return;
-    }
-
-    self.wrap_width = wrap_width;
-    self.update_all(&self.text.clone(), window, cx);
-  }
-
-  pub(super) fn set_font(&mut self, font: Font, font_size: Pixels, window: &Window, cx: &mut App) {
-    if self.font.eq(&font) && self.font_size == font_size {
-      return;
-    }
-
-    self.font = font;
-    self.font_size = font_size;
-    self.update_all(&self.text.clone(), window, cx);
-  }
-
-  pub(super) fn prepare_if_need(&mut self, text: &Rope, window: &Window, cx: &mut App) {
-    if self._initialized {
-      return;
-    }
-    self._initialized = true;
-    self.update_all(text, window, cx);
   }
 
   /// Update the text wrapper and recalculate the wrapped lines.

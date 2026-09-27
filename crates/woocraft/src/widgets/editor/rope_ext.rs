@@ -189,10 +189,6 @@ pub trait RopeExt {
   /// Get the word byte range at the given byte offset (0-based).
   fn word_range(&self, offset: usize) -> Option<Range<usize>>;
 
-  /// Get word at the given byte offset (0-based).
-  #[allow(dead_code)]
-  fn word_at(&self, offset: usize) -> String;
-
   /// Convert offset in UTF-16 to byte offset (0-based).
   ///
   /// Runs in O(log N) time.
@@ -369,15 +365,6 @@ impl RopeExt for Rope {
     let end = offset + right.len();
 
     if start == end { None } else { Some(start..end) }
-  }
-
-  #[allow(dead_code)]
-  fn word_at(&self, offset: usize) -> String {
-    if let Some(range) = self.word_range(offset) {
-      self.slice(range).to_string()
-    } else {
-      String::new()
-    }
   }
 
   #[inline]
@@ -582,23 +569,19 @@ mod tests {
   }
 
   #[test]
-  fn test_word_at() {
+  fn test_word_range() {
     let rope = Rope::from("Hello\nWorld\r\nThis is a test 中文 世界\nRope");
-    assert_eq!(rope.word_at(0), "Hello");
     assert_eq!(rope.word_range(0), Some(0..5));
-    assert_eq!(rope.word_at(8), "World");
+    assert_eq!(rope.word_range(6), Some(6..11));
     assert_eq!(rope.word_range(8), Some(6..11));
-    assert_eq!(rope.word_at(12), "");
+    assert_eq!(rope.word_range(11), Some(6..11));
     assert_eq!(rope.word_range(12), None);
-    assert_eq!(rope.word_at(13), "This");
     assert_eq!(rope.word_range(13), Some(13..17));
-    assert_eq!(rope.word_at(31), "中文");
     assert_eq!(rope.word_range(31), Some(28..34));
-    assert_eq!(rope.word_at(38), "世界");
+    assert_eq!(rope.word_range(35), Some(35..41));
     assert_eq!(rope.word_range(38), Some(35..41));
-    assert_eq!(rope.word_at(44), "Rope");
-    assert_eq!(rope.word_range(44), Some(42..46));
-    assert_eq!(rope.word_at(45), "Rope");
+    assert_eq!(rope.word_range(42), Some(42..46));
+    assert_eq!(rope.word_range(45), Some(42..46));
   }
 
   #[test]
