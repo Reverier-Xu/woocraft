@@ -38,6 +38,10 @@ pub enum ListEvent {
   Cancel,
 }
 
+/// Options are compared on every render to skip redundant write-backs into
+/// the state, and to invalidate the measured row sizes when the rendering
+/// options change.
+#[derive(Clone, PartialEq)]
 struct ListOptions {
   size: Size,
   scrollbar_visible: bool,
@@ -85,6 +89,9 @@ pub struct ListState<D: ListDelegate> {
   reset_on_cancel: bool,
   searchable: bool,
   selectable: bool,
+  /// Whether a `load_more` task is currently in flight, so repeated
+  /// triggers from scrolling do not spawn concurrent delegate calls.
+  loading_more: bool,
   _search_task: Task<()>,
   _load_more_task: Task<()>,
   _query_input_subscription: Subscription,
@@ -118,6 +125,7 @@ where
       context_menu_builder: None,
       scroll_handle: VirtualListScrollHandle::new(),
       reset_on_cancel: true,
+      loading_more: false,
       _search_task: Task::ready(()),
       _load_more_task: Task::ready(()),
       _query_input_subscription,
@@ -220,6 +228,9 @@ where
     &mut self, ix: IndexPath, _: &mut Window, cx: &mut Context<Self>,
   ) {
     self.item_to_measure_index = ix;
+    // Row sizes are only re-measured when the cache is stale, so force a
+    // re-measure with the new measurement item.
+    self.rows_cache.invalidate();
     cx.notify();
   }
 
@@ -304,13 +315,16 @@ where
   ) {
     let threshold = self.delegate.load_more_threshold();
     if visible_end >= entities_count.saturating_sub(threshold) {
-      if !self.delegate.has_more(cx) {
+      // Skip while a previous `load_more` task is still in flight.
+      if self.loading_more || !self.delegate.has_more(cx) {
         return;
       }
 
+      self.loading_more = true;
       self._load_more_task = cx.spawn_in(window, async move |view, cx| {
         _ = view.update_in(cx, |view, window, cx| {
           view.delegate.load_more(window, cx);
+          view.loading_more = false;
         });
       });
     }
@@ -380,6 +394,17 @@ where
 
   fn prepare_items_if_needed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     let sections_count = self.delegate.sections_count(cx).max(1);
+
+    // Collect per-section item counts first: these are cheap delegate
+    // queries, while the measurement below renders elements and runs a real
+    // layout pass. Only pay that cost when the cache is actually stale.
+    let new_sections: Vec<usize> = (0..sections_count)
+      .map(|section_ix| self.delegate.items_count(section_ix, cx))
+      .collect();
+    if self.rows_cache.matches_sections(&new_sections) {
+      return;
+    }
+
     let mut measured_size = MeasuredEntrySize::default();
 
     let available_space = size(AvailableSpace::MinContent, AvailableSpace::MinContent);
@@ -403,11 +428,7 @@ where
       measured_size.section_footer_size = el.layout_as_root(available_space, window, cx);
     }
 
-    self
-      .rows_cache
-      .prepare_if_needed(sections_count, measured_size, cx, |section_ix, cx| {
-        self.delegate.items_count(section_ix, cx)
-      });
+    self.rows_cache.prepare(measured_size, new_sections);
   }
 
   fn render_list_item(
@@ -415,7 +436,9 @@ where
   ) -> impl IntoElement {
     let selectable = self.selectable;
     let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
-    let id = SharedString::from(format!("list-item-{}", ix));
+    // Pack (section, row) into one integer to avoid a per-row String
+    // allocation on every render; entries always live at column 0.
+    let id = ("list-item", ((ix.section as u64) << 32) | ix.row as u64);
 
     div()
       .id(id)
@@ -457,6 +480,13 @@ where
     &mut self, items_count: usize, entities_count: usize, window: &mut Window,
     cx: &mut Context<Self>,
   ) -> impl IntoElement {
+    // Build the gap-augmented sizes before cloning the cache: the gap
+    // variant itself is cached on the cache, so steady-state frames reuse
+    // one `Rc` instead of cloning the whole sizes table.
+    let entries_sizes = match self.options.bottom_gap {
+      Some(gap) => self.rows_cache.entries_sizes_with_gap(gap),
+      None => self.rows_cache.entries_sizes.clone(),
+    };
     let rows_cache = self.rows_cache.clone();
     let scrollbar_visible = self.options.scrollbar_visible;
     let scroll_handle = self.scroll_handle.clone();
@@ -472,13 +502,6 @@ where
       })
       .when(items_count > 0, |this| {
         let real_entries_count = rows_cache.len();
-        let entries_sizes = if let Some(gap) = self.options.bottom_gap {
-          let mut sizes = (*rows_cache.entries_sizes).clone();
-          sizes.push(size(Pixels::ZERO, gap));
-          Rc::new(sizes)
-        } else {
-          rows_cache.entries_sizes.clone()
-        };
 
         this.child(
           v_virtual_list(
@@ -761,8 +784,24 @@ where
     self.options.outer_style = self.style;
 
     self.state.update(cx, |state, _| {
-      state.options = self.options;
-      state.context_menu_builder = self.context_menu_builder;
+      // Write back only on change: item rendering depends on the options
+      // (`size` and text styles inherited from `outer_style` reach the
+      // measured row elements), so a change must also invalidate the rows
+      // cache to refresh the measured row sizes.
+      if state.options != self.options {
+        state.options = self.options;
+        state.rows_cache.invalidate();
+      }
+
+      let same_context_menu_builder =
+        match (&state.context_menu_builder, &self.context_menu_builder) {
+          (Some(current), Some(new)) => Rc::ptr_eq(current, new),
+          (None, None) => true,
+          _ => false,
+        };
+      if !same_context_menu_builder {
+        state.context_menu_builder = self.context_menu_builder;
+      }
     });
 
     self.state
