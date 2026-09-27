@@ -884,6 +884,11 @@ impl Element for TerminalElement {
         // Presentation options and link providers, read once per frame.
         let view_options = self.view.read(cx).view_options().clone();
         let link_providers = self.view.read(cx).link_providers().to_vec();
+        // Current phase of the view-driven cursor blink; `false` during the
+        // blink-off phase skips painting the cursor (the IME anchor below
+        // still tracks the real cursor cell). Always `true` while blinking
+        // is paused or disabled.
+        let cursor_blink_visible = self.view.read(cx).cursor_visible;
 
         // Resolve the terminal font: view override → host override →
         // library default.
@@ -1151,7 +1156,9 @@ impl Element for TerminalElement {
           None
         };
         let cursor_char = content.cursor_char;
-        let char_text = cursor_position.map(|_| {
+        // Shaped inverse-video glyph for the block cursor; skipped entirely
+        // during the blink-off phase.
+        let char_text = (cursor_position.is_some() && cursor_blink_visible).then(|| {
           let text = cursor_char.to_string();
           window.text_system().shape_line(
             SharedString::from(text),
@@ -1181,7 +1188,9 @@ impl Element for TerminalElement {
         let cursor_width = px(f32::from(cell_width) * cursor_cells as f32);
         let ime_cursor_bounds = cursor_position
           .map(|position| Bounds::new(position, gpui::size(cursor_width, line_height)));
-        let cursor = if cursor_shape == CursorShape::Hidden {
+        let cursor = if cursor_shape == CursorShape::Hidden || !cursor_blink_visible {
+          // Application-hidden cursors and blink-off phases paint nothing;
+          // `ime_cursor_bounds` above still anchors the IME to the cell.
           None
         } else {
           // The visible cursor paints in window coordinates, so it resolves
