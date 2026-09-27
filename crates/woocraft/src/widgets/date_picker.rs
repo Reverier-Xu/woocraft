@@ -39,12 +39,21 @@ use gpui::{
 
 use crate::{
   ActiveTheme, Anchor, Button, ButtonVariants as _, Calendar, CalendarEvent, CalendarState, Date,
-  Delete, Disableable, Icon, IconName, Matcher, Popover, Selectable, Sizable, Size, StyledExt as _,
+  Delete, Disableable, Icon, IconName, LocaleCache, Matcher, Popover, Selectable, Sizable, Size,
+  StyledExt as _,
   actions::{Cancel, Confirm},
   h_flex, translate_woocraft, v_flex,
 };
 
 const CONTEXT: &str = "DatePicker";
+
+static PLACEHOLDER: LocaleCache<SharedString> = LocaleCache::new();
+
+/// Translated default placeholder for the active locale, cached per locale so
+/// the per-frame render path avoids translation lookups and allocations.
+fn placeholder_text() -> SharedString {
+  PLACEHOLDER.get(|| SharedString::from(translate_woocraft("date_picker.placeholder")))
+}
 
 pub(crate) fn init(cx: &mut App) {
   cx.bind_keys([
@@ -233,10 +242,21 @@ impl DatePickerState {
     cx.notify();
   }
 
-  fn set_calendar_disabled_matcher(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+  /// Push the picker's disabled matcher to the calendar when it changed.
+  ///
+  /// Called from `DatePicker::render`; matchers are immutable once built, so
+  /// `Rc` identity equality is enough to skip redundant write-backs.
+  fn set_calendar_disabled_matcher(&mut self, cx: &mut Context<Self>) {
     let matcher = self.disabled_matcher.clone();
-    self.calendar.update(cx, |state, _| {
-      state.disabled_matcher = matcher;
+    self.calendar.update(cx, |calendar, _| {
+      let unchanged = match (&calendar.disabled_matcher, &matcher) {
+        (Some(current), Some(next)) => Rc::ptr_eq(current, next),
+        (None, None) => true,
+        _ => false,
+      };
+      if !unchanged {
+        calendar.disabled_matcher = matcher;
+      }
     });
   }
 
@@ -395,17 +415,19 @@ fn clear_button(id: impl Into<ElementId>, cx: &App) -> Button {
 
 impl RenderOnce for DatePicker {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let number_of_months = self.number_of_months.max(1);
     self.state.update(cx, |state, cx| {
-      state.set_calendar_disabled_matcher(window, cx);
-      state.number_of_months = self.number_of_months.max(1);
+      // Write back only on change to avoid a redundant state update every
+      // frame.
+      state.set_calendar_disabled_matcher(cx);
+      if state.number_of_months != number_of_months {
+        state.number_of_months = number_of_months;
+      }
     });
 
     let state_view = self.state.read(cx);
     let show_clean = self.cleanable && state_view.date.is_some() && !self.disabled;
-    let placeholder = self
-      .placeholder
-      .clone()
-      .unwrap_or_else(|| SharedString::from(translate_woocraft("date_picker.placeholder")));
+    let placeholder = self.placeholder.clone().unwrap_or_else(placeholder_text);
     let display_title = state_view
       .date
       .format(&state_view.date_format)
@@ -413,7 +435,6 @@ impl RenderOnce for DatePicker {
     let open = state_view.open;
     let is_focused = state_view.focus_handle.is_focused(window) && !self.disabled;
     let number_of_months = state_view.number_of_months;
-    let _ = state_view;
 
     let trigger_state = self.state.clone();
     let trigger = Button::new(("date-picker-trigger", self.state.entity_id()))
