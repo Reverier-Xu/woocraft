@@ -44,14 +44,18 @@ pub struct SearchMatcher {
 
   pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
   pub(super) current_match_ix: usize,
+  /// Monotonic revision bumped whenever `matched_ranges` is replaced. Lets
+  /// render cache keys detect match updates without comparing the ranges.
+  matched_ranges_revision: u64,
   /// Is in replacing mode, if true, the next update will not reset the current
   /// match index.
   replacing: bool,
 }
 
 impl SearchMatcher {
-  pub(crate) fn matched_ranges_ptr(&self) -> *const Vec<Range<usize>> {
-    Rc::as_ptr(&self.matched_ranges)
+  /// Revision of the current matched ranges, changes on every re-match.
+  pub(crate) fn matched_ranges_revision(&self) -> u64 {
+    self.matched_ranges_revision
   }
 
   pub fn new() -> Self {
@@ -60,6 +64,7 @@ impl SearchMatcher {
       query: None,
       matched_ranges: Rc::new(Vec::new()),
       current_match_ix: 0,
+      matched_ranges_revision: 0,
       replacing: false,
     }
   }
@@ -87,6 +92,7 @@ impl SearchMatcher {
       }
     }
     self.matched_ranges = Rc::new(new_ranges);
+    self.matched_ranges_revision += 1;
     if !self.replacing {
       self.current_match_ix = 0;
       self.replacing = false;
@@ -224,10 +230,6 @@ impl InputState {
 }
 
 impl SearchPanel {
-  pub(crate) fn matched_ranges_ptr(&self) -> *const Vec<Range<usize>> {
-    self.matcher.matched_ranges_ptr()
-  }
-
   pub fn new(editor: Entity<InputState>, cx: &mut App) -> Entity<Self> {
     let search_input = cx.new(TextInputState::new);
     let replace_input = cx.new(TextInputState::new);
@@ -620,6 +622,28 @@ mod tests {
 
     matcher.update_query("IS", false);
     assert_eq!(matcher.label(), "0/0");
+  }
+
+  #[test]
+  fn test_matched_ranges_revision_bumps_on_rematch() {
+    let text = Rope::from("Hello 世界 this is a Is test string.");
+    let mut matcher = SearchMatcher::new();
+    assert_eq!(matcher.matched_ranges_revision(), 0);
+
+    // Both the query and the text update trigger one re-match each.
+    matcher.update_query("Is", true);
+    matcher.update(&text);
+    let revision_after_match = matcher.matched_ranges_revision();
+    assert_eq!(revision_after_match, 2);
+
+    // Re-matching unchanged text keeps the revision stable.
+    matcher.update(&text);
+    assert_eq!(matcher.matched_ranges_revision(), revision_after_match);
+
+    // A new query re-matches (the unchanged text does not).
+    matcher.update_query("IS", false);
+    matcher.update(&text);
+    assert_eq!(matcher.matched_ranges_revision(), revision_after_match + 1);
   }
 
   #[test]

@@ -103,6 +103,7 @@ impl InputState {
           editor
             .hover_definition
             .update(symbol_range.clone(), locations.clone());
+          editor.hover_locations_revision += 1;
           if !had_hover_definition || !was_same_hover_definition {
             cx.notify();
           }

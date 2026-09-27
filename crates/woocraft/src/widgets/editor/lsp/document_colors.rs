@@ -86,6 +86,7 @@ impl Lsp {
 
           if document_colors != input_state.lsp.document_colors {
             input_state.lsp.document_colors = document_colors;
+            input_state.document_colors_revision += 1;
             cx.notify();
           }
         });
