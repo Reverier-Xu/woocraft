@@ -100,12 +100,11 @@ pub struct DockArea {
 
 /// DockItem is a tree structure that represents the layout of the dock.
 ///
-/// The `items`/`sizes`/`active_ix` fields on each variant are
-/// **construction-time mirrors**: they hold the values the tree was built
-/// with, but drag-and-drop restructures only mutate the live view entities,
-/// so the mirrors go stale immediately afterwards. Read structure through the
-/// `view` entities (or the `find_panel` / `has_real_panels` helpers, which
-/// already traverse the entity graph). See `docs/dock-layout-refactor.md`.
+/// Each variant only holds its `size` hint and the live view entity that
+/// owns the real structure: structural reads go through the `view` entities
+/// (or [`DockItem::find_panel`] / [`DockItem::has_real_panels`] /
+/// [`DockItem::snapshot`], which traverse the entity graph). See
+/// `docs/dock-layout-refactor.md`.
 #[derive(Clone)]
 pub enum DockItem {
   /// Split layout
@@ -113,24 +112,12 @@ pub enum DockItem {
     axis: Axis,
     /// Self size, only used for build split panels
     size: Option<Pixels>,
-    /// Construction-time mirror of the initial [`StackPanel`] children; not
-    /// maintained after layout changes.
-    items: Vec<DockItem>,
-    /// Items sizes (construction-time mirror; live sizes live in the
-    /// [`StackPanel`]'s `ResizableState`)
-    sizes: Vec<Option<Pixels>>,
     view: Entity<StackPanel>,
   },
   /// Tab layout
   Tabs {
     /// Self size, only used for build split panels
     size: Option<Pixels>,
-    /// Construction-time mirror of the initial [`TabPanel`] panels; not
-    /// maintained after layout changes.
-    items: Vec<Arc<dyn PanelView>>,
-    /// Construction-time mirror of the initial [`TabPanel`] active index; not
-    /// maintained after tab switches.
-    active_ix: usize,
     view: Entity<TabPanel>,
   },
   /// Panel layout
@@ -143,9 +130,6 @@ pub enum DockItem {
   Tiles {
     /// Self size, only used for build split panels
     size: Option<Pixels>,
-    /// Construction-time mirror of the initial [`Tiles`] items (including
-    /// their bounds); not maintained after tile drags.
-    items: Vec<TileItem>,
     view: Entity<Tiles>,
   },
 }
@@ -153,21 +137,8 @@ pub enum DockItem {
 impl std::fmt::Debug for DockItem {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      DockItem::Split {
-        axis, items, sizes, ..
-      } => f
-        .debug_struct("Split")
-        .field("axis", axis)
-        .field("items", &items.len())
-        .field("sizes", sizes)
-        .finish(),
-      DockItem::Tabs {
-        items, active_ix, ..
-      } => f
-        .debug_struct("Tabs")
-        .field("items", &items.len())
-        .field("active_ix", active_ix)
-        .finish(),
+      DockItem::Split { axis, .. } => f.debug_struct("Split").field("axis", axis).finish(),
+      DockItem::Tabs { .. } => f.debug_struct("Tabs").finish(),
       DockItem::Panel { .. } => f.debug_struct("Panel").finish(),
       DockItem::Tiles { .. } => f.debug_struct("Tiles").finish(),
     }
@@ -177,10 +148,10 @@ impl std::fmt::Debug for DockItem {
 /// Live structural projection of a [`DockItem`], read from the view entities
 /// at call time.
 ///
-/// [`DockItem`]'s own `items`/`sizes`/`active_ix` fields are construction-time
-/// mirrors that go stale after any drag-and-drop restructure; this snapshot
-/// reflects the current structure: panels added, removed, or closed through
-/// the UI, runtime splits, tile drags. See `docs/dock-layout-refactor.md`.
+/// A [`DockItem`] only carries a `size` hint and its live view entity; this
+/// snapshot expands that into the current structure: panels added, removed,
+/// or closed through the UI, runtime splits, tile drags. See
+/// `docs/dock-layout-refactor.md`.
 #[derive(Clone, PartialEq)]
 pub enum DockItemSnapshot {
   /// A [`DockItem::Split`] projected from its live [`StackPanel`].
@@ -285,9 +256,8 @@ fn snapshot_panel_view(panel: &Arc<dyn PanelView>, cx: &App) -> DockItemSnapshot
 impl DockItem {
   /// Return true if this dock item tree contains any real (user) panels.
   ///
-  /// Traversal goes through the live view entities: the `items` mirrors are
-  /// construction-time values that go stale after drag-and-drop restructures
-  /// (see `docs/dock-layout-refactor.md`). An empty [`TabPanel`] kept as a
+  /// Traversal goes through the live view entities, so panels moved in or
+  /// out via drag-and-drop are reflected. An empty [`TabPanel`] kept as a
   /// drop target does not count as real content.
   pub fn has_real_panels(&self, cx: &App) -> bool {
     match self {
@@ -351,13 +321,7 @@ impl DockItem {
       "active_ix can only be set for DockItem::Tabs"
     );
 
-    if let Self::Tabs {
-      ref mut active_ix,
-      ref mut view,
-      ..
-    } = self
-    {
-      *active_ix = new_active_ix;
+    if let Self::Tabs { view, .. } = &mut self {
       view.update(cx, |tab_panel, _| {
         tab_panel.active_ix = new_active_ix;
       });
@@ -396,11 +360,10 @@ impl DockItem {
     axis: Axis, items: Vec<DockItem>, sizes: Vec<Option<Pixels>>, dock_area: &WeakEntity<DockArea>,
     window: &mut Window, cx: &mut App,
   ) -> Self {
-    let mut items = items;
     let stack_panel = cx.new(|cx| {
       let mut stack_panel = StackPanel::new(axis, window, cx);
       stack_panel.set_dock_area(dock_area.clone());
-      for (i, item) in items.iter_mut().enumerate() {
+      for (i, item) in items.iter().enumerate() {
         let view = item.view();
         let size = sizes.get(i).copied().flatten();
         stack_panel.add_panel(view.clone(), size, dock_area.clone(), window, cx)
@@ -422,8 +385,6 @@ impl DockItem {
     Self::Split {
       axis,
       size: None,
-      items,
-      sizes,
       view: stack_panel,
     }
   }
@@ -447,7 +408,7 @@ impl DockItem {
 
     let tile_panel = cx.new(|cx| {
       let mut tiles = Tiles::new(window, cx);
-      for (ix, item) in items.clone().into_iter().enumerate() {
+      for (ix, item) in items.into_iter().enumerate() {
         match item {
           DockItem::Tabs { view, .. } => {
             let meta: TileMeta = metas[ix].into();
@@ -480,7 +441,6 @@ impl DockItem {
 
     Self::Tiles {
       size: None,
-      items: tile_panel.read(cx).panels.clone(),
       view: tile_panel,
     }
   }
@@ -518,16 +478,14 @@ impl DockItem {
 
     Self::Tabs {
       size: None,
-      items,
-      active_ix,
       view: tab_panel,
     }
   }
 
   /// Project the live structure behind this item into a value snapshot.
   ///
-  /// This is the official read path for current structure: the enum's own
-  /// `items`/`sizes`/`active_ix` fields only hold construction-time values.
+  /// This is the official read path for current structure: the variant fields
+  /// only carry the `size` hint and the live view entity.
   pub fn snapshot(&self, cx: &App) -> DockItemSnapshot {
     match self {
       Self::Split { view, .. } => view.read(cx).snapshot(cx),
@@ -566,9 +524,8 @@ impl DockItem {
   /// Find `panel` in the live view graph behind this item, compared by view
   /// identity (same semantics as `PartialEq for dyn PanelView`).
   ///
-  /// Traverses entity state instead of the construction-time `items` mirror,
-  /// so panels moved in or out via drag-and-drop are reflected (see
-  /// `docs/dock-layout-refactor.md`).
+  /// Traverses entity state, so panels moved in or out via drag-and-drop
+  /// are reflected (see `docs/dock-layout-refactor.md`).
   pub fn find_panel(&self, panel: Arc<dyn PanelView>, cx: &App) -> Option<Arc<dyn PanelView>> {
     match self {
       Self::Tabs { view, .. } => view.read(cx).panels.iter().find(|p| *p == &panel).cloned(),
@@ -623,9 +580,8 @@ impl DockItem {
 
   /// Add a panel to the dock item.
   ///
-  /// The panel is registered on the live view entities only; the `items`
-  /// mirrors on this enum are construction-time values and are not updated
-  /// (see `docs/dock-layout-refactor.md`).
+  /// The panel is registered on the live view entities (see
+  /// `docs/dock-layout-refactor.md`).
   pub fn add_panel(
     &mut self, panel: Arc<dyn PanelView>, dock_area: &WeakEntity<DockArea>,
     bounds: Option<Bounds<Pixels>>, window: &mut Window, cx: &mut App,
@@ -676,11 +632,10 @@ impl DockItem {
 
   /// Remove a panel from the dock item.
   ///
-  /// Removal happens on the live view entities only; the `items` mirrors are
-  /// construction-time values and are not updated (see
-  /// `docs/dock-layout-refactor.md`). The [`StackPanel`] recursion keeps the
-  /// previous behavior of the mirror recursion, including firing
-  /// [`Panel::on_removed`] and empty-TabPanel cleanup per visited child.
+  /// Removal happens on the live view entities (see
+  /// `docs/dock-layout-refactor.md`). The [`StackPanel`] recursion fires
+  /// [`Panel::on_removed`] and keeps the empty-TabPanel cleanup behavior per
+  /// visited child.
   pub fn remove_panel(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) {
     match self {
       DockItem::Tabs { view, .. } => {
@@ -698,9 +653,8 @@ impl DockItem {
         );
       }
       DockItem::Split { view, .. } => {
-        // Recurse through the live entity graph: the `items` mirror is stale
-        // after drag-and-drop restructures. Children are cloned first because
-        // removing a panel can prune empty TabPanels from the stack.
+        // Children are cloned first because removing a panel can prune
+        // empty TabPanels from the stack.
         let children = view.read(cx).panels.to_vec();
         for child in children {
           Self::remove_panel_from_view(&child, panel.clone(), window, cx);
@@ -757,8 +711,6 @@ impl DockItem {
         });
       }
       DockItem::Split { view, .. } => {
-        // Recurse through the live entity graph: the `items` mirror is stale
-        // after drag-and-drop restructures.
         let children = view.read(cx).panels.to_vec();
         for panel in children {
           Self::set_collapsed_on_view(&panel, collapsed, window, cx);
@@ -785,7 +737,7 @@ impl DockItem {
         Self::set_collapsed_on_view(&child, collapsed, window, cx);
       }
     }
-    // Tiles have no collapsed state, matching the previous mirror recursion.
+    // Tiles have no collapsed state.
   }
 
   /// Recursively traverses to find the left-most and top-most TabPanel.
@@ -829,13 +781,6 @@ impl DockArea {
     let center = DockItem::Split {
       axis: Axis::Horizontal,
       size: None,
-      items: vec![DockItem::Tabs {
-        size: None,
-        items: vec![],
-        active_ix: 0,
-        view: center_tab,
-      }],
-      sizes: vec![None],
       view: stack_panel.clone(),
     };
 
@@ -1436,49 +1381,6 @@ impl DockArea {
     }
   }
 
-  /// Subscribe event on the panels
-  #[allow(clippy::only_used_in_recursion)]
-  #[allow(dead_code)]
-  fn subscribe_item(&mut self, item: &DockItem, window: &mut Window, cx: &mut Context<Self>) {
-    match item {
-      DockItem::Split { items, view, .. } => {
-        for item in items {
-          self.subscribe_item(item, window, cx);
-        }
-
-        self._subscriptions.push(cx.subscribe_in(
-          view,
-          window,
-          move |this, _, event, window, cx| {
-            if let PanelEvent::LayoutChanged = event
-              && !this.pending_layout_change
-            {
-              this.pending_layout_change = true;
-              cx.spawn_in(window, async move |view, window| {
-                _ = view.update_in(window, |view, window, cx| {
-                  view.pending_layout_change = false;
-                  view.update_toggle_button_tab_panels(window, cx);
-                });
-              })
-              .detach();
-              cx.emit(DockEvent::LayoutChanged);
-            }
-          },
-        ));
-      }
-      DockItem::Tabs { .. } => {
-        // We subscribe to the tab panel event in StackPanel's insert_panel
-      }
-      DockItem::Tiles { .. } => {
-        // We subscribe to the tab panel event in Tiles's
-        // [`add_item`](Tiles::add_item)
-      }
-      DockItem::Panel { .. } => {
-        // Not supported
-      }
-    }
-  }
-
   /// Subscribe zoom event on the panel
   pub(crate) fn subscribe_panel<P: Panel>(
     &mut self, view: &Entity<P>, window: &mut Window, cx: &mut Context<DockArea>,
@@ -1731,8 +1633,7 @@ mod tests {
 
   // Regression anchors for the dock layout convergence: UI-driven changes
   // (dropping a panel into a tab group, closing it from its ✕) mutate only
-  // the entities, so structural reads must traverse the entity graph — the
-  // `DockItem` mirror fields stay frozen at their construction-time values
+  // the entities, so all structural reads must see the live entity graph
   // (see `docs/dock-layout-refactor.md`).
   //
   // The window hosts a bare root: the test asset source is empty, so letting
@@ -1747,7 +1648,7 @@ mod tests {
   }
 
   #[gpui::test]
-  async fn entity_reads_track_ui_changes_the_mirrors_miss(cx: &mut TestAppContext) {
+  async fn entity_reads_track_ui_changes(cx: &mut TestAppContext) {
     cx.set_global(Theme::default());
     cx.update(PanelRegistry::init);
 
@@ -1763,8 +1664,7 @@ mod tests {
       .update(cx, |_, window, cx| {
         let dock_area = cx.new(|cx| DockArea::new("test", None, window, cx));
 
-        // The center is `Split { items: [Tabs { items: [] }] }` with one
-        // empty placeholder TabPanel; both mirror and entity agree: empty.
+        // The center is a Split holding one empty placeholder TabPanel.
         // Cloned: the enum is all Arc handles behind, so the clone still
         // reflects live entity state without borrowing the DockArea.
         let center = dock_area.read(cx).center().clone();
@@ -1788,16 +1688,7 @@ mod tests {
           tab_panel.add_panel(Arc::new(panel.clone()), window, cx);
         });
 
-        // The construction-time mirror is now stale — and must stay stale.
-        let DockItem::Split { items, .. } = &center else {
-          unreachable!("center is always a Split")
-        };
-        let DockItem::Tabs { items: mirror, .. } = &items[0] else {
-          unreachable!("center child is a Tabs")
-        };
-        assert!(mirror.is_empty(), "mirror must not track UI changes");
-
-        // …but the entity-graph readers see the panel.
+        // The entity-graph readers see the panel.
         assert!(
           center.has_real_panels(cx),
           "has_real_panels must traverse the live entity graph"
