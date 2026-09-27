@@ -310,7 +310,8 @@ mod tests {
     history.end_grouping();
     history.push(4.into());
 
-    // Grouped pushes share one version (0); the ungrouped push gets its own (1).
+    // Grouped pushes share one version (0); the ungrouped push gets its own
+    // (1).
     assert_eq!(history.version(), 1);
     assert_eq!(history.undos().len(), 4);
     assert_eq!(history.undos().first().unwrap().version(), 0);

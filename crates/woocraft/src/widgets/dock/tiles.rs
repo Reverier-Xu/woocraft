@@ -632,7 +632,16 @@ impl Tiles {
       ResizeSide::BottomRight,
     ]
     .into_iter()
-    .map(|side| resize_handle(side, entity_id, item.id, item.bounds, -HANDLE_SIZE + px(1.), cx))
+    .map(|side| {
+      resize_handle(
+        side,
+        entity_id,
+        item.id,
+        item.bounds,
+        -HANDLE_SIZE + px(1.),
+        cx,
+      )
+    })
     .collect()
   }
   fn on_resize_handle_mouse_down(
@@ -886,7 +895,12 @@ fn resize_handle_container(side: ResizeSide, offset: Pixels, item_bounds: &Bound
 /// `(x, y, width, height)` where `None` means "keep the current value".
 fn resize_drag_target(
   side: ResizeSide, drag: &ResizeDrag, position: Point<Pixels>,
-) -> (Option<Pixels>, Option<Pixels>, Option<Pixels>, Option<Pixels>) {
+) -> (
+  Option<Pixels>,
+  Option<Pixels>,
+  Option<Pixels>,
+  Option<Pixels>,
+) {
   match side {
     ResizeSide::Left => {
       let delta = drag.last_position.x - position.x;
@@ -943,26 +957,28 @@ fn resize_handle(
       cx.stop_propagation();
       cx.new(|_| drag.clone())
     })
-    .on_drag_move(cx.listener(move |this, e: &DragMoveEvent<DragResizing>, window, cx| {
-      match e.drag(cx) {
-        DragResizing(id) => {
-          if *id != entity_id {
-            return;
-          }
+    .on_drag_move(
+      cx.listener(
+        move |this, e: &DragMoveEvent<DragResizing>, window, cx| match e.drag(cx) {
+          DragResizing(id) => {
+            if *id != entity_id {
+              return;
+            }
 
-          let Some(drag_data) = this.resizing_drag_data.as_ref() else {
-            return;
-          };
-          if drag_data.side != side {
-            return;
-          }
+            let Some(drag_data) = this.resizing_drag_data.as_ref() else {
+              return;
+            };
+            if drag_data.side != side {
+              return;
+            }
 
-          let (new_x, new_y, new_width, new_height) =
-            resize_drag_target(side, drag_data, e.event.position);
-          this.resize(new_x, new_y, new_width, new_height, window, cx);
-        }
-      }
-    }));
+            let (new_x, new_y, new_width, new_height) =
+              resize_drag_target(side, drag_data, e.event.position);
+            this.resize(new_x, new_y, new_width, new_height, window, cx);
+          }
+        },
+      ),
+    );
 
   if side == ResizeSide::BottomRight {
     // The corner handle renders a visual resize affordance on top of the

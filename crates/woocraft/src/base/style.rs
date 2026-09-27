@@ -300,20 +300,12 @@ impl Size {
 
   /// Returns the larger of the two sizes (`Small < Medium < Large`).
   pub fn max(&self, other: Self) -> Self {
-    if other > *self {
-      other
-    } else {
-      *self
-    }
+    if other > *self { other } else { *self }
   }
 
   /// Returns the smaller of the two sizes (`Small < Medium < Large`).
   pub fn min(&self, other: Self) -> Self {
-    if other < *self {
-      other
-    } else {
-      *self
-    }
+    if other < *self { other } else { *self }
   }
 
   pub fn component_px(&self) -> Pixels {

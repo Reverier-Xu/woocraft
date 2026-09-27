@@ -1087,7 +1087,13 @@ impl Element for TerminalElement {
           .grid_layout_cache
           .clone()
           .filter(|cache| cache.key == layout_key)
-          .map(|cache| (cache.background_rects, cache.batched_runs, cache.block_rects));
+          .map(|cache| {
+            (
+              cache.background_rects,
+              cache.batched_runs,
+              cache.block_rects,
+            )
+          });
         let (background_rects, batched_runs, block_rects) = match cached_layout {
           Some(layout) => layout,
           None => {

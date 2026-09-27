@@ -163,10 +163,18 @@ impl PopupMenuItem {
     &mut Option<Rc<ClickHandler>>,
   )> {
     match self {
-      PopupMenuItem::Item { checked, action, handler, .. }
-      | PopupMenuItem::ElementItem { checked, action, handler, .. } => {
-        Some((checked, action, handler))
+      PopupMenuItem::Item {
+        checked,
+        action,
+        handler,
+        ..
       }
+      | PopupMenuItem::ElementItem {
+        checked,
+        action,
+        handler,
+        ..
+      } => Some((checked, action, handler)),
       _ => None,
     }
   }
@@ -208,7 +216,7 @@ impl PopupMenuItem {
   /// NOTE: If `check_side` is [`Side::Left`], the icon will replace with a
   /// check icon.
   pub fn checked(mut self, checked: bool) -> Self {
-    if let Some((flag, _, _)) = self.clickable_mut() {
+    if let Some((flag, ..)) = self.clickable_mut() {
       *flag = checked;
     }
     self
@@ -704,8 +712,12 @@ impl PopupMenu {
     };
 
     if let Some(
-      PopupMenuItem::Item { handler, action, .. }
-      | PopupMenuItem::ElementItem { handler, action, .. },
+      PopupMenuItem::Item {
+        handler, action, ..
+      }
+      | PopupMenuItem::ElementItem {
+        handler, action, ..
+      },
     ) = self.menu_items.get(index)
     {
       if let Some(handler) = handler {
@@ -1043,9 +1055,7 @@ impl PopupMenu {
             let target = if *hovered { Some(ix) } else { None };
             // Only a change of `selected_index` needs a re-render: hovering
             // out of a non-selected item never changes the selection.
-            if this.selected_index != target
-              && (*hovered || this.selected_index == Some(ix))
-            {
+            if this.selected_index != target && (*hovered || this.selected_index == Some(ix)) {
               this.selected_index = target;
               cx.notify();
             }
@@ -1097,9 +1107,7 @@ impl PopupMenu {
             let target = if *hovered { Some(ix) } else { None };
             // Only a change of `selected_index` needs a re-render: hovering
             // out of a non-selected item never changes the selection.
-            if this.selected_index != target
-              && (*hovered || this.selected_index == Some(ix))
-            {
+            if this.selected_index != target && (*hovered || this.selected_index == Some(ix)) {
               this.selected_index = target;
               cx.notify();
             }

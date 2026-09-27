@@ -1,9 +1,9 @@
 use std::time::Instant;
 
 use gpui::{
-  App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
-  IntoElement, KeyDownEvent, MouseButton, ParentElement as _, Render, RenderOnce, SharedString,
-  Styled, Window, div, prelude::FluentBuilder as _,
+  App, Context, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+  KeyDownEvent, MouseButton, ParentElement as _, Render, RenderOnce, SharedString, Styled, Window,
+  div, prelude::FluentBuilder as _,
 };
 
 use super::InputEvent;
@@ -168,7 +168,11 @@ impl RenderOnce for OtpInput {
     let is_focused = state.focus_handle.is_focused(window);
     let animate_caret = state.should_animate_caret();
     let caret_color = cx.theme().primary;
-    let cursor_ix = state.value.chars().count().min(state.length.saturating_sub(1));
+    let cursor_ix = state
+      .value
+      .chars()
+      .count()
+      .min(state.length.saturating_sub(1));
     let group_count = self.number_of_groups.max(1).min(state.length);
     let base_group_size = state.length / group_count;
     let extra = state.length % group_count;

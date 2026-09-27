@@ -497,9 +497,24 @@ impl RenderOnce for Slider {
     let entity_id = self.state.entity_id();
     // Build the thumbs before the builder chain below moves fields out of
     // `self` (`.id(self.id)`), otherwise the closures could not borrow `self`.
-    let start_thumb =
-      is_range.then(|| self.thumb(cx, axis, true, percentage.start, entity_id, self.state.clone()));
-    let end_thumb = self.thumb(cx, axis, false, percentage.end, entity_id, self.state.clone());
+    let start_thumb = is_range.then(|| {
+      self.thumb(
+        cx,
+        axis,
+        true,
+        percentage.start,
+        entity_id,
+        self.state.clone(),
+      )
+    });
+    let end_thumb = self.thumb(
+      cx,
+      axis,
+      false,
+      percentage.end,
+      entity_id,
+      self.state.clone(),
+    );
 
     let state_for_down = self.state.clone();
     let state_for_move = self.state.clone();

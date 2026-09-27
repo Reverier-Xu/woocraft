@@ -89,11 +89,10 @@ pub fn set_font_overrides(overrides: FontOverrides) {
     .map(|fallbacks| FontFallbacks::from_fonts(fallbacks.clone()));
   *OVERRIDES
     .write()
-    .expect("font overrides lock should not be poisoned") =
-    Arc::new(FontSnapshot {
-      overrides,
-      override_fallbacks,
-    });
+    .expect("font overrides lock should not be poisoned") = Arc::new(FontSnapshot {
+    overrides,
+    override_fallbacks,
+  });
 }
 
 /// Returns a snapshot of the current application font overrides.

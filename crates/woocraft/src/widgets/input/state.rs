@@ -1,4 +1,9 @@
-use std::{hash::{DefaultHasher, Hash, Hasher}, ops::Range, rc::Rc, time::Instant};
+use std::{
+  hash::{DefaultHasher, Hash, Hasher},
+  ops::Range,
+  rc::Rc,
+  time::Instant,
+};
 
 use gpui::{
   Action, App, Bounds, ClipboardItem, Context, Corners, DispatchPhase, Element,
@@ -481,7 +486,10 @@ impl InputState {
   /// Borrows the display text and shaped line cached by
   /// [`Self::refresh_display_cache`].
   fn cached_display(&self) -> (&str, &gpui::ShapedLine) {
-    let cache = self.display_cache.as_ref().expect("display cache must be refreshed before use");
+    let cache = self
+      .display_cache
+      .as_ref()
+      .expect("display cache must be refreshed before use");
     (cache.display.as_str(), &cache.shaped)
   }
 
@@ -703,11 +711,7 @@ impl InputState {
       }
     }
 
-    if in_word {
-      word_start
-    } else {
-      last_word_start
-    }
+    if in_word { word_start } else { last_word_start }
   }
 
   fn next_word_end(&self, offset: usize) -> usize {

@@ -219,11 +219,9 @@ impl RenderOnce for Label {
     let text = if self.masked {
       // Masked form is cached at builder time; the fallback keeps masked
       // rendering correct if the cache was not refreshed.
-      self.cached_masked_text.unwrap_or_else(|| {
-        MASKED
-          .repeat(self.cached_full_text.chars().count())
-          .into()
-      })
+      self
+        .cached_masked_text
+        .unwrap_or_else(|| MASKED.repeat(self.cached_full_text.chars().count()).into())
     } else {
       self.cached_full_text
     };
@@ -232,8 +230,6 @@ impl RenderOnce for Label {
       .line_height(gpui::relative(1.25))
       .text_color(cx.theme().foreground)
       .refine_style(&self.style)
-      .child(StyledText::new(&text).when_some(highlights, |this, hl| {
-        this.with_highlights(hl)
-      }))
+      .child(StyledText::new(&text).when_some(highlights, |this, hl| this.with_highlights(hl)))
   }
 }

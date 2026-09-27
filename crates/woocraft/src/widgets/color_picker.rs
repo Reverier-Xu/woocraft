@@ -665,12 +665,15 @@ fn render_channel_row(
             state.set_channel_bounds(channel, bounds);
           });
         })
-        .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, window, cx| {
-          state_for_down.update(cx, |state, cx| {
-            state.set_channel_by_position(channel, event.position, window, cx);
-          });
-          cx.stop_propagation();
-        })
+        .on_mouse_down(
+          MouseButton::Left,
+          move |event: &MouseDownEvent, window, cx| {
+            state_for_down.update(cx, |state, cx| {
+              state.set_channel_by_position(channel, event.position, window, cx);
+            });
+            cx.stop_propagation();
+          },
+        )
         .on_mouse_move(move |event: &MouseMoveEvent, window, cx| {
           if event.pressed_button == Some(MouseButton::Left) {
             state_for_move.update(cx, |state, cx| {
@@ -742,10 +745,7 @@ fn paint_channel(
 /// Resolves one gradient segment: display color plus gamut warning flag.
 fn resolve_gradient_stop(value: ColorPickerOklch) -> ChannelGradientStop {
   let (rgba, out_of_gamut) = resolve_rgba(value);
-  ChannelGradientStop {
-    rgba,
-    out_of_gamut,
-  }
+  ChannelGradientStop { rgba, out_of_gamut }
 }
 
 /// Builds the gradient color table for `channel`, sweeping it across its full
@@ -1034,10 +1034,26 @@ mod tests {
   #[test]
   fn parse_hex_color_supports_short_and_long_forms() {
     let white = parse_hex_color("#FFFFFFFF").expect("8-digit hex parses");
-    assert_eq!(white, ColorPickerRgba { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+    assert_eq!(
+      white,
+      ColorPickerRgba {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0
+      }
+    );
 
     let black = parse_hex_color("000").expect("3-digit hex parses");
-    assert_eq!(black, ColorPickerRgba { r: 0.0, g: 0.0, b: 0.0, a: 1.0 });
+    assert_eq!(
+      black,
+      ColorPickerRgba {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0
+      }
+    );
 
     assert!(parse_hex_color("11223344").is_some());
     assert!(parse_hex_color("11223").is_none(), "wrong digit count");
@@ -1108,7 +1124,10 @@ mod tests {
 
     let first = state.channel_gradient(PickerChannel::Lightness);
     let second = state.channel_gradient(PickerChannel::Lightness);
-    assert!(Arc::ptr_eq(&first, &second), "unchanged value reuses the table");
+    assert!(
+      Arc::ptr_eq(&first, &second),
+      "unchanged value reuses the table"
+    );
 
     // The lightness gradient depends on chroma, so it must rebuild.
     state.value.chroma += 0.01;
@@ -1118,8 +1137,14 @@ mod tests {
     // Moving the swept component itself must not invalidate the table.
     let chroma_table = state.channel_gradient(PickerChannel::Chroma);
     state.value.lightness += 0.01;
-    assert!(Arc::ptr_eq(&third, &state.channel_gradient(PickerChannel::Lightness)));
-    assert!(!Arc::ptr_eq(&chroma_table, &state.channel_gradient(PickerChannel::Chroma)));
+    assert!(Arc::ptr_eq(
+      &third,
+      &state.channel_gradient(PickerChannel::Lightness)
+    ));
+    assert!(!Arc::ptr_eq(
+      &chroma_table,
+      &state.channel_gradient(PickerChannel::Chroma)
+    ));
   }
 
   #[test]
@@ -1148,7 +1173,10 @@ mod tests {
   fn set_oklch_keeps_resolved_cache_consistent(cx: &mut TestAppContext) {
     let state = cx.new(|_| ColorPickerState::new());
     cx.update(|app| {
-      assert_eq!(state.read(app).value(), resolve_value(ColorPickerOklch::default()));
+      assert_eq!(
+        state.read(app).value(),
+        resolve_value(ColorPickerOklch::default())
+      );
 
       let next = ColorPickerOklch {
         lightness: 0.8,

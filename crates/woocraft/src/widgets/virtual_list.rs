@@ -257,14 +257,18 @@ fn resolve_infer_size(
   content_size: Size<Pixels>,
 ) -> Size<Pixels> {
   Size {
-    width: known_dimensions.width.unwrap_or(match available_space.width {
-      AvailableSpace::Definite(x) => x,
-      AvailableSpace::MinContent | AvailableSpace::MaxContent => content_size.width,
-    }),
-    height: known_dimensions.height.unwrap_or(match available_space.height {
-      AvailableSpace::Definite(x) => x,
-      AvailableSpace::MinContent | AvailableSpace::MaxContent => content_size.height,
-    }),
+    width: known_dimensions
+      .width
+      .unwrap_or(match available_space.width {
+        AvailableSpace::Definite(x) => x,
+        AvailableSpace::MinContent | AvailableSpace::MaxContent => content_size.width,
+      }),
+    height: known_dimensions
+      .height
+      .unwrap_or(match available_space.height {
+        AvailableSpace::Definite(x) => x,
+        AvailableSpace::MinContent | AvailableSpace::MaxContent => content_size.height,
+      }),
   }
 }
 

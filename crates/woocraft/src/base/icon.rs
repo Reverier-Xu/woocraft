@@ -9,8 +9,10 @@
 use std::collections::HashSet;
 use std::{
   collections::HashMap,
-  sync::atomic::{AtomicBool, Ordering},
-  sync::{OnceLock, RwLock},
+  sync::{
+    OnceLock, RwLock,
+    atomic::{AtomicBool, Ordering},
+  },
 };
 
 use gpui::{
@@ -353,8 +355,14 @@ impl RenderOnce for Icon {
     debug_validate_icon_path(&self.path, _cx);
 
     Self::render_inner(
-      self.colorized, self.text_color, self.size, self.transformation, self.base, self.path,
-      self.style, window,
+      self.colorized,
+      self.text_color,
+      self.size,
+      self.transformation,
+      self.base,
+      self.path,
+      self.style,
+      window,
     )
   }
 }
@@ -371,8 +379,14 @@ impl Render for Icon {
     debug_validate_icon_path(&self.path, _cx);
 
     Self::render_inner(
-      self.colorized, self.text_color, self.size, self.transformation, svg(), self.path.clone(),
-      self.style.clone(), window,
+      self.colorized,
+      self.text_color,
+      self.size,
+      self.transformation,
+      svg(),
+      self.path.clone(),
+      self.style.clone(),
+      window,
     )
   }
 }

@@ -348,9 +348,9 @@ impl NotificationState {
     for item in &self.items {
       if item.data.autohide
         && !item.hovered
-        && item.started_at.is_some_and(|started_at| {
-          now.duration_since(started_at) >= item.data.duration
-        })
+        && item
+          .started_at
+          .is_some_and(|started_at| now.duration_since(started_at) >= item.data.duration)
       {
         expired_ids.push(item.id);
       }
