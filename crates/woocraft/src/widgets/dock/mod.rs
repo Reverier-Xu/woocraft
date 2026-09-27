@@ -1088,9 +1088,14 @@ impl Render for DockArea {
               // Left dock (always present)
               .child(div().flex().flex_none().child(left_dock.clone()))
               // Divider between the left dock and the center; hidden while
-              // the dock is collapsed.
+              // the dock is collapsed, highlighted while it is being resized.
               .when(!left_dock.read(cx).collapsed, |this| {
-                this.child(div().flex_none().w(px(1.)).h_full().bg(cx.theme().border))
+                let color = if left_dock.read(cx).is_resizing() {
+                  cx.theme().primary
+                } else {
+                  cx.theme().border
+                };
+                this.child(div().flex_none().w(px(1.)).h_full().bg(color))
               })
               // Center column
               .child(
@@ -1111,15 +1116,25 @@ impl Render for DockArea {
                   // Divider between the center content and the bottom dock;
                   // hidden while the bottom dock is collapsed.
                   .when(!bottom_dock.read(cx).collapsed, |this| {
-                    this.child(div().flex_none().h(px(1.)).w_full().bg(cx.theme().border))
+                    let color = if bottom_dock.read(cx).is_resizing() {
+                      cx.theme().primary
+                    } else {
+                      cx.theme().border
+                    };
+                    this.child(div().flex_none().h(px(1.)).w_full().bg(color))
                   })
                   // Bottom Dock (always present)
                   .child(bottom_dock.clone()),
               )
               // Divider between the center and the right dock; hidden while
-              // the dock is collapsed.
+              // the dock is collapsed, highlighted while it is being resized.
               .when(!right_dock.read(cx).collapsed, |this| {
-                this.child(div().flex_none().w(px(1.)).h_full().bg(cx.theme().border))
+                let color = if right_dock.read(cx).is_resizing() {
+                  cx.theme().primary
+                } else {
+                  cx.theme().border
+                };
+                this.child(div().flex_none().w(px(1.)).h_full().bg(color))
               })
               // Right Dock (always present)
               .child(div().flex().flex_none().child(right_dock.clone())),
