@@ -66,6 +66,13 @@ impl StackPanel {
       cx.subscribe(&state, |_, _, _: &ResizablePanelEvent, cx| {
         cx.emit(PanelEvent::LayoutChanged)
       }),
+      // Divider-size corrections happen inside the state's own entity
+      // updates (prepaint-time `update_panel_size` replacements and
+      // container-change adjustments). Those only notify the state, which
+      // would leave a `.cached()` host rendering stale handle offsets until
+      // an unrelated repaint; observing the state re-renders this stack
+      // whenever its divider layout changes.
+      cx.observe(&state, |_, _, cx| cx.notify()),
     ];
 
     Self {
@@ -122,8 +129,7 @@ impl StackPanel {
     self.axis = axis;
     let panels_len = self.panels.len();
     self.state.update(cx, |state, cx| {
-      state.sync_panels_count(axis, panels_len, cx);
-      state.sync_sizes(sizes.to_vec(), cx);
+      state.sync_layout(axis, panels_len, sizes.to_vec(), cx);
     });
     cx.notify();
   }
