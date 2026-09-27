@@ -12,7 +12,7 @@ use super::{
     PANEL_MIN_SIZE, ResizablePanelEvent, ResizablePanelGroup, ResizablePanelState, ResizableState,
     resizable_panel,
   },
-  DockArea, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel,
+  DockArea, DockItemSnapshot, Panel, PanelEvent, PanelInfo, PanelState, PanelView, TabPanel,
 };
 use crate::{ActiveTheme, IconName, Placement, h_flex};
 
@@ -377,6 +377,25 @@ impl StackPanel {
   pub(super) fn set_axis(&mut self, axis: Axis, _: &mut Window, cx: &mut Context<Self>) {
     self.axis = axis;
     cx.notify();
+  }
+}
+
+impl StackPanel {
+  /// Project the live structure of this stack panel into a snapshot.
+  ///
+  /// Reads the children and the current divider sizes from the entities, so
+  /// runtime splits and resizes are reflected (unlike the construction-time
+  /// `DockItem::Split` mirrors).
+  pub(crate) fn snapshot(&self, cx: &App) -> DockItemSnapshot {
+    DockItemSnapshot::Split {
+      axis: self.axis,
+      sizes: self.state.read(cx).sizes().clone(),
+      items: self
+        .panels
+        .iter()
+        .map(|panel| super::snapshot_panel_view(panel, cx))
+        .collect(),
+    }
   }
 }
 
