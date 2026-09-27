@@ -49,10 +49,10 @@
 //! callback to avoid excessive cloning. Horizontal scrolling is calculated
 //! on-demand during rendering and is efficient even for very long text.
 
-use std::{ops::Range, rc::Rc, time::Instant};
+use std::{hash::{DefaultHasher, Hash, Hasher}, ops::Range, rc::Rc, time::Instant};
 
 use gpui::{
-  Action, AnyElement, App, Bounds, ClipboardItem, Context, Corners, DispatchPhase, Element,
+  Action, App, Bounds, ClipboardItem, Context, Corners, DispatchPhase, Element,
   ElementInputHandler, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
   GlobalElementId, InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding,
   KeyDownEvent, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -181,6 +181,44 @@ struct Snapshot {
   selection: Selection,
 }
 
+/// Fingerprint of the inputs that determine the shaped display line: text
+/// content, masking, and the effective text style. The cached shaping is
+/// reused only while this fingerprint still matches the state.
+struct DisplayFingerprint {
+  text_hash: u64,
+  masked: bool,
+  text_style: Option<TextStyle>,
+}
+
+impl DisplayFingerprint {
+  /// Checks the fingerprint against the current state without cloning; only
+  /// the text hash is recomputed (O(n) over the text, no allocation).
+  fn matches(&self, state: &InputState) -> bool {
+    if self.masked != state.masked {
+      return false;
+    }
+    let mut hasher = DefaultHasher::new();
+    state.text.hash(&mut hasher);
+    if self.text_hash != hasher.finish() {
+      return false;
+    }
+    match (&self.text_style, state.text_style.as_ref()) {
+      (Some(cached), Some(current)) => cached == current,
+      (None, None) => true,
+      _ => false,
+    }
+  }
+}
+
+/// Cached display text and its shaped line, shared by rendering, caret
+/// scrolling, mouse hit testing, and IME bounds so the line is shaped at most
+/// once per text/style change instead of on every call.
+struct DisplayCache {
+  fingerprint: DisplayFingerprint,
+  display: String,
+  shaped: gpui::ShapedLine,
+}
+
 /// Internal state management for text input field.
 ///
 /// Manages rendering and user interaction for a single-line text input. Handles
@@ -216,6 +254,7 @@ pub struct InputState {
   clean_on_escape: bool,
   size: Size,
   text_style: Option<TextStyle>,
+  display_cache: Option<DisplayCache>,
   pattern: Option<Regex>,
   validate: Option<InputValidate>,
   undo_stack: Vec<Snapshot>,
@@ -243,6 +282,7 @@ impl InputState {
       clean_on_escape: false,
       size: Size::default(),
       text_style: None,
+      display_cache: None,
       pattern: None,
       validate: None,
       undo_stack: Vec::new(),
@@ -310,7 +350,10 @@ impl InputState {
     self.text.clone().into()
   }
 
-  /// Get the unmasked input value. For non-masked inputs, same as `value()`.
+  /// Get the unmasked input value.
+  ///
+  /// Masking only affects display; the stored value is always plaintext, so
+  /// this is equivalent to [`Self::value()`] and kept for API clarity.
   pub fn unmask_value(&self) -> SharedString {
     self.value()
   }
@@ -353,8 +396,9 @@ impl InputState {
   }
 
   /// Update the validation pattern on an existing input.
-  pub fn set_pattern(&mut self, pattern: Regex, _: &mut Window, _: &mut Context<Self>) {
+  pub fn set_pattern(&mut self, pattern: Regex, _: &mut Window, cx: &mut Context<Self>) {
     self.pattern = Some(pattern);
+    cx.notify();
   }
 
   /// Set a custom validation callback.
@@ -452,13 +496,45 @@ impl InputState {
     }
   }
 
-  fn shape_line_for_display(&self, display: &str, window: &Window) -> gpui::ShapedLine {
+  /// Refreshes the shaped display cache if the fingerprint no longer matches
+  /// the current state. Rendering, caret scrolling, mouse hit testing, and IME
+  /// bounds all go through this entry point so the line is shaped at most once
+  /// per text/style change.
+  fn refresh_display_cache(&mut self, window: &Window) {
+    let cache_is_current = self
+      .display_cache
+      .as_ref()
+      .is_some_and(|cache| cache.fingerprint.matches(self));
+
+    if cache_is_current {
+      return;
+    }
+
+    let display = self.display_text();
     let text_style = self.layout_text_style(window);
     let font_size = text_style.font_size.to_pixels(window.rem_size());
     let runs = [text_style.to_run(display.len())];
-    window
+    let shaped = window
       .text_system()
-      .shape_line(display.to_string().into(), font_size, &runs, None)
+      .shape_line(display.clone().into(), font_size, &runs, None);
+    let mut hasher = DefaultHasher::new();
+    self.text.hash(&mut hasher);
+    self.display_cache = Some(DisplayCache {
+      fingerprint: DisplayFingerprint {
+        text_hash: hasher.finish(),
+        masked: self.masked,
+        text_style: self.text_style.clone(),
+      },
+      display,
+      shaped,
+    });
+  }
+
+  /// Borrows the display text and shaped line cached by
+  /// [`Self::refresh_display_cache`].
+  fn cached_display(&self) -> (&str, &gpui::ShapedLine) {
+    let cache = self.display_cache.as_ref().expect("display cache must be refreshed before use");
+    (cache.display.as_str(), &cache.shaped)
   }
 
   fn layout_text_style(&self, window: &Window) -> TextStyle {
@@ -482,20 +558,41 @@ impl InputState {
   }
 
   fn ensure_cursor_visible(&mut self, window: &Window) {
-    let display = self.display_text();
-    let shaped = self.shape_line_for_display(&display, window);
-    self.ensure_cursor_visible_with_shaped(&shaped, &display);
+    let viewport_width = self.input_bounds.size.width;
+    if viewport_width <= px(0.) {
+      return;
+    }
+
+    self.refresh_display_cache(window);
+    let (display, shaped) = self.cached_display();
+    let cursor_display_index = self.text_byte_to_display_index(display, self.cursor());
+    let cursor_x = shaped.x_for_index(cursor_display_index);
+    let horizontal_padding = px(4.);
+    let left_edge = self.horizontal_scroll + horizontal_padding;
+    let right_edge = self.horizontal_scroll + viewport_width - horizontal_padding;
+
+    let mut scroll = self.horizontal_scroll;
+    if cursor_x < left_edge {
+      scroll = (cursor_x - horizontal_padding).max(px(0.));
+    } else if cursor_x > right_edge {
+      scroll = (cursor_x - viewport_width + horizontal_padding).max(px(0.));
+    }
+
+    let max_scroll = (shaped.width - viewport_width).max(px(0.));
+    if scroll > max_scroll {
+      scroll = max_scroll;
+    }
+    self.horizontal_scroll = scroll;
   }
 
   fn byte_offset_for_mouse_position(
-    &self, position: gpui::Point<Pixels>, window: &Window,
+    &mut self, position: gpui::Point<Pixels>, window: &Window,
   ) -> usize {
-    let display = self.display_text();
+    self.refresh_display_cache(window);
+    let (display, shaped) = self.cached_display();
     if display.is_empty() {
       return 0;
     }
-
-    let shaped = self.shape_line_for_display(&display, window);
     let bounds = self.input_bounds;
 
     let mut local_x = position.x - bounds.origin.x + self.horizontal_scroll;
@@ -506,36 +603,12 @@ impl InputState {
     }
 
     let display_index = shaped.closest_index_for_x(local_x);
-    self.display_index_to_text_byte(&display, display_index)
+    self.display_index_to_text_byte(display, display_index)
   }
 
   fn cursor_x_with_shaped(&self, shaped: &gpui::ShapedLine, display: &str) -> Pixels {
     let display_index = self.text_byte_to_display_index(display, self.cursor());
     shaped.x_for_index(display_index)
-  }
-
-  fn ensure_cursor_visible_with_shaped(&mut self, shaped: &gpui::ShapedLine, display: &str) {
-    let viewport_width = self.input_bounds.size.width;
-    if viewport_width <= px(0.) {
-      return;
-    }
-
-    let cursor_display_index = self.text_byte_to_display_index(display, self.cursor());
-    let cursor_x = shaped.x_for_index(cursor_display_index);
-    let horizontal_padding = px(4.);
-    let left_edge = self.horizontal_scroll + horizontal_padding;
-    let right_edge = self.horizontal_scroll + viewport_width - horizontal_padding;
-
-    if cursor_x < left_edge {
-      self.horizontal_scroll = (cursor_x - horizontal_padding).max(px(0.));
-    } else if cursor_x > right_edge {
-      self.horizontal_scroll = (cursor_x - viewport_width + horizontal_padding).max(px(0.));
-    }
-
-    let max_scroll = (shaped.width - viewport_width).max(px(0.));
-    if self.horizontal_scroll > max_scroll {
-      self.horizontal_scroll = max_scroll;
-    }
   }
 
   fn on_mouse_down(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -661,44 +734,51 @@ impl InputState {
   }
 
   fn previous_word_start(&self, offset: usize) -> usize {
-    let chars: Vec<(usize, char)> = self.text.char_indices().collect();
-    if chars.is_empty() {
-      return 0;
+    // Equivalent to scanning backward from the character before `offset` to
+    // the start of its word, as a single lazy forward pass over the text.
+    let mut in_word = false;
+    let mut word_start = 0;
+    let mut last_word_start = 0;
+
+    for (byte, ch) in self.text.char_indices() {
+      if byte >= offset {
+        break;
+      }
+      if ch.is_whitespace() {
+        if in_word {
+          last_word_start = word_start;
+          in_word = false;
+        }
+      } else if !in_word {
+        in_word = true;
+        word_start = byte;
+      }
     }
-    let mut idx = chars
-      .iter()
-      .position(|(byte, _)| *byte >= offset)
-      .unwrap_or(chars.len());
-    idx = idx.saturating_sub(1);
-    while idx > 0 && chars[idx].1.is_whitespace() {
-      idx -= 1;
+
+    if in_word {
+      word_start
+    } else {
+      last_word_start
     }
-    while idx > 0 && !chars[idx - 1].1.is_whitespace() {
-      idx -= 1;
-    }
-    chars[idx].0
   }
 
   fn next_word_end(&self, offset: usize) -> usize {
-    let chars: Vec<(usize, char)> = self.text.char_indices().collect();
-    if chars.is_empty() {
-      return 0;
+    // Skip the whitespace run at/after `offset`, then the word that follows,
+    // as a single lazy forward pass over the text.
+    let mut skipping_ws = true;
+    for (byte, ch) in self.text.char_indices() {
+      if byte < offset {
+        continue;
+      }
+      if skipping_ws {
+        if !ch.is_whitespace() {
+          skipping_ws = false;
+        }
+      } else if ch.is_whitespace() {
+        return byte;
+      }
     }
-    let mut idx = chars
-      .iter()
-      .position(|(byte, _)| *byte >= offset)
-      .unwrap_or(chars.len());
-    while idx < chars.len() && chars[idx].1.is_whitespace() {
-      idx += 1;
-    }
-    while idx < chars.len() && !chars[idx].1.is_whitespace() {
-      idx += 1;
-    }
-    if idx >= chars.len() {
-      self.text.len()
-    } else {
-      chars[idx].0
-    }
+    self.text.len()
   }
 
   fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
@@ -935,8 +1015,13 @@ impl InputState {
       return;
     }
 
+    // Extending an already-active caret hold leaves the frame unchanged; only
+    // notify when the caret transitions from blinking to held visible.
+    let caret_was_animating = self.should_animate_caret();
     self.hold_caret_visible();
-    cx.notify();
+    if caret_was_animating {
+      cx.notify();
+    }
   }
 }
 
@@ -1058,6 +1143,9 @@ impl Focusable for OtpState {
 }
 
 impl Render for OtpState {
+  // `OtpState` is never rendered directly; `OtpInput` draws the actual cells.
+  // This impl exists only so the state entity can be embedded as a child
+  // element of the OTP view.
   fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
     div()
   }
@@ -1096,77 +1184,73 @@ impl RenderOnce for OtpInput {
     let is_focused = state.focus_handle.is_focused(window);
     let animate_caret = state.should_animate_caret();
     let caret_color = cx.theme().primary;
-    let value_chars = state.value.chars().collect::<Vec<_>>();
-    let cursor_ix = value_chars.len().min(state.length.saturating_sub(1));
+    let cursor_ix = state.value.chars().count().min(state.length.saturating_sub(1));
     let group_count = self.number_of_groups.max(1).min(state.length);
     let base_group_size = state.length / group_count;
     let extra = state.length % group_count;
 
-    let mut groups: Vec<Vec<AnyElement>> = (0..group_count).map(|_| Vec::new()).collect();
-    let mut group_ix = 0usize;
-    let mut in_group_ix = 0usize;
-    let mut current_group_cap = base_group_size + usize::from(extra > 0);
+    // Build each group directly from its cell range in one pass, avoiding a
+    // nested Vec<Vec<AnyElement>> allocation per frame.
+    let mut groups = Vec::with_capacity(group_count);
+    let mut cell_ix = 0usize;
+    for group_ix in 0..group_count {
+      let group_size = base_group_size + usize::from(group_ix < extra);
+      let mut group = h_flex().items_center().gap(self.size.container_gap());
+      for _ in 0..group_size {
+        let ch = state.value.chars().nth(cell_ix);
+        let focused_cell = is_focused && cell_ix == cursor_ix;
 
-    for ix in 0..state.length {
-      if in_group_ix >= current_group_cap && group_ix + 1 < group_count {
-        group_ix += 1;
-        in_group_ix = 0;
-        current_group_cap = base_group_size + usize::from(group_ix < extra);
+        group = group.child(
+          h_flex()
+            .border_1()
+            .border_color(if focused_cell {
+              cx.theme().ring
+            } else {
+              cx.theme().input
+            })
+            .bg(if self.disabled {
+              cx.theme().muted
+            } else {
+              cx.theme().background
+            })
+            .rounded(cx.theme().radius)
+            .items_center()
+            .justify_center()
+            .text_color(if self.disabled {
+              cx.theme().muted_foreground
+            } else {
+              cx.theme().foreground
+            })
+            .component_h(self.size)
+            .w(self.size.component_height())
+            .on_mouse_down(
+              MouseButton::Left,
+              window.listener_for(&self.state, OtpState::on_input_mouse_down),
+            )
+            .child(match ch {
+              Some(c) => {
+                if state.masked {
+                  "•".to_string().into_any_element()
+                } else {
+                  c.to_string().into_any_element()
+                }
+              }
+              None => {
+                if focused_cell {
+                  div()
+                    .h_4()
+                    .child(render_caret(caret_color, animate_caret, "otp-caret-blink"))
+                    .into_any_element()
+                } else {
+                  div().into_any_element()
+                }
+              }
+            }),
+        );
+
+        cell_ix += 1;
       }
-
-      let ch = value_chars.get(ix).copied();
-      let focused_cell = is_focused && ix == cursor_ix;
-
-      groups[group_ix].push(
-        h_flex()
-          .border_1()
-          .border_color(if focused_cell {
-            cx.theme().ring
-          } else {
-            cx.theme().input
-          })
-          .bg(if self.disabled {
-            cx.theme().muted
-          } else {
-            cx.theme().background
-          })
-          .rounded(cx.theme().radius)
-          .items_center()
-          .justify_center()
-          .text_color(if self.disabled {
-            cx.theme().muted_foreground
-          } else {
-            cx.theme().foreground
-          })
-          .component_h(self.size)
-          .w(self.size.component_height())
-          .on_mouse_down(
-            MouseButton::Left,
-            window.listener_for(&self.state, OtpState::on_input_mouse_down),
-          )
-          .child(match ch {
-            Some(c) => {
-              if state.masked {
-                "•".to_string().into_any_element()
-              } else {
-                c.to_string().into_any_element()
-              }
-            }
-            None => {
-              if focused_cell {
-                div()
-                  .h_4()
-                  .child(render_caret(caret_color, animate_caret, "otp-caret-blink"))
-                  .into_any_element()
-              } else {
-                div().into_any_element()
-              }
-            }
-          })
-          .into_any_element(),
-      );
-
-      in_group_ix += 1;
+      groups.push(group);
     }
 
     h_flex()
@@ -1177,12 +1261,7 @@ impl RenderOnce for OtpInput {
       })
       .items_center()
       .gap(self.size.container_gap() * 2.0)
-      .children(groups.into_iter().map(|cells| {
-        h_flex()
-          .items_center()
-          .gap(self.size.container_gap())
-          .children(cells)
-      }))
+      .children(groups)
   }
 }
 
@@ -1196,6 +1275,9 @@ pub enum NumberInputEvent {
   Step(StepAction),
 }
 
+/// Emission host for [`NumberInputEvent`]: `NumberInput::apply_step` emits
+/// step events through the input state's context, and subscribers listen on
+/// the same `Entity<InputState>`. This impl is load-bearing, not dead code.
 impl EventEmitter<NumberInputEvent> for InputState {}
 
 #[derive(IntoElement)]
@@ -1273,7 +1355,7 @@ impl NumberInput {
       if state.disabled {
         return;
       }
-      let current = state.value().as_ref().parse::<f64>().unwrap_or(0.0);
+      let current = state.text.parse::<f64>().unwrap_or(0.0);
       let mut next = match action {
         StepAction::Increment => current + step,
         StepAction::Decrement => current - step,
@@ -1298,7 +1380,9 @@ impl_styled!(NumberInput);
 impl RenderOnce for NumberInput {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     self.state.update(cx, |state, _cx| {
-      if !self.placeholder.is_empty() {
+      // Only write back when the value actually changed to avoid touching the
+      // entity on every parent re-render.
+      if !self.placeholder.is_empty() && state.placeholder != self.placeholder {
         state.placeholder = self.placeholder.clone();
       }
     });
@@ -1447,11 +1531,11 @@ impl EntityInputHandler for InputState {
       return Some(bounds);
     }
 
-    let display = self.display_text();
-    let shaped = self.shape_line_for_display(&display, window);
+    self.refresh_display_cache(window);
+    let (display, shaped) = self.cached_display();
     let range = self.range_from_utf16(&range_utf16);
-    let start_ix = self.text_byte_to_display_index(&display, range.start);
-    let end_ix = self.text_byte_to_display_index(&display, range.end.max(range.start));
+    let start_ix = self.text_byte_to_display_index(display, range.start);
+    let end_ix = self.text_byte_to_display_index(display, range.end.max(range.start));
 
     let start_x = (shaped.x_for_index(start_ix) - self.horizontal_scroll).max(px(0.));
     let end_x = (shaped.x_for_index(end_ix) - self.horizontal_scroll)
@@ -1487,15 +1571,10 @@ impl Render for InputState {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let mut text_style = window.text_style();
     text_style.font_size = self.size.text_size().into();
-    self.text_style = Some(text_style.clone());
-
-    let display = if self.masked {
-      "•".repeat(self.text.chars().count())
-    } else {
-      self.text.clone()
-    };
-    let shaped = self.shape_line_for_display(&display, window);
-    self.ensure_cursor_visible_with_shaped(&shaped, &display);
+    let text_color = text_style.color;
+    // Injected for the next shaping pass (`layout_text_style`) so shaping
+    // never needs a per-frame clone of the style.
+    self.text_style = Some(text_style);
 
     let cursor = self.cursor();
     let is_focused = self.focus_handle.is_focused(window) && !self.disabled;
@@ -1505,27 +1584,31 @@ impl Render for InputState {
     let keep_caret_highlight = self.shared_context_menu_open;
     let selection = self.selected_range_normalized();
     let has_selection = !selection.is_empty();
+    let show_caret = (is_focused || keep_caret_highlight) && !has_selection;
+    let animate_caret = show_caret && !keep_caret_highlight && self.should_animate_caret();
 
-    let text_color = text_style.color;
     let caret_color = cx.theme().primary;
     let selection_color = cx.theme().primary.opacity(0.25);
 
-    let cursor_char = Self::byte_to_char_offset(&self.text, cursor);
-    let selection_start_char = Self::byte_to_char_offset(&self.text, selection.start);
-    let selection_end_char = Self::byte_to_char_offset(&self.text, selection.end);
+    self.ensure_cursor_visible(window);
+    let (display, shaped) = self.cached_display();
 
-    let left_byte = Self::char_to_byte_offset(&display, selection_start_char);
-    let selected_byte = Self::char_to_byte_offset(&display, selection_end_char);
-    let cursor_byte = Self::char_to_byte_offset(&display, cursor_char);
-
-    let left_text = &display[..left_byte.min(display.len())];
-    let selected_text = &display[left_byte.min(display.len())..selected_byte.min(display.len())];
-    let right_text = &display[selected_byte.min(display.len())..];
-
+    // `display` mirrors `text` byte-for-byte when unmasked, and maps one
+    // character to one 3-byte bullet when masked, so text byte offsets convert
+    // to display offsets without byte<->char round trips.
+    let bullet_len = '•'.len_utf8();
+    let to_display_byte = |text_byte: usize| {
+      if self.masked {
+        Self::byte_to_char_offset(&self.text, text_byte) * bullet_len
+      } else {
+        text_byte
+      }
+    };
+    let left_byte = to_display_byte(selection.start).min(display.len());
+    let selected_byte = to_display_byte(selection.end).min(display.len());
+    let cursor_byte = to_display_byte(cursor).min(display.len());
     let caret_left =
-      (self.cursor_x_with_shaped(&shaped, &display) - self.horizontal_scroll).max(px(0.));
-    let show_caret = (is_focused || keep_caret_highlight) && !has_selection;
-    let animate_caret = show_caret && !keep_caret_highlight && self.should_animate_caret();
+      (self.cursor_x_with_shaped(shaped, display) - self.horizontal_scroll).max(px(0.));
 
     h_flex()
       .id("input-state")
@@ -1541,17 +1624,21 @@ impl Render for InputState {
           .items_center()
           .ml(-self.horizontal_scroll)
           .child(if has_selection {
-            left_text.to_string()
+            display[..left_byte].to_string()
           } else {
-            display[..cursor_byte.min(display.len())].to_string()
+            display[..cursor_byte].to_string()
           })
           .when(has_selection, |this| {
             this
-              .child(div().bg(selection_color).child(selected_text.to_string()))
-              .child(right_text.to_string())
+              .child(
+                div()
+                  .bg(selection_color)
+                  .child(display[left_byte..selected_byte].to_string()),
+              )
+              .child(display[selected_byte..].to_string())
           })
           .when(!has_selection, |this| {
-            this.child(display[cursor_byte.min(display.len())..].to_string())
+            this.child(display[cursor_byte..].to_string())
           }),
       )
       .when(show_caret, |this| {
@@ -1866,8 +1953,14 @@ impl RenderOnce for Input {
     let _ = state_view;
 
     self.state.update(cx, |state, _| {
-      state.disabled = self.disabled;
-      state.size = self.size;
+      // Only write back when the value actually changed to avoid touching the
+      // entity on every parent re-render.
+      if state.disabled != self.disabled {
+        state.disabled = self.disabled;
+      }
+      if state.size != self.size {
+        state.size = self.size;
+      }
     });
 
     let input = div()
