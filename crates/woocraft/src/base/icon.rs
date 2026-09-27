@@ -9,6 +9,7 @@
 use std::collections::HashSet;
 use std::{
   collections::HashMap,
+  sync::atomic::{AtomicBool, Ordering},
   sync::{OnceLock, RwLock},
 };
 
@@ -29,6 +30,10 @@ pub trait IconNamed {
 }
 
 static CUSTOM_ICON_REGISTRY: OnceLock<RwLock<HashMap<String, SharedString>>> = OnceLock::new();
+/// Set to `true` while [`CUSTOM_ICON_REGISTRY`] is non-empty (updated under
+/// the registry write lock after every mutation) so per-icon lookups can skip
+/// the registry read lock in the common no-custom-icons case.
+static HAS_CUSTOM_ICONS: AtomicBool = AtomicBool::new(false);
 #[cfg(debug_assertions)]
 static VALIDATED_ICON_PATHS: OnceLock<RwLock<HashSet<SharedString>>> = OnceLock::new();
 
@@ -92,6 +97,7 @@ pub fn register_icon(name: impl Into<SharedString>, path: impl Into<SharedString
     .write()
     .expect("custom icon registry poisoned");
   registry.insert(name, path);
+  HAS_CUSTOM_ICONS.store(true, Ordering::Release);
 }
 
 /// Unregisters a custom icon from the global registry.
@@ -102,7 +108,9 @@ pub fn unregister_icon(name: &str) -> Option<SharedString> {
   let mut registry = custom_icon_registry()
     .write()
     .expect("custom icon registry poisoned");
-  registry.remove(name)
+  let removed = registry.remove(name);
+  HAS_CUSTOM_ICONS.store(!registry.is_empty(), Ordering::Release);
+  removed
 }
 
 /// Clears all custom icons from the registry.
@@ -111,12 +119,16 @@ pub fn clear_custom_icons() {
     .write()
     .expect("custom icon registry poisoned");
   registry.clear();
+  HAS_CUSTOM_ICONS.store(false, Ordering::Release);
 }
 
 /// Looks up a custom icon path by name.
 ///
 /// Returns Some(path) if the icon is registered, or None otherwise.
 pub fn custom_icon_path(name: &str) -> Option<SharedString> {
+  if !HAS_CUSTOM_ICONS.load(Ordering::Acquire) {
+    return None;
+  }
   let registry = custom_icon_registry()
     .read()
     .expect("custom icon registry poisoned");
@@ -180,7 +192,10 @@ pub struct Icon {
   path: SharedString,
   text_color: Option<Hsla>,
   size: Option<Size>,
-  rotation: Option<Radians>,
+  /// Builder transformation (`rotate()`/`transform()`), applied at render
+  /// time so it survives both the stateless and the stateful render path
+  /// (the stateful path cannot move out of `self.base`).
+  transformation: Option<Transformation>,
   colorized: bool,
 }
 
@@ -192,7 +207,7 @@ impl Default for Icon {
       path: "".into(),
       text_color: None,
       size: None,
-      rotation: None,
+      transformation: None,
       colorized: true,
     }
   }
@@ -202,7 +217,7 @@ impl Clone for Icon {
   fn clone(&self) -> Self {
     let mut this = Self::default().path(self.path.clone());
     this.style = self.style.clone();
-    this.rotation = self.rotation;
+    this.transformation = self.transformation;
     this.size = self.size;
     this.text_color = self.text_color;
     this
@@ -233,6 +248,48 @@ impl Icon {
     self
   }
 
+  /// Shared render body for the stateless ([`RenderOnce`]) and stateful
+  /// ([`Render`]) trait paths, keeping the two from drifting apart. Icon
+  /// state is passed field-by-field so the stateless path can move it out of
+  /// `self` without cloning; the stateful path cannot move out of
+  /// `&mut self` and passes a fresh `svg()` plus clones. Builder
+  /// transformations live on the icon (see [`Icon::transform`]) and are
+  /// re-applied here, which keeps them alive in both paths.
+  #[allow(clippy::too_many_arguments)]
+  fn render_inner(
+    colorized: bool, text_color: Option<Hsla>, size: Option<Size>,
+    transformation: Option<Transformation>, mut base: Svg, path: SharedString,
+    style: StyleRefinement, window: &Window,
+  ) -> AnyElement {
+    let text_color = text_color.unwrap_or_else(|| window.text_style().color);
+    let text_size = window.text_style().font_size.to_pixels(window.rem_size());
+    let has_base_size = style.size.width.is_some() || style.size.height.is_some();
+
+    if colorized {
+      *base.style() = style;
+
+      base
+        .flex_shrink_0()
+        .text_color(text_color)
+        .when(!has_base_size, |this| this.size(text_size))
+        .when_some(size, |this, size| this.size(size.icon_size()))
+        .when_some(transformation, |this, transformation| {
+          this.with_transformation(transformation)
+        })
+        .path(path)
+        .into_any_element()
+    } else {
+      let mut base = img(path);
+      *base.style() = style;
+
+      base
+        .flex_shrink_0()
+        .when(!has_base_size, |this| this.size(text_size))
+        .when_some(size, |this, size| this.size(size.icon_size()))
+        .into_any_element()
+    }
+  }
+
   /// Creates a new Entity<Icon> for use as a stateful component in views.
   ///
   /// Useful when icon state needs to be managed within the app context.
@@ -242,9 +299,11 @@ impl Icon {
 
   /// Applies a transformation (scale, rotate, translate) to the icon.
   ///
-  /// Use for custom transforms beyond the rotate() method.
+  /// Stored on the icon and applied at render time, so it works for both
+  /// stateless icons and stateful `Entity<Icon>` views. Use for custom
+  /// transforms beyond the [`Icon::rotate`] method.
   pub fn transform(mut self, transformation: gpui::Transformation) -> Self {
-    self.base = self.base.with_transformation(transformation);
+    self.transformation = Some(transformation);
     self
   }
 
@@ -256,11 +315,8 @@ impl Icon {
   /// Rotates the icon by the specified angle in radians.
   ///
   /// Example: `Icon::new(IconName::ChevronRight).rotate(90.0.to_radians())`
-  pub fn rotate(mut self, radians: impl Into<Radians>) -> Self {
-    self.base = self
-      .base
-      .with_transformation(Transformation::rotate(radians));
-    self
+  pub fn rotate(self, radians: impl Into<Radians>) -> Self {
+    self.transform(Transformation::rotate(radians))
   }
 
   /// Controls whether the icon is colorized with the text color.
@@ -296,31 +352,10 @@ impl RenderOnce for Icon {
     #[cfg(debug_assertions)]
     debug_validate_icon_path(&self.path, _cx);
 
-    let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
-    let text_size = window.text_style().font_size.to_pixels(window.rem_size());
-    let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
-
-    if self.colorized {
-      let mut base = self.base;
-      *base.style() = self.style;
-
-      base
-        .flex_shrink_0()
-        .text_color(text_color)
-        .when(!has_base_size, |this| this.size(text_size))
-        .when_some(self.size, |this, size| this.size(size.icon_size()))
-        .path(self.path)
-        .into_any_element()
-    } else {
-      let mut base = img(self.path);
-      *base.style() = self.style;
-
-      base
-        .flex_shrink_0()
-        .when(!has_base_size, |this| this.size(text_size))
-        .when_some(self.size, |this, size| this.size(size.icon_size()))
-        .into_any_element()
-    }
+    Self::render_inner(
+      self.colorized, self.text_color, self.size, self.transformation, self.base, self.path,
+      self.style, window,
+    )
   }
 }
 
@@ -335,33 +370,9 @@ impl Render for Icon {
     #[cfg(debug_assertions)]
     debug_validate_icon_path(&self.path, _cx);
 
-    let text_color = self.text_color.unwrap_or_else(|| window.text_style().color);
-    let text_size = window.text_style().font_size.to_pixels(window.rem_size());
-    let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
-
-    if self.colorized {
-      let mut base = svg().flex_none();
-      *base.style() = self.style.clone();
-
-      base
-        .flex_shrink_0()
-        .text_color(text_color)
-        .when(!has_base_size, |this| this.size(text_size))
-        .when_some(self.size, |this, size| this.size(size.icon_size()))
-        .path(self.path.clone())
-        .when_some(self.rotation, |this, rotation| {
-          this.with_transformation(Transformation::rotate(rotation))
-        })
-        .into_any_element()
-    } else {
-      let mut base = img(self.path.clone());
-      *base.style() = self.style.clone();
-
-      base
-        .flex_shrink_0()
-        .when(!has_base_size, |this| this.size(text_size))
-        .when_some(self.size, |this, size| this.size(size.icon_size()))
-        .into_any_element()
-    }
+    Self::render_inner(
+      self.colorized, self.text_color, self.size, self.transformation, svg(), self.path.clone(),
+      self.style.clone(), window,
+    )
   }
 }
