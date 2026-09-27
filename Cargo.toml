@@ -28,10 +28,15 @@ async-channel                 = "2"
 chrono                        = "0.4"
 crossbeam-channel             = "0.5"
 enum-iterator                 = "2.3"
-gpui                          = { git = "https://github.com/zed-industries/zed", package = "gpui" }
-gpui-macros                   = { git = "https://github.com/zed-industries/zed", package = "gpui_macros" }
-gpui_platform                 = { git = "https://github.com/zed-industries/zed", package = "gpui_platform" }
-gpui_sum_tree                 = { git = "https://github.com/zed-industries/zed", package = "sum_tree" }
+# NOTE: Temporary migration from git deps to the `gpui-pre-*` crates.io snapshots
+# published by Longbridge (huacnlee). Version 0.3.6 == zed@bcf6582. Exact pins are
+# required: each 0.3.x snapshot may contain breaking API changes (see longbridge/
+# gpui-kit#3156). Migrate back to the zed git source once an official stable gpui
+# release catches up.
+gpui                          = { version = "=0.3.6", package = "gpui-pre" }
+gpui-macros                   = { version = "=0.3.6", package = "gpui-pre-macros" }
+gpui_platform                 = { version = "=0.3.6", package = "gpui-pre-platform" }
+gpui_sum_tree                 = { version = "=0.3.6", package = "gpui-pre-sum-tree" }
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
 palette                       = "0.7"
