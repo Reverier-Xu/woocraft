@@ -118,7 +118,10 @@ pub struct TerminalView {
   pub(crate) marked_text: Option<SharedString>,
   /// Whether the application requested a blinking cursor.
   blinking_terminal_enabled: bool,
-  cursor_visible: bool,
+  /// Current phase of the view-driven blink. `false` hides the painted
+  /// cursor (the IME anchor stays put). Always `true` while blinking is
+  /// paused or disabled, so the cursor then renders constantly.
+  pub(crate) cursor_visible: bool,
   /// Wakes the single long-lived blink task after `blink_deadline` changes.
   /// Bounded capacity: a queued wake makes further sends redundant.
   blink_wake: async_channel::Sender<()>,
