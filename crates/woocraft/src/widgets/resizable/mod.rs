@@ -122,18 +122,70 @@ impl ResizableState {
     }
   }
 
-  /// Replaces divider sizes after a structural sync. `None` slots keep their
-  /// current (proportionally redistributed) size, so user-driven resizes
-  /// survive tree edits that do not touch the divider layout.
+  /// Replaces divider sizes after a structural sync.
+  ///
+  /// `Some` slots are the tree's persisted divider positions. `None` slots
+  /// (never-resized children, e.g. a freshly split group) get an equal share
+  /// of the space left after the fixed slots, so the first frame after a
+  /// split shows an even layout with the handles where they belong, instead
+  /// of leftover widths plus a `PANEL_MIN_SIZE` newcomer. Before the first
+  /// prepaint the container size is unknown; the newcomers fall back to
+  /// `PANEL_MIN_SIZE` and the group's prepaint re-normalizes against the
+  /// real container.
   pub(crate) fn sync_sizes(&mut self, sizes: Vec<Option<Pixels>>, cx: &mut Context<Self>) {
     debug_assert_eq!(sizes.len(), self.panels.len(), "split slots out of sync");
-    for (ix, slot) in sizes.into_iter().enumerate() {
-      if let Some(size) = slot {
-        self.sizes[ix] = size;
-        self.panels[ix].size = Some(size);
+    let free_count = sizes.iter().filter(|slot| slot.is_none()).count();
+    let container = self.container_size().as_f32();
+    let free_share = if free_count > 0 {
+      let fixed: f32 = sizes
+        .iter()
+        .filter_map(|slot| slot.map(|size| size.as_f32()))
+        .sum();
+      if container > fixed {
+        Some(px(
+          ((container - fixed) / free_count as f32).max(PANEL_MIN_SIZE.as_f32()),
+        ))
+      } else {
+        // The container is unknown on a freshly created stack (its bounds
+        // arrive with the first prepaint). Placeholder-size the newcomers in
+        // `sizes` only: the group's prepaint re-normalizes `sizes` against
+        // the real container, and pinning `panels[ix].size` here would mask
+        // that correction (display sizes prefer the pinned value).
+        None
       }
+    } else {
+      None
+    };
+    for (ix, slot) in sizes.into_iter().enumerate() {
+      let resolved = slot.or(free_share);
+      self.sizes[ix] = resolved.unwrap_or(PANEL_MIN_SIZE);
+      self.panels[ix].size = resolved;
     }
     cx.notify();
+  }
+
+  /// Aligns the resizable layout with a structural sync from the layout
+  /// tree: the panel count first (newcomers placeholder-sized, no premature
+  /// redistribution), then the divider sizes (see [`Self::sync_sizes`]).
+  pub(crate) fn sync_layout(
+    &mut self, axis: Axis, panels_count: usize, sizes: Vec<Option<Pixels>>, cx: &mut Context<Self>,
+  ) {
+    self.axis = axis;
+    match panels_count.cmp(&self.panels.len()) {
+      std::cmp::Ordering::Greater => {
+        let diff = panels_count - self.panels.len();
+        self
+          .panels
+          .extend(vec![ResizablePanelState::default(); diff]);
+        self.sizes.extend(vec![PANEL_MIN_SIZE; diff]);
+      }
+      std::cmp::Ordering::Less => {
+        self.panels.truncate(panels_count);
+        self.sizes.truncate(panels_count);
+      }
+      std::cmp::Ordering::Equal => {}
+    }
+    self.sync_sizes(sizes, cx);
   }
 
   pub(crate) fn update_panel_size(
