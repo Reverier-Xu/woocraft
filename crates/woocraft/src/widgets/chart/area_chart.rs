@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 use gpui::{
-  App, Background, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, TextAlign,
-  Window, canvas, px,
+  App, Background, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, Window, canvas,
 };
 use num_traits::{Num, ToPrimitive};
 
+use super::axes::{XTickAlign, paint_axes};
 use crate::{
-  AXIS_GAP, ActiveTheme, AxisText, Grid, Plot, PlotAxis, StrokeStyle,
+  AXIS_GAP, ActiveTheme, Plot, StrokeStyle,
   scale::{Scale, ScaleLinear, ScalePoint, Sealed},
   shape::Area,
 };
@@ -132,34 +132,19 @@ where
       .collect::<Vec<_>>();
     let y = ScaleLinear::new(domain, vec![height, 10.]);
 
-    let data_len = self.data.len();
-    let x_label = self.data.iter().enumerate().filter_map(|(i, d)| {
-      if (i + 1) % self.tick_margin == 0 {
-        x.tick(&x_fn(d)).map(|x_tick| {
-          let align = match i {
-            0 if data_len == 1 => TextAlign::Center,
-            0 => TextAlign::Left,
-            i if i == data_len - 1 => TextAlign::Right,
-            _ => TextAlign::Center,
-          };
-          AxisText::new(x_fn(d).into(), x_tick, cx.theme().muted_foreground).align(align)
-        })
-      } else {
-        None
-      }
-    });
-
-    PlotAxis::new()
-      .x(height)
-      .x_label(x_label)
-      .stroke(cx.theme().border)
-      .paint(&bounds, window, cx);
-
-    Grid::new()
-      .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
-      .stroke(cx.theme().border)
-      .dash_array(&[px(4.), px(2.)])
-      .paint(&bounds, window);
+    paint_axes(
+      self.data.len(),
+      |i| {
+        let x_value = x_fn(&self.data[i]);
+        let tick = x.tick(&x_value)?;
+        Some((x_value.into(), tick))
+      },
+      self.tick_margin,
+      XTickAlign::Edges,
+      bounds,
+      window,
+      cx,
+    );
 
     for (i, y_fn) in self.y.iter().enumerate() {
       let x = x.clone();

@@ -1,8 +1,11 @@
 use std::{
+  borrow::Cow,
   collections::HashMap,
   ops::Deref,
   sync::{LazyLock, RwLock},
 };
+
+use gpui::SharedString;
 
 pub const SUPPORTED_LOCALES: [&str; 4] = ["zh-hans", "zh-hant", "en-us", "ja-jp"];
 pub const WOOCRAFT_I18N_DOMAIN: &str = "tech.woooo.woocraft";
@@ -20,8 +23,29 @@ fn is_woocraft_domain_key(key: &str) -> bool {
       .is_some_and(|rest| rest.starts_with('.'))
 }
 
+/// Builds a woocraft-domain i18n key.
 pub fn woocraft_key(key: impl AsRef<str>) -> String {
-  let key = key.as_ref();
+  format_woocraft_key(key.as_ref())
+}
+
+/// Cow-based variant of [`woocraft_key`] for crate-internal hot paths.
+///
+/// Keys that are already in the woocraft domain are passed through as
+/// [`Cow::Borrowed`] when the input permits borrowing (`&'static str`), so
+/// domain-prefixed static keys cost no allocation.
+pub(crate) fn woocraft_key_cow(key: impl Into<Cow<'static, str>>) -> Cow<'static, str> {
+  match key.into() {
+    Cow::Borrowed(key) if is_woocraft_domain_key(key) => Cow::Borrowed(key),
+    Cow::Owned(key) if is_woocraft_domain_key(&key) => Cow::Owned(key),
+    key => Cow::Owned(format_woocraft_key(&key)),
+  }
+}
+
+/// Prefixes `key` with the woocraft i18n domain, returning a fresh `String`.
+///
+/// Internal `&str` primitive behind [`woocraft_key`] for inputs with a
+/// non-static lifetime (the public entries take `impl AsRef<str>`).
+fn format_woocraft_key(key: &str) -> String {
   if is_woocraft_domain_key(key) {
     key.to_string()
   } else {
@@ -95,6 +119,8 @@ pub fn locale() -> impl Deref<Target = str> {
 pub fn set_locale(locale: &str) {
   let locale = normalize_locale(locale);
   rust_i18n::set_locale(&locale);
+  // The active locale changed, so every cached translation is stale.
+  clear_translation_cache();
 }
 
 pub fn available_locales() -> Vec<String> {
@@ -136,6 +162,8 @@ pub fn load_locale(locale: impl AsRef<str>, translations: HashMap<String, String
     .write()
     .unwrap_or_else(|poisoned| poisoned.into_inner())
     .insert(locale, translations);
+  // Custom translation data changed for the locale, invalidate the cache.
+  clear_translation_cache();
 }
 
 pub fn extend_locale<I, K, V>(locale: impl AsRef<str>, translations: I)
@@ -155,13 +183,16 @@ where
       locale_translations.insert(key, value.into());
     }
   }
+
+  // Custom translation data changed for the locale, invalidate the cache.
+  clear_translation_cache();
 }
 
 pub fn try_translate_woocraft_in_locale(
   locale: impl AsRef<str>, key: impl AsRef<str>,
 ) -> Option<String> {
   let locale = normalize_locale(locale.as_ref());
-  let key = woocraft_key(key);
+  let key = format_woocraft_key(key.as_ref());
   lookup_rust_i18n_translation_merged(&locale, &key)
 }
 
@@ -172,7 +203,7 @@ pub fn try_translate_woocraft(key: impl AsRef<str>) -> Option<String> {
 
 pub fn translate_woocraft_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> String {
   let locale = normalize_locale(locale.as_ref());
-  let key = woocraft_key(key);
+  let key = format_woocraft_key(key.as_ref());
 
   lookup_rust_i18n_translation_merged(&locale, &key)
     .unwrap_or_else(|| crate::_rust_i18n_translate(&locale, &key).into_owned())
@@ -181,6 +212,57 @@ pub fn translate_woocraft_in_locale(locale: impl AsRef<str>, key: impl AsRef<str
 pub fn translate_woocraft(key: impl AsRef<str>) -> String {
   let locale = locale();
   translate_woocraft_in_locale(&*locale, key)
+}
+
+/// Cache entry of the hot-path translation cache, keyed by
+/// `(locale, key)`.
+type CachedTranslation = (String, String, SharedString);
+
+/// Cache of hot-path woocraft-domain translations, keyed by `(locale, key)`.
+///
+/// Entries are cleared whenever the active locale changes or custom
+/// translations are (re)loaded, mirroring the per-locale invalidation of the
+/// calendar's `LocaleCache`: a cached value can never outlive the translation
+/// data it was built from.
+static TRANSLATION_CACHE: LazyLock<RwLock<Vec<CachedTranslation>>> =
+  LazyLock::new(|| RwLock::new(Vec::new()));
+
+fn clear_translation_cache() {
+  TRANSLATION_CACHE
+    .write()
+    .unwrap_or_else(|poisoned| poisoned.into_inner())
+    .clear();
+}
+
+/// Translates a woocraft-domain key in the active locale, caching the result
+/// by `(locale, key)`.
+///
+/// Equivalent to [`translate_woocraft`] but returns a cheaply cloneable
+/// [`SharedString`] and skips locale normalization, key formatting, and
+/// fallback-chain lookups on cache hits, which makes it the entry point of
+/// choice for render hot paths.
+pub fn translate_static(key: &'static str) -> SharedString {
+  let locale = locale();
+  let locale: &str = &locale;
+
+  {
+    let cache = TRANSLATION_CACHE
+      .read()
+      .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((_, _, value)) = cache
+      .iter()
+      .find(|(cached_locale, cached_key, _)| cached_locale == locale && cached_key == key)
+    {
+      return value.clone();
+    }
+  }
+
+  let value = SharedString::from(translate_woocraft(key));
+  TRANSLATION_CACHE
+    .write()
+    .unwrap_or_else(|poisoned| poisoned.into_inner())
+    .push((locale.to_string(), key.to_string(), value.clone()));
+  value
 }
 
 pub fn try_translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> Option<String> {
@@ -223,7 +305,7 @@ pub fn translate(key: impl AsRef<str>) -> String {
 
 pub fn locale_display_name(locale: impl AsRef<str>) -> String {
   let locale = normalize_locale(locale.as_ref());
-  let builtin_key = woocraft_key("i18n.name");
+  let builtin_key = woocraft_key_cow("i18n.name");
 
   // First try the built-in woocraft domain key
   if let Some(name) = lookup_rust_i18n_translation_merged(&locale, &builtin_key) {
@@ -385,7 +467,7 @@ mod tests {
 
     let mut custom_translations = HashMap::new();
     custom_translations.insert(
-      woocraft_key("common.loading"),
+      woocraft_key_cow("common.loading").into_owned(),
       "This should be ignored".to_string(),
     );
 
@@ -409,5 +491,70 @@ mod tests {
 
     // Custom extended translation should be available
     assert_eq!(translate_in_locale("zh-hans", "extended_key"), "扩展翻译");
+  }
+
+  #[test]
+  fn test_woocraft_key_borrows_domain_keys() {
+    // The public entry always returns an owned `String`.
+    assert_eq!(woocraft_key(WOOCRAFT_I18N_DOMAIN), WOOCRAFT_I18N_DOMAIN);
+    assert_eq!(
+      woocraft_key("common.loading"),
+      "tech.woooo.woocraft.common.loading"
+    );
+
+    // The crate-internal Cow variant borrows already-prefixed static keys
+    // without allocating.
+    assert!(matches!(
+      woocraft_key_cow(WOOCRAFT_I18N_DOMAIN),
+      Cow::Borrowed(_)
+    ));
+    assert_eq!(
+      woocraft_key_cow("common.loading"),
+      "tech.woooo.woocraft.common.loading"
+    );
+
+    // Owned inputs pass through unchanged when already domain-prefixed.
+    assert_eq!(
+      woocraft_key_cow(String::from(WOOCRAFT_I18N_DOMAIN)),
+      WOOCRAFT_I18N_DOMAIN
+    );
+  }
+
+  #[test]
+  fn test_translate_static_caches_per_locale() {
+    let _guard = LocaleTestGuard::new();
+
+    set_locale("en-us");
+    assert_eq!(translate_static("pagination.previous"), "Previous");
+    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+
+    // Repeated lookups hit the cache instead of growing it.
+    assert_eq!(translate_static("pagination.previous"), "Previous");
+    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+
+    // Switching the locale invalidates the cache and repopulates it.
+    set_locale("zh-hans");
+    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 0);
+    assert_eq!(translate_static("pagination.previous"), "上一页");
+    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+  }
+
+  #[test]
+  fn test_translate_static_invalidates_on_custom_translations() {
+    let _guard = LocaleTestGuard::new();
+
+    set_locale("en-us");
+    assert_eq!(translate_static("pagination.previous"), "Previous");
+    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+
+    // Loading custom translation data clears the cache.
+    let mut translations = HashMap::new();
+    translations.insert("custom.cached".to_string(), "translated".to_string());
+    load_locale("en-us", translations);
+    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 0);
+
+    // And the next lookup repopulates it from the current data.
+    assert_eq!(translate_static("pagination.previous"), "Previous");
+    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
   }
 }

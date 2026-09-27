@@ -174,7 +174,7 @@ impl RenderOnce for Editor {
     let bg = if state.disabled {
       cx.theme().muted
     } else if state.mode.is_code_editor() {
-      cx.theme().editor_background()
+      cx.theme().editor_background
     } else {
       cx.theme().background
     };
