@@ -13,11 +13,11 @@ use super::{
     menu::{DropdownMenu, PopupMenu},
     tab::{Tab, TabBar},
   },
-  ClosePanel, DockArea, Panel, PanelControl, PanelEvent, PanelInfo, PanelState, PanelStyle,
-  PanelView, StackPanel, ToggleZoom,
+  ClosePanel, DockArea, InsertTarget, NodeId, Panel, PanelControl, PanelEvent, PanelInfo,
+  PanelState, PanelStyle, PanelView, StackPanel, ToggleZoom,
 };
 use crate::{
-  ActiveTheme, AxisExt, Disableable, Divider, DockPlacement, ElementExt, Icon, IconLabel, IconName,
+  ActiveTheme, Disableable, Divider, DockPlacement, ElementExt, Icon, IconLabel, IconName,
   Placement, Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate_woocraft,
   v_flex,
 };
@@ -94,6 +94,12 @@ pub struct TabPanel {
   /// The stock_panel can be None, if is None, that means the panels can't be
   /// split or move
   stack_panel: Option<WeakEntity<StackPanel>>,
+  /// The `Tabs` node of the region's [`PaneTree`] this panel mirrors, when
+  /// the region is tree-driven. While attached, all structural mutations go
+  /// through the tree and this panel's `panels`/`active_ix` are synced back
+  /// from it. Side docks are still entity-driven, so `None` selects the
+  /// legacy path.
+  pub(crate) node_id: Option<NodeId>,
   pub(crate) panels: Vec<Arc<dyn PanelView>>,
   pub(crate) active_ix: usize,
   /// If this is true, the Panel closable will follow the active panel's
@@ -214,6 +220,7 @@ impl TabPanel {
       zoomed: false,
       closable: true,
       in_tiles: false,
+      node_id: None,
       tab_bar_bounds: None,
       vertical_tab_bar_bounds: None,
       panel_content_bounds: None,
@@ -222,6 +229,15 @@ impl TabPanel {
 
   pub(crate) fn set_dock(&mut self, dock: WeakEntity<super::Dock>) {
     self.dock = Some(dock);
+  }
+
+  /// The placement of the dock this panel sits in, if any.
+  pub(crate) fn dock_placement(&self, cx: &App) -> Option<DockPlacement> {
+    self
+      .dock
+      .as_ref()?
+      .upgrade()
+      .map(|dock| dock.read(cx).placement)
   }
 
   fn get_tab_bar_direction(&self, cx: &App) -> TabBarDirection {
@@ -321,8 +337,75 @@ impl TabPanel {
     true
   }
 
+  /// Routes a structural edit of this tree-attached group through the
+  /// DockArea. The edit runs after the current update completes: callers can
+  /// be anywhere in the entity graph — including inside a `DockArea` update —
+  /// without triggering a re-entrant entity update.
+  fn edit_tree_later(
+    &self, window: &mut Window, cx: &mut Context<Self>,
+    apply: impl FnOnce(&mut DockArea, &mut Window, &mut Context<DockArea>) + 'static,
+  ) {
+    let Some(dock_area) = self.dock_area.upgrade() else {
+      return;
+    };
+    cx.spawn_in(window, async move |_, cx| {
+      let _ = dock_area.update_in(cx, |dock, window, cx| apply(dock, window, cx));
+    })
+    .detach();
+  }
+
+  /// Sync this panel from its `Tabs` node after a tree edit: replaces the
+  /// panel list and active index, and performs the same side effects a tab
+  /// switch would (scroll-into-view, focus, active-state propagation). Only
+  /// called by [`DockArea::sync_center`] on tree-driven regions.
+  pub(crate) fn sync_from_tree(
+    &mut self, panels: Vec<Arc<dyn PanelView>>, active_ix: usize, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if self.panels == panels && self.active_ix == active_ix {
+      return;
+    }
+    // Panels joining this group get the same hook the legacy add path fired.
+    let previous: Vec<_> = self.panels.iter().map(|p| p.view().entity_id()).collect();
+    let added: Vec<_> = panels
+      .iter()
+      .filter(|p| !previous.contains(&p.view().entity_id()))
+      .cloned()
+      .collect();
+    for panel in added {
+      panel.on_added_to(cx.entity().downgrade(), window, cx);
+    }
+
+    let last_active_ix = self.active_ix;
+    self.panels = panels;
+    self.active_ix = active_ix;
+    if self.active_ix != last_active_ix {
+      self.tab_bar_scroll_handle.scroll_to_item(active_ix);
+      self.focus_active_panel(window, cx);
+      // Panels are distinct entities (never this TabPanel), so updating them
+      // here cannot re-enter this update.
+      if let Some(last_active) = self.panels.get(last_active_ix) {
+        last_active.set_active(false, window, cx);
+      }
+      if let Some(active) = self.panels.get(self.active_ix) {
+        active.set_active(true, window, cx);
+      }
+    }
+    cx.notify();
+  }
+
   fn set_active_ix(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
     if ix == self.active_ix {
+      return;
+    }
+
+    // Tree-driven regions record the switch in the tree; the mirror sync
+    // performs the side effects below.
+    if let Some(node) = self.node_id {
+      let region = DockArea::region_of(self, cx);
+      self.edit_tree_later(window, cx, move |dock, window, cx| {
+        dock.activate_tab(region, node, ix, window, cx);
+      });
       return;
     }
 
@@ -402,6 +485,24 @@ impl TabPanel {
       return;
     }
 
+    if let Some(node) = self.node_id {
+      let region = DockArea::region_of(self, cx);
+      self.edit_tree_later(window, cx, move |dock, window, cx| {
+        dock.place_panel(
+          panel,
+          region,
+          InsertTarget::Tabs {
+            node,
+            ix: None,
+            activate: active,
+          },
+          window,
+          cx,
+        );
+      });
+      return;
+    }
+
     panel.on_added_to(cx.entity().downgrade(), window, cx);
     self.panels.push(panel);
     // set the active panel to the new panel
@@ -444,6 +545,24 @@ impl TabPanel {
       return;
     }
 
+    if let Some(node) = self.node_id {
+      let region = DockArea::region_of(self, cx);
+      self.edit_tree_later(window, cx, move |dock, window, cx| {
+        dock.place_panel(
+          panel,
+          region,
+          InsertTarget::Tabs {
+            node,
+            ix: Some(ix),
+            activate: true,
+          },
+          window,
+          cx,
+        );
+      });
+      return;
+    }
+
     panel.on_added_to(cx.entity().downgrade(), window, cx);
     self.panels.insert(ix, panel);
     self.set_active_ix(ix, window, cx);
@@ -459,6 +578,16 @@ impl TabPanel {
     // another dock detaches it without firing the hook, so panels hosting
     // external resources (e.g. a PTY session) keep them across moves.
     panel.on_removed(window, cx);
+
+    if self.node_id.is_some() {
+      let region = DockArea::region_of(self, cx);
+      self.edit_tree_later(window, cx, move |dock, window, cx| {
+        dock.close_panel(region, panel, window, cx);
+      });
+      cx.emit(PanelEvent::ZoomOut);
+      return;
+    }
+
     self.detach_panel(panel, window, cx);
     self.remove_self_if_empty(window, cx);
 
@@ -480,6 +609,14 @@ impl TabPanel {
   fn detach_panel(
     &mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>,
   ) {
+    if self.node_id.is_some() {
+      let region = DockArea::region_of(self, cx);
+      self.edit_tree_later(window, cx, move |dock, window, cx| {
+        dock.detach_panel(region, panel, window, cx);
+      });
+      return;
+    }
+
     let panel_view = panel.view();
     self.panels.retain(|p| p.view() != panel_view);
     if self.active_ix >= self.panels.len() {
@@ -494,32 +631,9 @@ impl TabPanel {
   /// - In the root StackPanel (center area): the last TabPanel stays.
   /// - In a side dock: the TabPanel stays (dock remains visible).
   fn remove_self_if_empty(&self, window: &mut Window, cx: &mut Context<Self>) {
-    if !self.panels.is_empty() {
-      return;
-    }
-
-    let tab_view = cx.entity().clone();
-    if let Some(stack_panel) = self.stack_panel.as_ref() {
-      // Don't remove the last TabPanel from the root (center) StackPanel.
-      // This keeps an empty drop target in the center area.
-      if let Some(stack) = stack_panel.upgrade() {
-        let stack_ref = stack.read(cx);
-        if stack_ref.parent.is_none() && stack_ref.panels_len() <= 1 {
-          cx.notify();
-          return;
-        }
-      }
-
-      _ = stack_panel.update(cx, |view, cx| {
-        view.remove_panel(Arc::new(tab_view), window, cx);
-      });
-      return;
-    }
-
-    // For dock TabPanels: just stay empty as a drop target, notify to re-render
-    if self.dock.is_some() {
-      cx.notify();
-    }
+    // Tree-driven regions are pruned by normalization; tiles panels have no
+    // parent stack, so there is nothing to remove from here anymore.
+    let _ = (window, cx);
   }
 
   pub(super) fn set_collapsed(
@@ -1478,7 +1592,7 @@ impl TabPanel {
   /// Handle the drop event when dragging a panel
   ///
   /// - `active` - When true, the panel will be active after the drop
-  fn on_drop(
+  pub(crate) fn on_drop(
     &mut self, drag: &DragPanel, ix: Option<usize>, active: bool, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
@@ -1507,6 +1621,37 @@ impl TabPanel {
     } else {
       None
     };
+
+    // Tree-driven target: the drop is a single `place_panel` command — the
+    // command detaches the panel from whatever region currently holds it and
+    // inserts it at the target zone. A panel dragged from a non-tree
+    // container (tiles) detaches locally first.
+    if let Some(target_node) = self.node_id {
+      let region = DockArea::region_of(self, cx);
+      let source_tree_attached = is_same_tab || drag.tab_panel.read(cx).node_id.is_some();
+      if !source_tree_attached {
+        drag.tab_panel.update(cx, |view, cx| {
+          view.detach_panel(panel.clone(), window, cx);
+          view.remove_self_if_empty(window, cx);
+        });
+      }
+      let target = match split_placement {
+        Some(placement) => InsertTarget::Split {
+          node: target_node,
+          placement,
+          size: None,
+        },
+        None => InsertTarget::Tabs {
+          node: target_node,
+          ix,
+          activate: active,
+        },
+      };
+      self.edit_tree_later(window, cx, move |dock, window, cx| {
+        dock.place_panel(panel, region, target, window, cx);
+      });
+      return;
+    }
 
     // Here is looks like remove_panel on a same item, but it difference.
     //
@@ -1542,7 +1687,7 @@ impl TabPanel {
 
     // Auto-collapse source dock when all panels have been moved out.
     if let Some(source_dock) = source_dock
-      && !source_dock.read(cx).has_panels(cx)
+      && !source_dock.read(cx).has_panels()
     {
       source_dock.update(cx, |dock, cx| {
         dock.set_collapsed(true, window, cx);
@@ -1556,173 +1701,30 @@ impl TabPanel {
   }
 
   /// Add panel with split placement
-  fn split_panel(
+  ///
+  /// On tree-driven regions this is a single tree edit: the panel is moved
+  /// into a fresh tab group beside this node and normalization replaces the
+  /// split gymnastics the entity path below used to perform by hand.
+  pub(crate) fn split_panel(
     &mut self, panel: Arc<dyn PanelView>, placement: Placement, size: Option<Pixels>,
     window: &mut Window, cx: &mut Context<Self>,
   ) {
-    let dock_area = self.dock_area.clone();
-    // wrap the panel in a TabPanel
-    let panel_view = panel.view();
-    let new_tab_panel = cx.new(|cx| Self::new(None, dock_area.clone(), window, cx));
-    let new_tab_panel_id = new_tab_panel.entity_id();
-    new_tab_panel.update(cx, |view, cx| {
-      view.add_panel(panel, window, cx);
-    });
-    debug_assert!(
-      new_tab_panel
-        .read(cx)
-        .panels
-        .iter()
-        .any(|p| p.view() == panel_view),
-      "split_panel must move the panel into the new TabPanel"
-    );
-
-    let stack_panel = match self.stack_panel.as_ref().and_then(|panel| panel.upgrade()) {
-      Some(panel) => panel,
-      None => return,
-    };
-
-    let parent_axis = stack_panel.read(cx).axis;
-
-    let ix = stack_panel
-      .read(cx)
-      .index_of_panel(Arc::new(cx.entity().clone()))
-      .unwrap_or_default();
-
-    if parent_axis.is_vertical() && placement.is_vertical() {
-      let stack_panel_weak = stack_panel.downgrade();
-      stack_panel.update(cx, |view, cx| {
-        view.insert_panel_at(
-          Arc::new(new_tab_panel.clone()),
-          ix,
-          placement,
-          size,
-          dock_area.clone(),
+    if let Some(node) = self.node_id {
+      let region = DockArea::region_of(self, cx);
+      self.edit_tree_later(window, cx, move |dock, window, cx| {
+        dock.place_panel(
+          panel,
+          region,
+          InsertTarget::Split {
+            node,
+            placement,
+            size,
+          },
           window,
           cx,
         );
       });
-      new_tab_panel.update(cx, |view, _| view.set_parent(stack_panel_weak));
-      debug_assert!(
-        stack_panel
-          .read(cx)
-          .panels
-          .iter()
-          .any(|p| p.view().entity_id() == cx.entity().entity_id()),
-        "split source must remain registered in its parent StackPanel"
-      );
-    } else if parent_axis.is_horizontal() && placement.is_horizontal() {
-      let stack_panel_weak = stack_panel.downgrade();
-      stack_panel.update(cx, |view, cx| {
-        view.insert_panel_at(
-          Arc::new(new_tab_panel.clone()),
-          ix,
-          placement,
-          size,
-          dock_area.clone(),
-          window,
-          cx,
-        );
-      });
-      new_tab_panel.update(cx, |view, _| view.set_parent(stack_panel_weak));
-      debug_assert!(
-        stack_panel
-          .read(cx)
-          .panels
-          .iter()
-          .any(|p| p.view().entity_id() == cx.entity().entity_id()),
-        "split source must remain registered in its parent StackPanel"
-      );
-    } else {
-      // 1. Create new StackPanel with new axis
-      // 2. Move cx.entity() from parent StackPanel to the new StackPanel
-      // 3. Add the new TabPanel to the new StackPanel at the correct index
-      // 4. Add new StackPanel to the parent StackPanel at the correct index
-      //
-      // We set both TabPanels' parent references synchronously here so the new
-      // panel is immediately able to split again, instead of relying on the
-      // deferred parent update inside add_panel.
-      let tab_panel = cx.entity().clone();
-      let self_id = tab_panel.entity_id();
-
-      // Try to use the old stack panel, not just create a new one, to avoid too
-      // many nested stack panels
-      let new_stack_panel = if stack_panel.read(cx).panels_len() <= 1 {
-        stack_panel.update(cx, |view, cx| {
-          view.remove_all_panels(window, cx);
-          view.set_axis(placement.axis(), window, cx);
-        });
-        stack_panel.clone()
-      } else {
-        cx.new(|cx| {
-          let mut panel = StackPanel::new(placement.axis(), window, cx);
-          panel.parent = Some(stack_panel.downgrade());
-          panel.set_dock_area(dock_area.clone());
-          panel
-        })
-      };
-
-      let new_stack_panel_weak = new_stack_panel.downgrade();
-      self.stack_panel = Some(new_stack_panel_weak.clone());
-      new_tab_panel.update(cx, |view, _| view.set_parent(new_stack_panel_weak.clone()));
-
-      new_stack_panel.update(cx, |view, cx| match placement {
-        Placement::Left | Placement::Top => {
-          view.add_panel(Arc::new(new_tab_panel), size, dock_area.clone(), window, cx);
-          view.add_panel(
-            Arc::new(tab_panel.clone()),
-            None,
-            dock_area.clone(),
-            window,
-            cx,
-          );
-        }
-        Placement::Right | Placement::Bottom => {
-          view.add_panel(
-            Arc::new(tab_panel.clone()),
-            None,
-            dock_area.clone(),
-            window,
-            cx,
-          );
-          view.add_panel(Arc::new(new_tab_panel), size, dock_area.clone(), window, cx);
-        }
-      });
-
-      if stack_panel != new_stack_panel {
-        stack_panel.update(cx, |view, cx| {
-          view.replace_panel(
-            Arc::new(tab_panel.clone()),
-            new_stack_panel.clone(),
-            window,
-            cx,
-          );
-        });
-      }
-
-      debug_assert!(
-        new_stack_panel
-          .read(cx)
-          .panels
-          .iter()
-          .any(|p| p.view().entity_id() == self_id)
-          && new_stack_panel
-            .read(cx)
-            .panels
-            .iter()
-            .any(|p| p.view().entity_id() == new_tab_panel_id),
-        "split must register both the source and the new panel in the parent StackPanel"
-      );
-
-      cx.spawn_in(window, async move |_, cx| {
-        cx.update(|window, cx| {
-          tab_panel.update(cx, |view, cx| view.remove_self_if_empty(window, cx))
-        })
-      })
-      .detach()
     }
-
-    cx.emit(PanelEvent::LayoutChanged);
   }
 
   fn focus_active_panel(&self, window: &mut Window, cx: &mut Context<Self>) {

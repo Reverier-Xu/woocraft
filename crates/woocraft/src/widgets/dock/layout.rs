@@ -46,6 +46,8 @@ impl NodeId {
     Self(NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed))
   }
 
+  /// The raw identity value, e.g. for serialization.
+  #[allow(dead_code)]
   pub fn as_u64(self) -> u64 {
     self.0
   }
@@ -57,6 +59,8 @@ impl NodeId {
 pub struct PanelId(u64);
 
 impl PanelId {
+  /// The raw identity value, e.g. for serialization.
+  #[allow(dead_code)]
   pub fn as_u64(self) -> u64 {
     self.0
   }
@@ -175,6 +179,9 @@ pub struct PaneTree {
 }
 
 impl PaneTree {
+  /// Standalone construction is exercised by tests; region trees are built
+  /// via [`PaneTree::from_layout`] or adopted in `DockArea::new`.
+  #[allow(dead_code)]
   pub fn new(root_kind: RootKind) -> Self {
     let root = match root_kind {
       RootKind::Split => PaneNode::new(NodeKind::Split {
@@ -204,6 +211,7 @@ impl PaneTree {
     &self.root
   }
 
+  #[allow(dead_code)]
   pub fn root_kind(&self) -> RootKind {
     self.root_kind
   }
@@ -226,6 +234,7 @@ impl PaneTree {
   }
 
   /// The tab group holding `panel`, if any.
+  #[allow(dead_code)]
   pub fn tab_group_of(&self, panel: PanelId) -> Option<NodeId> {
     fn search(node: &PaneNode, panel: PanelId) -> Option<NodeId> {
       match &node.kind {
@@ -237,7 +246,14 @@ impl PaneTree {
     search(&self.root, panel)
   }
 
+  /// The borrowed projection of the node with `id`, if present.
+  pub fn pane_ref(&self, id: NodeId) -> Option<PaneRef<'_>> {
+    let path = self.path_of_node(id)?;
+    Some(self.root.node_at(&path).kind())
+  }
+
   /// The panels and active index of the tab group `node`, if it is one.
+  #[allow(dead_code)]
   pub fn tabs_of(&self, node: NodeId) -> Option<(&[PanelId], usize)> {
     let path = self.path_of_node(node)?;
     match self.root.node_at(&path).kind() {
@@ -278,6 +294,7 @@ impl PaneTree {
   }
 
   /// Inserts `panel` beside `at`, in a fresh tab group placed by `placement`.
+  #[allow(dead_code)]
   pub fn split(
     &mut self, at: NodeId, panel: PanelId, placement: Placement, size: Option<Pixels>,
   ) -> EditResult {
@@ -315,6 +332,7 @@ impl PaneTree {
   /// normalization repairs a length mismatch, so applying it would otherwise
   /// leave `children.len() != sizes.len()` and trip the normalization
   /// `debug_assert!`.
+  #[allow(dead_code)]
   pub fn set_sizes(&mut self, node: NodeId, new_sizes: Vec<Option<Pixels>>) -> EditResult {
     self.edit(|root| {
       let Some(path) = root.path_of_node(node) else {
@@ -392,6 +410,7 @@ impl EditResult {
   }
 
   /// Panics when an edit unexpectedly did nothing (tests and examples).
+  #[allow(dead_code)]
   pub fn expect_changed(&self) {
     assert!(self.changed, "expected the edit to change the tree");
   }
@@ -478,7 +497,18 @@ impl PaneNode {
       PaneRef::Tabs { .. } => None,
     };
 
-    if target_axis == Some(placement_axis) {
+    // Same-axis rule: match the *parent* split's axis against the placement
+    // axis. A panel dropped beside a tab group inside a horizontal stack
+    // lands as a flat sibling of that group.
+    let parent_axis = match path.as_slice() {
+      [] => target_axis,
+      _ => match self.node_at(&path[..path.len() - 1]).kind() {
+        PaneRef::Split { axis, .. } => Some(axis),
+        PaneRef::Tabs { .. } => unreachable!("paths only descend through splits"),
+      },
+    };
+
+    if parent_axis == Some(placement_axis) {
       // Same axis: the new tab group becomes a sibling of the target. When
       // the target is the root split, it gains the group directly.
       let (parent_path, ix) = match path.as_slice() {
@@ -502,11 +532,11 @@ impl PaneNode {
     }
 
     // Different axis (or a root tab group): wrap the target in a fresh split
-    // holding [target, new] or [new, target].
+    // holding the new tab group on the placed side of the target.
     let target = self.node_at(&path).clone();
     let (first, second, first_size, second_size) = match placement {
-      Placement::Left | Placement::Top => (target, new_tabs, None, size),
-      Placement::Right | Placement::Bottom => (new_tabs, target, size, None),
+      Placement::Left | Placement::Top => (new_tabs, target, size, None),
+      Placement::Right | Placement::Bottom => (target, new_tabs, None, size),
     };
     let replacement = PaneNode::new(NodeKind::Split {
       axis: placement_axis,
@@ -579,11 +609,32 @@ fn normalize(node: PaneNode, is_root: bool, root_kind: RootKind) -> Option<PaneN
   {
     let mut kept_children = Vec::with_capacity(children.len());
     let mut kept_sizes = Vec::with_capacity(sizes.len());
+    // Pinned split roots (the center) are never truly childless: the first
+    // emptied tab group survives as the drop target, keeping its `NodeId`
+    // so the mirror cache does not thrash.
+    let mut placeholder: Option<(PaneNode, Option<Pixels>)> = None;
     for (child, size) in children.drain(..).zip(sizes.drain(..)) {
-      if let Some(kept) = normalize(child, false, root_kind) {
-        kept_children.push(kept);
-        kept_sizes.push(size);
+      let is_empty_tabs = matches!(&child.kind, NodeKind::Tabs { panels, .. } if panels.is_empty());
+      let candidate =
+        (is_root && root_kind == RootKind::Split && is_empty_tabs && placeholder.is_none())
+          .then(|| (child.clone(), size));
+      match normalize(child, false, root_kind) {
+        Some(kept) => {
+          kept_children.push(kept);
+          kept_sizes.push(size);
+        }
+        None => {
+          if let Some(candidate) = candidate {
+            placeholder = Some(candidate);
+          }
+        }
       }
+    }
+    if kept_children.is_empty()
+      && let Some((tabs, size)) = placeholder
+    {
+      kept_children.push(tabs);
+      kept_sizes.push(size);
     }
     *children = kept_children;
     *sizes = kept_sizes;
@@ -687,6 +738,7 @@ impl DockLayout {
   }
 
   /// Adds a panel view to this tab group.
+  #[allow(dead_code)]
   pub fn panel_view(mut self, panel: Arc<dyn PanelView>, cx: &App) -> Self {
     debug_assert!(
       matches!(self.kind, LayoutSeed::Tabs { .. }),
@@ -699,6 +751,7 @@ impl DockLayout {
   }
 
   /// Adds a panel entity to this tab group.
+  #[allow(dead_code)]
   pub fn panel<P: Panel>(self, panel: Entity<P>, cx: &App) -> Self {
     let view: Arc<dyn PanelView> = Arc::new(panel);
     self.panel_view(view, cx)
@@ -795,9 +848,12 @@ mod tests {
 
     tree.remove_panel(panel(1)).expect_changed();
     assert!(!tree.contains_panel(panel(1)));
-    // The root stays a split even though it is empty.
+    // The root stays a split, keeping one emptied tab group as the center's
+    // drop target (the mirror cache relies on its `NodeId` surviving).
     assert!(matches!(tree.root().kind(), PaneRef::Split { .. }));
-    assert!(tree.tab_groups().is_empty());
+    let groups = tabs_ids(&tree);
+    assert_eq!(groups.len(), 1);
+    assert_eq!(tabs_panel_count(&tree, groups[0]), 0);
   }
 
   #[test]
@@ -937,6 +993,59 @@ mod tests {
       panic!("the wrapped node must be a vertical split");
     };
     assert_eq!(axis, Axis::Vertical);
+  }
+
+  #[test]
+  fn split_places_the_new_group_on_the_placed_side() {
+    let mut tree = PaneTree::from_layout(
+      RootKind::Split,
+      DockLayout::h_split().child(DockLayout::tabs().panel_view_raw(panel(1)), None),
+    );
+    let tabs = tabs_ids(&tree)[0];
+
+    // Same axis (parent split is horizontal), Left: the new group becomes a
+    // flat sibling before the target.
+    tree
+      .split(tabs, panel(2), Placement::Left, None)
+      .expect_changed();
+    let PaneRef::Split { children, .. } = tree.root().kind() else {
+      panic!("root must stay a split");
+    };
+    assert_eq!(children.len(), 2, "same-axis split stays flat");
+    let PaneRef::Tabs { panels, .. } = children[0].kind() else {
+      panic!("the left child must be a tab group");
+    };
+    assert_eq!(panels, &[panel(2)][..], "Left places the new group first");
+
+    // Different axis, Bottom: the target wraps into a new vertical split and
+    // the new group lands below it.
+    let PaneRef::Tabs { .. } = children[1].kind() else {
+      panic!("the right child must be a tab group");
+    };
+    let right_tabs = children[1].id();
+    tree
+      .split(right_tabs, panel(3), Placement::Bottom, None)
+      .expect_changed();
+    let PaneRef::Split { children, .. } = tree.root().kind() else {
+      panic!("root must stay a split");
+    };
+    let PaneRef::Split {
+      axis,
+      children: inner,
+      ..
+    } = children[1].kind()
+    else {
+      panic!("wrap must introduce an inner vertical split");
+    };
+    assert_eq!(axis, Axis::Vertical);
+    let PaneRef::Tabs { panels, .. } = inner[1].kind() else {
+      panic!("the bottom child must be a tab group");
+    };
+    assert_eq!(
+      panels,
+      &[panel(3)][..],
+      "Bottom places the new group second"
+    );
   }
 
   #[test]

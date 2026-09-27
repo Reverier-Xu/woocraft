@@ -1,11 +1,9 @@
 #[allow(clippy::module_inception)]
 mod dock;
 mod invalid_panel;
-// Standalone until B-M2 wires it into `DockArea` (see
-// docs/dock-layout-refactor.md).
-#[allow(dead_code)]
 mod layout;
 mod panel;
+mod region;
 mod stack_panel;
 mod state;
 mod tab_panel;
@@ -16,12 +14,16 @@ use std::{collections::HashSet, sync::Arc};
 use anyhow::Result;
 pub use dock::*;
 use gpui::{
-  AnyElement, AnyView, App, AppContext, Axis, Bounds, Context, Edges, Entity, EntityId,
+  AnyElement, AnyView, App, AppContext, Bounds, Context, Edges, Empty, Entity, EntityId,
   EventEmitter, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels,
   Point, Render, SharedString, Styled, Subscription, WeakEntity, Window, actions, div,
   prelude::FluentBuilder,
 };
+pub(crate) use layout::{
+  DockLayout, EditResult, InsertTarget, NodeId, PaneRef, PaneTree, PanelId, RootKind,
+};
 pub use panel::*;
+pub(crate) use region::{CreatedMirror, DockRegion, RegionKind};
 pub use stack_panel::*;
 pub use state::*;
 pub use tab_panel::*;
@@ -54,8 +56,10 @@ pub struct DockArea {
   version: Option<usize>,
   pub(crate) bounds: Bounds<Pixels>,
 
-  /// The center view of the dock_area.
-  center: DockItem,
+  /// The center region of the dock_area. Its [`PaneTree`] is the structure's
+  /// single source of truth; every structural mutation goes through
+  /// [`DockArea::edit_region`], then mirrors are synced from the tree.
+  pub(crate) center_region: DockRegion,
   /// Whether the center area is enabled (visible).
   center_enabled: bool,
   /// The left dock of the dock_area (always present).
@@ -89,7 +93,6 @@ pub struct DockArea {
 
   _subscriptions: Vec<Subscription>,
   subscribed_panel_ids: HashSet<EntityId>,
-  subscribed_tile_drop_ids: HashSet<EntityId>,
   pending_layout_change: bool,
 
   /// Tracks which [`TabPanel`] drop zone the mouse was over during the last
@@ -102,659 +105,6 @@ pub struct DockArea {
   pending_drag_position: Option<Point<Pixels>>,
 }
 
-/// DockItem is a tree structure that represents the layout of the dock.
-///
-/// Each variant only holds its `size` hint and the live view entity that
-/// owns the real structure: structural reads go through the `view` entities
-/// (or [`DockItem::find_panel`] / [`DockItem::has_real_panels`] /
-/// [`DockItem::snapshot`], which traverse the entity graph). See
-/// `docs/dock-layout-refactor.md`.
-#[derive(Clone)]
-pub enum DockItem {
-  /// Split layout
-  Split {
-    axis: Axis,
-    /// Self size, only used for build split panels
-    size: Option<Pixels>,
-    view: Entity<StackPanel>,
-  },
-  /// Tab layout
-  Tabs {
-    /// Self size, only used for build split panels
-    size: Option<Pixels>,
-    view: Entity<TabPanel>,
-  },
-  /// Panel layout
-  Panel {
-    /// Self size, only used for build split panels
-    size: Option<Pixels>,
-    view: Arc<dyn PanelView>,
-  },
-  /// Tiles layout
-  Tiles {
-    /// Self size, only used for build split panels
-    size: Option<Pixels>,
-    view: Entity<Tiles>,
-  },
-}
-
-impl std::fmt::Debug for DockItem {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      DockItem::Split { axis, .. } => f.debug_struct("Split").field("axis", axis).finish(),
-      DockItem::Tabs { .. } => f.debug_struct("Tabs").finish(),
-      DockItem::Panel { .. } => f.debug_struct("Panel").finish(),
-      DockItem::Tiles { .. } => f.debug_struct("Tiles").finish(),
-    }
-  }
-}
-
-/// Live structural projection of a [`DockItem`], read from the view entities
-/// at call time.
-///
-/// A [`DockItem`] only carries a `size` hint and its live view entity; this
-/// snapshot expands that into the current structure: panels added, removed,
-/// or closed through the UI, runtime splits, tile drags. See
-/// `docs/dock-layout-refactor.md`.
-#[derive(Clone, PartialEq)]
-pub enum DockItemSnapshot {
-  /// A [`DockItem::Split`] projected from its live [`StackPanel`].
-  Split {
-    /// Layout axis of the stack panel.
-    axis: Axis,
-    /// Live divider sizes from the stack panel's resizable state.
-    sizes: Vec<Pixels>,
-    /// Live children, projected recursively.
-    items: Vec<DockItemSnapshot>,
-  },
-  /// A [`DockItem::Tabs`] projected from its live [`TabPanel`].
-  Tabs {
-    /// The panels currently in the tab group.
-    panels: Vec<Arc<dyn PanelView>>,
-    /// The index of the currently active panel.
-    active_ix: usize,
-  },
-  /// A [`DockItem::Panel`]; a bare panel carries no live state beyond its
-  /// view.
-  Panel {
-    /// The panel view.
-    view: Arc<dyn PanelView>,
-  },
-  /// A [`DockItem::Tiles`] projected from its live [`Tiles`].
-  Tiles {
-    /// The live tiles with their current free-floating bounds.
-    tiles: Vec<TileSnapshot>,
-  },
-}
-
-impl std::fmt::Debug for DockItemSnapshot {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      Self::Split { axis, sizes, items } => f
-        .debug_struct("Split")
-        .field("axis", axis)
-        .field("sizes", sizes)
-        .field("items", &items.len())
-        .finish(),
-      Self::Tabs { panels, active_ix } => f
-        .debug_struct("Tabs")
-        .field("panels", &panels.len())
-        .field("active_ix", active_ix)
-        .finish(),
-      Self::Panel { .. } => f.debug_struct("Panel").finish(),
-      Self::Tiles { tiles } => f
-        .debug_struct("Tiles")
-        .field("tiles", &tiles.len())
-        .finish(),
-    }
-  }
-}
-
-/// Live projection of one tile: its wrapped panel and current bounds.
-#[derive(Clone)]
-pub struct TileSnapshot {
-  /// The [`TabPanel`] hosted by the tile.
-  pub panel: Arc<dyn PanelView>,
-  /// The tile's current free-floating bounds.
-  pub bounds: Bounds<Pixels>,
-}
-
-impl PartialEq for TileSnapshot {
-  fn eq(&self, other: &Self) -> bool {
-    // View identity, matching `PartialEq for dyn PanelView`.
-    self.panel.view() == other.panel.view() && self.bounds == other.bounds
-  }
-}
-
-/// Project a panel held in a [`StackPanel`] or [`Tiles`] into a snapshot,
-/// recursing through container views.
-fn snapshot_panel_view(panel: &Arc<dyn PanelView>, cx: &App) -> DockItemSnapshot {
-  let view = panel.view();
-  if let Ok(tab_panel) = view.clone().downcast::<TabPanel>() {
-    let tab_panel = tab_panel.read(cx);
-    DockItemSnapshot::Tabs {
-      panels: tab_panel.panels.clone(),
-      active_ix: tab_panel.active_ix,
-    }
-  } else if let Ok(stack_panel) = view.clone().downcast::<StackPanel>() {
-    stack_panel.read(cx).snapshot(cx)
-  } else if let Ok(tiles) = view.downcast::<Tiles>() {
-    DockItemSnapshot::Tiles {
-      tiles: tiles
-        .read(cx)
-        .panels()
-        .iter()
-        .map(|item| TileSnapshot {
-          panel: item.panel.clone(),
-          bounds: item.bounds,
-        })
-        .collect(),
-    }
-  } else {
-    DockItemSnapshot::Panel {
-      view: panel.clone(),
-    }
-  }
-}
-
-impl DockItem {
-  /// Return true if this dock item tree contains any real (user) panels.
-  ///
-  /// Traversal goes through the live view entities, so panels moved in or
-  /// out via drag-and-drop are reflected. An empty [`TabPanel`] kept as a
-  /// drop target does not count as real content.
-  pub fn has_real_panels(&self, cx: &App) -> bool {
-    match self {
-      Self::Tabs { view, .. } => !view.read(cx).panels.is_empty(),
-      Self::Split { view, .. } => view
-        .read(cx)
-        .panels
-        .iter()
-        .any(|panel| Self::view_has_real_panels(panel, cx)),
-      Self::Panel { .. } => true,
-      Self::Tiles { view, .. } => !view.read(cx).panels().is_empty(),
-    }
-  }
-
-  /// Entity-graph variant of [`Self::has_real_panels`] for panels held by a
-  /// [`StackPanel`].
-  fn view_has_real_panels(panel: &Arc<dyn PanelView>, cx: &App) -> bool {
-    let view = panel.view();
-    if let Ok(tab_panel) = view.clone().downcast::<TabPanel>() {
-      !tab_panel.read(cx).panels.is_empty()
-    } else if let Ok(stack_panel) = view.clone().downcast::<StackPanel>() {
-      stack_panel
-        .read(cx)
-        .panels
-        .iter()
-        .any(|panel| Self::view_has_real_panels(panel, cx))
-    } else if let Ok(tiles) = view.downcast::<Tiles>() {
-      !tiles.read(cx).panels().is_empty()
-    } else {
-      // A plain user panel always counts as real content.
-      true
-    }
-  }
-
-  /// Get the size of the DockItem.
-  fn get_size(&self) -> Option<Pixels> {
-    match self {
-      Self::Split { size, .. } => *size,
-      Self::Tabs { size, .. } => *size,
-      Self::Panel { size, .. } => *size,
-      Self::Tiles { size, .. } => *size,
-    }
-  }
-
-  /// Set size for the DockItem.
-  pub fn size(mut self, new_size: impl Into<Pixels>) -> Self {
-    let new_size: Option<Pixels> = Some(new_size.into());
-    match self {
-      Self::Split { ref mut size, .. } => *size = new_size,
-      Self::Tabs { ref mut size, .. } => *size = new_size,
-      Self::Tiles { ref mut size, .. } => *size = new_size,
-      Self::Panel { ref mut size, .. } => *size = new_size,
-    }
-    self
-  }
-
-  /// Set active index for the DockItem, only valid for [`DockItem::Tabs`].
-  pub fn active_index(mut self, new_active_ix: usize, cx: &mut App) -> Self {
-    debug_assert!(
-      matches!(self, Self::Tabs { .. }),
-      "active_ix can only be set for DockItem::Tabs"
-    );
-
-    if let Self::Tabs { view, .. } = &mut self {
-      view.update(cx, |tab_panel, _| {
-        tab_panel.active_ix = new_active_ix;
-      });
-    }
-    self
-  }
-
-  /// Create DockItem::Split with given split layout.
-  pub fn split(
-    axis: Axis, items: Vec<DockItem>, dock_area: &WeakEntity<DockArea>, window: &mut Window,
-    cx: &mut App,
-  ) -> Self {
-    let sizes = items.iter().map(|item| item.get_size()).collect();
-    Self::split_with_sizes(axis, items, sizes, dock_area, window, cx)
-  }
-
-  /// Create DockItem with vertical split layout.
-  pub fn v_split(
-    items: Vec<DockItem>, dock_area: &WeakEntity<DockArea>, window: &mut Window, cx: &mut App,
-  ) -> Self {
-    Self::split(Axis::Vertical, items, dock_area, window, cx)
-  }
-
-  /// Create DockItem with horizontal split layout.
-  pub fn h_split(
-    items: Vec<DockItem>, dock_area: &WeakEntity<DockArea>, window: &mut Window, cx: &mut App,
-  ) -> Self {
-    Self::split(Axis::Horizontal, items, dock_area, window, cx)
-  }
-
-  /// Create DockItem with split layout, each item of panel have specified size.
-  ///
-  /// Please note that the `items` and `sizes` must have the same length.
-  /// Set `None` in `sizes` to make the index of panel have auto size.
-  pub fn split_with_sizes(
-    axis: Axis, items: Vec<DockItem>, sizes: Vec<Option<Pixels>>, dock_area: &WeakEntity<DockArea>,
-    window: &mut Window, cx: &mut App,
-  ) -> Self {
-    let stack_panel = cx.new(|cx| {
-      let mut stack_panel = StackPanel::new(axis, window, cx);
-      stack_panel.set_dock_area(dock_area.clone());
-      for (i, item) in items.iter().enumerate() {
-        let view = item.view();
-        let size = sizes.get(i).copied().flatten();
-        stack_panel.add_panel(view.clone(), size, dock_area.clone(), window, cx)
-      }
-
-      stack_panel
-    });
-
-    window.defer(cx, {
-      let stack_panel = stack_panel.clone();
-      let dock_area = dock_area.clone();
-      move |window, cx| {
-        _ = dock_area.update(cx, |this, cx| {
-          this.subscribe_panel(&stack_panel, window, cx);
-        });
-      }
-    });
-
-    Self::Split {
-      axis,
-      size: None,
-      view: stack_panel,
-    }
-  }
-
-  /// Create DockItem with panel layout
-  pub fn panel(panel: Arc<dyn PanelView>) -> Self {
-    Self::Panel {
-      size: None,
-      view: panel,
-    }
-  }
-
-  /// Create DockItem with tiles layout
-  ///
-  /// This items and metas should have the same length.
-  pub fn tiles(
-    items: Vec<DockItem>, metas: Vec<impl Into<TileMeta> + Copy>, dock_area: &WeakEntity<DockArea>,
-    window: &mut Window, cx: &mut App,
-  ) -> Self {
-    assert!(items.len() == metas.len());
-
-    let tile_panel = cx.new(|cx| {
-      let mut tiles = Tiles::new(window, cx);
-      for (ix, item) in items.into_iter().enumerate() {
-        match item {
-          DockItem::Tabs { view, .. } => {
-            let meta: TileMeta = metas[ix].into();
-            let tile_item = TileItem::new(Arc::new(view), meta.bounds).z_index(meta.z_index);
-            tiles.add_item(tile_item, dock_area, window, cx);
-          }
-          DockItem::Panel { view, .. } => {
-            let meta: TileMeta = metas[ix].into();
-            let tile_item = TileItem::new(view.clone(), meta.bounds).z_index(meta.z_index);
-            tiles.add_item(tile_item, dock_area, window, cx);
-          }
-          _ => {
-            // Ignore non-tabs items
-          }
-        }
-      }
-      tiles
-    });
-
-    window.defer(cx, {
-      let tile_panel = tile_panel.clone();
-      let dock_area = dock_area.clone();
-      move |window, cx| {
-        _ = dock_area.update(cx, |this, cx| {
-          this.subscribe_panel(&tile_panel, window, cx);
-          this.subscribe_tiles_item_drop(&tile_panel, window, cx);
-        });
-      }
-    });
-
-    Self::Tiles {
-      size: None,
-      view: tile_panel,
-    }
-  }
-
-  /// Create DockItem with tabs layout, items are displayed as tabs.
-  ///
-  /// The `active_ix` is the index of the active tab, if `None` the first tab is
-  /// active.
-  pub fn tabs(
-    items: Vec<Arc<dyn PanelView>>, dock_area: &WeakEntity<DockArea>, window: &mut Window,
-    cx: &mut App,
-  ) -> Self {
-    Self::new_tabs(items, None, dock_area, window, cx)
-  }
-
-  pub fn tab<P: Panel>(
-    item: Entity<P>, dock_area: &WeakEntity<DockArea>, window: &mut Window, cx: &mut App,
-  ) -> Self {
-    Self::new_tabs(vec![Arc::new(item.clone())], None, dock_area, window, cx)
-  }
-
-  fn new_tabs(
-    items: Vec<Arc<dyn PanelView>>, active_ix: Option<usize>, dock_area: &WeakEntity<DockArea>,
-    window: &mut Window, cx: &mut App,
-  ) -> Self {
-    let active_ix = active_ix.unwrap_or(0);
-    let tab_panel = cx.new(|cx| {
-      let mut tab_panel = TabPanel::new(None, dock_area.clone(), window, cx);
-      for item in items.iter() {
-        tab_panel.add_panel(item.clone(), window, cx)
-      }
-      tab_panel.active_ix = active_ix;
-      tab_panel
-    });
-
-    Self::Tabs {
-      size: None,
-      view: tab_panel,
-    }
-  }
-
-  /// Project the live structure behind this item into a value snapshot.
-  ///
-  /// This is the official read path for current structure: the variant fields
-  /// only carry the `size` hint and the live view entity.
-  pub fn snapshot(&self, cx: &App) -> DockItemSnapshot {
-    match self {
-      Self::Split { view, .. } => view.read(cx).snapshot(cx),
-      Self::Tabs { view, .. } => {
-        let tab_panel = view.read(cx);
-        DockItemSnapshot::Tabs {
-          panels: tab_panel.panels.clone(),
-          active_ix: tab_panel.active_ix,
-        }
-      }
-      Self::Panel { view, .. } => DockItemSnapshot::Panel { view: view.clone() },
-      Self::Tiles { view, .. } => DockItemSnapshot::Tiles {
-        tiles: view
-          .read(cx)
-          .panels()
-          .iter()
-          .map(|item| TileSnapshot {
-            panel: item.panel.clone(),
-            bounds: item.bounds,
-          })
-          .collect(),
-      },
-    }
-  }
-
-  /// Returns the views of the dock item.
-  pub fn view(&self) -> Arc<dyn PanelView> {
-    match self {
-      Self::Split { view, .. } => Arc::new(view.clone()),
-      Self::Tabs { view, .. } => Arc::new(view.clone()),
-      Self::Tiles { view, .. } => Arc::new(view.clone()),
-      Self::Panel { view, .. } => view.clone(),
-    }
-  }
-
-  /// Find `panel` in the live view graph behind this item, compared by view
-  /// identity (same semantics as `PartialEq for dyn PanelView`).
-  ///
-  /// Traverses entity state, so panels moved in or out via drag-and-drop
-  /// are reflected (see `docs/dock-layout-refactor.md`).
-  pub fn find_panel(&self, panel: Arc<dyn PanelView>, cx: &App) -> Option<Arc<dyn PanelView>> {
-    match self {
-      Self::Tabs { view, .. } => view.read(cx).panels.iter().find(|p| *p == &panel).cloned(),
-      Self::Split { view, .. } => view
-        .read(cx)
-        .panels
-        .iter()
-        .find_map(|child| Self::find_panel_in_view(child, &panel, cx)),
-      Self::Panel { view, .. } => (*view == panel).then_some(view.clone()),
-      Self::Tiles { view, .. } => view
-        .read(cx)
-        .panels()
-        .iter()
-        .find(|item| item.panel.view() == panel.view())
-        .map(|item| item.panel.clone()),
-    }
-  }
-
-  /// Entity-graph search for [`Self::find_panel`] over a panel held by a
-  /// [`StackPanel`].
-  fn find_panel_in_view(
-    view: &Arc<dyn PanelView>, panel: &Arc<dyn PanelView>, cx: &App,
-  ) -> Option<Arc<dyn PanelView>> {
-    if view == panel {
-      return Some(panel.clone());
-    }
-    let any_view = view.view();
-    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
-      tab_panel
-        .read(cx)
-        .panels
-        .iter()
-        .find(|p| *p == panel)
-        .cloned()
-    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
-      stack_panel
-        .read(cx)
-        .panels
-        .iter()
-        .find_map(|child| Self::find_panel_in_view(child, panel, cx))
-    } else if let Ok(tiles) = any_view.downcast::<Tiles>() {
-      tiles
-        .read(cx)
-        .panels()
-        .iter()
-        .find(|item| &item.panel == panel)
-        .map(|item| item.panel.clone())
-    } else {
-      None
-    }
-  }
-
-  /// Add a panel to the dock item.
-  ///
-  /// The panel is registered on the live view entities (see
-  /// `docs/dock-layout-refactor.md`).
-  pub fn add_panel(
-    &mut self, panel: Arc<dyn PanelView>, dock_area: &WeakEntity<DockArea>,
-    bounds: Option<Bounds<Pixels>>, window: &mut Window, cx: &mut App,
-  ) {
-    match self {
-      Self::Tabs { view, .. } => {
-        view.update(cx, |tab_panel, cx| {
-          tab_panel.add_panel(panel, window, cx);
-        });
-      }
-      Self::Split { view, .. } => {
-        // Add to the first direct TabPanel child in the live entity graph.
-        let first_tabs = view
-          .read(cx)
-          .panels
-          .iter()
-          .find_map(|panel| panel.view().downcast::<TabPanel>().ok());
-        if let Some(tab_panel) = first_tabs {
-          tab_panel.update(cx, |tab_panel, cx| {
-            tab_panel.add_panel(panel, window, cx);
-          });
-          return;
-        }
-
-        // Unable to find tabs, create new tabs
-        let new_item = Self::tabs(vec![panel.clone()], dock_area, window, cx);
-        let new_item_view = new_item.view();
-        view.update(cx, |stack_panel, cx| {
-          stack_panel.add_panel(new_item_view, None, dock_area.clone(), window, cx);
-        });
-      }
-      Self::Tiles { view, .. } => {
-        let tile_item = TileItem::new(
-          Arc::new(cx.new(|cx| {
-            let mut tab_panel = TabPanel::new(None, dock_area.clone(), window, cx);
-            tab_panel.add_panel(panel.clone(), window, cx);
-            tab_panel
-          })),
-          bounds.unwrap_or_else(|| TileMeta::default().bounds),
-        );
-        view.update(cx, |tiles, cx| {
-          tiles.add_item(tile_item, dock_area, window, cx);
-        });
-      }
-      Self::Panel { .. } => {}
-    }
-  }
-
-  /// Remove a panel from the dock item.
-  ///
-  /// Removal happens on the live view entities (see
-  /// `docs/dock-layout-refactor.md`). The [`StackPanel`] recursion fires
-  /// [`Panel::on_removed`] and keeps the empty-TabPanel cleanup behavior per
-  /// visited child.
-  pub fn remove_panel(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) {
-    match self {
-      DockItem::Tabs { view, .. } => {
-        let panel_id = panel.view().entity_id();
-        view.update(cx, |tab_panel, cx| {
-          tab_panel.remove_panel(panel, window, cx);
-        });
-        debug_assert!(
-          !view
-            .read(cx)
-            .panels
-            .iter()
-            .any(|p| p.view().entity_id() == panel_id),
-          "panel must be removed from TabPanel.panels by remove_panel"
-        );
-      }
-      DockItem::Split { view, .. } => {
-        // Children are cloned first because removing a panel can prune
-        // empty TabPanels from the stack.
-        let children = view.read(cx).panels.to_vec();
-        for child in children {
-          Self::remove_panel_from_view(&child, panel.clone(), window, cx);
-        }
-        view.update(cx, |split, cx| {
-          split.remove_panel(panel, window, cx);
-        });
-      }
-      DockItem::Tiles { view, .. } => {
-        let panel_id = panel.entity_id(cx);
-        view.update(cx, |tiles, cx| {
-          tiles.remove(panel, window, cx);
-        });
-        debug_assert!(
-          !view
-            .read(cx)
-            .panels()
-            .iter()
-            .any(|item| item.panel.view().entity_id() == panel_id),
-          "tile must be removed from Tiles by remove_panel"
-        );
-      }
-      DockItem::Panel { .. } => {}
-    }
-  }
-
-  /// Entity-graph removal for [`Self::remove_panel`] over a panel held by a
-  /// [`StackPanel`].
-  fn remove_panel_from_view(
-    view: &Arc<dyn PanelView>, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App,
-  ) {
-    let any_view = view.view();
-    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
-      tab_panel.update(cx, |tab_panel, cx| {
-        tab_panel.remove_panel(panel, window, cx);
-      });
-    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
-      let children = stack_panel.read(cx).panels.to_vec();
-      for child in children {
-        Self::remove_panel_from_view(&child, panel.clone(), window, cx);
-      }
-    } else if let Ok(tiles) = any_view.downcast::<Tiles>() {
-      tiles.update(cx, |tiles, cx| {
-        tiles.remove(panel, window, cx);
-      });
-    }
-  }
-
-  pub fn set_collapsed(&self, collapsed: bool, window: &mut Window, cx: &mut App) {
-    match self {
-      DockItem::Tabs { view, .. } => {
-        view.update(cx, |tab_panel, cx| {
-          tab_panel.set_collapsed(collapsed, window, cx);
-        });
-      }
-      DockItem::Split { view, .. } => {
-        let children = view.read(cx).panels.to_vec();
-        for panel in children {
-          Self::set_collapsed_on_view(&panel, collapsed, window, cx);
-        }
-      }
-      DockItem::Tiles { .. } => {}
-      DockItem::Panel { view, .. } => view.set_active(!collapsed, window, cx),
-    }
-  }
-
-  /// Entity-graph collapse for [`Self::set_collapsed`] over a panel held by a
-  /// [`StackPanel`].
-  fn set_collapsed_on_view(
-    panel: &Arc<dyn PanelView>, collapsed: bool, window: &mut Window, cx: &mut App,
-  ) {
-    let any_view = panel.view();
-    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
-      tab_panel.update(cx, |tab_panel, cx| {
-        tab_panel.set_collapsed(collapsed, window, cx);
-      });
-    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
-      let children = stack_panel.read(cx).panels.to_vec();
-      for child in children {
-        Self::set_collapsed_on_view(&child, collapsed, window, cx);
-      }
-    }
-    // Tiles have no collapsed state.
-  }
-
-  /// Recursively traverses to find the left-most and top-most TabPanel.
-  pub(crate) fn left_top_tab_panel(&self, cx: &App) -> Option<Entity<TabPanel>> {
-    match self {
-      DockItem::Tabs { view, .. } => Some(view.clone()),
-      DockItem::Split { view, .. } => view.read(cx).left_top_tab_panel(true, cx),
-      DockItem::Tiles { .. } => None,
-      DockItem::Panel { .. } => None,
-    }
-  }
-}
-
 impl DockArea {
   pub fn new(
     id: impl Into<SharedString>, version: Option<usize>, window: &mut Window,
@@ -762,31 +112,15 @@ impl DockArea {
   ) -> Self {
     let weak_self = cx.entity().downgrade();
 
-    // Create center as a split with one empty TabPanel placeholder
-    let stack_panel = cx.new(|cx| {
-      let mut sp = StackPanel::new(Axis::Horizontal, window, cx);
-      sp.set_dock_area(weak_self.clone());
-      sp
-    });
-
-    let center_tab =
-      cx.new(|cx| TabPanel::new(Some(stack_panel.downgrade()), weak_self.clone(), window, cx));
-
-    stack_panel.update(cx, |sp, cx| {
-      sp.add_panel(
-        Arc::new(center_tab.clone()),
-        None,
-        weak_self.clone(),
-        window,
-        cx,
-      );
-    });
-
-    let center = DockItem::Split {
-      axis: Axis::Horizontal,
-      size: None,
-      view: stack_panel.clone(),
-    };
+    // The center region's structure lives in its tree; mirrors are created
+    // by the region's sync. The initial layout is a single (empty) tab
+    // group, which normalization keeps as the center's drop target.
+    let mut center_region = DockRegion::new(RootKind::Split);
+    center_region.tree = PaneTree::from_layout(
+      RootKind::Split,
+      DockLayout::h_split().child(DockLayout::tabs(), None),
+    );
+    let created = center_region.sync(&weak_self, window, cx);
 
     // Create side docks (always present, start empty and collapsed)
     let left_dock = cx.new(|cx| {
@@ -809,7 +143,7 @@ impl DockArea {
       id: id.into(),
       version,
       bounds: Bounds::default(),
-      center,
+      center_region,
       center_enabled: true,
       left_dock,
       bottom_dock,
@@ -823,13 +157,17 @@ impl DockArea {
       center_placeholder: None,
       _subscriptions: vec![],
       subscribed_panel_ids: HashSet::new(),
-      subscribed_tile_drop_ids: HashSet::new(),
       pending_layout_change: false,
       last_drag_hover: None,
       pending_drag_position: None,
     };
 
-    this.subscribe_panel(&stack_panel, window, cx);
+    for mirror in created {
+      match mirror {
+        CreatedMirror::Tab(tp) => this.subscribe_panel(&tp, window, cx),
+        CreatedMirror::Split(sp) => this.subscribe_panel(&sp, window, cx),
+      }
+    }
     this.update_toggle_button_tab_panels(window, cx);
 
     this
@@ -838,22 +176,6 @@ impl DockArea {
   /// Return the bounds of the dock area.
   pub fn bounds(&self) -> Bounds<Pixels> {
     self.bounds
-  }
-
-  /// Subscribe to the tiles item drag item drop event
-  fn subscribe_tiles_item_drop(
-    &mut self, tile_panel: &Entity<Tiles>, _: &mut Window, cx: &mut Context<Self>,
-  ) {
-    if !self.subscribed_tile_drop_ids.insert(tile_panel.entity_id()) {
-      return;
-    }
-
-    self
-      ._subscriptions
-      .push(cx.subscribe(tile_panel, move |_, _, evt: &DragDrop, cx| {
-        let item = evt.0.clone();
-        cx.emit(DockEvent::DragDrop(item));
-      }));
   }
 
   /// Set the panel style of the dock area.
@@ -904,8 +226,9 @@ impl DockArea {
   }
 
   /// Return the center dock item.
-  pub fn center(&self) -> &DockItem {
-    &self.center
+  /// The root view of the center region, if it has been built.
+  pub fn center_root_view(&self) -> Option<Arc<dyn PanelView>> {
+    self.center_region.root_view()
   }
 
   /// Return the left dock.
@@ -927,9 +250,22 @@ impl DockArea {
   pub fn add_to_center(
     &mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    let weak_self = cx.entity().downgrade();
-    self.center.add_panel(panel, &weak_self, None, window, cx);
-    cx.notify();
+    let panel_id = PanelId::from(panel.view().entity_id());
+    self.center_region.registry.insert(panel_id, panel);
+    if let Some(node) = self.center_region.first_tab_group() {
+      self.edit_region(RegionKind::Center, window, cx, |tree| {
+        tree.insert_panel(
+          panel_id,
+          InsertTarget::Tabs {
+            node,
+            ix: None,
+            activate: true,
+          },
+        )
+      });
+    } else {
+      cx.notify();
+    }
   }
 
   /// Add a panel to the left dock.
@@ -1061,31 +397,42 @@ impl DockArea {
   }
 
   /// Add a panel item to the dock area at the given placement.
+  /// Add a panel item to the dock area at the given placement.
+  ///
+  /// `bounds` only applies to tiles containers, which stay entity-managed.
   pub fn add_panel(
     &mut self, panel: Arc<dyn PanelView>, placement: DockPlacement, bounds: Option<Bounds<Pixels>>,
     window: &mut Window, cx: &mut Context<Self>,
   ) {
+    let _ = bounds;
     match placement {
-      DockPlacement::Left => {
-        self
-          .left_dock
-          .update(cx, |dock, cx| dock.add_panel(panel, window, cx));
+      DockPlacement::Center => self.add_to_center(panel, window, cx),
+      _ => {
+        let region = Self::region_of_placement(placement);
+        let node = self.dock(region).read(cx).region.first_tab_group();
+        if let Some(node) = node {
+          self.place_panel(
+            panel,
+            region,
+            InsertTarget::Tabs {
+              node,
+              ix: None,
+              activate: true,
+            },
+            window,
+            cx,
+          );
+        }
       }
-      DockPlacement::Bottom => {
-        self
-          .bottom_dock
-          .update(cx, |dock, cx| dock.add_panel(panel, window, cx));
-      }
-      DockPlacement::Right => {
-        self
-          .right_dock
-          .update(cx, |dock, cx| dock.add_panel(panel, window, cx));
-      }
-      DockPlacement::Center => {
-        self
-          .center
-          .add_panel(panel, &cx.entity().downgrade(), bounds, window, cx);
-      }
+    }
+  }
+
+  fn region_of_placement(placement: DockPlacement) -> RegionKind {
+    match placement {
+      DockPlacement::Left => RegionKind::Left,
+      DockPlacement::Right => RegionKind::Right,
+      DockPlacement::Bottom => RegionKind::Bottom,
+      DockPlacement::Center => RegionKind::Center,
     }
   }
 
@@ -1094,25 +441,19 @@ impl DockArea {
     &mut self, panel: Arc<dyn PanelView>, placement: DockPlacement, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
-    match placement {
-      DockPlacement::Left => {
-        self.left_dock.update(cx, |dock, cx| {
-          dock.remove_panel(panel, window, cx);
-        });
-      }
-      DockPlacement::Right => {
-        self.right_dock.update(cx, |dock, cx| {
-          dock.remove_panel(panel, window, cx);
-        });
-      }
-      DockPlacement::Bottom => {
-        self.bottom_dock.update(cx, |dock, cx| {
-          dock.remove_panel(panel, window, cx);
-        });
-      }
-      DockPlacement::Center => {
-        self.center.remove_panel(panel, window, cx);
-      }
+    let region = Self::region_of_placement(placement);
+    let panel_id = PanelId::from(panel.view().entity_id());
+    let holds = match region {
+      RegionKind::Center => self.center_region.tree.contains_panel(panel_id),
+      _ => self
+        .dock(region)
+        .read(cx)
+        .region
+        .tree
+        .contains_panel(panel_id),
+    };
+    if holds {
+      self.close_panel(region, panel, window, cx);
     }
     cx.notify();
   }
@@ -1121,10 +462,26 @@ impl DockArea {
   pub fn remove_panel_from_all_docks(
     &mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    self.remove_panel(panel.clone(), DockPlacement::Center, window, cx);
-    self.remove_panel(panel.clone(), DockPlacement::Left, window, cx);
-    self.remove_panel(panel.clone(), DockPlacement::Right, window, cx);
-    self.remove_panel(panel.clone(), DockPlacement::Bottom, window, cx);
+    let panel_id = PanelId::from(panel.view().entity_id());
+    for region in [
+      RegionKind::Center,
+      RegionKind::Left,
+      RegionKind::Right,
+      RegionKind::Bottom,
+    ] {
+      let holds = match region {
+        RegionKind::Center => self.center_region.tree.contains_panel(panel_id),
+        _ => self
+          .dock(region)
+          .read(cx)
+          .region
+          .tree
+          .contains_panel(panel_id),
+      };
+      if holds {
+        self.close_panel(region, panel.clone(), window, cx);
+      }
+    }
   }
 
   /// Single global handler for `DragPanel` drag-move events.
@@ -1232,30 +589,20 @@ impl DockArea {
     }
   }
 
-  fn collect_tab_panels_from_panel_view(
-    panel: Arc<dyn PanelView>, out: &mut Vec<Entity<TabPanel>>, cx: &App,
-  ) {
-    if let Ok(tab_panel) = panel.view().downcast::<TabPanel>() {
-      out.push(tab_panel);
-    } else if let Ok(stack_panel) = panel.view().downcast::<StackPanel>() {
-      stack_panel.read(cx).collect_tab_panels(out, cx);
-    }
-  }
-
   fn all_tab_panels(&self, cx: &App) -> Vec<Entity<TabPanel>> {
-    let mut panels = Vec::new();
-    Self::collect_tab_panels_from_panel_view(self.center.view(), &mut panels, cx);
-    Self::collect_tab_panels_from_panel_view(self.left_dock.read(cx).panel.view(), &mut panels, cx);
-    Self::collect_tab_panels_from_panel_view(
-      self.right_dock.read(cx).panel.view(),
-      &mut panels,
-      cx,
-    );
-    Self::collect_tab_panels_from_panel_view(
-      self.bottom_dock.read(cx).panel.view(),
-      &mut panels,
-      cx,
-    );
+    let mut panels: Vec<Entity<TabPanel>> =
+      self.center_region.tab_mirrors.values().cloned().collect();
+    for kind in [RegionKind::Left, RegionKind::Right, RegionKind::Bottom] {
+      panels.extend(
+        self
+          .dock(kind)
+          .read(cx)
+          .region
+          .tab_mirrors
+          .values()
+          .cloned(),
+      );
+    }
     panels
   }
 
@@ -1340,7 +687,6 @@ impl DockArea {
   ) -> Result<()> {
     self._subscriptions.clear();
     self.subscribed_panel_ids.clear();
-    self.subscribed_tile_drop_ids.clear();
     self.version = state.version;
     self.center_enabled = state.center_enabled;
     let weak_self = cx.entity().downgrade();
@@ -1357,12 +703,12 @@ impl DockArea {
       self.bottom_dock = bottom_dock_state.to_dock(weak_self.clone(), window, cx);
     }
 
-    self.center = state.center.to_item(weak_self.clone(), window, cx);
-
-    // Ensure the root StackPanel of the center knows about the dock_area
-    if let DockItem::Split { view, .. } = &self.center {
-      view.update(cx, |sp, _| sp.set_dock_area(weak_self));
-    }
+    // Build the center region straight from the serialized tree and sync the
+    // mirrors; created mirrors need their panel subscriptions.
+    self.center_region =
+      DockRegion::from_panel_state(&state.center, RootKind::Split, &weak_self, window, cx);
+    let created = self.center_region.sync(&weak_self, window, cx);
+    self.subscribe_created(created, window, cx);
 
     self.update_toggle_button_tab_panels(window, cx);
     Ok(())
@@ -1372,12 +718,9 @@ impl DockArea {
   ///
   /// See also [DockArea::load].
   pub fn dump(&self, cx: &App) -> DockAreaState {
-    let root = self.center.view();
-    let center = root.dump(cx);
-
     DockAreaState {
       version: self.version,
-      center,
+      center: self.center_region.to_panel_state(cx),
       center_enabled: self.center_enabled,
       left_dock: Some(DockState::new(self.left_dock.clone(), cx)),
       right_dock: Some(DockState::new(self.right_dock.clone(), cx)),
@@ -1452,11 +795,9 @@ impl DockArea {
   }
 
   fn render_items(&self, _window: &mut Window, _cx: &mut Context<Self>) -> AnyElement {
-    match &self.center {
-      DockItem::Split { view, .. } => view.clone().into_any_element(),
-      DockItem::Tabs { view, .. } => view.clone().into_any_element(),
-      DockItem::Tiles { view, .. } => view.clone().into_any_element(),
-      DockItem::Panel { view, .. } => view.clone().view().into_any_element(),
+    match self.center_region.root_view() {
+      Some(view) => view.view().into_any_element(),
+      None => Empty.into_any_element(),
     }
   }
 
@@ -1465,9 +806,227 @@ impl DockArea {
     self.toggle_button_panels.bottom = self
       .bottom_dock
       .read(cx)
-      .panel
-      .left_top_tab_panel(cx)
+      .first_tab_panel()
       .map(|view| view.entity_id());
+  }
+
+  /// The single write path for a region's structure.
+  ///
+  /// Applies `edit` to the region's [`PaneTree`]; when the tree changed,
+  /// mirror entities are re-synced from it and `DockEvent::LayoutChanged`
+  /// fires. Structural mutations of any region must go through here — mirror
+  /// entities are read-only reflections of the tree.
+  pub(crate) fn edit_region(
+    &mut self, region: RegionKind, window: &mut Window, cx: &mut Context<Self>,
+    apply: impl FnOnce(&mut PaneTree) -> EditResult,
+  ) {
+    match region {
+      RegionKind::Center => {
+        if !apply(&mut self.center_region.tree).changed() {
+          return;
+        }
+        let weak_self = cx.entity().downgrade();
+        let created = self.center_region.sync(&weak_self, window, cx);
+        self.subscribe_created(created, window, cx);
+        cx.emit(DockEvent::LayoutChanged);
+        cx.notify();
+      }
+      RegionKind::Left => self.left_dock.update(cx, |dock, cx| {
+        dock.edit_tree(apply, window, cx);
+      }),
+      RegionKind::Right => self.right_dock.update(cx, |dock, cx| {
+        dock.edit_tree(apply, window, cx);
+      }),
+      RegionKind::Bottom => self.bottom_dock.update(cx, |dock, cx| {
+        dock.edit_tree(apply, window, cx);
+      }),
+    }
+  }
+
+  fn subscribe_created(
+    &mut self, created: Vec<CreatedMirror>, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    for mirror in created {
+      match mirror {
+        CreatedMirror::Tab(tp) => self.subscribe_panel(&tp, window, cx),
+        CreatedMirror::Split(sp) => self.subscribe_panel(&sp, window, cx),
+      }
+    }
+  }
+
+  /// The region a tab panel belongs to: its dock's placement when it sits in
+  /// a side dock, otherwise the center.
+  pub(crate) fn region_of(tab_panel: &TabPanel, cx: &App) -> RegionKind {
+    match tab_panel.dock_placement(cx) {
+      Some(DockPlacement::Left) => RegionKind::Left,
+      Some(DockPlacement::Right) => RegionKind::Right,
+      Some(DockPlacement::Bottom) => RegionKind::Bottom,
+      Some(DockPlacement::Center) | None => RegionKind::Center,
+    }
+  }
+
+  /// Inserts `panel` into the region at `target`. If the panel lives in
+  /// another region, it is detached there first (a drag is not a close, so
+  /// no `on_removed` hook fires). A panel already in the target region moves
+  /// atomically. A target node that was normalized away between scheduling
+  /// and execution falls back to the region's first tab group.
+  pub(crate) fn place_panel(
+    &mut self, panel: Arc<dyn PanelView>, region: RegionKind, target: InsertTarget,
+    window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    let panel_id = PanelId::from(panel.view().entity_id());
+
+    // Resolve the target against the tree as of execution time.
+    let target = {
+      let target_node = match &target {
+        InsertTarget::Tabs { node, .. } | InsertTarget::Split { node, .. } => *node,
+      };
+      let tree = match region {
+        RegionKind::Center => &self.center_region.tree,
+        _ => &self.dock(region).read(cx).region.tree,
+      };
+      if tree.path_of_node(target_node).is_none() {
+        match tree.tab_groups().first().copied() {
+          Some(node) => InsertTarget::Tabs {
+            node,
+            ix: None,
+            activate: true,
+          },
+          None => target,
+        }
+      } else {
+        target
+      }
+    };
+
+    // A panel already in the target region moves atomically; otherwise
+    // detach it from whichever region currently holds it.
+    let in_target = match region {
+      RegionKind::Center => self.center_region.tree.contains_panel(panel_id),
+      _ => self
+        .dock(region)
+        .read(cx)
+        .region
+        .tree
+        .contains_panel(panel_id),
+    };
+    if in_target {
+      self.edit_region(region, window, cx, |tree| tree.move_panel(panel_id, target));
+    } else {
+      for kind in [
+        RegionKind::Center,
+        RegionKind::Left,
+        RegionKind::Right,
+        RegionKind::Bottom,
+      ] {
+        if kind == region {
+          continue;
+        }
+        let holds = match kind {
+          RegionKind::Center => self.center_region.tree.contains_panel(panel_id),
+          _ => self
+            .dock(kind)
+            .read(cx)
+            .region
+            .tree
+            .contains_panel(panel_id),
+        };
+        if holds {
+          self.detach_panel(kind, panel.clone(), window, cx);
+        }
+      }
+      match region {
+        RegionKind::Center => {
+          self.center_region.registry.insert(panel_id, panel);
+          self.edit_region(RegionKind::Center, window, cx, |tree| {
+            tree.insert_panel(panel_id, target)
+          });
+        }
+        _ => {
+          let dock = self.dock(region).clone();
+          dock.update(cx, |dock, cx| {
+            dock.region.registry.insert(panel_id, panel);
+            dock.edit_tree(|tree| tree.insert_panel(panel_id, target), window, cx);
+          });
+        }
+      }
+    }
+
+    // A collapsed target dock expands when a panel lands in it.
+    if region != RegionKind::Center {
+      let dock = self.dock(region).clone();
+      if dock.read(cx).is_collapsed() {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(false, window, cx);
+        });
+      }
+    }
+  }
+
+  /// Closes `panel` in its region: fires the panel's `on_removed` hook and
+  /// removes it from the tree.
+  pub(crate) fn close_panel(
+    &mut self, region: RegionKind, panel: Arc<dyn PanelView>, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    panel.on_removed(window, cx);
+    let panel_id = PanelId::from(panel.view().entity_id());
+    self.edit_region(region, window, cx, |tree| tree.remove_panel(panel_id));
+    // Dock regions collapse once empty; the center keeps its placeholder.
+    if region != RegionKind::Center {
+      let dock = self.dock(region).clone();
+      let empty = !dock.read(cx).region.has_real_panels();
+      if empty {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(true, window, cx);
+        });
+      }
+    }
+  }
+
+  /// Detaches `panel` from its region without firing `on_removed` (used by
+  /// drags; the panel keeps its resources).
+  pub(crate) fn detach_panel(
+    &mut self, region: RegionKind, panel: Arc<dyn PanelView>, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    let panel_id = PanelId::from(panel.view().entity_id());
+    self.edit_region(region, window, cx, |tree| tree.remove_panel(panel_id));
+    if region != RegionKind::Center {
+      let dock = self.dock(region).clone();
+      let empty = !dock.read(cx).region.has_real_panels();
+      if empty {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(true, window, cx);
+        });
+      }
+    }
+  }
+
+  /// Activates tab `ix` of tab group `node` in the region. Dock regions
+  /// expand first when collapsed.
+  pub(crate) fn activate_tab(
+    &mut self, region: RegionKind, node: NodeId, ix: usize, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if region != RegionKind::Center {
+      let dock = self.dock(region).clone();
+      if dock.read(cx).is_collapsed() {
+        dock.update(cx, |dock, cx| {
+          dock.set_collapsed(false, window, cx);
+        });
+      }
+    }
+    self.edit_region(region, window, cx, |tree| tree.set_active(node, ix));
+  }
+
+  fn dock(&self, region: RegionKind) -> &Entity<Dock> {
+    match region {
+      RegionKind::Left => &self.left_dock,
+      RegionKind::Right => &self.right_dock,
+      RegionKind::Bottom => &self.bottom_dock,
+      RegionKind::Center => unreachable!("the center has no dock"),
+    }
   }
 }
 impl EventEmitter<DockEvent> for DockArea {}
@@ -1505,48 +1064,40 @@ impl Render for DockArea {
         if let Some(zoom_view) = self.zoom_view.clone() {
           this.child(zoom_view)
         } else {
-          match &self.center {
-            DockItem::Tiles { view, .. } => {
-              // render tiles
-              this.child(view.clone())
-            }
-            _ => {
-              let left_dock = self.left_dock.clone();
-              let right_dock = self.right_dock.clone();
-              let bottom_dock = self.bottom_dock.clone();
+          let left_dock = self.left_dock.clone();
+          let right_dock = self.right_dock.clone();
+          let bottom_dock = self.bottom_dock.clone();
 
-              // render dock
-              this.child(
+          // render dock
+          this.child(
+            div()
+              .flex()
+              .flex_row()
+              .h_full()
+              // Left dock (always present)
+              .child(div().flex().flex_none().child(left_dock.clone()))
+              // Center column
+              .child(
                 div()
                   .flex()
-                  .flex_row()
-                  .h_full()
-                  // Left dock (always present)
-                  .child(div().flex().flex_none().child(left_dock.clone()))
-                  // Center column
+                  .flex_1()
+                  .flex_col()
+                  .overflow_hidden()
+                  // Center content (or empty space when disabled)
                   .child(
                     div()
-                      .flex()
                       .flex_1()
-                      .flex_col()
                       .overflow_hidden()
-                      // Center content (or empty space when disabled)
-                      .child(
-                        div()
-                          .flex_1()
-                          .overflow_hidden()
-                          .when(self.center_enabled, |this| {
-                            this.child(self.render_items(window, cx))
-                          }),
-                      )
-                      // Bottom Dock (always present)
-                      .child(bottom_dock.clone()),
+                      .when(self.center_enabled, |this| {
+                        this.child(self.render_items(window, cx))
+                      }),
                   )
-                  // Right Dock (always present)
-                  .child(div().flex().flex_none().child(right_dock.clone())),
+                  // Bottom Dock (always present)
+                  .child(bottom_dock.clone()),
               )
-            }
-          }
+              // Right Dock (always present)
+              .child(div().flex().flex_none().child(right_dock.clone())),
+          )
         }
       })
   }
@@ -1557,7 +1108,7 @@ mod tests {
   use gpui::{FocusHandle, Focusable, TestAppContext};
 
   use super::*;
-  use crate::Theme;
+  use crate::{Placement, Theme};
 
   struct TestPanel {
     focus_handle: FocusHandle,
@@ -1652,11 +1203,17 @@ mod tests {
   }
 
   #[gpui::test]
-  async fn entity_reads_track_ui_changes(cx: &mut TestAppContext) {
+  async fn region_tree_drives_mirrors(cx: &mut TestAppContext) {
     cx.set_global(Theme::default());
     cx.update(PanelRegistry::init);
 
-    let panel = cx.new(|cx| TestPanel {
+    let panel_a = cx.new(|cx| TestPanel {
+      focus_handle: cx.focus_handle(),
+    });
+    let panel_b = cx.new(|cx| TestPanel {
+      focus_handle: cx.focus_handle(),
+    });
+    let panel_c = cx.new(|cx| TestPanel {
       focus_handle: cx.focus_handle(),
     });
 
@@ -1664,61 +1221,174 @@ mod tests {
       .update(|app| app.open_window(Default::default(), |_, cx| cx.new(|_| TestRoot)))
       .unwrap();
 
-    window
+    // Build the dock area with panel A in the center placeholder group.
+    let dock_area = window
       .update(cx, |_, window, cx| {
         let dock_area = cx.new(|cx| DockArea::new("test", None, window, cx));
-
-        // The center is a Split holding one empty placeholder TabPanel.
-        // Cloned: the enum is all Arc handles behind, so the clone still
-        // reflects live entity state without borrowing the DockArea.
-        let center = dock_area.read(cx).center().clone();
-        assert!(!center.has_real_panels(cx));
-        assert!(center.find_panel(Arc::new(panel.clone()), cx).is_none());
-
-        // Simulate the drop path: the panel lands in the placeholder's
-        // TabPanel entity, bypassing `DockItem::add_panel` entirely.
-        let center_tab = match &center {
-          DockItem::Split { view, .. } => view
-            .read(cx)
-            .panels
-            .first()
-            .unwrap()
-            .view()
-            .downcast::<TabPanel>()
-            .expect("center placeholder must be a TabPanel"),
-          _ => unreachable!("center is always a Split"),
-        };
-        center_tab.update(cx, |tab_panel, cx| {
-          tab_panel.add_panel(Arc::new(panel.clone()), window, cx);
+        dock_area.update(cx, |dock, cx| {
+          dock.add_to_center(Arc::new(panel_a.clone()), window, cx);
         });
+        dock_area
+      })
+      .unwrap();
+    // The deferred mirror sync upgrades the DockArea by weak reference, so
+    // the entity must stay alive for the whole test.
+    let _keep_alive = &dock_area;
+    cx.run_until_parked();
 
-        // The entity-graph readers see the panel.
+    // The tree holds A; its mirror shows it and stays drop-capable.
+    window
+      .update(cx, |_, _, cx| {
+        let dock = dock_area.read(cx);
         assert!(
-          center.has_real_panels(cx),
-          "has_real_panels must traverse the live entity graph"
+          dock
+            .center_region
+            .tree
+            .contains_panel(PanelId::from(panel_a.entity_id())),
+          "the tree holds the placed panel"
         );
+        let (node, mirror) = dock
+          .center_region
+          .tab_mirrors
+          .iter()
+          .next()
+          .expect("a tab mirror exists");
+        assert_eq!(mirror.read(cx).panels.len(), 1);
         assert!(
-          center.find_panel(Arc::new(panel.clone()), cx).is_some(),
-          "find_panel must traverse the live entity graph"
+          mirror.read(cx).allows_split_drop(),
+          "mirror {node:?} must allow split drops"
         );
+      })
+      .unwrap();
 
-        // The snapshot projection reports the live panel too.
-        let DockItemSnapshot::Split { items, .. } = center.snapshot(cx) else {
-          unreachable!("center snapshot is a Split")
-        };
-        let DockItemSnapshot::Tabs { panels, active_ix } = &items[0] else {
-          unreachable!("center snapshot child is a Tabs")
-        };
-        assert_eq!(panels.len(), 1);
-        assert_eq!(*active_ix, 0);
-
-        // Closing via the TabPanel (the ✕ path) empties the live graph;
-        // the placeholder TabPanel itself is kept as a drop target.
-        center_tab.update(cx, |tab_panel, cx| {
-          tab_panel.remove_panel(Arc::new(panel.clone()), window, cx);
+    // Split B to the right of A's group, then C right of B's group.
+    let group_a = window
+      .update(cx, |_, _, cx| {
+        dock_area
+          .read(cx)
+          .center_region
+          .tree
+          .tab_group_of(PanelId::from(panel_a.entity_id()))
+          .expect("A lives in a tab group")
+      })
+      .unwrap();
+    window
+      .update(cx, |_, window, cx| {
+        dock_area.update(cx, |dock, cx| {
+          dock.place_panel(
+            Arc::new(panel_b.clone()),
+            RegionKind::Center,
+            InsertTarget::Split {
+              node: group_a,
+              placement: Placement::Right,
+              size: None,
+            },
+            window,
+            cx,
+          );
         });
-        assert!(!center.has_real_panels(cx));
-        assert!(center.find_panel(Arc::new(panel.clone()), cx).is_none());
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    let group_b = window
+      .update(cx, |_, _, cx| {
+        let tree = &dock_area.read(cx).center_region.tree;
+        assert_eq!(tree.tab_groups().len(), 2, "first split adds a group");
+        tree
+          .tab_group_of(PanelId::from(panel_b.entity_id()))
+          .expect("B lives in a tab group")
+      })
+      .unwrap();
+    window
+      .update(cx, |_, window, cx| {
+        dock_area.update(cx, |dock, cx| {
+          dock.place_panel(
+            Arc::new(panel_c.clone()),
+            RegionKind::Center,
+            InsertTarget::Split {
+              node: group_b,
+              placement: Placement::Right,
+              size: None,
+            },
+            window,
+            cx,
+          );
+        });
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    window
+      .update(cx, |_, _, cx| {
+        let dock = dock_area.read(cx);
+        assert_eq!(dock.center_region.tree.tab_groups().len(), 3);
+        // Every mirror stays drop-capable after repeated splits.
+        for (node, mirror) in dock.center_region.tab_mirrors.iter() {
+          let tp = mirror.read(cx);
+          assert!(!tp.panels.is_empty(), "mirror {node:?} lost its panel");
+          assert!(
+            tp.allows_split_drop(),
+            "mirror {node:?} lost split-drop capability"
+          );
+        }
+      })
+      .unwrap();
+
+    // Close every panel: the placeholder group survives as the drop target.
+    window
+      .update(cx, |_, window, cx| {
+        for panel in [&panel_a, &panel_b, &panel_c] {
+          dock_area.update(cx, |dock, cx| {
+            dock.close_panel(RegionKind::Center, Arc::new(panel.clone()), window, cx);
+          });
+        }
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    window
+      .update(cx, |_, _, cx| {
+        let dock = dock_area.read(cx);
+        let groups = dock.center_region.tree.tab_groups();
+        assert_eq!(groups.len(), 1, "one placeholder group survives");
+        let mirror = &dock.center_region.tab_mirrors[&groups[0]];
+        assert!(mirror.read(cx).panels.is_empty());
+      })
+      .unwrap();
+
+    // A drop into the emptied group lands and stays splittable.
+    window
+      .update(cx, |_, window, cx| {
+        dock_area.update(cx, |dock, cx| {
+          let node = dock.center_region.first_tab_group().unwrap();
+          dock.place_panel(
+            Arc::new(panel_a.clone()),
+            RegionKind::Center,
+            InsertTarget::Tabs {
+              node,
+              ix: None,
+              activate: true,
+            },
+            window,
+            cx,
+          );
+        });
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    window
+      .update(cx, |_, _, cx| {
+        let dock = dock_area.read(cx);
+        let mirror = dock
+          .center_region
+          .tab_mirrors
+          .values()
+          .next()
+          .expect("the placeholder mirror persists");
+        assert_eq!(mirror.read(cx).panels.len(), 1);
+        assert!(mirror.read(cx).allows_split_drop());
       })
       .unwrap();
   }
