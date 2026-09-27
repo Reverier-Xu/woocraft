@@ -56,7 +56,28 @@ impl Tooltip {
     self
   }
 
-  pub fn build(self, _: &mut Window, cx: &mut App) -> AnyView {
+  /// Render the tooltip as a view for gpui's tooltip API.
+  ///
+  /// The signature has to hand out an `AnyView`: gpui's tooltip element only
+  /// consumes entity-backed views, so a per-tooltip entity is unavoidable.
+  /// It is created lazily by gpui only when the tooltip is actually shown,
+  /// and all content/keybinding resolution happens here so re-renders of the
+  /// backing entity stay cheap.
+  pub fn build(mut self, window: &mut Window, cx: &mut App) -> AnyView {
+    // Resolve the key binding eagerly: the tooltip content is immutable for
+    // its lifetime, so `binding_for_action`'s keymap scan does not need to be
+    // repeated on every re-render of the backing entity.
+    if self.key_binding.is_none() {
+      if let Some((action, context)) = &self.action {
+        self.key_binding = Kbd::binding_for_action(
+          action.as_ref(),
+          context.as_ref().map(|s| s.as_ref()),
+          window,
+        );
+      }
+      self.action = None;
+    }
+
     cx.new(|_| self).into()
   }
 }
@@ -68,17 +89,9 @@ impl_styled!(Tooltip);
 
 impl Render for Tooltip {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let key_binding = if let Some(key_binding) = &self.key_binding {
-      Some(key_binding.clone())
-    } else if let Some((action, context)) = &self.action {
-      Kbd::binding_for_action(
-        action.as_ref(),
-        context.as_ref().map(|s| s.as_ref()),
-        window,
-      )
-    } else {
-      None
-    };
+    // The effective binding was resolved once in `build`; render only reads
+    // the cached value.
+    let key_binding = self.key_binding.clone();
 
     h_flex()
       .m_3()

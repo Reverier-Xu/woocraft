@@ -236,7 +236,6 @@ impl PopoverState {
             state.update(cx, |state, cx| {
               state.dismiss(window, cx);
             });
-            window.refresh();
           }),
         );
     } else {
@@ -275,12 +274,24 @@ impl RenderOnce for Popover {
     });
 
     state.update(cx, |state, _| {
-      if let Some(tracked_focus_handle) = tracked_focus_handle {
-        state.tracked_focus_handle = Some(tracked_focus_handle);
+      // Write back only what actually changed; `Popover::render` runs on every
+      // parent re-render, so unconditional per-frame rewrites here would be
+      // pure churn.
+      if tracked_focus_handle != state.tracked_focus_handle {
+        state.tracked_focus_handle = tracked_focus_handle;
       }
-      state.on_open_change = self.on_open_change.clone();
-      if let Some(force_open) = force_open {
-        state.open = force_open;
+      let on_open_changed = match (&self.on_open_change, &state.on_open_change) {
+        (Some(new), Some(old)) => !Rc::ptr_eq(new, old),
+        (None, None) => false,
+        _ => true,
+      };
+      if on_open_changed {
+        state.on_open_change = self.on_open_change.clone();
+      }
+      if let Some(forced) = force_open
+        && state.open != forced
+      {
+        state.open = forced;
       }
     });
 

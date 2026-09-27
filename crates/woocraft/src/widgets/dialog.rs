@@ -71,6 +71,21 @@ type DialogContentBuilder = Rc<
 
 type DialogCloseHandler = Rc<dyn Fn(&mut Window, &mut App) + 'static>;
 
+/// Elevated shadow cast by the dialog panel. Hoisted to a constant so the
+/// per-render styling work is a single-element `Vec` of a fixed value.
+const DIALOG_PANEL_SHADOW: BoxShadow = BoxShadow {
+  color: Hsla {
+    h: 0.,
+    s: 0.,
+    l: 0.,
+    a: 0.25,
+  },
+  blur_radius: px(24.),
+  spread_radius: px(0.),
+  offset: point(px(0.), px(4.)),
+  inset: false,
+};
+
 // ─── DialogState ────────────────────────────────────────────────────────────
 
 /// Retained state for a [`Dialog`] element.
@@ -122,7 +137,10 @@ impl DialogState {
       self.focus_handle.focus(window, cx);
 
       // Subscribe to `DismissEvent` so external code can close us via the
-      // event bus (same pattern as `PopoverState`).
+      // event bus (same pattern as `PopoverState`). `dismiss` → `set_open`
+      // already notifies this entity, and the entity is observed by the view
+      // that rendered the `Dialog` (see `use_keyed_state` in `Dialog::render`),
+      // so no window-wide refresh is needed here.
       let entity = cx.entity().clone();
       let entity_for_cb = entity.clone();
       self.dismiss_subscription =
@@ -131,7 +149,6 @@ impl DialogState {
             entity_for_cb.update(cx, |state, cx| {
               state.dismiss(window, cx);
             });
-            window.refresh();
           }),
         );
     } else {
@@ -456,18 +473,7 @@ impl RenderOnce for Dialog {
       .when_some(width, |this: gpui::Stateful<gpui::Div>, w| this.w(w))
       .when_some(height, |this: gpui::Stateful<gpui::Div>, h| this.h(h))
       // Elevated shadow
-      .shadow(vec![BoxShadow {
-        color: Hsla {
-          h: 0.,
-          s: 0.,
-          l: 0.,
-          a: 0.25,
-        },
-        blur_radius: px(24.),
-        spread_radius: px(0.),
-        offset: point(px(0.), px(4.)),
-        inset: false,
-      }])
+      .shadow(vec![DIALOG_PANEL_SHADOW])
       .when_some(header_el, |this, hdr| this.child(hdr))
       .child(body_el)
       // Stop click events from bubbling to the backdrop.
