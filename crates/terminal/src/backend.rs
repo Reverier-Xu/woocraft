@@ -9,7 +9,7 @@ use std::{
   borrow::Cow,
   sync::{
     Arc, Mutex, OnceLock,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
   },
 };
 
@@ -104,6 +104,10 @@ impl PtySender {
 /// into [`TerminalEvent`]s and answers PTY queries that must keep their
 /// ordering relative to other PTY writes (text-area size, application writes).
 ///
+/// It also owns the content revision counter: every parsed mutation is
+/// reported as an emulator wakeup, so the wakeup path is the single choke
+/// point for PTY-driven content changes.
+///
 /// Callbacks run on the PTY event loop thread while the emulator lock is held
 /// (parsing happens under the lock), so they must never re-lock the emulator;
 /// anything that needs emulator state is deferred to the host thread instead.
@@ -116,12 +120,15 @@ pub(crate) struct BackendListener {
   pty_sender: Arc<OnceLock<PtySender>>,
   exited: Arc<AtomicBool>,
   exit_status: Arc<Mutex<Option<ChildStatus>>>,
+  /// Shared with the session; bumped on every content mutation.
+  revision: Arc<AtomicU64>,
 }
 
 impl BackendListener {
   pub(crate) fn new(
     events_tx: async_channel::Sender<TerminalEvent>, bounds: Arc<Mutex<TerminalBounds>>,
     exited: Arc<AtomicBool>, exit_status: Arc<Mutex<Option<ChildStatus>>>,
+    revision: Arc<AtomicU64>,
   ) -> Self {
     Self {
       events_tx,
@@ -129,6 +136,7 @@ impl BackendListener {
       pty_sender: Arc::new(OnceLock::new()),
       exited,
       exit_status,
+      revision,
     }
   }
 
@@ -174,7 +182,13 @@ impl EventListener for BackendListener {
         self.write_to_pty(format(window_size).into_bytes());
       }
       AlacEvent::CursorBlinkingChange => self.send(TerminalEvent::CursorBlinkingChanged),
-      AlacEvent::Wakeup => self.send(TerminalEvent::Wakeup),
+      AlacEvent::Wakeup => {
+        // Wakeups are emitted after parsed PTY output changed the emulator
+        // state (and on child exit), so this is where PTY-driven content
+        // changes bump the revision.
+        self.revision.fetch_add(1, Ordering::Relaxed);
+        self.send(TerminalEvent::Wakeup);
+      }
       AlacEvent::Bell => self.send(TerminalEvent::Bell),
       AlacEvent::ChildExit(status) => {
         let status = ChildStatus::from(&status);
@@ -418,8 +432,14 @@ fn row_to_string(row: &Row<AlacCell>) -> String {
   row[..Column(row.len())].iter().map(|cell| cell.c).collect()
 }
 
-/// Takes a consistent snapshot of the emulator state.
-pub(crate) fn make_content(term: &Term<BackendListener>, bounds: &TerminalBounds) -> Content {
+/// Takes a consistent snapshot of the emulator state. `revision` is the
+/// session's current content revision, stamped onto the snapshot (read by the
+/// caller *before* locking, so a mutation racing with this snapshot yields a
+/// stale revision — one redundant re-snapshot — instead of fresh revision
+/// stamped on stale cells).
+pub(crate) fn make_content(
+  term: &Term<BackendListener>, bounds: &TerminalBounds, revision: u64,
+) -> Content {
   let content = term.renderable_content();
 
   let mut cells = Vec::with_capacity(content.display_iter.size_hint().0);
@@ -450,6 +470,7 @@ pub(crate) fn make_content(term: &Term<BackendListener>, bounds: &TerminalBounds
     scrolled_to_bottom: content.display_offset == 0,
     dynamic_colors: dynamic_colors(term),
     terminal_bounds: *bounds,
+    revision,
   }
 }
 
@@ -580,6 +601,7 @@ mod tests {
       Arc::new(std::sync::Mutex::new(bounds)),
       Arc::new(AtomicBool::new(false)),
       Arc::new(std::sync::Mutex::new(None)),
+      Arc::new(AtomicU64::new(1)),
     );
     let mut term = Term::new(AlacConfig::default(), &bounds, listener);
 

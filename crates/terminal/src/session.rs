@@ -4,7 +4,7 @@ use std::{
   borrow::Cow,
   sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
   },
 };
 
@@ -38,6 +38,11 @@ struct SessionInner {
   exited: Arc<AtomicBool>,
   exit_status: Arc<Mutex<Option<ChildStatus>>>,
   display_processor: Mutex<Processor<vte::ansi::StdSyncHandler>>,
+  /// Monotonic content revision, shared with the backend listener (which
+  /// bumps it for PTY-driven changes); the session bumps it for direct
+  /// emulator mutations. Starts above [`crate::types::Content::empty`]'s
+  /// revision (0) so the very first snapshot is always taken.
+  revision: Arc<AtomicU64>,
 }
 
 enum SessionKind {
@@ -59,12 +64,14 @@ impl TerminalSession {
     let exited = Arc::new(AtomicBool::new(false));
     let exit_status = Arc::new(Mutex::new(None));
     let bounds_shared = Arc::new(Mutex::new(bounds));
+    let revision = Arc::new(AtomicU64::new(1));
 
     let listener = BackendListener::new(
       events_tx.clone(),
       bounds_shared.clone(),
       exited.clone(),
       exit_status.clone(),
+      revision.clone(),
     );
     let term = backend::new_term(
       backend::term_config(&options),
@@ -85,6 +92,7 @@ impl TerminalSession {
         exited,
         exit_status,
         display_processor: Mutex::new(Processor::new()),
+        revision,
       }),
     })
   }
@@ -99,12 +107,14 @@ impl TerminalSession {
     let exited = Arc::new(AtomicBool::new(false));
     let exit_status = Arc::new(Mutex::new(None));
     let bounds_shared = Arc::new(Mutex::new(bounds));
+    let revision = Arc::new(AtomicU64::new(1));
 
     let listener = BackendListener::new(
       events_tx.clone(),
       bounds_shared.clone(),
       exited.clone(),
       exit_status.clone(),
+      revision.clone(),
     );
     let term = backend::new_term(
       backend::term_config(&options),
@@ -123,6 +133,7 @@ impl TerminalSession {
         exited,
         exit_status,
         display_processor: Mutex::new(Processor::new()),
+        revision,
       }),
     }
   }
@@ -174,12 +185,14 @@ impl TerminalSession {
       pty_tx.resize(bounds);
     }
     backend::resize(&mut self.inner.term.lock(), bounds);
+    self.bump_revision();
     self.wake();
   }
 
   /// Scrolls the display.
   pub fn scroll(&self, scroll: ScrollKind) {
     backend::scroll_display(&mut self.inner.term.lock(), scroll);
+    self.bump_revision();
     self.wake();
   }
 
@@ -193,10 +206,28 @@ impl TerminalSession {
     self.inner.term.lock().cursor_style().blinking
   }
 
+  /// The current content revision. Changes whenever the emulator content may
+  /// have changed since the previously observed value, so renderers can skip
+  /// [`Self::snapshot`] while it stays equal.
+  pub fn revision(&self) -> u64 {
+    self.inner.revision.load(Ordering::Relaxed)
+  }
+
+  /// Bumps the content revision; called after direct emulator mutations
+  /// (PTY-driven changes are bumped by the backend listener).
+  fn bump_revision(&self) {
+    self.inner.revision.fetch_add(1, Ordering::Relaxed);
+  }
+
   /// Takes a point-in-time snapshot of the terminal state.
   pub fn snapshot(&self) -> crate::types::Content {
+    // Read the revision before locking: a mutation racing with this snapshot
+    // then yields a stale revision (forcing one redundant re-snapshot next
+    // frame) instead of a fresh revision stamped on stale cells. Relaxed
+    // ordering suffices; the emulator lock orders the content itself.
+    let revision = self.inner.revision.load(Ordering::Relaxed);
     let bounds = *self.inner.bounds.lock().unwrap();
-    backend::make_content(&self.inner.term.lock(), &bounds)
+    backend::make_content(&self.inner.term.lock(), &bounds, revision)
   }
 
   /// Renders the full terminal content (visible grid + scrollback) as text.
@@ -212,6 +243,7 @@ impl TerminalSession {
   /// Selects a range of cells with the given [`SelectionKind`] semantics.
   pub fn select(&self, start: Point, end: Point, kind: SelectionKind) {
     backend::set_selection(&mut self.inner.term.lock(), start, end, kind);
+    self.bump_revision();
     self.wake();
   }
 
@@ -225,6 +257,7 @@ impl TerminalSession {
   pub fn update_selection_head(&self, head: Point) -> bool {
     let updated = backend::update_selection_head(&mut self.inner.term.lock(), head);
     if updated {
+      self.bump_revision();
       self.wake();
     }
     updated
@@ -233,6 +266,7 @@ impl TerminalSession {
   /// Clears the current selection, if any.
   pub fn clear_selection(&self) {
     backend::clear_selection(&mut self.inner.term.lock());
+    self.bump_revision();
     self.wake();
   }
 
@@ -244,6 +278,7 @@ impl TerminalSession {
   /// Clears the screen and the scrollback history.
   pub fn clear(&self) {
     backend::clear_saved_screen(&mut self.inner.term.lock());
+    self.bump_revision();
     self.wake();
   }
 
@@ -274,6 +309,7 @@ impl TerminalSession {
       let mut processor = self.inner.display_processor.lock().unwrap();
       backend::feed_display(&mut term, bytes, &mut processor);
     }
+    self.bump_revision();
     self.wake();
   }
 
@@ -419,5 +455,28 @@ mod tests {
     assert_eq!(content.total_lines, 24);
     assert!(content.mode.contains(Modes::LINE_WRAP));
     assert_eq!(DEFAULT_SCROLLING_HISTORY, 10_000);
+  }
+
+  #[test]
+  fn content_revision_tracks_mutations() {
+    let session = display_session(SpawnOptions::default());
+    let first = session.snapshot();
+    // Live sessions start above `Content::empty`'s revision (0), so a
+    // renderer's first frame always takes a real snapshot.
+    assert!(first.revision > 0);
+    // Without a mutation the revision is stable, so renderers can reuse the
+    // previous snapshot instead of re-snapshotting under the lock.
+    assert_eq!(session.revision(), first.revision);
+
+    // PTY-driven output bumps the revision ...
+    session.feed_display(b"hello");
+    let second = session.snapshot();
+    assert!(second.revision > first.revision);
+    assert_eq!(second.revision, session.revision());
+
+    // ... and so do direct emulator mutations (scroll keeps the offset when
+    // there is no history, but the revision is still bumped conservatively).
+    session.scroll(ScrollKind::Top);
+    assert!(session.revision() > second.revision);
   }
 }

@@ -1,7 +1,7 @@
 //! The terminal view entity: hosts a [`TerminalSession`] and drives it with
 //! GPUI-native tasks.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use gpui::{
   App, ClipboardItem, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement as _,
@@ -15,7 +15,7 @@ use woocraft_terminal::{
 
 use super::{
   colors::TerminalPalette,
-  element::TerminalElement,
+  element::{CellMetricsCache, GridLayoutCache, LinkColumnsCache, TerminalElement},
   input::to_esc_str,
   link::{self, GridLink, LinkProvider},
   mouse::{
@@ -73,7 +73,7 @@ pub enum TerminalViewEvent {
 ///
 /// These configure how the view renders and interacts; process and emulator
 /// semantics live in `SpawnOptions`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 #[non_exhaustive]
 pub struct TerminalViewOptions {
   /// Overrides the rendered cursor shape. `None` follows the application
@@ -115,15 +115,29 @@ pub struct TerminalView {
   /// copy stored on the view without a second full-grid clone.
   pub(crate) content: std::sync::Arc<woocraft_terminal::Content>,
   title: Option<String>,
-  pub(crate) marked_text: Option<String>,
+  pub(crate) marked_text: Option<SharedString>,
   /// Whether the application requested a blinking cursor.
   blinking_terminal_enabled: bool,
   cursor_visible: bool,
-  blink_generation: u64,
+  /// Wakes the single long-lived blink task after `blink_deadline` changes.
+  /// Bounded capacity: a queued wake makes further sends redundant.
+  blink_wake: async_channel::Sender<()>,
+  /// Absolute time of the next cursor blink toggle; `None` while blinking is
+  /// paused or disabled (the cursor then stays visible).
+  blink_deadline: Option<Instant>,
   pub(crate) font_family: Option<SharedString>,
   pub(crate) font_size: Option<Pixels>,
-  /// Keeps the focus subscriptions alive for as long as the view lives.
-  /// Keeps the focus subscriptions alive for as long as the view lives.
+  /// Cached monospace cell measurements (element render input); invalidated
+  /// by the font setters.
+  pub(crate) cell_metrics_cache: Option<CellMetricsCache>,
+  /// Cached per-line annotated-link columns (element render input), reused
+  /// while the content revision and provider state are unchanged.
+  pub(crate) link_columns_cache: Option<LinkColumnsCache>,
+  /// Cached grid layout (element render input), reused while its inputs are
+  /// unchanged.
+  pub(crate) grid_layout_cache: Option<GridLayoutCache>,
+  /// Keeps the focus subscriptions alive for as long as the view lives (RAII
+  /// only; the subscriptions are never read).
   #[allow(dead_code)]
   focus_subscriptions: Vec<gpui::Subscription>,
   // Selection interaction state. The anchor is fixed when the mouse goes
@@ -145,6 +159,9 @@ pub struct TerminalView {
   /// The link under the pointer when the current click started, used to
   /// detect click-without-drag activation.
   down_link: Option<GridLink>,
+  /// Cached hover hit-test: (content revision, grid point) and the link
+  /// found there, so mouse moves that stay on one cell skip the row scan.
+  hover_hit_test: Option<(u64, GridPoint, Option<GridLink>)>,
 }
 
 impl EventEmitter<TerminalViewEvent> for TerminalView {}
@@ -202,6 +219,47 @@ impl TerminalView {
     })
     .detach();
 
+    // The single long-lived blink task: parked on `blink_wake` while blinking
+    // is paused or disabled, sleeping toward `blink_deadline` while active.
+    // Re-arming only moves the deadline, so keystrokes never spawn new tasks.
+    let (blink_wake, blink_wake_rx) = async_channel::bounded::<()>(1);
+    cx.spawn(async move |this, cx| {
+      loop {
+        // Park until blinking is (re)armed; the sender dies with the view.
+        if blink_wake_rx.recv().await.is_err() {
+          return;
+        }
+        loop {
+          let Ok(deadline) = this.update(cx, |view, _| view.blink_deadline) else {
+            return;
+          };
+          let Some(deadline) = deadline else {
+            break;
+          };
+          let now = Instant::now();
+          if deadline > now {
+            cx.background_executor().timer(deadline - now).await;
+            continue;
+          }
+          let Ok(()) = this.update(cx, |view, cx| {
+            // Re-checked under the lock: the deadline may have been moved or
+            // disarmed while we slept.
+            if view
+              .blink_deadline
+              .is_some_and(|deadline| deadline <= Instant::now())
+            {
+              view.blink_deadline = Some(Instant::now() + view.blink_interval());
+              view.cursor_visible = !view.cursor_visible;
+              cx.notify();
+            }
+          }) else {
+            return;
+          };
+        }
+      }
+    })
+    .detach();
+
     Self {
       session,
       focus,
@@ -210,9 +268,13 @@ impl TerminalView {
       marked_text: None,
       blinking_terminal_enabled: false,
       cursor_visible: true,
-      blink_generation: 0,
+      blink_wake,
+      blink_deadline: None,
       font_family: None,
       font_size: None,
+      cell_metrics_cache: None,
+      link_columns_cache: None,
+      grid_layout_cache: None,
       selection_phase: SelectionPhase::Ended,
       selection_anchor: None,
       selection_head: None,
@@ -223,6 +285,7 @@ impl TerminalView {
       link_providers: Vec::new(),
       hovered_link: None,
       down_link: None,
+      hover_hit_test: None,
       focus_subscriptions: vec![focus_in, focus_out],
     }
   }
@@ -244,6 +307,9 @@ impl TerminalView {
 
   /// Replaces the presentation options.
   pub fn set_view_options(&mut self, options: TerminalViewOptions, cx: &mut Context<Self>) {
+    if self.view_options == options {
+      return;
+    }
     self.view_options = options;
     cx.notify();
   }
@@ -254,10 +320,20 @@ impl TerminalView {
   }
 
   /// Registers a link provider; the built-in OSC 8 provider is always active.
+  /// Registering an already-registered provider is a no-op.
   pub fn register_link_provider(
     &mut self, provider: std::sync::Arc<dyn LinkProvider>, cx: &mut Context<Self>,
   ) {
+    if self
+      .link_providers
+      .iter()
+      .any(|registered| std::sync::Arc::ptr_eq(registered, &provider))
+    {
+      return;
+    }
     self.link_providers.push(provider);
+    // The new provider may match rows the hover cache already resolved.
+    self.hover_hit_test = None;
     cx.notify();
   }
 
@@ -270,13 +346,22 @@ impl TerminalView {
   pub fn set_font_family(
     &mut self, family: Option<impl Into<SharedString>>, cx: &mut Context<Self>,
   ) {
-    self.font_family = family.map(|family| family.into());
+    let family = family.map(|family| family.into());
+    if self.font_family == family {
+      return;
+    }
+    self.font_family = family;
+    self.cell_metrics_cache = None;
     cx.notify();
   }
 
   /// Overrides the terminal font size.
   pub fn set_font_size(&mut self, size: Option<Pixels>, cx: &mut Context<Self>) {
+    if self.font_size == size {
+      return;
+    }
     self.font_size = size;
+    self.cell_metrics_cache = None;
     cx.notify();
   }
 
@@ -400,7 +485,7 @@ impl TerminalView {
         // this event while the PTY event loop may hold the emulator lock, so
         // it must not query emulator state itself.
         self.blinking_terminal_enabled = self.session.cursor_blinking();
-        self.start_blink(cx);
+        self.start_blink();
         cx.notify();
       }
       TerminalEvent::ChildExit(status) => {
@@ -420,48 +505,37 @@ impl TerminalView {
     false
   }
 
-  /// Restarts the blink loop; the cursor stays visible while paused.
-  fn start_blink(&mut self, cx: &mut Context<Self>) {
+  /// Re-arms the blink loop; the cursor stays visible until the next toggle.
+  /// Reuses the long-lived blink task: only its deadline moves.
+  fn start_blink(&mut self) {
     self.cursor_visible = true;
-    self.blink_generation += 1;
-    let generation = self.blink_generation;
-    let interval = self
-      .view_options
-      .cursor_blink_interval
-      .unwrap_or(CURSOR_BLINK_INTERVAL);
-    cx.spawn(async move |this, cx| {
-      loop {
-        cx.background_executor().timer(interval).await;
-        let Ok(stop) = this.update(cx, |view, cx| {
-          if view.blink_generation != generation || !view.blinking_terminal_enabled {
-            return true;
-          }
-          view.cursor_visible = !view.cursor_visible;
-          cx.notify();
-          false
-        }) else {
-          return;
-        };
-        if stop {
-          return;
-        }
-      }
-    })
-    .detach();
+    self.blink_deadline = self
+      .blinking_terminal_enabled
+      .then(|| Instant::now() + self.blink_interval());
+    // Bounded(1): a queued wake makes further sends redundant.
+    let _ = self.blink_wake.try_send(());
   }
 
   /// Keeps the cursor visible and restarts blinking (e.g. after a keystroke).
-  pub(crate) fn pause_blink(&mut self, cx: &mut Context<Self>) {
+  pub(crate) fn pause_blink(&mut self) {
     if self.blinking_terminal_enabled {
-      self.start_blink(cx);
+      self.start_blink();
     }
+  }
+
+  /// The configured cursor blink cadence.
+  fn blink_interval(&self) -> Duration {
+    self
+      .view_options
+      .cursor_blink_interval
+      .unwrap_or(CURSOR_BLINK_INTERVAL)
   }
 
   fn focus_in(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
     if self.content.mode.contains(Modes::FOCUS_IN_OUT) {
       self.session.input(b"\x1b[I");
     }
-    self.start_blink(cx);
+    self.start_blink();
     cx.notify();
   }
 
@@ -471,8 +545,10 @@ impl TerminalView {
     if self.content.mode.contains(Modes::FOCUS_IN_OUT) {
       self.session.input(b"\x1b[O");
     }
+    // Disarm the blink loop; the cursor stays visible while unfocused.
     self.cursor_visible = true;
-    self.blink_generation += 1;
+    self.blink_deadline = None;
+    let _ = self.blink_wake.try_send(());
     cx.notify();
   }
 
@@ -488,7 +564,7 @@ impl TerminalView {
     let esc = esc.into_owned();
     self.session.input(esc.into_bytes());
     self.input_scroll_to_bottom(cx);
-    self.pause_blink(cx);
+    self.pause_blink();
     cx.notify();
     true
   }
@@ -532,57 +608,49 @@ impl TerminalView {
   fn on_action_scroll_line_up(
     &mut self, _: &super::ScrollLineUp, _: &mut Window, cx: &mut Context<Self>,
   ) {
-    if self.is_alt_screen() {
-      cx.propagate();
-      return;
-    }
-    self.scroll(ScrollKind::Delta(1), cx);
+    self.scroll_action(ScrollKind::Delta(1), cx);
   }
 
   fn on_action_scroll_line_down(
     &mut self, _: &super::ScrollLineDown, _: &mut Window, cx: &mut Context<Self>,
   ) {
-    if self.is_alt_screen() {
-      cx.propagate();
-      return;
-    }
-    self.scroll(ScrollKind::Delta(-1), cx);
+    self.scroll_action(ScrollKind::Delta(-1), cx);
   }
 
   fn on_action_scroll_page_up(
     &mut self, _: &super::ScrollPageUp, _: &mut Window, cx: &mut Context<Self>,
   ) {
-    if self.is_alt_screen() {
-      cx.propagate();
-      return;
-    }
-    self.scroll(ScrollKind::PageUp, cx);
+    self.scroll_action(ScrollKind::PageUp, cx);
   }
 
   fn on_action_scroll_page_down(
     &mut self, _: &super::ScrollPageDown, _: &mut Window, cx: &mut Context<Self>,
   ) {
-    if self.is_alt_screen() {
-      cx.propagate();
-      return;
-    }
-    self.scroll(ScrollKind::PageDown, cx);
+    self.scroll_action(ScrollKind::PageDown, cx);
   }
 
   fn on_action_scroll_to_top(
     &mut self, _: &super::ScrollToTop, _: &mut Window, cx: &mut Context<Self>,
   ) {
-    if self.is_alt_screen() {
-      cx.propagate();
-      return;
-    }
-    self.scroll(ScrollKind::Top, cx);
+    self.scroll_action(ScrollKind::Top, cx);
   }
 
   fn on_action_scroll_to_bottom(
     &mut self, _: &super::ScrollToBottom, _: &mut Window, cx: &mut Context<Self>,
   ) {
+    // Scrolling back to the bottom is safe on the alternate screen: it can
+    // only restore the live viewport, never dig into scrollback.
     self.scroll(ScrollKind::Bottom, cx);
+  }
+
+  /// Shared body of the viewport scroll actions. On the alternate screen the
+  /// application owns scrolling, so the action propagates to the host.
+  fn scroll_action(&mut self, scroll: ScrollKind, cx: &mut Context<Self>) {
+    if self.is_alt_screen() {
+      cx.propagate();
+      return;
+    }
+    self.scroll(scroll, cx);
   }
 
   /// Handles scroll wheel input: mouse reporting, alternate-screen scrolling,
@@ -861,7 +929,7 @@ impl TerminalView {
         self.content.terminal_bounds,
         self.content.display_offset,
       );
-      link::link_at(&self.content, point, &self.link_providers)
+      self.cached_link_at(point)
     };
     if self.hovered_link != link {
       self.hovered_link = link.clone();
@@ -930,6 +998,22 @@ impl TerminalView {
   /// used for local selection. Shift bypasses mouse mode.
   fn mouse_mode(&self, shift: bool) -> bool {
     self.content.mode.intersects(Modes::MOUSE_MODE) && !shift
+  }
+
+  /// Hit-tests the link at `point`, reusing the previous answer while the
+  /// content revision and point are unchanged: hover recomputes on every
+  /// mouse move, and the underlying row scan is not free.
+  fn cached_link_at(&mut self, point: GridPoint) -> Option<GridLink> {
+    let revision = self.content.revision;
+    if let Some((last_revision, last_point, link)) = &self.hover_hit_test
+      && *last_revision == revision
+      && *last_point == point
+    {
+      return link.clone();
+    }
+    let link = link::link_at(&self.content, point, &self.link_providers);
+    self.hover_hit_test = Some((revision, point, link.clone()));
+    link
   }
 
   fn mouse_changed(&mut self, point: GridPoint, after_midpoint: bool) -> bool {
