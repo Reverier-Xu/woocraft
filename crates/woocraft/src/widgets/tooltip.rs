@@ -59,10 +59,11 @@ impl Tooltip {
   /// Render the tooltip as a view for gpui's tooltip API.
   ///
   /// The signature has to hand out an `AnyView`: gpui's tooltip element only
-  /// consumes entity-backed views, so a per-tooltip entity is unavoidable.
-  /// It is created lazily by gpui only when the tooltip is actually shown,
-  /// and all content/keybinding resolution happens here so re-renders of the
-  /// backing entity stay cheap.
+  /// consumes entity-backed views, so *a* per-hover entity is unavoidable.
+  /// Everything expensive is resolved here instead of inside that entity: the
+  /// boxed action is consumed for a one-time keymap scan and then dropped, so
+  /// the backing [`TooltipView`] is an immutable shell that merely paints
+  /// precomputed data on the (rare) frames it re-renders.
   pub fn build(mut self, window: &mut Window, cx: &mut App) -> AnyView {
     // Resolve the key binding eagerly: the tooltip content is immutable for
     // its lifetime, so `binding_for_action`'s keymap scan does not need to be
@@ -78,7 +79,13 @@ impl Tooltip {
       self.action = None;
     }
 
-    cx.new(|_| self).into()
+    cx.new(|_| TooltipView {
+      style: self.style,
+      content: self.content,
+      key_binding: self.key_binding,
+      size: self.size,
+    })
+    .into()
   }
 }
 
@@ -87,7 +94,16 @@ impl FluentBuilder for Tooltip {}
 impl_sizable!(Tooltip);
 impl_styled!(Tooltip);
 
-impl Render for Tooltip {
+/// The immutable shell entity held by gpui's tooltip API. See
+/// [`Tooltip::build`]; it owns only precomputed render inputs.
+struct TooltipView {
+  style: StyleRefinement,
+  content: TooltipContent,
+  key_binding: Option<Kbd>,
+  size: Size,
+}
+
+impl Render for TooltipView {
   fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     // The effective binding was resolved once in `build`; render only reads
     // the cached value.
