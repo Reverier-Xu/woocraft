@@ -199,12 +199,6 @@ impl Theme {
   pub fn color_for_hue(&self, hue: f32) -> gpui::Hsla {
     self.tokens.syntax_color(hue)
   }
-
-  /// Gets the editor background color.
-  #[inline]
-  pub fn editor_background(&self) -> gpui::Hsla {
-    self.editor_background
-  }
 }
 
 /// Initializes the global theme and syncs with system appearance.

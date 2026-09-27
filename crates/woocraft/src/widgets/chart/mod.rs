@@ -1,4 +1,5 @@
 mod area_chart;
+mod axes;
 mod bar_chart;
 mod candlestick_chart;
 mod line_chart;
