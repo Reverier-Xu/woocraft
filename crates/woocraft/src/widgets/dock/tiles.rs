@@ -86,7 +86,7 @@ struct ResizeDrag {
 pub struct TileItem {
   id: EntityId,
   pub(crate) panel: Arc<dyn PanelView>,
-  bounds: Bounds<Pixels>,
+  pub(crate) bounds: Bounds<Pixels>,
   z_index: usize,
 }
 

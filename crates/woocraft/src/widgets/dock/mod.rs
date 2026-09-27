@@ -174,6 +174,116 @@ impl std::fmt::Debug for DockItem {
   }
 }
 
+/// Live structural projection of a [`DockItem`], read from the view entities
+/// at call time.
+///
+/// [`DockItem`]'s own `items`/`sizes`/`active_ix` fields are construction-time
+/// mirrors that go stale after any drag-and-drop restructure; this snapshot
+/// reflects the current structure: panels added, removed, or closed through
+/// the UI, runtime splits, tile drags. See `docs/dock-layout-refactor.md`.
+#[derive(Clone, PartialEq)]
+pub enum DockItemSnapshot {
+  /// A [`DockItem::Split`] projected from its live [`StackPanel`].
+  Split {
+    /// Layout axis of the stack panel.
+    axis: Axis,
+    /// Live divider sizes from the stack panel's resizable state.
+    sizes: Vec<Pixels>,
+    /// Live children, projected recursively.
+    items: Vec<DockItemSnapshot>,
+  },
+  /// A [`DockItem::Tabs`] projected from its live [`TabPanel`].
+  Tabs {
+    /// The panels currently in the tab group.
+    panels: Vec<Arc<dyn PanelView>>,
+    /// The index of the currently active panel.
+    active_ix: usize,
+  },
+  /// A [`DockItem::Panel`]; a bare panel carries no live state beyond its
+  /// view.
+  Panel {
+    /// The panel view.
+    view: Arc<dyn PanelView>,
+  },
+  /// A [`DockItem::Tiles`] projected from its live [`Tiles`].
+  Tiles {
+    /// The live tiles with their current free-floating bounds.
+    tiles: Vec<TileSnapshot>,
+  },
+}
+
+impl std::fmt::Debug for DockItemSnapshot {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      Self::Split {
+        axis, sizes, items,
+      } => f
+        .debug_struct("Split")
+        .field("axis", axis)
+        .field("sizes", sizes)
+        .field("items", &items.len())
+        .finish(),
+      Self::Tabs { panels, active_ix } => f
+        .debug_struct("Tabs")
+        .field("panels", &panels.len())
+        .field("active_ix", active_ix)
+        .finish(),
+      Self::Panel { .. } => f.debug_struct("Panel").finish(),
+      Self::Tiles { tiles } => f
+        .debug_struct("Tiles")
+        .field("tiles", &tiles.len())
+        .finish(),
+    }
+  }
+}
+
+/// Live projection of one tile: its wrapped panel and current bounds.
+#[derive(Clone)]
+pub struct TileSnapshot {
+  /// The [`TabPanel`] hosted by the tile.
+  pub panel: Arc<dyn PanelView>,
+  /// The tile's current free-floating bounds.
+  pub bounds: Bounds<Pixels>,
+}
+
+impl PartialEq for TileSnapshot {
+  fn eq(&self, other: &Self) -> bool {
+    // View identity, matching `PartialEq for dyn PanelView`.
+    self.panel.view() == other.panel.view() && self.bounds == other.bounds
+  }
+}
+
+/// Project a panel held in a [`StackPanel`] or [`Tiles`] into a snapshot,
+/// recursing through container views.
+fn snapshot_panel_view(panel: &Arc<dyn PanelView>, cx: &App) -> DockItemSnapshot {
+  let view = panel.view();
+  if let Ok(tab_panel) = view.clone().downcast::<TabPanel>() {
+    let tab_panel = tab_panel.read(cx);
+    DockItemSnapshot::Tabs {
+      panels: tab_panel.panels.clone(),
+      active_ix: tab_panel.active_ix,
+    }
+  } else if let Ok(stack_panel) = view.clone().downcast::<StackPanel>() {
+    stack_panel.read(cx).snapshot(cx)
+  } else if let Ok(tiles) = view.downcast::<Tiles>() {
+    DockItemSnapshot::Tiles {
+      tiles: tiles
+        .read(cx)
+        .panels()
+        .iter()
+        .map(|item| TileSnapshot {
+          panel: item.panel.clone(),
+          bounds: item.bounds,
+        })
+        .collect(),
+    }
+  } else {
+    DockItemSnapshot::Panel {
+      view: panel.clone(),
+    }
+  }
+}
+
 impl DockItem {
   /// Return true if this dock item tree contains any real (user) panels.
   ///
@@ -413,6 +523,35 @@ impl DockItem {
       items,
       active_ix,
       view: tab_panel,
+    }
+  }
+
+  /// Project the live structure behind this item into a value snapshot.
+  ///
+  /// This is the official read path for current structure: the enum's own
+  /// `items`/`sizes`/`active_ix` fields only hold construction-time values.
+  pub fn snapshot(&self, cx: &App) -> DockItemSnapshot {
+    match self {
+      Self::Split { view, .. } => view.read(cx).snapshot(cx),
+      Self::Tabs { view, .. } => {
+        let tab_panel = view.read(cx);
+        DockItemSnapshot::Tabs {
+          panels: tab_panel.panels.clone(),
+          active_ix: tab_panel.active_ix,
+        }
+      }
+      Self::Panel { view, .. } => DockItemSnapshot::Panel { view: view.clone() },
+      Self::Tiles { view, .. } => DockItemSnapshot::Tiles {
+        tiles: view
+          .read(cx)
+          .panels()
+          .iter()
+          .map(|item| TileSnapshot {
+            panel: item.panel.clone(),
+            bounds: item.bounds,
+          })
+          .collect(),
+      },
     }
   }
 
