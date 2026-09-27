@@ -23,6 +23,35 @@ type TreeContextMenuBuilder =
 type TreeBlankContextMenuBuilder =
   Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
 
+/// The built-in row renderer shared by `TreeState` and `Tree`.
+///
+/// Handed out as the same `Rc` allocation (per thread) so the per-frame
+/// write-back in `Tree::render` can skip the assignment via `Rc::ptr_eq`
+/// when neither the state nor the element overrides the default.
+fn default_render_item() -> TreeRenderItem {
+  thread_local! {
+    static DEFAULT: TreeRenderItem = Rc::new(|_, entry, _, _, _| {
+      div()
+        .w_full()
+        .min_w_0()
+        .truncate()
+        .child(entry.item().label.clone())
+        .into_any_element()
+    });
+  }
+  DEFAULT.with(Rc::clone)
+}
+
+/// Whether two optional `Rc` handles point at the same allocation (or are
+/// both `None`).
+fn same_rc<T: ?Sized>(current: &Option<Rc<T>>, next: &Option<Rc<T>>) -> bool {
+  match (current, next) {
+    (Some(a), Some(b)) => Rc::ptr_eq(a, b),
+    (None, None) => true,
+    _ => false,
+  }
+}
+
 /// Events emitted by the tree component.
 #[derive(Clone, Debug)]
 pub enum TreeEvent {
@@ -129,14 +158,7 @@ impl TreeState {
       focus_handle: cx.focus_handle(),
       model: TreeModel::new(),
       scroll_handle: UniformListScrollHandle::default(),
-      render_item: Rc::new(move |_, entry, _, _, _| {
-        div()
-          .w_full()
-          .min_w_0()
-          .truncate()
-          .child(entry.item().label.clone())
-          .into_any_element()
-      }),
+      render_item: default_render_item(),
       context_menu_builder: None,
       blank_context_menu_builder: None,
       right_clicked_ix: None,
@@ -261,12 +283,20 @@ impl TreeState {
     self.model.selected_items()
   }
 
-  fn row_id(entry: &TreeEntry) -> ElementId {
-    ElementId::Name(format!("tree-row-{}", entry.item().id.as_ref()).into())
+  /// Row identity used for element state. Keyed by the flattened index
+  /// instead of the item id: building `format!("tree-row-{id}")` names
+  /// allocated a `String` for every visible row on every frame. Index keys
+  /// are stable while entries are unchanged; when entries shift
+  /// (expand/collapse or `update_items`) row element state is rebuilt — the
+  /// previous id-keyed scheme misaligned the same way, since row positions
+  /// shift under unchanged ids.
+  fn row_id(ix: usize) -> ElementId {
+    ("tree-row", ix).into()
   }
 
-  fn item_id(entry: &TreeEntry) -> ElementId {
-    ElementId::Name(format!("tree-item-{}", entry.item().id.as_ref()).into())
+  /// See [`TreeState::row_id`] for the id-keying rationale.
+  fn item_id(ix: usize) -> ElementId {
+    ("tree-item", ix).into()
   }
 
   fn render_list_item(
@@ -281,24 +311,20 @@ impl TreeState {
     let is_loading = entry.is_loading();
     let is_folder = entry.is_folder();
 
-    let _ = ix;
-
-    ListItem::new(Self::item_id(entry))
-      .loading(is_loading)
-      .child(
-        h_flex()
-          .w_full()
-          .min_w_0()
-          .relative()
-          .items_center()
-          .component_gap(Size::Medium)
-          .pl(px(16.) * entry.depth())
-          .child(Icon::new(entry.icon_or_default()))
-          .child(div().flex_1().truncate().min_w_0().child(content))
-          .when(is_folder && !is_loading, |this| {
-            this.child(Icon::new(expand_icon))
-          }),
-      )
+    ListItem::new(Self::item_id(ix)).loading(is_loading).child(
+      h_flex()
+        .w_full()
+        .min_w_0()
+        .relative()
+        .items_center()
+        .component_gap(Size::Medium)
+        .pl(px(16.) * entry.depth())
+        .child(Icon::new(entry.icon_or_default()))
+        .child(div().flex_1().truncate().min_w_0().child(content))
+        .when(is_folder && !is_loading, |this| {
+          this.child(Icon::new(expand_icon))
+        }),
+    )
   }
 
   fn render_guide_layers(
@@ -313,21 +339,14 @@ impl TreeState {
     let color = cx.theme().foreground.opacity(0.2);
     let immediate_parent_ix = self.model.parent_index(ix);
 
-    // Ancestor continuation lines (VS Code style).
-    let mut cursor_ix = ix;
-    while let Some(parent_ix) = self.model.parent_index(cursor_ix) {
-      let parent_depth = self
-        .model
-        .entries()
-        .get(parent_ix)
-        .map(|e| e.depth())
-        .unwrap_or(0);
-      let is_immediate_parent = Some(parent_ix) == immediate_parent_ix;
-      if !is_immediate_parent && self.model.has_next_sibling(parent_ix) {
+    // Ancestor continuation lines (VS Code style), precomputed per entry in
+    // the model's structural cache; here we only map flags to elements.
+    for (ancestor_depth, &has_line) in self.model.ancestor_guides(ix).iter().enumerate() {
+      if has_line {
         layers.push(
           div()
             .absolute()
-            .left(Self::guide_x(parent_depth) + px(8.))
+            .left(Self::guide_x(ancestor_depth) + px(8.))
             .top_0()
             .bottom_0()
             .w(px(1.))
@@ -335,7 +354,6 @@ impl TreeState {
             .into_any_element(),
         );
       }
-      cursor_ix = parent_ix;
     }
 
     // Branch segment for current row (├ / └).
@@ -501,13 +519,11 @@ impl TreeState {
         cx.notify();
         return;
       }
-      // Plain click in multi-mode: clear multi-selection, select single
-      self.model.clear_selection();
-    }
-
-    self.model.set_selected_index(Some(ix));
-    if self.multi_selectable {
-      self.model.toggle_selected(ix);
+      // Plain click in multi-mode: replace any multi-selection with just
+      // this item.
+      self.model.select_only(ix);
+    } else {
+      self.model.set_selected_index(Some(ix));
     }
     self.model.toggle_expand(ix);
     cx.emit(TreeEvent::Select(ix));
@@ -593,10 +609,9 @@ impl Render for TreeState {
           let content = (render_item)(ix, entry, selected, window, cx);
           let list_item = state.render_list_item(ix, entry, content, cx);
           let guides = state.render_guide_layers(ix, entry, cx);
-          let label = entry.item().label.clone();
 
           let mut row = div()
-            .id(Self::row_id(entry))
+            .id(Self::row_id(ix))
             .relative()
             .children(guides)
             .child(list_item.disabled(disabled).selected(selected));
@@ -616,13 +631,12 @@ impl Render for TreeState {
 
           // Drag-to-reorder support
           if draggable && !disabled {
-            let drag_label = label.clone();
             row = row
               .on_drag(
                 DragTreeItem {
                   entity_id,
                   ix,
-                  label: drag_label,
+                  label: entry.item().label.clone(),
                 },
                 |drag, _, _, cx| {
                   cx.stop_propagation();
@@ -682,14 +696,7 @@ impl Tree {
       id: ("tree", state.entity_id()).into(),
       state: state.clone(),
       style: StyleRefinement::default(),
-      render_item: Rc::new(|_, entry, _, _, _| {
-        div()
-          .w_full()
-          .min_w_0()
-          .truncate()
-          .child(entry.item().label.clone())
-          .into_any_element()
-      }),
+      render_item: default_render_item(),
       context_menu_builder: None,
       blank_context_menu_builder: None,
       bottom_gap: None,
@@ -742,12 +749,28 @@ impl RenderOnce for Tree {
     let focus_handle = self.state.read(cx).focus_handle.clone();
     let scroll_handle = self.state.read(cx).scroll_handle.clone();
 
+    let render_item = self.render_item;
+    let context_menu_builder = self.context_menu_builder;
+    let blank_context_menu_builder = self.blank_context_menu_builder;
+    let bottom_gap = self.bottom_gap;
+
     self.state.update(cx, |state, _| {
-      state.render_item = self.render_item;
-      state.context_menu_builder = self.context_menu_builder;
-      state.blank_context_menu_builder = self.blank_context_menu_builder;
-      if let Some(gap) = self.bottom_gap {
-        state.bottom_gap = Some(gap);
+      // `Tree` is rebuilt by parents on every render; skip write-backs when
+      // the element carries the same `Rc` handles the state already holds.
+      if !Rc::ptr_eq(&state.render_item, &render_item) {
+        state.render_item = render_item;
+      }
+      if !same_rc(&state.context_menu_builder, &context_menu_builder) {
+        state.context_menu_builder = context_menu_builder;
+      }
+      if !same_rc(
+        &state.blank_context_menu_builder,
+        &blank_context_menu_builder,
+      ) {
+        state.blank_context_menu_builder = blank_context_menu_builder;
+      }
+      if bottom_gap.is_some() && state.bottom_gap != bottom_gap {
+        state.bottom_gap = bottom_gap;
       }
     });
 
