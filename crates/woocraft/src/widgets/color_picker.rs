@@ -34,6 +34,8 @@
 //! differences. RGB values and hex input are converted to Oklch on change, with
 //! hue preservation when changing from RGB.
 
+use std::sync::Arc;
+
 use gpui::{
   App, AppContext as _, Bounds, Context, ElementId, Entity, EventEmitter, Hsla,
   InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
@@ -50,7 +52,10 @@ use crate::{
 const CHROMA_MAX: f32 = 0.4;
 const HUE_MAX: f32 = 360.0;
 const WARNING_LINE_THICKNESS: Pixels = px(2.0);
-const GRADIENT_MIN_STEPS: usize = 64;
+/// Fixed number of gradient segments per channel slider. 96 segments are
+/// visually indistinguishable from per-pixel segmentation (gpui-kit uses the
+/// same fixed step count) and keep the cached color table size constant.
+const GRADIENT_STEPS: usize = 96;
 const POINTER_OUTER_WIDTH: Pixels = px(4.0);
 const POINTER_INNER_WIDTH: Pixels = px(2.0);
 
@@ -200,6 +205,29 @@ impl PickerChannel {
     let (min, max) = self.range();
     min + (max - min) * ratio.clamp(0.0, 1.0)
   }
+
+  /// Cache key for this channel's gradient table: the oklch components the
+  /// gradient depends on, with the channel's own component zeroed because the
+  /// gradient sweeps it across the full range.
+  fn gradient_cache_key(self, mut oklch: ColorPickerOklch) -> ColorPickerOklch {
+    self.assign(&mut oklch, 0.0);
+    oklch
+  }
+}
+
+/// One precomputed segment of a channel gradient.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ChannelGradientStop {
+  rgba: ColorPickerRgba,
+  out_of_gamut: bool,
+}
+
+/// Cached gradient color table for one channel.
+struct ChannelGradient {
+  /// Oklch snapshot the table was built from, as produced by
+  /// [`PickerChannel::gradient_cache_key`].
+  key: ColorPickerOklch,
+  colors: Arc<[ChannelGradientStop]>,
 }
 
 impl Default for ColorPickerOklch {
@@ -220,9 +248,13 @@ impl Default for ColorPickerOklch {
 /// Emits `ColorPickerEvent::Change` whenever the color changes.
 pub struct ColorPickerState {
   value: ColorPickerOklch,
+  /// Fully resolved value cache, kept in sync with `value` by `set_oklch` and
+  /// `default_value` so renders never re-run color space conversions.
+  resolved: ColorPickerValue,
   channel_bounds: [Bounds<Pixels>; 4],
+  /// Per-channel gradient color tables (see [`Self::channel_gradient`]).
+  gradient_cache: [Option<ChannelGradient>; 4],
   hex_input: Option<Entity<InputState>>,
-  pending_programmatic_hex_events: usize,
   hex_input_dirty: bool,
   _hex_input_subscription: Option<Subscription>,
 }
@@ -238,11 +270,13 @@ impl ColorPickerState {
   ///
   /// Default color is a medium-saturation blue (h=248°, c=0.17, l=0.64, a=1.0).
   pub fn new() -> Self {
+    let value = ColorPickerOklch::default();
     Self {
-      value: ColorPickerOklch::default(),
+      value,
+      resolved: resolve_value(value),
       channel_bounds: [Bounds::default(); 4],
+      gradient_cache: [None, None, None, None],
       hex_input: None,
-      pending_programmatic_hex_events: 0,
       hex_input_dirty: false,
       _hex_input_subscription: None,
     }
@@ -254,6 +288,7 @@ impl ColorPickerState {
   /// to valid ranges (lightness 0..1, chroma 0..0.4, hue 0..360, alpha 0..1).
   pub fn default_value(mut self, value: ColorPickerOklch) -> Self {
     self.value = sanitize_oklch(value);
+    self.resolved = resolve_value(self.value);
     self
   }
 
@@ -268,7 +303,8 @@ impl ColorPickerState {
       return;
     }
     self.value = next;
-    cx.emit(ColorPickerEvent::Change(self.value()));
+    self.resolved = resolve_value(next);
+    cx.emit(ColorPickerEvent::Change(self.resolved.clone()));
     cx.notify();
   }
 
@@ -280,8 +316,10 @@ impl ColorPickerState {
   /// Returns the complete current color with all color space representations.
   ///
   /// Includes RGBA hex (8-digit), RGBA normalized values, Oklch, and HSLA.
+  /// Clones the cache maintained by [`Self::set_oklch`] instead of re-running
+  /// color space conversions.
   pub fn value(&self) -> ColorPickerValue {
-    resolve_value(self.value)
+    self.resolved.clone()
   }
 
   /// Returns the opt hex input field entity (if it has been created).
@@ -289,26 +327,33 @@ impl ColorPickerState {
     self.hex_input.clone()
   }
 
-  fn ensure_hex_input(&mut self, cx: &mut Context<Self>) -> Entity<InputState> {
+  fn ensure_hex_input(
+    &mut self, window: &mut Window, cx: &mut Context<Self>,
+  ) -> Entity<InputState> {
     if let Some(hex_input) = &self.hex_input {
       return hex_input.clone();
     }
 
-    let initial_hex = self.value().rgba_hex.to_string();
+    let initial_hex = self.resolved.rgba_hex.to_string();
     let hex_input = cx.new(|cx| {
       InputState::new(cx)
         .placeholder(translate_woocraft("color_picker.hex_placeholder"))
         .default_value(initial_hex.clone())
     });
-    let subscription = cx.subscribe(&hex_input, Self::on_hex_input_event);
+    // Subscribing in-window lets the input event handler sync the display
+    // right after a committed hex value is applied.
+    let subscription = cx.subscribe_in(&hex_input, window, Self::on_hex_input_event);
     self.hex_input = Some(hex_input.clone());
     self._hex_input_subscription = Some(subscription);
     hex_input
   }
 
+  /// Rewrites the hex input display to the canonical hex of the current value
+  /// unless the user is mid-edit. Guards by comparing the displayed text with
+  /// the expected value, so programmatic writes need no event bookkeeping.
   pub fn sync_hex_input_display(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-    let hex_input = self.ensure_hex_input(cx);
-    let expected = self.value().rgba_hex.to_string();
+    let expected = self.resolved.rgba_hex.to_string();
+    let hex_input = self.ensure_hex_input(window, cx);
     let current = hex_input.read(cx).value().to_string();
     if current == expected {
       self.hex_input_dirty = false;
@@ -319,10 +364,28 @@ impl ColorPickerState {
       return;
     }
 
-    self.pending_programmatic_hex_events = self.pending_programmatic_hex_events.saturating_add(1);
     hex_input.update(cx, |input, cx| {
-      input.set_value(expected.clone(), window, cx);
+      input.set_value(expected, window, cx);
     });
+  }
+
+  /// Returns the gradient color table for `channel`, rebuilding it only when
+  /// an oklch component the gradient depends on has changed.
+  fn channel_gradient(&mut self, channel: PickerChannel) -> Arc<[ChannelGradientStop]> {
+    let cache_key = channel.gradient_cache_key(self.value);
+    let current = self.value;
+    let cache = &mut self.gradient_cache[channel.index()];
+    match cache {
+      Some(entry) if entry.key == cache_key => entry.colors.clone(),
+      _ => {
+        let colors: Arc<[ChannelGradientStop]> = build_channel_gradient(channel, current).into();
+        *cache = Some(ChannelGradient {
+          key: cache_key,
+          colors: colors.clone(),
+        });
+        colors
+      }
+    }
   }
 
   fn set_channel_bounds(&mut self, channel: PickerChannel, bounds: Bounds<Pixels>) {
@@ -330,7 +393,8 @@ impl ColorPickerState {
   }
 
   fn set_channel_by_position(
-    &mut self, channel: PickerChannel, position: Point<Pixels>, cx: &mut Context<Self>,
+    &mut self, channel: PickerChannel, position: Point<Pixels>, window: &mut Window,
+    cx: &mut Context<Self>,
   ) {
     let bounds = self.channel_bounds[channel.index()];
     if bounds.size.width <= px(0.0) {
@@ -341,18 +405,16 @@ impl ColorPickerState {
     let mut next = self.value;
     channel.assign(&mut next, channel.value_from_ratio(ratio));
     self.set_oklch(next, cx);
+    self.sync_hex_input_display(window, cx);
   }
 
   fn on_hex_input_event(
-    &mut self, state: Entity<InputState>, event: &InputEvent, cx: &mut Context<Self>,
+    &mut self, state: &Entity<InputState>, event: &InputEvent, window: &mut Window,
+    cx: &mut Context<Self>,
   ) {
     let input = state.read(cx).value().to_string();
     let parsed = match event {
       InputEvent::Change => {
-        if self.pending_programmatic_hex_events > 0 {
-          self.pending_programmatic_hex_events -= 1;
-          return;
-        }
         self.hex_input_dirty = true;
         if !is_complete_eight_hex_input(&input) {
           return;
@@ -372,9 +434,18 @@ impl ColorPickerState {
       return;
     };
 
+    // Skip edits that already denote the current color. Programmatic display
+    // syncs write exactly the canonical hex of the current value, so this
+    // swallows their echoes without an event counter.
+    if rgba_to_hex(rgba) == *self.resolved.rgba_hex {
+      self.hex_input_dirty = false;
+      return;
+    }
+
     self.hex_input_dirty = false;
     let next = oklch_from_rgba(rgba, self.value.hue);
     self.set_oklch(next, cx);
+    self.sync_hex_input_display(window, cx);
   }
 }
 
@@ -441,10 +512,14 @@ impl_styled!(ColorPicker);
 
 impl RenderOnce for ColorPicker {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    // Lazily create the hex input; its display is synced when the value
+    // changes (right after `set_oklch`) and when popover content is rebuilt.
     self.state.update(cx, |state, cx| {
-      state.sync_hex_input_display(window, cx);
+      state.ensure_hex_input(window, cx);
     });
 
+    // Reads the value cache maintained by `set_oklch`; this render-hot path
+    // performs no color space conversions.
     let resolved = self.state.read(cx).value();
     let state_id = self.state.entity_id();
     let swatch_color = gpui::Rgba {
@@ -493,26 +568,30 @@ impl RenderOnce for ColorPicker {
     Popover::new(self.id.clone())
       .anchor(Anchor::TopLeft)
       .trigger(trigger)
-      .content(move |_, _, cx| {
+      .content(move |_, window, cx| {
+        state.update(cx, |state, cx| {
+          // Sync the hex echo here so programmatic value changes made outside
+          // the picker are picked up when the popover renders; channel drags
+          // already sync right after `set_oklch`.
+          state.sync_hex_input_display(window, cx);
+        });
         let hex_input = state.read(cx).hex_input();
-        let content = v_flex().w(px(320.0)).gap(px(8.0));
+        let mut content = v_flex().w(px(320.0)).gap(px(8.0));
 
-        let content = if let Some(hex_input) = hex_input {
-          content.child(Input::new(&hex_input))
-        } else {
-          content
-        };
+        if let Some(hex_input) = hex_input {
+          content = content.child(Input::new(&hex_input));
+        }
+
+        for channel in [
+          PickerChannel::Lightness,
+          PickerChannel::Chroma,
+          PickerChannel::Hue,
+          PickerChannel::Alpha,
+        ] {
+          content = content.child(render_channel_row(channel, &state, size, cx));
+        }
 
         content
-          .child(render_channel_row(
-            PickerChannel::Lightness,
-            &state,
-            size,
-            cx,
-          ))
-          .child(render_channel_row(PickerChannel::Chroma, &state, size, cx))
-          .child(render_channel_row(PickerChannel::Hue, &state, size, cx))
-          .child(render_channel_row(PickerChannel::Alpha, &state, size, cx))
       })
       .into_any_element()
   }
@@ -521,11 +600,16 @@ impl RenderOnce for ColorPicker {
 fn render_channel_row(
   channel: PickerChannel, state: &Entity<ColorPickerState>, size: Size, cx: &mut App,
 ) -> impl IntoElement {
-  let (current_oklch, value) = {
-    let state = state.read(cx);
+  // Refresh (or reuse) the cached gradient color table for this channel so
+  // painting below never re-runs color space conversions.
+  let (current_oklch, value, stops) = state.update(cx, |state, _| {
     let current_oklch = state.oklch();
-    (current_oklch, channel.value(current_oklch))
-  };
+    (
+      current_oklch,
+      channel.value(current_oklch),
+      state.channel_gradient(channel),
+    )
+  });
   let out_of_gamut = is_out_of_gamut(current_oklch);
 
   let state_for_bounds = state.clone();
@@ -581,16 +665,16 @@ fn render_channel_row(
             state.set_channel_bounds(channel, bounds);
           });
         })
-        .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
+        .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, window, cx| {
           state_for_down.update(cx, |state, cx| {
-            state.set_channel_by_position(channel, event.position, cx);
+            state.set_channel_by_position(channel, event.position, window, cx);
           });
           cx.stop_propagation();
         })
-        .on_mouse_move(move |event: &MouseMoveEvent, _, cx| {
+        .on_mouse_move(move |event: &MouseMoveEvent, window, cx| {
           if event.pressed_button == Some(MouseButton::Left) {
             state_for_move.update(cx, |state, cx| {
-              state.set_channel_by_position(channel, event.position, cx);
+              state.set_channel_by_position(channel, event.position, window, cx);
             });
             cx.stop_propagation();
           }
@@ -599,7 +683,7 @@ fn render_channel_row(
           canvas(
             move |_, _, _| {},
             move |bounds, _, window, cx| {
-              paint_channel(channel, current_oklch, ratio, bounds, window, cx);
+              paint_channel(&stops, ratio, bounds, window, cx);
             },
           )
           .absolute()
@@ -609,19 +693,14 @@ fn render_channel_row(
 }
 
 fn paint_channel(
-  channel: PickerChannel, oklch: ColorPickerOklch, ratio: f32, bounds: Bounds<Pixels>,
-  window: &mut Window, cx: &mut App,
+  stops: &[ChannelGradientStop], ratio: f32, bounds: Bounds<Pixels>, window: &mut Window,
+  cx: &mut App,
 ) {
-  let width = f32::from(bounds.size.width).max(1.0);
-  let steps = (width.ceil() as usize).max(GRADIENT_MIN_STEPS);
+  let steps = stops.len();
 
-  for ix in 0..steps {
+  for (ix, stop) in stops.iter().enumerate() {
     let start_ratio = ix as f32 / steps as f32;
     let end_ratio = (ix + 1) as f32 / steps as f32;
-    let sample_ratio = (start_ratio + end_ratio) * 0.5;
-    let mut sample = oklch;
-    channel.assign(&mut sample, channel.value_from_ratio(sample_ratio));
-    let resolved = resolve_value(sample);
 
     let x = bounds.origin.x + bounds.size.width * start_ratio;
     let next_x = bounds.origin.x + bounds.size.width * end_ratio;
@@ -632,14 +711,13 @@ fn paint_channel(
     );
 
     let color = Hsla::from(gpui::Rgba {
-      r: resolved.rgba.r,
-      g: resolved.rgba.g,
-      b: resolved.rgba.b,
-      a: resolved.rgba.a,
+      r: stop.rgba.r,
+      g: stop.rgba.g,
+      b: stop.rgba.b,
+      a: stop.rgba.a,
     });
-    let out_of_gamut = is_out_of_gamut(sample);
     window.paint_quad(fill(segment, color));
-    if out_of_gamut {
+    if stop.out_of_gamut {
       let warning_segment = Bounds::new(
         point(x, bounds.bottom() - WARNING_LINE_THICKNESS),
         size(segment_width, WARNING_LINE_THICKNESS),
@@ -659,6 +737,30 @@ fn paint_channel(
   );
   window.paint_quad(fill(outer, cx.theme().background));
   window.paint_quad(fill(inner, cx.theme().foreground));
+}
+
+/// Resolves one gradient segment: display color plus gamut warning flag.
+fn resolve_gradient_stop(value: ColorPickerOklch) -> ChannelGradientStop {
+  let (rgba, out_of_gamut) = resolve_rgba(value);
+  ChannelGradientStop {
+    rgba,
+    out_of_gamut,
+  }
+}
+
+/// Builds the gradient color table for `channel`, sweeping it across its full
+/// range while keeping every other oklch component fixed.
+fn build_channel_gradient(
+  channel: PickerChannel, value: ColorPickerOklch,
+) -> Vec<ChannelGradientStop> {
+  let mut colors = Vec::with_capacity(GRADIENT_STEPS);
+  for step in 0..GRADIENT_STEPS {
+    let sample_ratio = (step as f32 + 0.5) / GRADIENT_STEPS as f32;
+    let mut sample = value;
+    channel.assign(&mut sample, channel.value_from_ratio(sample_ratio));
+    colors.push(resolve_gradient_stop(sample));
+  }
+  colors
 }
 
 fn sanitize_oklch(value: ColorPickerOklch) -> ColorPickerOklch {
@@ -729,7 +831,10 @@ fn convert_oklch(value: ColorPickerOklch) -> (Srgb, bool) {
   (raw_rgb, rgb_out_of_range || hsl_out_of_range)
 }
 
-fn resolve_value(value: ColorPickerOklch) -> ColorPickerValue {
+/// Converts `value` to a displayable sRGB color, bisecting chroma toward the
+/// nearest in-gamut color when the requested color is out of gamut. Returns
+/// the clamped RGBA plus whether the requested color was out of gamut.
+fn resolve_rgba(value: ColorPickerOklch) -> (ColorPickerRgba, bool) {
   let value = sanitize_oklch(value);
   let (_, out_of_gamut) = convert_oklch(value);
   let fallback = if out_of_gamut {
@@ -739,12 +844,18 @@ fn resolve_value(value: ColorPickerOklch) -> ColorPickerValue {
   };
 
   let (raw_rgb, _) = convert_oklch(fallback);
-  let clamped = ColorPickerRgba {
+  let rgba = ColorPickerRgba {
     r: raw_rgb.red.clamp(0.0, 1.0),
     g: raw_rgb.green.clamp(0.0, 1.0),
     b: raw_rgb.blue.clamp(0.0, 1.0),
     a: fallback.alpha.clamp(0.0, 1.0),
   };
+  (rgba, out_of_gamut)
+}
+
+fn resolve_value(value: ColorPickerOklch) -> ColorPickerValue {
+  let value = sanitize_oklch(value);
+  let (clamped, _) = resolve_rgba(value);
 
   let hsl: Hsl = Hsl::from_color(Srgb::new(clamped.r, clamped.g, clamped.b));
   let hsla = ColorPickerHsla {
@@ -852,17 +963,12 @@ fn parse_hex_color(input: &str) -> Option<ColorPickerRgba> {
 }
 
 fn parse_complete_eight_hex_color(input: &str) -> Option<ColorPickerRgba> {
-  let hex = hex_digits(input);
-  if hex.len() != 8 || !is_hex_digits(hex) {
+  // Only the full 8-digit RGBA form is accepted here; the length check keeps
+  // shorter (3/6-digit) inputs from being resolved by `parse_hex_color`.
+  if hex_digits(input).len() != 8 {
     return None;
   }
-
-  Some(ColorPickerRgba {
-    r: parse_hex_byte(&hex[0..2])? as f32 / 255.0,
-    g: parse_hex_byte(&hex[2..4])? as f32 / 255.0,
-    b: parse_hex_byte(&hex[4..6])? as f32 / 255.0,
-    a: parse_hex_byte(&hex[6..8])? as f32 / 255.0,
-  })
+  parse_hex_color(input)
 }
 
 fn parse_hex_byte(input: &str) -> Option<u8> {
@@ -899,4 +1005,163 @@ fn rgba_to_hex(rgba: ColorPickerRgba) -> String {
   let b = (rgba.b.clamp(0.0, 1.0) * 255.0).round() as u8;
   let a = (rgba.a.clamp(0.0, 1.0) * 255.0).round() as u8;
   format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
+}
+
+#[cfg(test)]
+mod tests {
+  use gpui::TestAppContext;
+
+  use super::*;
+
+  fn sample_oklch() -> ColorPickerOklch {
+    ColorPickerOklch {
+      lightness: 0.64,
+      chroma: 0.17,
+      hue: 248.0,
+      alpha: 1.0,
+    }
+  }
+
+  fn gradient_channels() -> [PickerChannel; 4] {
+    [
+      PickerChannel::Lightness,
+      PickerChannel::Chroma,
+      PickerChannel::Hue,
+      PickerChannel::Alpha,
+    ]
+  }
+
+  #[test]
+  fn parse_hex_color_supports_short_and_long_forms() {
+    let white = parse_hex_color("#FFFFFFFF").expect("8-digit hex parses");
+    assert_eq!(white, ColorPickerRgba { r: 1.0, g: 1.0, b: 1.0, a: 1.0 });
+
+    let black = parse_hex_color("000").expect("3-digit hex parses");
+    assert_eq!(black, ColorPickerRgba { r: 0.0, g: 0.0, b: 0.0, a: 1.0 });
+
+    assert!(parse_hex_color("11223344").is_some());
+    assert!(parse_hex_color("11223").is_none(), "wrong digit count");
+    assert!(parse_hex_color("gggggggg").is_none(), "invalid digits");
+  }
+
+  #[test]
+  fn parse_complete_eight_hex_color_requires_full_rgba() {
+    assert!(parse_complete_eight_hex_color("#AABBCCDD").is_some());
+    assert!(parse_complete_eight_hex_color("aabbccdd").is_some());
+    assert!(parse_complete_eight_hex_color("#AABBCC").is_none());
+    assert!(parse_complete_eight_hex_color("AABBCCDDA").is_none());
+    assert!(parse_complete_eight_hex_color("AABBCCGG").is_none());
+  }
+
+  #[test]
+  fn canonical_hex_round_trips_through_parse() {
+    // The hex echo guard in `on_hex_input_event` relies on programmatic sync
+    // values parsing back to the exact same RGBA components.
+    for byte in [0u8, 1, 17, 127, 128, 200, 254, 255] {
+      let value = byte as f32 / 255.0;
+      let rgba = ColorPickerRgba {
+        r: value,
+        g: value,
+        b: value,
+        a: value,
+      };
+      let parsed = parse_hex_color(&rgba_to_hex(rgba)).expect("canonical hex parses");
+      assert_eq!(parsed, rgba);
+    }
+  }
+
+  #[test]
+  fn gradient_cache_key_tracks_dependency_components_only() {
+    let base = sample_oklch();
+
+    // Sweeping the channel's own component keeps the key stable.
+    for channel in gradient_channels() {
+      let mut swept = base;
+      channel.assign(&mut swept, channel.value_from_ratio(0.75));
+      assert_eq!(
+        channel.gradient_cache_key(base),
+        channel.gradient_cache_key(swept),
+        "{channel:?} key must ignore its own component"
+      );
+    }
+
+    // Any other component change invalidates the key.
+    for channel in gradient_channels() {
+      for other in gradient_channels() {
+        if other == channel {
+          continue;
+        }
+        let mut changed = base;
+        other.assign(&mut changed, other.value_from_ratio(0.75));
+        assert_ne!(
+          channel.gradient_cache_key(base),
+          channel.gradient_cache_key(changed),
+          "{channel:?} key must depend on {other:?}"
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn channel_gradient_cache_reuses_matching_tables() {
+    let mut state = ColorPickerState::new();
+
+    let first = state.channel_gradient(PickerChannel::Lightness);
+    let second = state.channel_gradient(PickerChannel::Lightness);
+    assert!(Arc::ptr_eq(&first, &second), "unchanged value reuses the table");
+
+    // The lightness gradient depends on chroma, so it must rebuild.
+    state.value.chroma += 0.01;
+    let third = state.channel_gradient(PickerChannel::Lightness);
+    assert!(!Arc::ptr_eq(&first, &third));
+
+    // Moving the swept component itself must not invalidate the table.
+    let chroma_table = state.channel_gradient(PickerChannel::Chroma);
+    state.value.lightness += 0.01;
+    assert!(Arc::ptr_eq(&third, &state.channel_gradient(PickerChannel::Lightness)));
+    assert!(!Arc::ptr_eq(&chroma_table, &state.channel_gradient(PickerChannel::Chroma)));
+  }
+
+  #[test]
+  fn alpha_gradient_spans_full_range() {
+    let colors = build_channel_gradient(PickerChannel::Alpha, sample_oklch());
+    assert_eq!(colors.len(), GRADIENT_STEPS);
+    assert!(colors.first().unwrap().rgba.a < 0.1);
+    assert!((colors.last().unwrap().rgba.a - 1.0).abs() < 0.05);
+  }
+
+  #[test]
+  fn hue_gradient_of_gray_is_uniform() {
+    let gray = ColorPickerOklch {
+      lightness: 0.5,
+      chroma: 0.0,
+      hue: 0.0,
+      alpha: 1.0,
+    };
+    let colors = build_channel_gradient(PickerChannel::Hue, gray);
+    assert_eq!(colors.len(), GRADIENT_STEPS);
+    assert!(colors.iter().all(|stop| stop.rgba == colors[0].rgba));
+    assert!(colors.iter().all(|stop| !stop.out_of_gamut));
+  }
+
+  #[gpui::test]
+  fn set_oklch_keeps_resolved_cache_consistent(cx: &mut TestAppContext) {
+    let state = cx.new(|_| ColorPickerState::new());
+    cx.update(|app| {
+      assert_eq!(state.read(app).value(), resolve_value(ColorPickerOklch::default()));
+
+      let next = ColorPickerOklch {
+        lightness: 0.8,
+        chroma: 0.1,
+        hue: 90.0,
+        alpha: 0.5,
+      };
+      state.update(app, |state, cx| state.set_oklch(next, cx));
+
+      let resolved = state.read(app).value();
+      assert_eq!(resolved.oklch, next);
+      // The cached value must stay consistent with a fresh resolve.
+      assert_eq!(resolved, resolve_value(next));
+    });
+  }
 }
