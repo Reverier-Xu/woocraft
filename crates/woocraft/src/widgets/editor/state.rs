@@ -44,6 +44,35 @@ use crate::{
 
 type ValidateFn<T> = dyn Fn(&str, &mut Context<T>) -> bool + 'static;
 
+/// Upper bound (in bytes) of the text window scanned by the word-motion
+/// helpers.
+///
+/// Word navigation only needs the text adjacent to the cursor, so a bounded
+/// window keeps the per-keystroke allocation constant instead of copying the
+/// whole prefix/suffix of the document.
+const WORD_BOUND_SCAN_WINDOW: usize = 4 * 1024;
+
+/// Formats `value` as decimal digits without going through `std::fmt`.
+///
+/// Line numbers are formatted on the render path for every visible row, so
+/// the conversion writes into a stack buffer and performs a single
+/// right-sized allocation.
+fn format_u64(value: u64) -> String {
+  let mut buf = [0u8; 20]; // u64::MAX has 20 decimal digits.
+  let mut i = buf.len();
+  let mut value = value;
+  loop {
+    i -= 1;
+    buf[i] = b'0' + (value % 10) as u8;
+    value /= 10;
+    if value == 0 {
+      break;
+    }
+  }
+  // The buffer only ever contains ASCII digits.
+  String::from_utf8(buf[i..].to_vec()).expect("digits are ASCII")
+}
+
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = editor, no_json)]
 pub struct Enter {
@@ -366,12 +395,10 @@ pub struct InputState {
   /// The marked range is the temporary insert text on IME typing.
   pub(super) ime_marked_range: Option<Selection>,
   pub(super) last_layout: Option<LastLayout>,
-  pub(super) last_cursor: Option<usize>,
   /// The input container bounds
   pub(super) input_bounds: Bounds<Pixels>,
   /// The text bounds
   pub(super) last_bounds: Option<Bounds<Pixels>>,
-  pub(super) last_selected_range: Option<Selection>,
   pub(super) selecting: bool,
   pub(super) scrollbar_dragging: bool,
   pub(super) top_row: usize,
@@ -486,8 +513,6 @@ impl InputState {
       mode: InputMode::default(),
       last_layout: None,
       last_bounds: None,
-      last_selected_range: None,
-      last_cursor: None,
       scrollbar_dragging: false,
       top_row: 0,
       preferred_column: None,
@@ -657,7 +682,7 @@ impl InputState {
     self
       .current_backend_snapshot()
       .map(|snapshot| snapshot.line_number_text(row).to_string())
-      .unwrap_or_else(|| row.saturating_add(1).to_string())
+      .unwrap_or_else(|| format_u64(row.saturating_add(1)))
   }
 
   /// Largest line-number text sample used for gutter width measuring.
@@ -665,7 +690,7 @@ impl InputState {
     self
       .current_backend_snapshot()
       .map(|snapshot| snapshot.max_line_number_text().to_string())
-      .unwrap_or_else(|| self.line_count_u64().max(1).to_string())
+      .unwrap_or_else(|| format_u64(self.line_count_u64().max(1)))
   }
 
   pub(super) fn cached_line_number_width(
@@ -1373,27 +1398,76 @@ impl InputState {
   }
 
   /// Return the start offset of the previous word.
+  ///
+  /// Only a bounded window before the cursor is copied and scanned instead of
+  /// the whole prefix. Word boundaries strictly inside the window are
+  /// identical to the full-text segmentation, so the window only grows when
+  /// the candidate segment is truncated at its starting edge.
   pub(super) fn previous_start_of_word(&mut self) -> usize {
     let offset = self.selected_range.start;
     let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
-    let left_part = self.text.slice(0..offset).to_string();
+    if offset == 0 {
+      return 0;
+    }
 
-    UnicodeSegmentation::split_word_bound_indices(left_part.as_str())
-      .rfind(|(_, s)| !s.trim_start().is_empty())
-      .map(|(i, _)| i)
-      .unwrap_or(0)
+    let mut window_len = WORD_BOUND_SCAN_WINDOW.min(offset);
+    loop {
+      let window_start = self.text.clip_offset(offset - window_len, Bias::Left);
+      let window = self.text.slice(window_start..offset).to_string();
+      let found = UnicodeSegmentation::split_word_bound_indices(window.as_str())
+        .rfind(|(_, s)| !s.trim_start().is_empty());
+
+      // The result is exact unless it comes from the first (possibly
+      // truncated) segment of a window that does not reach the text start.
+      let is_exact = match found {
+        Some((segment_start, _)) => segment_start > 0 || window_start == 0,
+        // No word segment in the window: the answer can only lie before the
+        // window unless the window already reaches the text start.
+        None => window_start == 0,
+      };
+
+      if is_exact {
+        return found.map(|(i, _)| window_start + i).unwrap_or(0);
+      }
+
+      // Grow the window (up to the whole prefix) and rescan.
+      window_len = (window_len * 2).min(offset);
+    }
   }
 
   /// Return the next end offset of the next word.
+  ///
+  /// Only a bounded window after the cursor is copied and scanned instead of
+  /// the whole suffix. Word boundaries strictly inside the window are
+  /// identical to the full-text segmentation, so the window only grows when
+  /// the candidate segment is truncated at its ending edge.
   pub(super) fn next_end_of_word(&mut self) -> usize {
     let offset = self.cursor();
     let offset = self.offset_from_utf16(self.offset_to_utf16(offset));
-    let right_part = self.text.slice(offset..self.text.len()).to_string();
+    let text_len = self.text.len();
+    if offset >= text_len {
+      return text_len;
+    }
 
-    UnicodeSegmentation::split_word_bound_indices(right_part.as_str())
-      .find(|(_, s)| !s.trim_start().is_empty())
-      .map(|(i, s)| offset + i + s.len())
-      .unwrap_or(self.text.len())
+    let mut window_len = WORD_BOUND_SCAN_WINDOW.min(text_len - offset);
+    loop {
+      let window_end = self.text.clip_offset(offset + window_len, Bias::Right);
+      let window = self.text.slice(offset..window_end).to_string();
+      let found = UnicodeSegmentation::split_word_bound_indices(window.as_str())
+        .find(|(_, s)| !s.trim_start().is_empty());
+
+      match found {
+        // A segment ending strictly before the window edge is complete, and
+        // at the end of the text nothing can be truncated.
+        Some((i, s)) if i + s.len() < window.len() || window_end == text_len => {
+          return offset + i + s.len();
+        }
+        // Every segment up to the end of the text is whitespace-only.
+        _ if window_end == text_len => return text_len,
+        // Grow the window (up to the whole suffix) and rescan.
+        _ => window_len = (window_len * 2).min(text_len - offset),
+      }
+    }
   }
 
   /// Get start of line byte offset of cursor
@@ -2263,32 +2337,19 @@ impl InputState {
     cx.notify();
   }
 
-  #[allow(dead_code)]
-  pub(super) fn set_input_bounds(&mut self, new_bounds: Bounds<Pixels>, cx: &mut Context<Self>) {
-    if self.mode.is_code_editor() {
-      self.input_bounds = new_bounds;
-      return;
-    }
-
-    let wrap_width_changed = self.input_bounds.size.width != new_bounds.size.width;
-    self.input_bounds = new_bounds;
-
-    // Update text_wrapper wrap_width if changed.
-    if let Some(_last_layout) = self.last_layout.as_ref()
-      && wrap_width_changed
-    {
-      self.text_wrapper.set_default_text(&self.text);
-      self.mode.update_auto_grow(&self.text_wrapper);
-      cx.notify();
-    }
-  }
-
   pub(super) fn selected_text(&self) -> RopeSlice<'_> {
     let range_utf16 = self.range_to_utf16(&self.selected_range.into());
     let range = self.range_from_utf16(&range_utf16);
     self.text.slice(range)
   }
 
+  /// Returns the bounds of a byte range relative to the text origin, or
+  /// `None` when the positions are outside the last layout.
+  ///
+  /// This is the simpler sibling of `ViewportElement::layout_match_range`:
+  /// that one builds per-line rectangle paths for painting and only accepts
+  /// ranges inside the visible rows, while this helper just needs the
+  /// enclosing box of a (possibly off-screen) range to scroll it into view.
   #[allow(dead_code)]
   pub(crate) fn range_to_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
     let last_layout = self.last_layout.as_ref()?;
@@ -2396,12 +2457,16 @@ impl EntityInputHandler for InputState {
       }))
       .unwrap_or(self.selected_range.into());
 
-    self.emit_backend_action(EditorUserAction::Replace {
-      range: (range.start as u64)..(range.end as u64),
-      new_text: new_text.to_string(),
-      marked: false,
-      silent: self.silent_replace_text,
-    });
+    // Build the action lazily: plain inputs have no backend, and this runs
+    // on every keystroke.
+    if self.backend.is_some() {
+      self.emit_backend_action(EditorUserAction::Replace {
+        range: (range.start as u64)..(range.end as u64),
+        new_text: new_text.to_string(),
+        marked: false,
+        silent: self.silent_replace_text,
+      });
+    }
 
     if let Some(response) = self.apply_custom_backend_edit(&range, new_text, false, window, cx) {
       if !response.accepted {
@@ -2515,12 +2580,16 @@ impl EntityInputHandler for InputState {
       }))
       .unwrap_or(self.selected_range.into());
 
-    self.emit_backend_action(EditorUserAction::Replace {
-      range: (range.start as u64)..(range.end as u64),
-      new_text: new_text.to_string(),
-      marked: true,
-      silent: self.silent_replace_text,
-    });
+    // Build the action lazily: plain inputs have no backend, and this runs
+    // on every keystroke.
+    if self.backend.is_some() {
+      self.emit_backend_action(EditorUserAction::Replace {
+        range: (range.start as u64)..(range.end as u64),
+        new_text: new_text.to_string(),
+        marked: true,
+        silent: self.silent_replace_text,
+      });
+    }
 
     if let Some(response) = self.apply_custom_backend_edit(&range, new_text, true, window, cx) {
       if !response.accepted {

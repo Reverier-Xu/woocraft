@@ -1086,7 +1086,6 @@ impl Element for ViewportElement {
     let _ = state_for_caret;
     let focused = focus_handle.is_focused(window);
     let bounds = prepaint.bounds;
-    let selected_range = self.state.read(cx).selected_range;
 
     window.handle_input(
       &focus_handle,
@@ -1199,9 +1198,7 @@ impl Element for ViewportElement {
     self.state.update(cx, |state, _| {
       state.last_layout = Some(prepaint.last_layout.clone());
       state.last_bounds = Some(bounds);
-      state.last_cursor = Some(state.cursor());
       state.input_bounds = input_bounds;
-      state.last_selected_range = Some(selected_range);
       state.top_row = viewport::clamp_top_row(
         state.top_row,
         state.display_row_count(),
