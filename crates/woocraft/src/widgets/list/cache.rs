@@ -274,9 +274,18 @@ mod tests {
     // Flat positions account for section headers and footers.
     assert_eq!(row_cache.position_of(&IndexPath::new(0)), Some(1));
     assert_eq!(row_cache.position_of(&IndexPath::new(1)), Some(2));
-    assert_eq!(row_cache.position_of(&IndexPath::new(0).section(1)), Some(5));
-    assert_eq!(row_cache.position_of(&IndexPath::new(3).section(1)), Some(8));
-    assert_eq!(row_cache.position_of(&IndexPath::new(2).section(2)), Some(13));
+    assert_eq!(
+      row_cache.position_of(&IndexPath::new(0).section(1)),
+      Some(5)
+    );
+    assert_eq!(
+      row_cache.position_of(&IndexPath::new(3).section(1)),
+      Some(8)
+    );
+    assert_eq!(
+      row_cache.position_of(&IndexPath::new(2).section(2)),
+      Some(13)
+    );
 
     // Out-of-range rows and sections are not found.
     assert_eq!(row_cache.position_of(&IndexPath::new(2).section(0)), None);
@@ -285,8 +294,7 @@ mod tests {
 
     // Entries always live at column 0.
     assert_eq!(
-      row_cache
-        .position_of(&IndexPath::new(0).section(0).column(1)),
+      row_cache.position_of(&IndexPath::new(0).section(0).column(1)),
       None
     );
   }

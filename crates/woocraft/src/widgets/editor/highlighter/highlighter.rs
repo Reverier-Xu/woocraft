@@ -646,9 +646,7 @@ impl SyntaxHighlighter {
       // The tree can be stale while a background reparse is pending, so node
       // offsets may fall inside multi-byte characters of the current text.
       // Snap to char boundaries — text shaping panics on a mid-char boundary.
-      node_range = self
-        .text
-        .clip_offset(node_range.start, Bias::Left)
+      node_range = self.text.clip_offset(node_range.start, Bias::Left)
         ..self.text.clip_offset(node_range.end, Bias::Right);
       if node_range.is_empty() {
         continue;

@@ -14,12 +14,11 @@ pub trait ScrollableElement: InteractiveElement + Styled + ParentElement + Eleme
   fn scrollbar<H: ScrollbarHandle + Clone>(
     self, scroll_handle: &H, axis: impl Into<ScrollbarAxis>,
   ) -> Self {
-    self
-      .child(
-        Scrollbar::new(scroll_handle)
-          .id("scrollbar_layer")
-          .axis(axis),
-      )
+    self.child(
+      Scrollbar::new(scroll_handle)
+        .id("scrollbar_layer")
+        .axis(axis),
+    )
   }
 
   #[track_caller]

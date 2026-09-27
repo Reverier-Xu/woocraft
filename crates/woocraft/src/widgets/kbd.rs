@@ -184,9 +184,7 @@ impl Kbd {
       (key.modifiers.shift, "shift"),
       (key.modifiers.platform, "cmd"),
     ] {
-      if enabled
-        && let Some(symbol) = special_key_symbol(name)
-      {
+      if enabled && let Some(symbol) = special_key_symbol(name) {
         parts.push(symbol);
       }
     }

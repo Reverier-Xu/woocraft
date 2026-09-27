@@ -1759,8 +1759,8 @@ where
   #[allow(clippy::too_many_arguments)]
   fn render_table_row(
     &mut self, row_ix: usize, rows_count: usize, left_columns_count: usize,
-    col_sizes: Rc<Vec<gpui::Size<Pixels>>>, columns_count: usize,
-    window: &mut Window, cx: &mut Context<Self>,
+    col_sizes: Rc<Vec<gpui::Size<Pixels>>>, columns_count: usize, window: &mut Window,
+    cx: &mut Context<Self>,
   ) -> Stateful<Div> {
     let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
     let is_stripe_row = self.options.stripe && !row_ix.is_multiple_of(2);
@@ -1842,9 +1842,10 @@ where
         )
         // Row selected style
         // Note: Don't show row selection if a cell is selected
-        .when(self.is_active_selection(SelectionTarget::Row(row_ix)), |this| {
-          this.child(div().absolute().inset_0().bg(cx.theme().table_active()))
-        })
+        .when(
+          self.is_active_selection(SelectionTarget::Row(row_ix)),
+          |this| this.child(div().absolute().inset_0().bg(cx.theme().table_active())),
+        )
         .on_mouse_down(
           MouseButton::Right,
           cx.listener(move |this, e, window, cx| {

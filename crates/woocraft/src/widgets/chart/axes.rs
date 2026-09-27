@@ -16,9 +16,7 @@ pub(super) enum XTickAlign {
   Edges,
   /// Band scales: every label centers over its band, offset by half the
   /// band width.
-  Band {
-    band_width: f32,
-  },
+  Band { band_width: f32 },
 }
 
 /// Paints the x axis, tick labels, and the dashed horizontal grid shared by
@@ -29,9 +27,8 @@ pub(super) enum XTickAlign {
 /// every `tick_margin`-th datum. The axis sits `AXIS_GAP` above the bottom
 /// edge of `bounds`.
 pub(super) fn paint_axes(
-  data_len: usize, tick_label: impl Fn(usize) -> Option<(SharedString, f32)>,
-  tick_margin: usize, align: XTickAlign, bounds: Bounds<Pixels>, window: &mut Window,
-  cx: &mut App,
+  data_len: usize, tick_label: impl Fn(usize) -> Option<(SharedString, f32)>, tick_margin: usize,
+  align: XTickAlign, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App,
 ) {
   let height = bounds.size.height.as_f32() - AXIS_GAP;
 

@@ -368,32 +368,29 @@ impl RenderOnce for WidgetGroup {
             let mut elements = Vec::with_capacity(2);
 
             if ix > 0 {
-              let color =
-                Self::divider_color(prev_active_color, active_color, self.disabled, cx);
+              let color = Self::divider_color(prev_active_color, active_color, self.disabled, cx);
               elements.push(Self::divider(self.layout, color, effective_size));
             }
             prev_active_color = active_color;
 
             let child = match child {
-              WidgetGroupChild::Button(button) => {
-                Self::strip_edge_borders(
-                  button
-                    .disabled(self.disabled)
-                    .border_corners(corners)
-                    .when_some(self.variant, |this, variant| this.with_variant(variant))
-                    .when_some(self.size, |this, size| this.with_size(size))
-                    .when(self.outline, |this| this.outline(true)),
-                  hide_leading_border,
-                  hide_trailing_border,
-                  self.layout,
-                )
-                .when(self.on_click.is_some() && !self.disabled, |this| {
-                  this.on_click(move |_, _, _| {
-                    clicked_ix.set(Some(ix));
-                  })
+              WidgetGroupChild::Button(button) => Self::strip_edge_borders(
+                button
+                  .disabled(self.disabled)
+                  .border_corners(corners)
+                  .when_some(self.variant, |this, variant| this.with_variant(variant))
+                  .when_some(self.size, |this, size| this.with_size(size))
+                  .when(self.outline, |this| this.outline(true)),
+                hide_leading_border,
+                hide_trailing_border,
+                self.layout,
+              )
+              .when(self.on_click.is_some() && !self.disabled, |this| {
+                this.on_click(move |_, _, _| {
+                  clicked_ix.set(Some(ix));
                 })
-                .into_any_element()
-              }
+              })
+              .into_any_element(),
               WidgetGroupChild::Input(input) => Self::strip_edge_borders(
                 input
                   .disabled(self.disabled)

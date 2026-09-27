@@ -550,55 +550,55 @@ fn compute_button_colors(
     border
   };
 
-  let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) = if !disabled
-  {
-    (
-      bg,
-      fg,
-      border,
-      hover_bg,
-      active_bg,
-      selected_bg,
-      selected_fg,
-      selected_border,
-    )
-  } else {
-    // Disabled styling needs variant-specific overrides on top of the
-    // blanket opacity pass, expressed as one match instead of layered
-    // remappings that silently overwrite each other.
-    match variant {
-      ButtonVariant::Link | ButtonVariant::Default => (
-        theme.foreground.opacity(0.1),
-        fg.opacity(opacity::DISABLED),
-        transparent,
-        hover_bg.opacity(opacity::DISABLED),
-        active_bg.opacity(opacity::DISABLED),
-        selected_bg.opacity(opacity::DISABLED),
-        selected_fg.opacity(opacity::DISABLED),
-        selected_border.opacity(opacity::DISABLED),
-      ),
-      ButtonVariant::Flat => (
-        transparent,
-        fg.opacity(opacity::DISABLED),
-        transparent,
-        theme.foreground.opacity(0.05),
-        theme.foreground.opacity(0.05),
-        theme.foreground.opacity(0.05),
-        selected_fg.opacity(opacity::DISABLED),
-        selected_border.opacity(opacity::DISABLED),
-      ),
-      _ => (
-        bg.opacity(opacity::DISABLED),
-        fg.opacity(opacity::DISABLED),
-        border.opacity(opacity::DISABLED),
-        hover_bg.opacity(opacity::DISABLED),
-        active_bg.opacity(opacity::DISABLED),
-        selected_bg.opacity(opacity::DISABLED),
-        selected_fg.opacity(opacity::DISABLED),
-        selected_border.opacity(opacity::DISABLED),
-      ),
-    }
-  };
+  let (bg, fg, border, hover_bg, active_bg, selected_bg, selected_fg, selected_border) =
+    if !disabled {
+      (
+        bg,
+        fg,
+        border,
+        hover_bg,
+        active_bg,
+        selected_bg,
+        selected_fg,
+        selected_border,
+      )
+    } else {
+      // Disabled styling needs variant-specific overrides on top of the
+      // blanket opacity pass, expressed as one match instead of layered
+      // remappings that silently overwrite each other.
+      match variant {
+        ButtonVariant::Link | ButtonVariant::Default => (
+          theme.foreground.opacity(0.1),
+          fg.opacity(opacity::DISABLED),
+          transparent,
+          hover_bg.opacity(opacity::DISABLED),
+          active_bg.opacity(opacity::DISABLED),
+          selected_bg.opacity(opacity::DISABLED),
+          selected_fg.opacity(opacity::DISABLED),
+          selected_border.opacity(opacity::DISABLED),
+        ),
+        ButtonVariant::Flat => (
+          transparent,
+          fg.opacity(opacity::DISABLED),
+          transparent,
+          theme.foreground.opacity(0.05),
+          theme.foreground.opacity(0.05),
+          theme.foreground.opacity(0.05),
+          selected_fg.opacity(opacity::DISABLED),
+          selected_border.opacity(opacity::DISABLED),
+        ),
+        _ => (
+          bg.opacity(opacity::DISABLED),
+          fg.opacity(opacity::DISABLED),
+          border.opacity(opacity::DISABLED),
+          hover_bg.opacity(opacity::DISABLED),
+          active_bg.opacity(opacity::DISABLED),
+          selected_bg.opacity(opacity::DISABLED),
+          selected_fg.opacity(opacity::DISABLED),
+          selected_border.opacity(opacity::DISABLED),
+        ),
+      }
+    };
 
   ButtonColors {
     bg,

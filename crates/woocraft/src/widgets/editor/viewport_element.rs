@@ -557,7 +557,9 @@ impl ViewportElement {
     // at a fixed character interval. Measure the interval once and derive
     // every row's wrap points arithmetically instead of shaping each row.
     let masked_wrap_chunk = if state.masked {
-      Some(Self::masked_wrap_chunk(&font, font_size, wrap_width, window))
+      Some(Self::masked_wrap_chunk(
+        &font, font_size, wrap_width, window,
+      ))
     } else {
       None
     };

@@ -495,8 +495,9 @@ impl Render for Dock {
             DockItem::Tabs { view, .. } => {
               this.child(AnyView::from(view).cached(self.panel_cache_style.clone()))
             }
-            DockItem::Panel { view, .. } => this
-              .child(view.view().cached(self.single_panel_cache_style.clone())),
+            DockItem::Panel { view, .. } => {
+              this.child(view.view().cached(self.single_panel_cache_style.clone()))
+            }
             DockItem::Tiles { .. } => this,
           });
 
