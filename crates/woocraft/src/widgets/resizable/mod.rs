@@ -122,6 +122,20 @@ impl ResizableState {
     }
   }
 
+  /// Replaces divider sizes after a structural sync. `None` slots keep their
+  /// current (proportionally redistributed) size, so user-driven resizes
+  /// survive tree edits that do not touch the divider layout.
+  pub(crate) fn sync_sizes(&mut self, sizes: Vec<Option<Pixels>>, cx: &mut Context<Self>) {
+    debug_assert_eq!(sizes.len(), self.panels.len(), "split slots out of sync");
+    for (ix, slot) in sizes.into_iter().enumerate() {
+      if let Some(size) = slot {
+        self.sizes[ix] = size;
+        self.panels[ix].size = Some(size);
+      }
+    }
+    cx.notify();
+  }
+
   pub(crate) fn update_panel_size(
     &mut self, panel_ix: usize, bounds: Bounds<Pixels>, size_range: Range<Pixels>,
     cx: &mut Context<Self>,

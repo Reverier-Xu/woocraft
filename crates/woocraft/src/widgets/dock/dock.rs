@@ -3,14 +3,14 @@
 use std::{ops::Deref, sync::Arc};
 
 use gpui::{
-  AnyView, App, AppContext, Context, Element, Empty, Entity, InteractiveElement, IntoElement,
+  App, AppContext, Context, Element, Empty, Entity, InteractiveElement, IntoElement,
   MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Style, StyleRefinement,
   Styled as _, WeakEntity, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
 
 use super::{
   super::resizable::{PANEL_MIN_SIZE, resize_handle},
-  DockArea, DockItem, PanelView, StackPanel, TabPanel, Tiles,
+  DockArea, DockRegion, InsertTarget, PaneTree, PanelId, PanelView, RootKind, TabPanel,
 };
 use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 
@@ -35,7 +35,9 @@ impl Render for ResizePanel {
 pub struct Dock {
   pub(super) placement: DockPlacement,
   dock_area: WeakEntity<DockArea>,
-  pub(crate) panel: DockItem,
+  /// The dock's layout tree: the single source of truth for what lives in
+  /// this dock.
+  pub(crate) region: DockRegion,
   /// The size is means the width or height of the Dock, if the placement is
   /// left or right, the size is width, otherwise the size is height.
   pub(super) size: Pixels,
@@ -58,7 +60,6 @@ pub struct Dock {
   /// They are identical every frame, so they are built once and cloned
   /// instead of being re-allocated per frame.
   panel_cache_style: StyleRefinement,
-  single_panel_cache_style: StyleRefinement,
 }
 
 impl Dock {
@@ -91,23 +92,15 @@ impl Dock {
       DockPlacement::Center => TabBarDirection::default(),
     };
 
-    let tab_panel = cx.new(|cx| {
-      let mut tab = TabPanel::new(None, dock_area.clone(), window, cx);
-      tab.closable = false;
-      tab
-    });
+    let mut region = DockRegion::new(RootKind::Any);
+    region.set_dock(cx.entity().downgrade());
+    let created = region.sync(&dock_area, window, cx);
+    Self::defer_subscribe_created(dock_area.clone(), created, window, cx);
 
-    let panel = DockItem::Tabs {
-      size: None,
-      view: tab_panel.clone(),
-    };
-
-    Self::subscribe_panel_events(dock_area.clone(), &panel, window, cx);
-
-    let dock = Self {
+    Self {
       placement,
       dock_area,
-      panel,
+      region,
       collapsed: false,
       size: px(200.0),
       tab_bar_direction,
@@ -116,15 +109,7 @@ impl Dock {
       last_resize_position: None,
       pending_resize_position: None,
       panel_cache_style: StyleRefinement::default().size_full(),
-      single_panel_cache_style: StyleRefinement::default().absolute().size_full(),
-    };
-
-    let dock_entity = cx.entity().clone();
-    tab_panel.update(cx, |tab_panel, _| {
-      tab_panel.set_dock(dock_entity.downgrade());
-    });
-
-    dock
+    }
   }
 
   pub fn left(
@@ -146,20 +131,70 @@ impl Dock {
   }
 
   /// Return true if the dock has any real panels (not just empty placeholders).
-  pub fn has_panels(&self, cx: &App) -> bool {
-    self.panel.has_real_panels(cx)
+  pub fn has_panels(&self) -> bool {
+    self.region.has_real_panels()
+  }
+
+  /// The first tab group mirror in this dock, if any (used by the toggle
+  /// button placement).
+  pub(crate) fn first_tab_panel(&self) -> Option<Entity<TabPanel>> {
+    let node = self.region.first_tab_group()?;
+    self.region.tab_mirrors.get(&node).cloned()
+  }
+
+  /// Applies `edit` to the dock's layout tree, syncs the mirrors and emits
+  /// the layout-changed event on the owning `DockArea`.
+  pub(crate) fn edit_tree(
+    &mut self, apply: impl FnOnce(&mut PaneTree) -> super::EditResult, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if !apply(&mut self.region.tree).changed() {
+      return;
+    }
+    let created = self.region.sync(&self.dock_area, window, cx);
+    Self::defer_subscribe_created(self.dock_area.clone(), created, window, cx);
+    // Emit the layout change on the owning DockArea once this update
+    // completes (the DockArea may be the entity currently being updated).
+    let dock_area = self.dock_area.clone();
+    window.defer(cx, move |window, cx| {
+      if let Some(dock_area) = dock_area.upgrade() {
+        dock_area.update(cx, |dock_area, cx| {
+          dock_area.update_toggle_button_tab_panels(window, cx);
+          cx.emit(super::DockEvent::LayoutChanged);
+        });
+      }
+    });
+    cx.notify();
+  }
+
+  /// Subscribes freshly created mirror entities via the owning `DockArea`,
+  /// deferred until the current update completes (the `DockArea` may be the
+  /// entity currently being updated).
+  fn defer_subscribe_created(
+    dock_area: WeakEntity<DockArea>, created: Vec<super::CreatedMirror>, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if created.is_empty() {
+      return;
+    }
+    window.defer(cx, move |window, cx| {
+      if let Some(dock_area) = dock_area.upgrade() {
+        dock_area.update(cx, |dock_area, cx| {
+          for mirror in created {
+            match mirror {
+              super::CreatedMirror::Tab(tp) => dock_area.subscribe_panel(&tp, window, cx),
+              super::CreatedMirror::Split(sp) => dock_area.subscribe_panel(&sp, window, cx),
+            }
+          }
+        });
+      }
+    });
   }
 
   pub(super) fn from_state(
-    dock_area: WeakEntity<DockArea>, placement: DockPlacement, size: Pixels, panel: DockItem,
-    collapsed: bool, window: &mut Window, cx: &mut Context<Self>,
+    dock_area: WeakEntity<DockArea>, placement: DockPlacement, size: Pixels,
+    panel: &super::PanelState, collapsed: bool, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self {
-    Self::subscribe_panel_events(dock_area.clone(), &panel, window, cx);
-
-    if collapsed {
-      panel.set_collapsed(true, window, cx);
-    }
-
     let tab_bar_direction = match placement {
       DockPlacement::Left => TabBarDirection::Left,
       DockPlacement::Right => TabBarDirection::Right,
@@ -168,10 +203,15 @@ impl Dock {
     };
     let min_size = Self::min_size_for_placement(placement);
 
-    let dock = Self {
+    let mut region = DockRegion::from_panel_state(panel, RootKind::Any, &dock_area, window, cx);
+    region.set_dock(cx.entity().downgrade());
+    let created = region.sync(&dock_area, window, cx);
+    Self::defer_subscribe_created(dock_area.clone(), created, window, cx);
+
+    Self {
       placement,
       dock_area,
-      panel,
+      region,
       collapsed,
       size: size.max(min_size),
       tab_bar_direction,
@@ -180,137 +220,7 @@ impl Dock {
       last_resize_position: None,
       pending_resize_position: None,
       panel_cache_style: StyleRefinement::default().size_full(),
-      single_panel_cache_style: StyleRefinement::default().absolute().size_full(),
-    };
-
-    let dock_entity = cx.entity().clone();
-    Self::set_dock_reference(&dock.panel, dock_entity.downgrade(), cx);
-
-    dock
-  }
-
-  fn set_dock_reference(panel: &DockItem, dock: WeakEntity<Self>, cx: &mut App) {
-    if let DockItem::Tabs { view, .. } = panel {
-      view.update(cx, |tab_panel, _| {
-        tab_panel.set_dock(dock);
-      });
-    } else if let DockItem::Split { view, .. } = panel {
-      let children = view.read(cx).panels.to_vec();
-      for child in children {
-        Self::set_dock_reference_for_view(&child, dock.clone(), cx);
-      }
     }
-  }
-
-  /// Entity-graph variant of [`Self::set_dock_reference`] for panels held by
-  /// a [`StackPanel`].
-  fn set_dock_reference_for_view(
-    panel_view: &Arc<dyn PanelView>, dock: WeakEntity<Self>, cx: &mut App,
-  ) {
-    let any_view = panel_view.view();
-    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
-      tab_panel.update(cx, |tab_panel, _| {
-        tab_panel.set_dock(dock);
-      });
-    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
-      let children = stack_panel.read(cx).panels.to_vec();
-      for child in children {
-        Self::set_dock_reference_for_view(&child, dock.clone(), cx);
-      }
-    }
-  }
-
-  fn subscribe_panel_events(
-    dock_area: WeakEntity<DockArea>, panel: &DockItem, window: &mut Window, cx: &mut Context<Self>,
-  ) {
-    match panel {
-      DockItem::Split { view, .. } => {
-        let children = view.read(cx).panels.to_vec();
-        for child in children {
-          Self::subscribe_panel_view_events(dock_area.clone(), &child, window, cx);
-        }
-        window.defer(cx, {
-          let view = view.clone();
-          move |window, cx| {
-            _ = dock_area.update(cx, |this, cx| {
-              this.subscribe_panel(&view, window, cx);
-            });
-          }
-        });
-      }
-      DockItem::Tabs { view, .. } => {
-        window.defer(cx, {
-          let view = view.clone();
-          move |window, cx| {
-            _ = dock_area.update(cx, |this, cx| {
-              this.subscribe_panel(&view, window, cx);
-            });
-          }
-        });
-      }
-      DockItem::Tiles { view, .. } => {
-        window.defer(cx, {
-          let view = view.clone();
-          move |window, cx| {
-            _ = dock_area.update(cx, |this, cx| {
-              this.subscribe_panel(&view, window, cx);
-            });
-          }
-        });
-      }
-      DockItem::Panel { .. } => {
-        // Not supported
-      }
-    }
-  }
-
-  /// Entity-graph variant of [`Self::subscribe_panel_events`] for panels
-  /// held by a [`StackPanel`].
-  fn subscribe_panel_view_events(
-    dock_area: WeakEntity<DockArea>, panel_view: &Arc<dyn PanelView>, window: &mut Window,
-    cx: &mut Context<Self>,
-  ) {
-    let any_view = panel_view.view();
-    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
-      window.defer(cx, {
-        move |window, cx| {
-          _ = dock_area.update(cx, |this, cx| {
-            this.subscribe_panel(&tab_panel, window, cx);
-          });
-        }
-      });
-    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
-      let children = stack_panel.read(cx).panels.to_vec();
-      for child in children {
-        Self::subscribe_panel_view_events(dock_area.clone(), &child, window, cx);
-      }
-      window.defer(cx, {
-        move |window, cx| {
-          _ = dock_area.update(cx, |this, cx| {
-            this.subscribe_panel(&stack_panel, window, cx);
-          });
-        }
-      });
-    } else if let Ok(tiles) = any_view.downcast::<Tiles>() {
-      window.defer(cx, {
-        move |window, cx| {
-          _ = dock_area.update(cx, |this, cx| {
-            this.subscribe_panel(&tiles, window, cx);
-          });
-        }
-      });
-    }
-  }
-
-  pub fn set_panel(&mut self, panel: DockItem, _: &mut Window, cx: &mut Context<Self>) {
-    let dock_weak = cx.entity().downgrade();
-    Self::set_dock_reference(&panel, dock_weak, cx);
-    self.panel = panel;
-    cx.notify();
-  }
-
-  pub fn panel(&self) -> &DockItem {
-    &self.panel
   }
 
   pub fn is_collapsed(&self) -> bool {
@@ -339,9 +249,15 @@ impl Dock {
   pub fn set_collapsed(&mut self, collapsed: bool, window: &mut Window, cx: &mut Context<Self>) {
     self.collapsed = collapsed;
     self.preview_size = None;
-    let item = self.panel.clone();
+    // Defer the per-panel active-state update: the collapse can be triggered
+    // from a tab click while that TabPanel is mid-update.
+    let mirrors: Vec<Entity<TabPanel>> = self.region.tab_mirrors.values().cloned().collect();
     cx.defer_in(window, move |_, window, cx| {
-      item.set_collapsed(collapsed, window, cx);
+      for mirror in mirrors {
+        mirror.update(cx, |tab_panel, cx| {
+          tab_panel.set_collapsed(collapsed, window, cx);
+        });
+      }
     });
     cx.notify();
   }
@@ -350,9 +266,26 @@ impl Dock {
   pub fn add_panel(
     &mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    self
-      .panel
-      .add_panel(panel, &self.dock_area, None, window, cx);
+    let panel_id = PanelId::from(panel.view().entity_id());
+    self.region.registry.insert(panel_id, panel);
+    let Some(node) = self.region.first_tab_group() else {
+      cx.notify();
+      return;
+    };
+    self.edit_tree(
+      |tree| {
+        tree.insert_panel(
+          panel_id,
+          InsertTarget::Tabs {
+            node,
+            ix: None,
+            activate: true,
+          },
+        )
+      },
+      window,
+      cx,
+    );
     cx.notify();
   }
 
@@ -360,7 +293,9 @@ impl Dock {
   pub fn remove_panel(
     &mut self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    self.panel.remove_panel(panel, window, cx);
+    panel.on_removed(window, cx);
+    let panel_id = PanelId::from(panel.view().entity_id());
+    self.edit_tree(|tree| tree.remove_panel(panel_id), window, cx);
     cx.notify();
   }
 
@@ -528,17 +463,9 @@ impl Render for Dock {
             DockPlacement::Bottom => this.w_full(),
             DockPlacement::Center => this,
           })
-          .map(|this| match self.panel.clone() {
-            DockItem::Split { view, .. } => {
-              this.child(AnyView::from(view).cached(self.panel_cache_style.clone()))
-            }
-            DockItem::Tabs { view, .. } => {
-              this.child(AnyView::from(view).cached(self.panel_cache_style.clone()))
-            }
-            DockItem::Panel { view, .. } => {
-              this.child(view.view().cached(self.single_panel_cache_style.clone()))
-            }
-            DockItem::Tiles { .. } => this,
+          .map(|this| match self.region.root_view() {
+            Some(view) => this.child(view.view().cached(self.panel_cache_style.clone())),
+            None => this,
           });
 
         this.child(panel)

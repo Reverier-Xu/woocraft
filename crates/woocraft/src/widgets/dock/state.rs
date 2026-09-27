@@ -1,7 +1,7 @@
 use gpui::{App, AppContext, Axis, Bounds, Entity, Pixels, WeakEntity, Window, point, px, size};
 use serde::{Deserialize, Serialize};
 
-use super::{Dock, DockArea, DockItem, Panel, PanelRegistry};
+use super::{Dock, DockArea, Panel};
 use crate::DockPlacement;
 
 /// Used to serialize and deserialize the DockArea
@@ -54,7 +54,7 @@ impl DockState {
       size: dock.size,
       collapsed: dock.collapsed,
       open: None,
-      panel: dock.panel.view().dump(cx),
+      panel: dock.region.to_panel_state(cx),
     }
   }
 
@@ -62,13 +62,12 @@ impl DockState {
   pub fn to_dock(
     &self, dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App,
   ) -> Entity<Dock> {
-    let item = self.panel.to_item(dock_area.clone(), window, cx);
     cx.new(|cx| {
       Dock::from_state(
         dock_area.clone(),
         self.placement,
         self.size,
-        item,
+        &self.panel,
         self.is_collapsed(),
         window,
         cx,
@@ -190,54 +189,5 @@ impl PanelState {
 
   pub fn add_child(&mut self, panel: PanelState) {
     self.children.push(panel);
-  }
-
-  pub fn to_item(
-    &self, dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut App,
-  ) -> DockItem {
-    let info = self.info.clone();
-
-    let items: Vec<DockItem> = self
-      .children
-      .iter()
-      .map(|child| child.to_item(dock_area.clone(), window, cx))
-      .collect();
-
-    match info {
-      PanelInfo::Stack { sizes, axis } => {
-        let axis = if axis == 0 {
-          Axis::Horizontal
-        } else {
-          Axis::Vertical
-        };
-        let sizes = sizes.iter().map(|s| Some(*s)).collect();
-        DockItem::split_with_sizes(axis, items, sizes, &dock_area, window, cx)
-      }
-      PanelInfo::Tabs { active_index } => {
-        if items.len() == 1 {
-          return items[0].clone();
-        }
-
-        // Flatten child tab groups through their live entities.
-        let items = items
-          .iter()
-          .flat_map(|item| match item {
-            DockItem::Tabs { view, .. } => view.read(cx).panels.clone(),
-            _ => {
-              // ignore invalid panels in tabs
-              vec![]
-            }
-          })
-          .collect();
-
-        DockItem::tabs(items, &dock_area, window, cx).active_index(active_index, cx)
-      }
-      PanelInfo::Panel(_) => {
-        let view =
-          PanelRegistry::build_panel(&self.panel_name, dock_area.clone(), self, &info, window, cx);
-        DockItem::tabs(vec![view.into()], &dock_area, window, cx)
-      }
-      PanelInfo::Tiles { metas } => DockItem::tiles(items, metas, &dock_area, window, cx),
-    }
   }
 }
