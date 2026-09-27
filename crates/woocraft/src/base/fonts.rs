@@ -17,6 +17,8 @@
 //! and widgets may expose their own primary font setting (the terminal
 //! does). See `docs/font-fallback-design.md` for the full rationale.
 
+use std::sync::{Arc, LazyLock, RwLock};
+
 use gpui::{Font, FontFallbacks, FontFeatures, FontStyle, FontWeight, SharedString};
 
 use crate::DEFAULT_FONT_FAMILY;
@@ -50,10 +52,29 @@ impl FontOverrides {
   }
 }
 
-static OVERRIDES: std::sync::RwLock<FontOverrides> = std::sync::RwLock::new(FontOverrides {
-  family: None,
-  fallbacks: None,
-});
+/// Immutable snapshot of the current font configuration, shared by `Arc` so
+/// render-path readers clone a pointer instead of deep-copying the override
+/// family list on every call. `override_fallbacks` is prebuilt from
+/// [`FontOverrides::fallbacks`] at write time (see [`set_font_overrides`])
+/// so readers never rebuild it; `None` means no fallback override is set and
+/// the platform default applies.
+#[derive(Clone, Default)]
+struct FontSnapshot {
+  overrides: FontOverrides,
+  override_fallbacks: Option<FontFallbacks>,
+}
+
+static OVERRIDES: LazyLock<RwLock<Arc<FontSnapshot>>> =
+  LazyLock::new(|| RwLock::new(Arc::new(FontSnapshot::default())));
+
+/// Returns the current font snapshot, cloning an `Arc` rather than the
+/// configuration itself.
+fn font_snapshot() -> Arc<FontSnapshot> {
+  OVERRIDES
+    .read()
+    .expect("font overrides lock should not be poisoned")
+    .clone()
+}
 
 /// Replaces the application-wide font overrides.
 ///
@@ -62,24 +83,29 @@ static OVERRIDES: std::sync::RwLock<FontOverrides> = std::sync::RwLock::new(Font
 /// [`default_font`], the flex layout helpers, and the terminal widget
 /// (whose own font family setting, when set, still takes precedence).
 pub fn set_font_overrides(overrides: FontOverrides) {
+  let override_fallbacks = overrides
+    .fallbacks
+    .as_ref()
+    .map(|fallbacks| FontFallbacks::from_fonts(fallbacks.clone()));
   *OVERRIDES
     .write()
-    .expect("font overrides lock should not be poisoned") = overrides;
+    .expect("font overrides lock should not be poisoned") =
+    Arc::new(FontSnapshot {
+      overrides,
+      override_fallbacks,
+    });
 }
 
 /// Returns a snapshot of the current application font overrides.
 pub fn font_overrides() -> FontOverrides {
-  OVERRIDES
-    .read()
-    .expect("font overrides lock should not be poisoned")
-    .clone()
+  font_snapshot().overrides.clone()
 }
 
 /// Applies the application fallback override, falling back to the given
 /// platform default when no override is set.
 pub fn font_fallbacks_with(platform_default: Option<FontFallbacks>) -> Option<FontFallbacks> {
-  match font_overrides().fallbacks {
-    Some(fallbacks) => Some(FontFallbacks::from_fonts(fallbacks)),
+  match &font_snapshot().override_fallbacks {
+    Some(fallbacks) => Some(fallbacks.clone()),
     None => platform_default,
   }
 }
@@ -87,15 +113,20 @@ pub fn font_fallbacks_with(platform_default: Option<FontFallbacks>) -> Option<Fo
 /// The default UI font: the overridden or embedded primary family, with
 /// overridden or platform-discovered fallbacks.
 pub fn default_font() -> Font {
-  let overrides = font_overrides();
+  let snapshot = font_snapshot();
   Font {
-    family: overrides
+    family: snapshot
+      .overrides
       .family
+      .clone()
       .unwrap_or_else(|| SharedString::from(DEFAULT_FONT_FAMILY)),
     weight: FontWeight::NORMAL,
     style: FontStyle::Normal,
     features: FontFeatures::default(),
-    fallbacks: font_fallbacks_with(platform_font_fallbacks()),
+    fallbacks: match &snapshot.override_fallbacks {
+      Some(fallbacks) => Some(fallbacks.clone()),
+      None => platform_font_fallbacks(),
+    },
   }
 }
 

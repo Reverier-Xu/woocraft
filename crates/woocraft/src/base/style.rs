@@ -153,7 +153,10 @@ pub trait StyledExt: Styled + Sized {
 
 impl<E: Styled> StyledExt for E {}
 
-#[derive(Clone, Default, Copy, PartialEq, Eq, Debug, Deserialize, Serialize)]
+/// Component sizing scale ordered `Small < Medium < Large`; the derived
+/// [`Ord`] matches the variant order, which [`Size::max`]/[`Size::min`] rely
+/// on.
+#[derive(Clone, Default, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize, Serialize)]
 pub enum Size {
   Small,
   #[default]
@@ -162,14 +165,6 @@ pub enum Size {
 }
 
 impl Size {
-  fn as_f32(&self) -> f32 {
-    match self {
-      Size::Small => 1.,
-      Size::Medium => 2.,
-      Size::Large => 3.,
-    }
-  }
-
   pub fn as_str(&self) -> &'static str {
     match self {
       Size::Small => "sm",
@@ -243,6 +238,11 @@ impl Size {
     }
   }
 
+  /// Horizontal (left/right) container padding.
+  ///
+  /// Semantically independent from [`Size::container_py`] even though the
+  /// current scale gives both the same values; the axes may diverge in the
+  /// future, so callers should not collapse the two calls.
   #[inline]
   pub fn container_px(&self) -> Pixels {
     match self {
@@ -252,6 +252,11 @@ impl Size {
     }
   }
 
+  /// Vertical (top/bottom) container padding.
+  ///
+  /// Semantically independent from [`Size::container_px`] even though the
+  /// current scale gives both the same values; the axes may diverge in the
+  /// future, so callers should not collapse the two calls.
   #[inline]
   pub fn container_py(&self) -> Pixels {
     match self {
@@ -293,19 +298,21 @@ impl Size {
     }
   }
 
+  /// Returns the larger of the two sizes (`Small < Medium < Large`).
   pub fn max(&self, other: Self) -> Self {
-    if self.as_f32() < other.as_f32() {
-      *self
-    } else {
+    if other > *self {
       other
+    } else {
+      *self
     }
   }
 
+  /// Returns the smaller of the two sizes (`Small < Medium < Large`).
   pub fn min(&self, other: Self) -> Self {
-    if self.as_f32() > other.as_f32() {
-      *self
-    } else {
+    if other < *self {
       other
+    } else {
+      *self
     }
   }
 
@@ -679,13 +686,15 @@ mod tests {
 
   #[test]
   fn test_size_max_min() {
-    assert_eq!(Size::Small.min(Size::Medium), Size::Medium);
-    assert_eq!(Size::Medium.min(Size::Large), Size::Large);
-    assert_eq!(Size::Large.min(Size::Small), Size::Large);
+    assert_eq!(Size::Small.min(Size::Medium), Size::Small);
+    assert_eq!(Size::Medium.min(Size::Large), Size::Medium);
+    assert_eq!(Size::Large.min(Size::Small), Size::Small);
+    assert_eq!(Size::Medium.min(Size::Medium), Size::Medium);
 
-    assert_eq!(Size::Small.max(Size::Medium), Size::Small);
-    assert_eq!(Size::Medium.max(Size::Large), Size::Medium);
-    assert_eq!(Size::Large.max(Size::Small), Size::Small);
+    assert_eq!(Size::Small.max(Size::Medium), Size::Medium);
+    assert_eq!(Size::Medium.max(Size::Large), Size::Large);
+    assert_eq!(Size::Large.max(Size::Small), Size::Large);
+    assert_eq!(Size::Medium.max(Size::Medium), Size::Medium);
   }
 
   #[test]
