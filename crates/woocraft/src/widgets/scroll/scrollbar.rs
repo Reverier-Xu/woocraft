@@ -237,11 +237,18 @@ impl ScrollbarAxis {
   }
 
   pub fn all(&self) -> Vec<Axis> {
+    self.axes().collect()
+  }
+
+  /// Iterate the concrete axes without allocating.
+  fn axes(&self) -> impl Iterator<Item = Axis> {
     match self {
-      Self::Vertical => vec![Axis::Vertical],
-      Self::Horizontal => vec![Axis::Horizontal],
-      Self::Both => vec![Axis::Horizontal, Axis::Vertical],
+      Self::Vertical => [Some(Axis::Vertical), None],
+      Self::Horizontal => [None, Some(Axis::Horizontal)],
+      Self::Both => [Some(Axis::Horizontal), Some(Axis::Vertical)],
     }
+    .into_iter()
+    .flatten()
   }
 }
 
@@ -308,14 +315,8 @@ impl Scrollbar {
   }
 
   fn style_for_active(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
-    (
-      cx.theme().scrollbar_thumb_hover,
-      cx.theme().scrollbar,
-      cx.theme().border,
-      THUMB_ACTIVE_WIDTH,
-      THUMB_ACTIVE_INSET,
-      THUMB_ACTIVE_RADIUS,
-    )
+    // A dragged thumb uses the same emphasized style as a hovered thumb.
+    Self::style_for_hovered_thumb(cx)
   }
 
   fn style_for_hovered_thumb(cx: &App) -> (Hsla, Hsla, Hsla, Pixels, Pixels, Pixels) {
@@ -452,7 +453,7 @@ impl Element for Scrollbar {
       .scroll_size
       .unwrap_or(self.scroll_handle.content_size());
 
-    for axis in self.axis.all().into_iter() {
+    for axis in self.axis.axes() {
       let vertical = is_vertical(axis);
       let (scroll_area_size, container_size, scroll_position) = if vertical {
         (
@@ -643,8 +644,13 @@ impl Element for Scrollbar {
       cx.notify(view_id);
     }
 
-    #[derive(Clone)]
-    struct AxisData {
+    /// Copy of the per-axis geometry needed by the mouse event handlers.
+    ///
+    /// A tiny `Copy` snapshot avoids building and deep-copying the full
+    /// `AxisPrepaintState` into every closure on each frame; the shared
+    /// `Rc<[AxisEventData]>` is cloned per closure by reference count only.
+    #[derive(Clone, Copy)]
+    struct AxisEventData {
       axis: Axis,
       bounds: Bounds<Pixels>,
       thumb_bounds: Bounds<Pixels>,
@@ -652,13 +658,18 @@ impl Element for Scrollbar {
       container_size: Pixels,
       thumb_size: Pixels,
       margin_end: Pixels,
-      vertical: bool,
     }
 
-    let axis_data: Vec<AxisData> = prepaint
+    impl AxisEventData {
+      fn vertical(&self) -> bool {
+        is_vertical(self.axis)
+      }
+    }
+
+    let axis_data: Rc<[AxisEventData]> = prepaint
       .states
       .iter()
-      .map(|state| AxisData {
+      .map(|state| AxisEventData {
         axis: state.axis,
         bounds: state.bounds,
         thumb_bounds: state.thumb_bounds,
@@ -666,9 +677,9 @@ impl Element for Scrollbar {
         container_size: state.container_size,
         thumb_size: state.thumb_size,
         margin_end: state.margin_end,
-        vertical: is_vertical(state.axis),
       })
-      .collect();
+      .collect::<Vec<_>>()
+      .into();
 
     window.with_content_mask(
       Some(ContentMask {
@@ -725,10 +736,10 @@ impl Element for Scrollbar {
               }
             }
 
-            for data in &axis_data {
+            for data in axis_data.iter() {
               let safe_range = (-data.scroll_size + data.container_size).min(px(0.))..px(0.);
               let mut offset = scroll_handle.offset();
-              if data.vertical {
+              if data.vertical() {
                 offset.y = (offset.y + delta.y).clamp(safe_range.start, safe_range.end);
               } else {
                 offset.x = (offset.x + delta.x).clamp(safe_range.start, safe_range.end);
@@ -759,7 +770,7 @@ impl Element for Scrollbar {
                 return;
               }
 
-              for data in &axis_data {
+              for data in axis_data.iter() {
                 if !data.bounds.contains(&event.position) {
                   continue;
                 }
@@ -777,7 +788,7 @@ impl Element for Scrollbar {
                   cx.notify(view_id);
                 } else {
                   let offset = scroll_handle.offset();
-                  let percentage = if data.vertical {
+                  let percentage = if data.vertical() {
                     (event.position.y - data.thumb_size / 2. - data.bounds.origin.y)
                       / (data.bounds.size.height - data.thumb_size)
                   } else {
@@ -786,7 +797,7 @@ impl Element for Scrollbar {
                   }
                   .clamp(0., 1.);
 
-                  if data.vertical {
+                  if data.vertical() {
                     scroll_handle.set_offset(point(
                       offset.x,
                       (-scroll_span * percentage).clamp(safe_range.start, safe_range.end),
@@ -817,7 +828,7 @@ impl Element for Scrollbar {
             let mut notify = false;
             let need_hover_to_update = is_hover_to_show || is_visible;
 
-            for data in &axis_data {
+            for data in axis_data.iter() {
               if data.bounds.contains(&event.position) && need_hover_to_update {
                 scrollbar_state.set(scrollbar_state.get().with_hovered(Some(data.axis)));
                 if scrollbar_state.get().hovered_axis != Some(data.axis) {
@@ -846,7 +857,7 @@ impl Element for Scrollbar {
                 let drag_pos = scrollbar_state.get().drag_pos;
                 let safe_range = (-data.scroll_size + data.container_size).min(px(0.))..px(0.);
 
-                let percentage = (if data.vertical {
+                let percentage = (if data.vertical() {
                   (event.position.y - drag_pos.y - data.bounds.origin.y)
                     / (data.bounds.size.height - data.thumb_size)
                 } else {
@@ -855,7 +866,7 @@ impl Element for Scrollbar {
                 })
                 .clamp(0., 1.);
 
-                let offset = if data.vertical {
+                let offset = if data.vertical() {
                   point(
                     scroll_handle.offset().x,
                     (-(data.scroll_size - data.container_size) * percentage)
@@ -891,7 +902,9 @@ impl Element for Scrollbar {
           let scroll_handle = self.scroll_handle.clone();
 
           move |_event: &MouseUpEvent, phase, _, cx| {
-            if phase.bubble() {
+            // Only a real drag changes state here; a plain click elsewhere
+            // must not trigger a redundant re-render.
+            if phase.bubble() && scrollbar_state.get().dragged_axis.is_some() {
               scroll_handle.end_drag();
               scrollbar_state.set(scrollbar_state.get().with_unset_drag_pos());
               cx.notify(view_id);

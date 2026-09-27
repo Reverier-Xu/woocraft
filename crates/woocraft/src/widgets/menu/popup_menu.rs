@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
 use gpui::{
-  Action, Anchor, AnchoredPositionMode, AnyElement, App, AppContext, Bounds, ClickEvent, Context,
-  DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement,
-  IntoElement, KeyBinding, MouseDownEvent, OwnedMenuItem, ParentElement, Pixels, Point, Render,
-  ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
-  anchored, div, prelude::FluentBuilder, px, rems,
+  Action, Anchor, AnchoredPositionMode, AnyElement, App, AppContext, AsKeystroke, Bounds,
+  ClickEvent, Context, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+  InteractiveElement, IntoElement, KeyBinding, Keystroke, MouseDownEvent, OwnedMenuItem,
+  ParentElement, Pixels, Point, Render, ScrollHandle, SharedString, StatefulInteractiveElement,
+  Styled, Subscription, WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
 };
 
 use crate::{
@@ -140,22 +140,44 @@ impl PopupMenuItem {
     PopupMenuItem::Label(label.into())
   }
 
+  /// Mutable access to the fields shared by all interactive variants (`Item`,
+  /// `ElementItem` and `Submenu`), so the builders below do not have to repeat
+  /// the same per-variant match.
+  fn interactive_mut(&mut self) -> Option<(&mut Option<Icon>, &mut bool)> {
+    match self {
+      PopupMenuItem::Item { icon, disabled, .. }
+      | PopupMenuItem::ElementItem { icon, disabled, .. }
+      | PopupMenuItem::Submenu { icon, disabled, .. } => Some((icon, disabled)),
+      _ => None,
+    }
+  }
+
+  /// Mutable access to the fields shared by the two clickable action variants
+  /// (`Item` and `ElementItem`).
+  #[allow(clippy::type_complexity)]
+  fn clickable_mut(
+    &mut self,
+  ) -> Option<(
+    &mut bool,
+    &mut Option<Box<dyn Action>>,
+    &mut Option<Rc<ClickHandler>>,
+  )> {
+    match self {
+      PopupMenuItem::Item { checked, action, handler, .. }
+      | PopupMenuItem::ElementItem { checked, action, handler, .. } => {
+        Some((checked, action, handler))
+      }
+      _ => None,
+    }
+  }
+
   /// Set the icon for the menu item.
   ///
   /// Only works for [`PopupMenuItem::Item`], [`PopupMenuItem::ElementItem`] and
   /// [`PopupMenuItem::Submenu`].
   pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
-    match &mut self {
-      PopupMenuItem::Item { icon: i, .. } => {
-        *i = Some(icon.into());
-      }
-      PopupMenuItem::ElementItem { icon: i, .. } => {
-        *i = Some(icon.into());
-      }
-      PopupMenuItem::Submenu { icon: i, .. } => {
-        *i = Some(icon.into());
-      }
-      _ => {}
+    if let Some((slot, _)) = self.interactive_mut() {
+      *slot = Some(icon.into());
     }
     self
   }
@@ -164,14 +186,8 @@ impl PopupMenuItem {
   ///
   /// Only works for [`PopupMenuItem::Item`] and [`PopupMenuItem::ElementItem`].
   pub fn action(mut self, action: Box<dyn Action>) -> Self {
-    match &mut self {
-      PopupMenuItem::Item { action: a, .. } => {
-        *a = Some(action);
-      }
-      PopupMenuItem::ElementItem { action: a, .. } => {
-        *a = Some(action);
-      }
-      _ => {}
+    if let Some((_, slot, _)) = self.clickable_mut() {
+      *slot = Some(action);
     }
     self
   }
@@ -181,17 +197,8 @@ impl PopupMenuItem {
   /// Only works for [`PopupMenuItem::Item`], [`PopupMenuItem::ElementItem`] and
   /// [`PopupMenuItem::Submenu`].
   pub fn disabled(mut self, disabled: bool) -> Self {
-    match &mut self {
-      PopupMenuItem::Item { disabled: d, .. } => {
-        *d = disabled;
-      }
-      PopupMenuItem::ElementItem { disabled: d, .. } => {
-        *d = disabled;
-      }
-      PopupMenuItem::Submenu { disabled: d, .. } => {
-        *d = disabled;
-      }
-      _ => {}
+    if let Some((_, flag)) = self.interactive_mut() {
+      *flag = disabled;
     }
     self
   }
@@ -201,14 +208,8 @@ impl PopupMenuItem {
   /// NOTE: If `check_side` is [`Side::Left`], the icon will replace with a
   /// check icon.
   pub fn checked(mut self, checked: bool) -> Self {
-    match &mut self {
-      PopupMenuItem::Item { checked: c, .. } => {
-        *c = checked;
-      }
-      PopupMenuItem::ElementItem { checked: c, .. } => {
-        *c = checked;
-      }
-      _ => {}
+    if let Some((flag, _, _)) = self.clickable_mut() {
+      *flag = checked;
     }
     self
   }
@@ -219,14 +220,8 @@ impl PopupMenuItem {
   pub fn on_click<F>(mut self, handler: F) -> Self
   where
     F: Fn(&ClickEvent, &mut Window, &mut App) + 'static, {
-    match &mut self {
-      PopupMenuItem::Item { handler: h, .. } => {
-        *h = Some(Rc::new(handler));
-      }
-      PopupMenuItem::ElementItem { handler: h, .. } => {
-        *h = Some(Rc::new(handler));
-      }
-      _ => {}
+    if let Some((_, _, slot)) = self.clickable_mut() {
+      *slot = Some(Rc::new(handler));
     }
     self
   }
@@ -315,6 +310,10 @@ pub struct PopupMenu {
   submenu_anchor: (Anchor, Point<Pixels>),
   // Item bounds in window coordinates, updated on prepaint.
   item_bounds: Vec<Bounds<Pixels>>,
+  // Resolved key strokes for `Item` items, filled lazily on the first render.
+  // The item list and the action context are fixed once the menu is built, so
+  // a length mismatch with `menu_items` is the only invalidation needed.
+  key_bindings: Vec<Option<Keystroke>>,
 
   _subscriptions: Vec<Subscription>,
 }
@@ -339,6 +338,7 @@ impl PopupMenu {
       size: Size::default(),
       submenu_anchor: (Anchor::TopLeft, Point::default()),
       item_bounds: vec![],
+      key_bindings: vec![],
       _subscriptions: vec![],
     }
   }
@@ -699,32 +699,22 @@ impl PopupMenu {
   }
 
   fn confirm(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
-    if let Some(index) = self.selected_index {
-      let item = self.menu_items.get(index);
-      match item {
-        Some(PopupMenuItem::Item {
-          handler, action, ..
-        }) => {
-          if let Some(handler) = handler {
-            handler(&ClickEvent::default(), window, cx);
-          } else if let Some(action) = action.as_ref() {
-            self.dispatch_confirm_action(action.as_ref(), window, cx);
-          }
+    let Some(index) = self.selected_index else {
+      return;
+    };
 
-          self.dismiss(&Cancel, window, cx)
-        }
-        Some(PopupMenuItem::ElementItem {
-          handler, action, ..
-        }) => {
-          if let Some(handler) = handler {
-            handler(&ClickEvent::default(), window, cx);
-          } else if let Some(action) = action.as_ref() {
-            self.dispatch_confirm_action(action.as_ref(), window, cx);
-          }
-          self.dismiss(&Cancel, window, cx)
-        }
-        _ => {}
+    if let Some(
+      PopupMenuItem::Item { handler, action, .. }
+      | PopupMenuItem::ElementItem { handler, action, .. },
+    ) = self.menu_items.get(index)
+    {
+      if let Some(handler) = handler {
+        handler(&ClickEvent::default(), window, cx);
+      } else if let Some(action) = action.as_ref() {
+        self.dispatch_confirm_action(action.as_ref(), window, cx);
       }
+
+      self.dismiss(&Cancel, window, cx);
     }
   }
 
@@ -763,14 +753,20 @@ impl PopupMenu {
       return;
     }
 
-    let last_clickable_ix = self.clickable_menu_items().last().map(|(ix, _)| ix);
-    self.set_selected_index(last_clickable_ix.unwrap_or(0), cx);
+    // Wrap to the last clickable item; keep the selection unchanged when the
+    // menu has no clickable item at all.
+    if let Some((last_ix, _)) = self.clickable_menu_items().last() {
+      self.set_selected_index(last_ix, cx);
+    }
   }
 
   fn select_down(&mut self, _: &SelectDown, _: &mut Window, cx: &mut Context<Self>) {
     cx.stop_propagation();
     let Some(ix) = self.selected_index else {
-      self.set_selected_index(0, cx);
+      // Start from the first item; keep `None` when no clickable item exists.
+      if self.clickable_menu_items().next().is_some() {
+        self.set_selected_index(0, cx);
+      }
       return;
     };
 
@@ -784,7 +780,11 @@ impl PopupMenu {
       return;
     }
 
-    self.set_selected_index(0, cx);
+    // Wrap to the first item; keep the selection unchanged when the menu has
+    // no clickable item at all.
+    if self.clickable_menu_items().next().is_some() {
+      self.set_selected_index(0, cx);
+    }
   }
 
   fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
@@ -927,21 +927,24 @@ impl PopupMenu {
     self.handle_dismiss(&e.position, window, cx);
   }
 
-  fn render_key_binding(
-    &self, action: Option<Box<dyn Action>>, window: &mut Window, _: &mut Context<Self>,
-  ) -> Option<Kbd> {
-    let action = action?;
+  /// Resolve the keystroke to display for an item's action.
+  ///
+  /// Mirrors `Kbd::binding_for_action*` without materializing a `Kbd`, so the
+  /// result can be cached per item (see `PopupMenu::key_bindings`) and rebuilt
+  /// cheaply on render.
+  fn key_binding_stroke(&self, action: &dyn Action, window: &Window) -> Option<Keystroke> {
+    let binding = match self.action_context.as_ref() {
+      Some(handle) => window
+        .highest_precedence_binding_for_action_in(action, handle)
+        // Fallback to App level key binding
+        .or_else(|| window.highest_precedence_binding_for_action(action)),
+      None => window.highest_precedence_binding_for_action(action),
+    };
 
-    match self
-      .action_context
-      .as_ref()
-      .and_then(|handle| Kbd::binding_for_action_in(action.as_ref(), handle, window))
-    {
-      Some(kbd) => Some(kbd),
-      // Fallback to App level key binding
-      None => Kbd::binding_for_action(action.as_ref(), None, window),
-    }
-    .map(|this| this.appearance(false))
+    binding?
+      .keystrokes()
+      .first()
+      .map(|key| key.as_keystroke().clone())
   }
 
   fn render_icon(has_icon: bool, checked: bool, icon: Option<Icon>) -> Option<Icon> {
@@ -1037,12 +1040,15 @@ impl PopupMenu {
           .selected(selected)
           .disabled(disabled)
           .on_hover(cx.listener(move |this, hovered, _, cx| {
-            if *hovered {
-              this.selected_index = Some(ix);
-            } else if this.selected_index == Some(ix) {
-              this.selected_index = None;
+            let target = if *hovered { Some(ix) } else { None };
+            // Only a change of `selected_index` needs a re-render: hovering
+            // out of a non-selected item never changes the selection.
+            if this.selected_index != target
+              && (*hovered || this.selected_index == Some(ix))
+            {
+              this.selected_index = target;
+              cx.notify();
             }
-            cx.notify();
           }))
           .when(!disabled, |this: Button| {
             this.on_click(cx.listener(move |this, _, window, cx| this.on_click(ix, window, cx)))
@@ -1061,14 +1067,20 @@ impl PopupMenu {
       PopupMenuItem::Item {
         icon,
         label,
-        action,
+        action: _,
         disabled,
         is_link,
         ..
       } => {
         let show_link_icon = *is_link && self.external_link_icon;
-        let action = action.as_ref().map(|action| action.boxed_clone());
-        let key = self.render_key_binding(action, window, cx);
+        // The resolved binding is cached per item on the menu, see
+        // `PopupMenu::key_bindings`.
+        let key = self
+          .key_bindings
+          .get(ix)
+          .cloned()
+          .flatten()
+          .map(|stroke| Kbd::new(stroke).appearance(false));
         let has_key = key.is_some();
         let has_right_check = right_check_icon.is_some();
         let label = label.clone();
@@ -1082,12 +1094,15 @@ impl PopupMenu {
           .selected(selected)
           .disabled(disabled)
           .on_hover(cx.listener(move |this, hovered, _, cx| {
-            if *hovered {
-              this.selected_index = Some(ix);
-            } else if this.selected_index == Some(ix) {
-              this.selected_index = None;
+            let target = if *hovered { Some(ix) } else { None };
+            // Only a change of `selected_index` needs a re-render: hovering
+            // out of a non-selected item never changes the selection.
+            if this.selected_index != target
+              && (*hovered || this.selected_index == Some(ix))
+            {
+              this.selected_index = target;
+              cx.notify();
             }
-            cx.notify();
           }))
           .when(!disabled, |this: Button| {
             this.on_click(cx.listener(move |this, _, window, cx| this.on_click(ix, window, cx)))
@@ -1121,10 +1136,12 @@ impl PopupMenu {
               .selected(selected)
               .disabled(*disabled)
               .on_hover(cx.listener(move |this, hovered, _, cx| {
-                if *hovered {
+                // The submenu stays selected while open, even after the
+                // pointer leaves; only a new hover needs a re-render.
+                if *hovered && this.selected_index != Some(ix) {
                   this.selected_index = Some(ix);
+                  cx.notify();
                 }
-                cx.notify();
               }))
               .children(left_icon)
               .child(div().flex_1().min_w_0().truncate().child(label))
@@ -1240,6 +1257,20 @@ impl Render for PopupMenu {
       .iter()
       .any(|item| item.has_left_icon(self.check_side));
 
+    // Resolve the key bindings once, not on every render of every item.
+    if self.key_bindings.len() != self.menu_items.len() {
+      self.key_bindings = self
+        .menu_items
+        .iter()
+        .map(|item| match item {
+          PopupMenuItem::Item { action, .. } => action
+            .as_deref()
+            .and_then(|action| self.key_binding_stroke(action, window)),
+          _ => None,
+        })
+        .collect();
+    }
+
     let max_width = self.max_width();
     let options = RenderOptions {
       has_left_icon,
@@ -1283,7 +1314,9 @@ impl Render for PopupMenu {
                   if menu.item_bounds.len() <= ix {
                     menu.item_bounds.resize(ix + 1, Bounds::default());
                   }
-                  menu.item_bounds[ix] = bounds;
+                  if menu.item_bounds[ix] != bounds {
+                    menu.item_bounds[ix] = bounds;
+                  }
                 })
               })
               .child(self.render_item(ix, item, options, window, cx))

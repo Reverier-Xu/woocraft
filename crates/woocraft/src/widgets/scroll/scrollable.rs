@@ -1,4 +1,4 @@
-use std::{panic::Location, rc::Rc};
+use std::panic::Location;
 
 use gpui::{
   App, Div, Element, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
@@ -14,11 +14,12 @@ pub trait ScrollableElement: InteractiveElement + Styled + ParentElement + Eleme
   fn scrollbar<H: ScrollbarHandle + Clone>(
     self, scroll_handle: &H, axis: impl Into<ScrollbarAxis>,
   ) -> Self {
-    self.child(ScrollbarLayer {
-      id: "scrollbar_layer".into(),
-      axis: axis.into(),
-      scroll_handle: Rc::new(scroll_handle.clone()),
-    })
+    self
+      .child(
+        Scrollbar::new(scroll_handle)
+          .id("scrollbar_layer")
+          .axis(axis),
+      )
   }
 
   #[track_caller]
@@ -145,22 +146,6 @@ where
   E: ParentElement + Styled + Element,
   Self: InteractiveElement,
 {
-}
-
-#[derive(IntoElement)]
-struct ScrollbarLayer<H: ScrollbarHandle + Clone> {
-  id: ElementId,
-  axis: ScrollbarAxis,
-  scroll_handle: Rc<H>,
-}
-
-impl<H> RenderOnce for ScrollbarLayer<H>
-where
-  H: ScrollbarHandle + Clone + 'static,
-{
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    render_scrollbar(self.id, self.scroll_handle.as_ref(), self.axis, window, cx)
-  }
 }
 
 #[inline]

@@ -38,10 +38,11 @@
 //! ```
 
 use gpui::{
-  App, AppContext as _, Axis, Bounds, Context, DragMoveEvent, Empty, Entity, EntityId,
+  App, AppContext as _, Axis, Bounds, Context, Div, DragMoveEvent, Empty, Entity, EntityId,
   EventEmitter, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
-  ParentElement, Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
+  ParentElement, Pixels, Render, RenderOnce, SharedString, Stateful,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+  prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{ActiveTheme, ElementExt, Size, StyledExt, opacity};
@@ -417,6 +418,67 @@ impl Slider {
     self.axis = Axis::Vertical;
     self
   }
+
+  /// Build a draggable range thumb positioned at `pct` (0..1). Shared by the
+  /// start and end thumbs; `is_start` only selects the element id and which
+  /// thumb the drag events belong to.
+  fn thumb(
+    &self, cx: &App, axis: Axis, is_start: bool, pct: f32, entity_id: EntityId,
+    state: Entity<SliderState>,
+  ) -> Stateful<Div> {
+    let thumb_id = if is_start {
+      "slider-thumb-start"
+    } else {
+      "slider-thumb-end"
+    };
+    let thumb_size = self.size.thumb_size();
+    let track_thickness = self.size.track_thickness();
+
+    div()
+      .id((thumb_id, entity_id.as_u64()))
+      .absolute()
+      .size(thumb_size)
+      .rounded_full()
+      .border_2()
+      .border_color(cx.theme().primary)
+      .bg(cx.theme().background)
+      .when(matches!(axis, Axis::Horizontal), |this| {
+        this
+          .top(-(thumb_size - track_thickness) / 2.0)
+          .left(relative(pct))
+          .ml(-thumb_size / 2.0)
+      })
+      .when(matches!(axis, Axis::Vertical), |this| {
+        this
+          .left(-(thumb_size - track_thickness) / 2.0)
+          .bottom(relative(pct))
+          .mb(-thumb_size / 2.0)
+      })
+      .when(!self.disabled, |this| {
+        this
+          .cursor_pointer()
+          .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            cx.stop_propagation();
+          })
+          .on_drag(DragThumb((entity_id, is_start)), |drag, _, _, cx| {
+            cx.stop_propagation();
+            cx.new(|_| drag.clone())
+          })
+          .on_drag_move({
+            move |e: &DragMoveEvent<DragThumb>, _, cx| {
+              let DragThumb((id, drag_is_start)) = e.drag(cx).clone();
+              if id != entity_id || drag_is_start != is_start {
+                return;
+              }
+
+              let position = e.event.position;
+              state.update(cx, |state, cx| {
+                state.update_by_position(axis, position, is_start, cx);
+              });
+            }
+          })
+      })
+  }
 }
 
 impl_disableable!(Slider);
@@ -425,13 +487,20 @@ impl_styled!(Slider);
 
 impl RenderOnce for Slider {
   fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let state = self.state.read(cx);
-    let percentage = state.percentage.clone();
-    let is_range = state.value.is_range();
-    let _ = state;
+    // `Range` is not `Copy`, so clone the (8-byte) value out of the state.
+    let (percentage, is_range) = {
+      let state = self.state.read(cx);
+      (state.percentage.clone(), state.value.is_range())
+    };
 
     let axis = self.axis;
     let entity_id = self.state.entity_id();
+    // Build the thumbs before the builder chain below moves fields out of
+    // `self` (`.id(self.id)`), otherwise the closures could not borrow `self`.
+    let start_thumb =
+      is_range.then(|| self.thumb(cx, axis, true, percentage.start, entity_id, self.state.clone()));
+    let end_thumb = self.thumb(cx, axis, false, percentage.end, entity_id, self.state.clone());
+
     let state_for_down = self.state.clone();
     let state_for_move = self.state.clone();
 
@@ -495,102 +564,8 @@ impl RenderOnce for Slider {
               .rounded_full()
               .bg(cx.theme().primary),
           )
-          .when(is_range, |this| {
-            this.child(
-              div()
-                .id(("slider-thumb-start", self.state.entity_id().as_u64()))
-                .absolute()
-                .size(self.size.thumb_size())
-                .rounded_full()
-                .border_2()
-                .border_color(cx.theme().primary)
-                .bg(cx.theme().background)
-                .when(matches!(axis, Axis::Horizontal), |this| {
-                  this
-                    .top(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
-                    .left(relative(percentage.start))
-                    .ml(-self.size.thumb_size() / 2.0)
-                })
-                .when(matches!(axis, Axis::Vertical), |this| {
-                  this
-                    .left(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
-                    .bottom(relative(percentage.start))
-                    .mb(-self.size.thumb_size() / 2.0)
-                })
-                .when(!self.disabled, |this| {
-                  this
-                    .cursor_pointer()
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                      cx.stop_propagation();
-                    })
-                    .on_drag(DragThumb((entity_id, true)), |drag, _, _, cx| {
-                      cx.stop_propagation();
-                      cx.new(|_| drag.clone())
-                    })
-                    .on_drag_move({
-                      let state = self.state.clone();
-                      move |e: &DragMoveEvent<DragThumb>, _, cx| {
-                        let DragThumb((id, is_start)) = e.drag(cx).clone();
-                        if id != entity_id || !is_start {
-                          return;
-                        }
-
-                        let position = e.event.position;
-                        state.update(cx, |state, cx| {
-                          state.update_by_position(axis, position, is_start, cx);
-                        });
-                      }
-                    })
-                }),
-            )
-          })
-          .child(
-            div()
-              .id(("slider-thumb-end", self.state.entity_id().as_u64()))
-              .absolute()
-              .size(self.size.thumb_size())
-              .rounded_full()
-              .border_2()
-              .border_color(cx.theme().primary)
-              .bg(cx.theme().background)
-              .when(matches!(axis, Axis::Horizontal), |this| {
-                this
-                  .top(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
-                  .left(relative(percentage.end))
-                  .ml(-self.size.thumb_size() / 2.0)
-              })
-              .when(matches!(axis, Axis::Vertical), |this| {
-                this
-                  .left(-(self.size.thumb_size() - self.size.track_thickness()) / 2.0)
-                  .bottom(relative(percentage.end))
-                  .mb(-self.size.thumb_size() / 2.0)
-              })
-              .when(!self.disabled, |this| {
-                this
-                  .cursor_pointer()
-                  .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                    cx.stop_propagation();
-                  })
-                  .on_drag(DragThumb((entity_id, false)), |drag, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.new(|_| drag.clone())
-                  })
-                  .on_drag_move({
-                    let state = self.state.clone();
-                    move |e: &DragMoveEvent<DragThumb>, _, cx| {
-                      let DragThumb((id, is_start)) = e.drag(cx).clone();
-                      if id != entity_id || is_start {
-                        return;
-                      }
-
-                      let position = e.event.position;
-                      state.update(cx, |state, cx| {
-                        state.update_by_position(axis, position, is_start, cx);
-                      });
-                    }
-                  })
-              }),
-          ),
+          .when_some(start_thumb, |this, thumb| this.child(thumb))
+          .child(end_thumb),
       )
       .opacity(if self.disabled {
         opacity::DISABLED
