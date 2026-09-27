@@ -5,8 +5,8 @@ use std::{
 };
 
 use gpui::{
-  App, Context, Entity, InteractiveElement as _, IntoElement, ParentElement, Render, RenderOnce,
-  SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+  App, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement, Render,
+  RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
   prelude::FluentBuilder as _, px, relative,
 };
 
@@ -237,9 +237,6 @@ struct NotificationItem {
   id: usize,
   key: Option<SharedString>,
   data: Notification,
-  autohide: bool,
-  duration: Duration,
-  timer_epoch: u64,
   started_at: Option<Instant>,
   hovered: bool,
 }
@@ -248,6 +245,9 @@ pub struct NotificationState {
   items: VecDeque<NotificationItem>,
   max_items: usize,
   next_id: usize,
+  /// Whether the shared autohide tick loop is running. The loop clears it as
+  /// it exits, so an idle queue arms no timer at all.
+  is_advancing: bool,
 }
 
 impl Default for NotificationState {
@@ -262,6 +262,7 @@ impl NotificationState {
       items: VecDeque::new(),
       max_items: 10,
       next_id: 1,
+      is_advancing: false,
     }
   }
 
@@ -283,15 +284,10 @@ impl NotificationState {
     self.next_id += 1;
 
     let autohide = notification.autohide;
-    let duration = notification.duration;
-
     self.items.push_back(NotificationItem {
       id,
       key: notification.key.clone(),
       data: notification,
-      autohide,
-      duration,
-      timer_epoch: 0,
       started_at: None,
       hovered: false,
     });
@@ -307,44 +303,30 @@ impl NotificationState {
     cx.notify();
   }
 
-  fn spawn_timer(
-    state: gpui::WeakEntity<Self>, id: usize, duration: Duration, epoch: u64, window: &mut Window,
-    cx: &mut Context<Self>,
-  ) {
-    cx.spawn_in(window, async move |_, cx| {
+  /// Drive all autohide timers from a single shared tick loop.
+  ///
+  /// One windowed tick advances every running notification and closes the
+  /// expired ones, so the whole queue pays for one timer regardless of its
+  /// size. Hover pause/resume only flips per-item state and re-arms this
+  /// loop, which is a no-op while it is already ticking.
+  fn start_advancing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if self.is_advancing {
+      return;
+    }
+    self.is_advancing = true;
+    // Detached rather than kept as a `Task`: the loop ends itself once no
+    // item needs animating, and holding a handle would keep the state entity
+    // alive only to drop it from inside its own future.
+    cx.spawn_in(window, async move |state, cx| {
       loop {
         cx.background_executor()
           .timer(duration::ANIMATION_FRAME)
           .await;
 
-        let keep_running = if let Some(state) = state.upgrade() {
-          state.update(cx, |state, cx| {
-            let Some(item) = state.items.iter_mut().find(|item| item.id == id) else {
-              return false;
-            };
-
-            if !item.autohide || item.timer_epoch != epoch {
-              return false;
-            }
-
-            let Some(started_at) = item.started_at else {
-              return false;
-            };
-
-            if started_at.elapsed() >= duration {
-              state.close(id);
-              cx.notify();
-              return false;
-            }
-
-            cx.notify();
-            true
-          })
-        } else {
-          false
+        let Ok(running) = state.update(cx, |state, cx| state.advance(cx)) else {
+          break;
         };
-
-        if !keep_running {
+        if !running {
           break;
         }
       }
@@ -352,44 +334,82 @@ impl NotificationState {
     .detach();
   }
 
-  fn restart_timer(&mut self, id: usize, window: &mut Window, cx: &mut Context<Self>) {
-    let Some((duration, epoch)) =
-      self
-        .items
-        .iter_mut()
-        .find(|item| item.id == id)
-        .and_then(|item| {
-          if !item.autohide {
-            return None;
-          }
+  /// Advance every autohide item by one tick of the shared loop.
+  ///
+  /// Returns `true` while at least one notification still needs the loop:
+  /// active (autohide, not hovered) items keep it alive; paused or sticky
+  /// ones do not. `cx.notify()` fires only when something visible can
+  /// change — an item was removed, or a running progress bar moved — so
+  /// parked notifications cost no re-renders.
+  fn advance(&mut self, cx: &mut Context<Self>) -> bool {
+    let now = Instant::now();
 
-          item.hovered = false;
-          item.started_at = Some(Instant::now());
-          item.timer_epoch = item.timer_epoch.wrapping_add(1);
-
-          Some((item.duration, item.timer_epoch))
+    let mut expired_ids = Vec::new();
+    for item in &self.items {
+      if item.data.autohide
+        && !item.hovered
+        && item.started_at.is_some_and(|started_at| {
+          now.duration_since(started_at) >= item.data.duration
         })
-    else {
-      return;
-    };
+      {
+        expired_ids.push(item.id);
+      }
+    }
 
-    let state = cx.entity().downgrade();
-    Self::spawn_timer(state, id, duration, epoch, window, cx);
+    let any_expired = !expired_ids.is_empty();
+    for id in expired_ids {
+      self.close(id);
+    }
+
+    let keep_running = self
+      .items
+      .iter()
+      .any(|item| item.data.autohide && !item.hovered && item.started_at.is_some());
+    self.is_advancing = keep_running;
+
+    if any_expired || keep_running {
+      cx.notify();
+    }
+
+    keep_running
   }
 
+  /// Restart (or start) the countdown for one notification and make sure the
+  /// shared advancing loop is running.
+  fn restart_timer(&mut self, id: usize, window: &mut Window, cx: &mut Context<Self>) {
+    let resumed = self
+      .items
+      .iter_mut()
+      .find(|item| item.id == id)
+      .is_some_and(|item| {
+        if !item.data.autohide {
+          return false;
+        }
+
+        item.hovered = false;
+        item.started_at = Some(Instant::now());
+        true
+      });
+
+    if resumed {
+      self.start_advancing(window, cx);
+    }
+  }
+
+  /// Pause the countdown while a notification is hovered; its progress bar
+  /// stays parked at full width until the pointer leaves.
   fn pause_and_reset_timer(&mut self, id: usize) {
     if let Some(item) = self.items.iter_mut().find(|item| item.id == id)
-      && item.autohide
+      && item.data.autohide
     {
       item.hovered = true;
       item.started_at = None;
-      item.timer_epoch = item.timer_epoch.wrapping_add(1);
     }
   }
 
   fn progress_ratio(&self, id: usize) -> Option<f32> {
     let item = self.items.iter().find(|item| item.id == id)?;
-    if !item.autohide {
+    if !item.data.autohide {
       return None;
     }
 
@@ -397,7 +417,7 @@ impl NotificationState {
       return Some(1.0);
     }
 
-    let duration = item.duration.as_secs_f32();
+    let duration = item.data.duration.as_secs_f32();
     if duration <= f32::EPSILON {
       return Some(0.0);
     }
@@ -468,7 +488,28 @@ impl_sizable!(NotificationCenter);
 impl_styled!(NotificationCenter);
 
 impl RenderOnce for NotificationCenter {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    // Bridge `NotificationState` notifications to the view that is rendering
+    // this center: without it, pushes, autohide closes and progress ticks
+    // would only repaint when the parent view happens to re-render for other
+    // reasons. This mirrors the wiring gpui does inside `use_keyed_state` —
+    // the observer is registered exactly once per element-state lifetime
+    // (keyed by the state entity id), detached, and forwards each state
+    // notification to the current view, which keeps the refresh chain
+    // explicit instead of coincidental.
+    let current_view = window.current_view();
+    let observed_state = self.state.clone();
+    window.use_keyed_state::<()>(
+      ElementId::named_usize(
+        "notification-center-observer",
+        self.state.entity_id().as_u64() as usize,
+      ),
+      cx,
+      |_, cx| {
+        App::observe(cx, &observed_state, move |_, cx| cx.notify(current_view)).detach();
+      },
+    );
+
     let item_count = self.state.read(cx).items.len();
     let placement = self.placement;
 
@@ -657,6 +698,11 @@ impl RenderOnce for NotificationCard {
   }
 }
 
+// `NotificationState` is a plain state entity and is never mounted in a
+// window's view tree: the UI refreshes through the observer bridged by
+// `NotificationCenter::render`. This empty `Render` impl is kept only so the
+// entity stays renderable for callers that hold it as a view handle; it plays
+// no part in the refresh chain.
 impl Render for NotificationState {
   fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
     div()
