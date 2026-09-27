@@ -540,7 +540,7 @@ impl Deref for HighlightTheme {
 }
 
 impl HighlightTheme {
-  fn from_tokens_with_mode(tokens: ThemeTokens, appearance: ThemeMode) -> Self {
+  pub(crate) fn from_tokens_with_mode(tokens: ThemeTokens, appearance: ThemeMode) -> Self {
     let colors = ThemeColors::from_tokens(tokens, appearance.is_dark());
     Self {
       name: if appearance.is_dark() {

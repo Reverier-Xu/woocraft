@@ -339,6 +339,15 @@ pub struct InputState {
   pub(super) backend_snapshot: Option<Arc<dyn EditorSnapshot>>,
   pub(super) highlighter: Option<Box<dyn EditorHighlighter>>,
   pub(super) highlighter_revision: u64,
+  /// Monotonic revision of `text`, bumped on every mutation. Lets cache keys
+  /// detect text changes without cloning the whole Rope per frame.
+  pub(super) text_revision: u64,
+  /// Monotonic revision of the LSP document colors, bumped whenever the data
+  /// is replaced or cleared.
+  pub(super) document_colors_revision: u64,
+  /// Monotonic revision of the hover definition locations, bumped whenever
+  /// the data is updated or cleared.
+  pub(super) hover_locations_revision: u64,
   pub(super) builtin_backend_language: Option<SharedString>,
   pub(super) text_wrapper: TextWrapper,
   pub(super) history: History<Change>,
@@ -451,6 +460,9 @@ impl InputState {
       backend_snapshot: None,
       highlighter: None,
       highlighter_revision: 0,
+      text_revision: 0,
+      document_colors_revision: 0,
+      hover_locations_revision: 0,
       builtin_backend_language: None,
       text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
       blink_cursor,
@@ -539,6 +551,7 @@ impl InputState {
     if let Some(backend) = self.backend.as_ref() {
       let snapshot = backend.snapshot();
       self.text = snapshot.rope();
+      self.text_revision += 1;
       self.backend_revision = backend.revision();
       self.backend_snapshot = Some(snapshot);
       self.highlighter = backend.create_highlighter();
@@ -920,6 +933,7 @@ impl InputState {
       .is_some_and(|change| self.can_apply_incremental_backend_change(&snapshot_rope, change));
 
     self.text = snapshot_rope;
+    self.text_revision += 1;
 
     if change_matches_snapshot {
       if let Some(change) = change.as_ref() {
@@ -1095,6 +1109,7 @@ impl InputState {
 
     if self.mode.is_code_editor() {
       self.lsp.reset();
+      self.document_colors_revision += 1;
     }
 
     // Move scroll to top
@@ -1231,6 +1246,7 @@ impl InputState {
   pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
     let text: SharedString = value.into();
     self.text = Rope::from(text.as_str());
+    self.text_revision += 1;
     if let Some(diagnostics) = self.mode.diagnostics_mut() {
       diagnostics.reset(&self.text)
     }
@@ -2155,6 +2171,7 @@ impl InputState {
     }
 
     self.hover_definition.clear();
+    self.hover_locations_revision += 1;
     true
   }
 
@@ -2427,6 +2444,7 @@ impl EntityInputHandler for InputState {
 
     let old_text = self.text.clone();
     self.text.replace(range.clone(), new_text);
+    self.text_revision += 1;
 
     let mut new_offset = (range.start + new_text.len()).min(self.text.len());
 
@@ -2437,12 +2455,14 @@ impl EntityInputHandler for InputState {
         let pending_text = self.text.to_string();
         if !self.is_valid_input(&pending_text, cx) {
           self.text = old_text;
+          self.text_revision += 1;
           return;
         }
 
         if !self.mask_pattern.is_none() {
           let mask_text = self.mask_pattern.mask(&pending_text);
           self.text = Rope::from(mask_text.as_str());
+          self.text_revision += 1;
           new_offset = (range.start + new_text.len()).min(self.text.len());
         }
       }
@@ -2484,6 +2504,7 @@ impl EntityInputHandler for InputState {
     }
 
     self.lsp.reset();
+    self.document_colors_revision += 1;
 
     let range = range_utf16
       .as_ref()
@@ -2553,6 +2574,7 @@ impl EntityInputHandler for InputState {
 
     let old_text = self.text.clone();
     self.text.replace(range.clone(), new_text);
+    self.text_revision += 1;
 
     if !self.mode.is_code_editor() {
       let needs_validation =
@@ -2561,6 +2583,7 @@ impl EntityInputHandler for InputState {
         let pending_text = self.text.to_string();
         if !self.is_valid_input(&pending_text, cx) {
           self.text = old_text;
+          self.text_revision += 1;
           return;
         }
       }

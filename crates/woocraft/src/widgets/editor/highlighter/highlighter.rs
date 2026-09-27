@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow};
 use gpui::{HighlightStyle, SharedString};
+use gpui_sum_tree::Bias;
 use ropey::{ChunkCursor, Rope};
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
 
@@ -46,6 +47,10 @@ pub struct SyntaxHighlighter {
   /// These are built once in update() and queried multiple times in
   /// match_styles().
   injection_layers: HashMap<SharedString, InjectionLayer>,
+
+  /// Reusable parsers per injection language, avoiding a fresh `Parser::new()`
+  /// on every update round.
+  injection_parsers: HashMap<SharedString, Parser>,
 }
 
 /// A parsed injection layer.
@@ -347,6 +352,7 @@ impl SyntaxHighlighter {
       parser,
       tree: None,
       injection_layers: HashMap::new(),
+      injection_parsers: HashMap::new(),
     })
   }
 
@@ -478,7 +484,12 @@ impl SyntaxHighlighter {
         continue;
       };
 
-      let mut parser = Parser::new();
+      // Reuse the cached parser for this language instead of building a new
+      // one on every round.
+      let mut parser = self
+        .injection_parsers
+        .remove(&language_name)
+        .unwrap_or_default();
       if parser.set_language(&config.language).is_err() {
         continue;
       }
@@ -504,13 +515,15 @@ impl SyntaxHighlighter {
         old_tree,
         None,
       ) else {
+        self.injection_parsers.insert(language_name, parser);
         continue;
       };
 
       // Store the parsed layer
       self
         .injection_layers
-        .insert(language_name, InjectionLayer { tree: new_tree });
+        .insert(language_name.clone(), InjectionLayer { tree: new_tree });
+      self.injection_parsers.insert(language_name, parser);
     }
   }
 
@@ -573,24 +586,10 @@ impl SyntaxHighlighter {
         };
 
         let node_range: Range<usize> = node.start_byte()..node.end_byte();
-        let highlight_name = SharedString::from(highlight_name.to_string());
-
-        // Merge near range and same highlight name
-        let last_item = highlights.last();
-        let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
-        let last_highlight_name = last_item.map(|item| item.name.clone());
-
-        if last_range == &node_range {
-          // case:
-          // last_range: 213..220, last_highlight_name: Some("property")
-          // last_range: 213..220, last_highlight_name: Some("string")
-          highlights.push(HighlightItem::new(
-            node_range,
-            last_highlight_name.unwrap_or(highlight_name),
-          ));
-        } else {
-          highlights.push(HighlightItem::new(node_range, highlight_name.clone()));
-        }
+        highlights.push(HighlightItem::new(
+          node_range,
+          SharedString::from(highlight_name.to_string()),
+        ));
       }
     }
 
@@ -643,6 +642,16 @@ impl SyntaxHighlighter {
       let mut node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
       if node_range.start > node_range.end {
         node_range.end = node_range.start;
+      }
+      // The tree can be stale while a background reparse is pending, so node
+      // offsets may fall inside multi-byte characters of the current text.
+      // Snap to char boundaries — text shaping panics on a mid-char boundary.
+      node_range = self
+        .text
+        .clip_offset(node_range.start, Bias::Left)
+        ..self.text.clip_offset(node_range.end, Bias::Right);
+      if node_range.is_empty() {
+        continue;
       }
 
       styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
@@ -881,6 +890,35 @@ $x = 1;
         has_highlight,
         "closing tag {} at byte {} should be highlighted",
         tag, pos
+      );
+    }
+  }
+
+  #[test]
+  #[cfg(feature = "tree-sitter-languages")]
+  fn test_styles_snaps_stale_tree_ranges_to_char_boundaries() {
+    // The tree can be stale while a reparse is pending, so node offsets may
+    // fall inside multi-byte characters of the current text. styles() must
+    // snap ranges to char boundaries (text shaping panics on mid-char ones).
+    let rope = Rope::from_str("fn main() { let s = \"xyz\"; }");
+    let mut highlighter = SyntaxHighlighter::new("rust");
+    highlighter.update(None, &rope);
+
+    // Swap in longer multi-byte text while keeping the stale tree: the stale
+    // string-content node ends at byte 24, which is inside 中 (bytes 22..25).
+    let multibyte = Rope::from_str("fn main() { let s = \"x中文z\"; }");
+    highlighter.text = multibyte.clone();
+    let stale_node_range = 21..24;
+    assert!(!multibyte.is_char_boundary(stale_node_range.end));
+
+    let theme = HighlightTheme::default_dark();
+    let styles = highlighter.styles(&(0..multibyte.len()), &theme);
+    assert!(!styles.is_empty());
+    for (range, _) in &styles {
+      assert!(range.start < range.end);
+      assert!(
+        multibyte.is_char_boundary(range.start) && multibyte.is_char_boundary(range.end),
+        "style range {range:?} is not on char boundaries"
       );
     }
   }

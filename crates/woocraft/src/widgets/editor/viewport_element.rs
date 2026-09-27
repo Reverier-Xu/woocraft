@@ -3,8 +3,8 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
   App, Bounds, ContentMask, DispatchPhase, Element, ElementId, ElementInputHandler, Entity, Font,
   GlobalElementId, HighlightStyle, Hsla, IntoElement, LayoutId, LineFragment, MouseButton,
-  MouseMoveEvent, MouseUpEvent, Path, Pixels, ShapedLine, SharedString, Style, TextAlign, TextRun,
-  TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
+  MouseMoveEvent, MouseUpEvent, Path, Pixels, ShapedLine, SharedString, StrikethroughStyle, Style,
+  TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -18,7 +18,7 @@ use super::{
   text_wrapper::LineLayout,
   viewport,
 };
-use crate::{ActiveTheme as _, ColorExt as _, Selection, paint_caret};
+use crate::{ActiveTheme as _, ColorExt as _, Selection, ThemeMode, ThemeTokens, paint_caret};
 
 const OVERSCAN_ROWS: usize = 2;
 const LINE_NUMBER_LEFT_MARGIN: Pixels = px(24.);
@@ -34,7 +34,6 @@ pub(super) struct ViewportElement {
 pub(super) struct PrepaintState {
   last_layout: LastLayout,
   line_numbers: Option<Vec<SmallVec<[ShapedLine; 1]>>>,
-  cursor_bounds: Option<Bounds<Pixels>>,
   current_row: Option<usize>,
   selection_path: Option<Path<Pixels>>,
   hover_highlight_path: Option<Path<Pixels>>,
@@ -58,42 +57,84 @@ struct VisibleRowLayout {
 /// every frame; by splitting content from geometry we can reuse the expensive
 /// shaping/highlighting work while only rebuilding paths/cursor which depend
 /// on the absolute bounds.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct ContentCacheKey {
   top_row: usize,
   visible_range_offset: Range<usize>,
-  text: Rope,
+  /// Monotonic revision of `InputState::text`. Replaces cloning the whole
+  /// Rope into the key on every frame.
+  text_revision: u64,
   selected_range: Selection,
   selection_reversed: bool,
   ime_marked_range: Option<Selection>,
   masked: bool,
   line_number: bool,
-  text_style: TextStyle,
+  text_style: ContentTextStyleKey,
   hover_symbol_range: Range<usize>,
-  hover_locations_ptr: *const Vec<lsp_types::LocationLink>,
-  document_colors_ptr: *const Vec<(lsp_types::Range, Hsla)>,
-  document_colors_len: usize,
-  search_matched_ranges_ptr: *const Vec<Range<usize>>,
+  /// Monotonic revisions of LSP/search data. Replace the previous raw-pointer
+  /// comparisons, which could mis-hit when a freed allocation was reused for
+  /// the new data (ABA).
+  hover_locations_revision: u64,
+  document_colors_revision: u64,
+  search_matched_ranges_revision: u64,
   highlighter_revision: u64,
 }
 
-impl PartialEq for ContentCacheKey {
+/// The subset of the window text style that affects cached content (shaped
+/// runs and line numbers). Captured field-by-field so building the key on
+/// every frame only clones the font instead of the whole [`TextStyle`].
+#[derive(Clone, PartialEq)]
+struct ContentTextStyleKey {
+  font: Font,
+  font_size: Pixels,
+  color: Hsla,
+  background_color: Option<Hsla>,
+  underline: Option<UnderlineStyle>,
+  strikethrough: Option<StrikethroughStyle>,
+}
+
+impl ContentTextStyleKey {
+  fn new(style: &TextStyle, font_size: Pixels) -> Self {
+    Self {
+      font: style.font(),
+      font_size,
+      color: style.color,
+      background_color: style.background_color,
+      underline: style.underline,
+      strikethrough: style.strikethrough,
+    }
+  }
+}
+
+/// Copyable identity of the theme inputs a [`HighlightTheme`] is built from.
+/// Lets the element cache reuse the built theme until the theme tokens really
+/// change (`ThemeTokens` holds plain `f32` fields and has no `PartialEq`).
+#[derive(Clone, Copy)]
+struct HighlightThemeSource {
+  mode: ThemeMode,
+  tokens: ThemeTokens,
+}
+
+impl HighlightThemeSource {
+  fn new(theme: &crate::Theme) -> Self {
+    Self {
+      mode: theme.mode,
+      tokens: theme.tokens,
+    }
+  }
+}
+
+impl PartialEq for HighlightThemeSource {
   fn eq(&self, other: &Self) -> bool {
-    self.top_row == other.top_row
-      && self.visible_range_offset == other.visible_range_offset
-      && self.text == other.text
-      && self.selected_range == other.selected_range
-      && self.selection_reversed == other.selection_reversed
-      && self.ime_marked_range == other.ime_marked_range
-      && self.masked == other.masked
-      && self.line_number == other.line_number
-      && self.text_style == other.text_style
-      && self.hover_symbol_range == other.hover_symbol_range
-      && self.hover_locations_ptr == other.hover_locations_ptr
-      && self.document_colors_ptr == other.document_colors_ptr
-      && self.document_colors_len == other.document_colors_len
-      && self.search_matched_ranges_ptr == other.search_matched_ranges_ptr
-      && self.highlighter_revision == other.highlighter_revision
+    self.mode == other.mode
+      && self.tokens.primary == other.tokens.primary
+      && self.tokens.error == other.tokens.error
+      && self.tokens.warning == other.tokens.warning
+      && self.tokens.success == other.tokens.success
+      && self.tokens.info == other.tokens.info
+      && self.tokens.accent == other.tokens.accent
+      && self.tokens.lightness == other.tokens.lightness
+      && self.tokens.chroma == other.tokens.chroma
   }
 }
 
@@ -109,6 +150,10 @@ struct Content {
 struct ContentCache {
   key: ContentCacheKey,
   content: Content,
+  /// Highlight theme built for `highlight_theme_source`; reused across
+  /// content rebuilds while the theme source is unchanged.
+  highlight_theme: HighlightTheme,
+  highlight_theme_source: HighlightThemeSource,
 }
 
 struct LayoutLinesParams<'a> {
@@ -508,6 +553,14 @@ impl ViewportElement {
     } = params;
     let mut lines = vec![];
     let wrap_width = last_layout.wrap_width.unwrap_or(last_layout.content_width);
+    // Masked text is a repetition of the same ASCII `*`, so wrap points fall
+    // at a fixed character interval. Measure the interval once and derive
+    // every row's wrap points arithmetically instead of shaping each row.
+    let masked_wrap_chunk = if state.masked {
+      Some(Self::masked_wrap_chunk(&font, font_size, wrap_width, window))
+    } else {
+      None
+    };
     for visible_line in last_layout.visible_lines.iter() {
       let row = visible_line.row;
       let slice_start_offset = visible_line
@@ -525,13 +578,15 @@ impl ViewportElement {
 
       let (line, wrapped_ranges) = if state.masked {
         let line = display_text.slice_line(row).to_string();
-        let mut wrapper = window.text_system().line_wrapper(font.clone(), font_size);
-        let fragment = LineFragment::Text { text: &line };
-        let mut start = 0;
+        let chunk = masked_wrap_chunk.expect("masked wrap chunk measured above");
         let mut wrapped = Vec::new();
-        for boundary in wrapper.wrap_line(&[fragment], wrap_width) {
-          wrapped.push(start..boundary.ix);
-          start = boundary.ix;
+        let mut start: usize = 0;
+        while let Some(end) = start.checked_add(chunk) {
+          if end >= line.len() {
+            break;
+          }
+          wrapped.push(start..end);
+          start = end;
         }
         wrapped.push(start..line.len());
         let wrapped_ranges = wrapped
@@ -605,8 +660,28 @@ impl ViewportElement {
     lines
   }
 
+  /// Measure how many masked characters (`*`) fit into one wrapped row for the
+  /// given font and width. All masked characters share the same glyph advance,
+  /// so a single probe line is enough to derive the interval arithmetically.
+  /// Falls back to the probe length itself when even the probe fits, which
+  /// only happens for sub-pixel glyph advances.
+  fn masked_wrap_chunk(
+    font: &Font, font_size: Pixels, wrap_width: Pixels, window: &mut Window,
+  ) -> usize {
+    // Generous probe length: one character per pixel plus slack.
+    let probe_len = (f32::from(wrap_width).ceil() as usize).saturating_add(1);
+    let probe = "*".repeat(probe_len);
+    let mut wrapper = window.text_system().line_wrapper(font.clone(), font_size);
+    wrapper
+      .wrap_line(&[LineFragment::Text { text: &probe }], wrap_width)
+      .next()
+      .map(|boundary| boundary.ix.max(1))
+      .unwrap_or(probe_len)
+  }
+
   fn highlight_lines(
-    &self, _visible_range: &Range<usize>, visible_byte_range: Range<usize>, cx: &mut App,
+    &self, _visible_range: &Range<usize>, visible_byte_range: Range<usize>,
+    highlight_theme: &HighlightTheme, cx: &mut App,
   ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
     let state = self.state.read(cx);
     let snapshot = state.current_backend_snapshot()?;
@@ -616,12 +691,11 @@ impl ViewportElement {
     };
     let highlighter = state.highlighter.as_ref()?;
 
-    let highlight_theme = HighlightTheme::from_theme(cx.theme());
     let mut styles = highlighter
       .highlight_range(
         snapshot.as_ref(),
         visible_byte_range.start as u64..visible_byte_range.end as u64,
-        &highlight_theme,
+        highlight_theme,
       )
       .into_iter()
       .map(|(range, style)| (range.start as usize..range.end as usize, style))
@@ -703,9 +777,12 @@ impl Element for ViewportElement {
 
     let state = self.state.read(cx);
     let visible_layout = self.visible_layout(state, bounds.size.height, line_height);
-    let visible_range = visible_layout.logical_range.clone();
+    let visible_range = visible_layout.logical_range;
     let visible_start_offset = visible_layout.byte_range.start;
     let visible_end_offset = visible_layout.byte_range.end;
+    // Share one Rc between the cached content rebuild and the final layout
+    // instead of cloning the visible-line Vec twice.
+    let visible_lines = Rc::new(visible_layout.lines);
 
     let is_text_empty = state.text.len() == 0;
     let ime_marked_range = state.ime_marked_range;
@@ -736,36 +813,38 @@ impl Element for ViewportElement {
       .lsp
       .document_colors_for_range(&display_text, &visible_range);
 
-    let (hover_symbol_range, hover_locations_ptr) = state.hover_definition.cache_key();
-    let document_colors_ref = state.lsp.document_colors();
-    let document_colors_ptr = document_colors_ref as *const Vec<(lsp_types::Range, Hsla)>;
-    let document_colors_len = document_colors_ref.len();
-    let search_matched_ranges_ptr = state
+    let (hover_symbol_range, _) = state.hover_definition.cache_key();
+    let hover_locations_revision = state.hover_locations_revision;
+    let document_colors_revision = state.document_colors_revision;
+    let search_matched_ranges_revision = state
       .search_panel
       .as_ref()
-      .map(|panel| panel.read(cx).matched_ranges_ptr())
-      .unwrap_or(std::ptr::null());
+      .and_then(|panel| panel.read(cx).matcher())
+      .map(|matcher| matcher.matched_ranges_revision())
+      .unwrap_or(0);
     let text_align = state.text_align;
     let line_number_enabled = state.mode.line_number();
     let cursor_row = {
       let cursor = state.cursor();
       state.text.offset_to_point(cursor).row
     };
+    let text_style_key = ContentTextStyleKey::new(&text_style, text_size);
+    // Copyable theme identity for the highlight-theme cache below.
+    let highlight_theme_source = HighlightThemeSource::new(cx.theme());
     let content_key = ContentCacheKey {
       top_row: state.top_row,
       visible_range_offset: visible_start_offset..visible_end_offset,
-      text: state.text.clone(),
+      text_revision: state.text_revision,
       selected_range: state.selected_range,
       selection_reversed: state.selection_reversed,
       ime_marked_range,
       masked: state.masked,
       line_number: line_number_enabled,
-      text_style: text_style.clone(),
+      text_style: text_style_key,
       hover_symbol_range,
-      hover_locations_ptr,
-      document_colors_ptr,
-      document_colors_len,
-      search_matched_ranges_ptr,
+      hover_locations_revision,
+      document_colors_revision,
+      search_matched_ranges_revision,
       highlighter_revision: state.highlighter_revision,
     };
     let _ = state;
@@ -791,11 +870,15 @@ impl Element for ViewportElement {
       strikethrough: None,
     };
 
-    let compute_content = |window: &mut Window| -> Content {
-      let highlight_styles =
-        self.highlight_lines(&visible_range, visible_start_offset..visible_end_offset, cx);
+    let compute_content = |window: &mut Window, highlight_theme: &HighlightTheme| -> Content {
+      let highlight_styles = self.highlight_lines(
+        &visible_range,
+        visible_start_offset..visible_end_offset,
+        highlight_theme,
+        cx,
+      );
       let runs = if !is_text_empty {
-        if let Some(highlight_styles) = highlight_styles.clone() {
+        if let Some(highlight_styles) = highlight_styles {
           let mut runs = vec![];
           for (range, style) in highlight_styles {
             let mut run = text_style.clone().highlight(style).to_run(range.len());
@@ -844,7 +927,7 @@ impl Element for ViewportElement {
         wrap_width,
         line_number_width,
         lines: Rc::new(vec![]),
-        visible_lines: Rc::new(visible_layout.lines.clone()),
+        visible_lines: Rc::clone(&visible_lines),
         cursor_bounds: None,
         text_align,
         content_width: bounds.size.width - line_number_width,
@@ -915,22 +998,39 @@ impl Element for ViewportElement {
 
     let content = if let Some(id) = id {
       window.with_element_state(id, |cache: Option<ContentCache>, window| {
+        // Reuse the highlight theme while the theme source is unchanged;
+        // rebuild it only when the active theme really changed.
+        let highlight_theme = match &cache {
+          Some(cache) if cache.highlight_theme_source == highlight_theme_source => {
+            cache.highlight_theme.clone()
+          }
+          _ => HighlightTheme::from_tokens_with_mode(
+            highlight_theme_source.tokens,
+            highlight_theme_source.mode,
+          ),
+        };
         if let Some(cache) = cache
           && cache.key == content_key
         {
           return (cache.content.clone(), cache);
         }
-        let content = compute_content(window);
+        let content = compute_content(window, &highlight_theme);
         (
           content.clone(),
           ContentCache {
             key: content_key,
             content,
+            highlight_theme,
+            highlight_theme_source,
           },
         )
       })
     } else {
-      compute_content(window)
+      let highlight_theme = HighlightTheme::from_tokens_with_mode(
+        highlight_theme_source.tokens,
+        highlight_theme_source.mode,
+      );
+      compute_content(window, &highlight_theme)
     };
 
     let mut last_layout = LastLayout {
@@ -941,14 +1041,13 @@ impl Element for ViewportElement {
       wrap_width,
       line_number_width,
       lines: Rc::new(content.lines),
-      visible_lines: Rc::new(visible_layout.lines.clone()),
+      visible_lines: Rc::clone(&visible_lines),
       cursor_bounds: None,
       text_align,
       content_width: bounds.size.width - line_number_width,
     };
 
-    let (cursor_bounds, _) = self.layout_cursor(&last_layout, bounds, window, cx);
-    last_layout.cursor_bounds = cursor_bounds;
+    last_layout.cursor_bounds = self.layout_cursor(&last_layout, bounds, window, cx).0;
 
     let search_match_paths = self.layout_search_matches(&last_layout, &bounds, cx);
     let selection_path = self.layout_selections(&last_layout, &bounds, window, cx);
@@ -963,7 +1062,6 @@ impl Element for ViewportElement {
     PrepaintState {
       last_layout,
       line_numbers: content.line_numbers,
-      cursor_bounds,
       current_row: content.current_row,
       selection_path,
       hover_highlight_path,
@@ -1091,7 +1189,7 @@ impl Element for ViewportElement {
 
         if focused
           && show_cursor
-          && let Some(cursor_bounds) = prepaint.cursor_bounds
+          && let Some(cursor_bounds) = prepaint.last_layout.cursor_bounds
         {
           paint_caret(window, cursor_bounds, cx.theme().primary, caret_opacity);
         }
