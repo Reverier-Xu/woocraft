@@ -1,6 +1,10 @@
 #[allow(clippy::module_inception)]
 mod dock;
 mod invalid_panel;
+// Standalone until B-M2 wires it into `DockArea` (see
+// docs/dock-layout-refactor.md).
+#[allow(dead_code)]
+mod layout;
 mod panel;
 mod stack_panel;
 mod state;
