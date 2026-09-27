@@ -242,6 +242,9 @@ pub(crate) struct ColGroup {
   pub(crate) preview_width: Option<Pixels>,
   /// The bounds of the column in the table after it renders.
   pub(crate) bounds: Bounds<Pixels>,
+  /// Preformatted resize-handle group name, so rendering a handle does not
+  /// allocate a fresh `String` on every frame.
+  pub(crate) group_name: SharedString,
 }
 
 impl ColGroup {

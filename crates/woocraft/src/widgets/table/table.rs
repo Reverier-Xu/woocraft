@@ -212,17 +212,43 @@ where
         != self.auto_detect_col_width
         || (self.auto_detect_col_width && state.options.size != self.size);
 
-      state.options.bordered = self.bordered;
-      state.options.stripe = self.stripe;
-      state.options.size = self.size;
-      state.options.auto_detect_col_width = self.auto_detect_col_width;
-      state.options.scrollbar_visible = gpui::Edges {
-        right: self.scrollbar_visible_vertical,
-        bottom: self.scrollbar_visible_horizontal,
-        ..Default::default()
+      // Only write back options that actually changed, instead of
+      // overwriting all of them on every render pass.
+      if state.options.bordered != self.bordered {
+        state.options.bordered = self.bordered;
+      }
+      if state.options.stripe != self.stripe {
+        state.options.stripe = self.stripe;
+      }
+      if state.options.size != self.size {
+        state.options.size = self.size;
+      }
+      if state.options.auto_detect_col_width != self.auto_detect_col_width {
+        state.options.auto_detect_col_width = self.auto_detect_col_width;
+      }
+      if state.options.scrollbar_visible.right != self.scrollbar_visible_vertical
+        || state.options.scrollbar_visible.bottom != self.scrollbar_visible_horizontal
+      {
+        state.options.scrollbar_visible = gpui::Edges {
+          right: self.scrollbar_visible_vertical,
+          bottom: self.scrollbar_visible_horizontal,
+          ..Default::default()
+        };
+      }
+      if state.options.bottom_gap != self.bottom_gap {
+        state.options.bottom_gap = self.bottom_gap;
+      }
+      let blank_builder_changed = match (
+        &state.blank_context_menu_builder,
+        &self.blank_context_menu_builder,
+      ) {
+        (Some(cur), Some(new)) => !Rc::ptr_eq(cur, new),
+        (None, None) => false,
+        _ => true,
       };
-      state.options.bottom_gap = self.bottom_gap;
-      state.blank_context_menu_builder = self.blank_context_menu_builder;
+      if blank_builder_changed {
+        state.blank_context_menu_builder = self.blank_context_menu_builder;
+      }
 
       if should_refresh_col_groups {
         state.refresh(cx);
