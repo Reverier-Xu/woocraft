@@ -568,6 +568,12 @@ pub struct Content {
   pub dynamic_colors: DynamicColors,
   /// The bounds that were active when the snapshot was taken.
   pub terminal_bounds: TerminalBounds,
+  /// Monotonic revision of the emulator content: the session bumps it on
+  /// every mutation, so equal revisions imply equal snapshots. Lets
+  /// renderers skip re-snapshotting (and re-layouting) while nothing
+  /// changed. [`Content::empty`] is revision `0`; live sessions start above
+  /// that.
+  pub revision: u64,
 }
 
 impl Default for Content {
@@ -596,6 +602,7 @@ impl Content {
       scrolled_to_bottom: true,
       dynamic_colors: DynamicColors::default(),
       terminal_bounds: TerminalBounds::default(),
+      revision: 0,
     }
   }
 

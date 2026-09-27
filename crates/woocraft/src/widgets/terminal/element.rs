@@ -44,14 +44,31 @@ impl StatefulInteractiveElement for TerminalElement {}
 pub(crate) struct BatchedTextRun {
   pub line: i32,
   pub column: i32,
-  pub text: String,
+  pub text: SharedString,
   pub cell_count: usize,
   pub style: TextRun,
   pub font_size: Pixels,
 }
 
-impl BatchedTextRun {
-  fn new_from_cell(line: i32, column: i32, c: char, style: TextRun, font_size: Pixels) -> Self {
+/// Builds one [`BatchedTextRun`] cell by cell.
+///
+/// The mutable text stays a plain `String` while cells are appended; it
+/// becomes a cheap-to-clone [`SharedString`] once, on `finish`, so painting a
+/// run never copies the text again. The owned run font is likewise built only
+/// on `finish`, instead of cloned per cell.
+struct BatchedTextRunBuilder {
+  line: i32,
+  column: i32,
+  text: String,
+  cell_count: usize,
+  style: CellTextStyle,
+  font_size: Pixels,
+}
+
+impl BatchedTextRunBuilder {
+  fn new_from_cell(
+    line: i32, column: i32, c: char, style: CellTextStyle, font_size: Pixels,
+  ) -> Self {
     let mut text = String::with_capacity(64);
     text.push(c);
     Self {
@@ -64,8 +81,11 @@ impl BatchedTextRun {
     }
   }
 
-  fn can_append(&self, style: &TextRun) -> bool {
-    self.style.font == style.font
+  fn can_append(&self, style: &CellTextStyle) -> bool {
+    // The base font is fixed for a whole layout pass, so only the face
+    // override (weight/style) distinguishes run fonts.
+    self.style.weight == style.weight
+      && self.style.style == style.style
       && self.style.color == style.color
       && self.style.underline == style.underline
       && self.style.strikethrough == style.strikethrough
@@ -83,18 +103,47 @@ impl BatchedTextRun {
 
   /// Pushes a glyph into the run. Zero-width characters extend the shaped
   /// text (so they render with the cell's style) without occupying a cell.
-  ///
-  /// The style length must track the text exactly: gpui's layout maps run
-  /// styles onto the text by byte length, and any bytes not covered by a run
-  /// fall back to cosmic-text's default (sans-serif) attributes.
   fn append_char_internal(&mut self, c: char, counts_cell: bool) {
     self.text.push(c);
     if counts_cell {
       self.cell_count += 1;
     }
-    self.style.len += c.len_utf8();
   }
 
+  fn finish(self, font: &gpui::Font) -> BatchedTextRun {
+    let text_len = self.text.len();
+    // The run font is built here — once per run — instead of cloned per
+    // cell; only bold/italic cells deviate from the base face. Requesting a
+    // face that exists keeps every run on the same metrics, so the forced
+    // per-cell grid stays aligned.
+    let font = if self.style.weight == font.weight && self.style.style == font.style {
+      font.clone()
+    } else {
+      gpui::Font {
+        weight: self.style.weight,
+        style: self.style.style,
+        ..font.clone()
+      }
+    };
+    BatchedTextRun {
+      line: self.line,
+      column: self.column,
+      text: SharedString::from(self.text),
+      cell_count: self.cell_count,
+      style: TextRun {
+        len: text_len,
+        font,
+        color: self.style.color,
+        background_color: None,
+        underline: self.style.underline,
+        strikethrough: self.style.strikethrough,
+      },
+      font_size: self.font_size,
+    }
+  }
+}
+
+impl BatchedTextRun {
   fn paint(
     &self, origin: Point<Pixels>, dimensions: &TerminalBounds, window: &mut Window, cx: &mut App,
   ) {
@@ -116,7 +165,9 @@ impl BatchedTextRun {
     let underline = glyph_style.underline.take();
     let strikethrough = glyph_style.strikethrough.take();
     let shaped = window.text_system().shape_line(
-      SharedString::from(self.text.clone()),
+      // Cheap SharedString clone (SmolStr inline copy or Arc bump); the text
+      // was converted once when the run was built.
+      self.text.clone(),
       self.font_size,
       &[glyph_style],
       Some(px(dimensions.cell_width())),
@@ -369,18 +420,79 @@ fn snap_stroke(value: Pixels, scale_factor: f32) -> Pixels {
   px((f32::from(value) * scale_factor).round().max(1.0) / scale_factor)
 }
 
+/// A cell's resolved paint style, borrowed from the base font: everything a
+/// run's [`TextRun`] carries except the owned font, which is built once per
+/// run (see [`BatchedTextRunBuilder::finish`]) instead of cloned per cell.
+struct CellTextStyle {
+  color: Hsla,
+  underline: Option<UnderlineStyle>,
+  strikethrough: Option<StrikethroughStyle>,
+  weight: FontWeight,
+  style: FontStyle,
+}
+
+/// Cached monospace cell measurements (see the prepaint measuring pass),
+/// keyed by the inputs that determine them. Invalidated by the font setters.
+#[derive(Clone)]
+pub(crate) struct CellMetricsCache {
+  key: (SharedString, Pixels, f32),
+  cell_width: Pixels,
+  line_height: Pixels,
+}
+
+/// Cached per-line link annotation columns (element render input), reused
+/// while the content revision and the provider/annotation state they were
+/// computed from are unchanged.
+#[derive(Clone)]
+pub(crate) struct LinkColumnsCache {
+  content_revision: u64,
+  providers_len: usize,
+  link_annotation: bool,
+  columns: std::sync::Arc<HashMap<i32, Vec<StdRange<usize>>>>,
+}
+
+impl LinkColumnsCache {
+  fn matches(&self, content_revision: u64, providers_len: usize, link_annotation: bool) -> bool {
+    self.content_revision == content_revision
+      && self.providers_len == providers_len
+      && self.link_annotation == link_annotation
+  }
+}
+
+/// Everything [`TerminalElement::layout_grid_with_links`] reads: when the key
+/// is unchanged its output is reused verbatim, so unchanged frames (cursor
+/// blink, hover) skip the whole grid pass.
+#[derive(Clone, PartialEq)]
+struct GridLayoutKey {
+  content_revision: u64,
+  font: gpui::Font,
+  font_size: Pixels,
+  palette: TerminalPalette,
+  link_columns: std::sync::Arc<HashMap<i32, Vec<StdRange<usize>>>>,
+}
+
+/// The cached layout output for one [`GridLayoutKey`].
+#[derive(Clone)]
+pub(crate) struct GridLayoutCache {
+  key: GridLayoutKey,
+  background_rects: std::sync::Arc<Vec<LayoutRect>>,
+  batched_runs: std::sync::Arc<Vec<BatchedTextRun>>,
+  block_rects: std::sync::Arc<Vec<BlockElementRect>>,
+}
+
 /// State computed during prepaint and consumed by paint.
 pub struct PrepaintState {
   hitbox: Hitbox,
   dimensions: TerminalBounds,
   origin: Point<Pixels>,
-  background_color: Hsla,
+  /// The resolved palette (theme + application colors), shared with paint.
+  palette: TerminalPalette,
   font: gpui::Font,
   font_size: Pixels,
-  background_rects: Vec<LayoutRect>,
+  background_rects: std::sync::Arc<Vec<LayoutRect>>,
   selection_rects: Vec<LayoutRect>,
-  batched_runs: Vec<BatchedTextRun>,
-  block_rects: Vec<BlockElementRect>,
+  batched_runs: std::sync::Arc<Vec<BatchedTextRun>>,
+  block_rects: std::sync::Arc<Vec<BlockElementRect>>,
   cursor: Option<CursorLayout>,
   ime_cursor_bounds: Option<Bounds<Pixels>>,
 }
@@ -402,14 +514,14 @@ impl TerminalElement {
   fn layout_grid(
     content: &Content, font: gpui::Font, font_size: Pixels, palette: &TerminalPalette,
   ) -> (Vec<LayoutRect>, Vec<BatchedTextRun>, Vec<BlockElementRect>) {
-    Self::layout_grid_with_links(content, font, font_size, palette, &HashMap::new())
+    Self::layout_grid_with_links(content, &font, font_size, palette, &HashMap::new())
   }
 
   /// Like [`Self::layout_grid`], with `link_columns` mapping each grid line
   /// to the column ranges covered by annotated links; those cells are
   /// underlined.
   fn layout_grid_with_links(
-    content: &Content, font: gpui::Font, font_size: Pixels, palette: &TerminalPalette,
+    content: &Content, font: &gpui::Font, font_size: Pixels, palette: &TerminalPalette,
     link_columns: &HashMap<i32, Vec<StdRange<usize>>>,
   ) -> (Vec<LayoutRect>, Vec<BatchedTextRun>, Vec<BlockElementRect>) {
     let cells = &content.cells;
@@ -417,7 +529,7 @@ impl TerminalElement {
     let mut background_regions: Vec<BackgroundRegion> = Vec::with_capacity(estimated / 20);
     let mut block_regions: Vec<BackgroundRegion> = Vec::with_capacity(8);
     let mut batched_runs: Vec<BatchedTextRun> = Vec::with_capacity(estimated / 10);
-    let mut current_batch: Option<BatchedTextRun> = None;
+    let mut current_batch: Option<BatchedTextRunBuilder> = None;
 
     for indexed in cells {
       let point = indexed.point;
@@ -458,9 +570,9 @@ impl TerminalElement {
       // Block element glyphs render more accurately as filled rectangles.
       if is_block_element(cell.c) {
         if let Some(batch) = current_batch.take() {
-          batched_runs.push(batch);
+          batched_runs.push(batch.finish(font));
         }
-        let style = cell_style(cell, fg, palette, font.clone(), false);
+        let style = cell_style(cell, fg, palette, font, false);
         collect_block_element_regions(
           display_line,
           point.column as i32,
@@ -481,7 +593,7 @@ impl TerminalElement {
       }
 
       // Extend or start a text run.
-      let style = cell_style(cell, fg, palette, font.clone(), link_underline);
+      let style = cell_style(cell, fg, palette, font, link_underline);
       let line = display_line;
       let column = point.column as i32;
       match current_batch.as_mut() {
@@ -497,9 +609,10 @@ impl TerminalElement {
         }
         _ => {
           if let Some(batch) = current_batch.take() {
-            batched_runs.push(batch);
+            batched_runs.push(batch.finish(font));
           }
-          let mut batch = BatchedTextRun::new_from_cell(line, column, cell.c, style, font_size);
+          let mut batch =
+            BatchedTextRunBuilder::new_from_cell(line, column, cell.c, style, font_size);
           if !cell.zerowidth.is_empty() {
             batch.append_zero_width(&cell.zerowidth);
           }
@@ -508,7 +621,7 @@ impl TerminalElement {
       }
     }
     if let Some(batch) = current_batch.take() {
-      batched_runs.push(batch);
+      batched_runs.push(batch.finish(font));
     }
 
     let background_rects = merge_background_regions(background_regions)
@@ -585,7 +698,7 @@ impl TerminalElement {
       move |event: &MouseDownEvent, window, cx| {
         window.focus(&focus, cx);
         view.update(cx, |view, cx| {
-          view.pause_blink(cx);
+          view.pause_blink();
           let position = event.position - origin;
           view.mouse_down(
             position,
@@ -758,9 +871,6 @@ impl Element for TerminalElement {
     bounds: Bounds<Pixels>, _request_layout: &mut Self::RequestLayoutState, window: &mut Window,
     cx: &mut App,
   ) -> Self::PrepaintState {
-    let theme = cx.theme().clone();
-    let palette = TerminalPalette::from_theme(&theme);
-
     self.interactivity.prepaint(
       global_id,
       inspector_id,
@@ -771,7 +881,12 @@ impl Element for TerminalElement {
       |_, _, hitbox, window, cx| {
         let hitbox = hitbox.expect("terminal element prepaint must produce a hitbox");
 
-        // Measure the monospace cell size.
+        // Presentation options and link providers, read once per frame.
+        let view_options = self.view.read(cx).view_options().clone();
+        let link_providers = self.view.read(cx).link_providers().to_vec();
+
+        // Resolve the terminal font: view override → host override →
+        // library default.
         let font_size = self
           .view
           .read(cx)
@@ -784,6 +899,14 @@ impl Element for TerminalElement {
           .clone()
           .or_else(|| crate::font_overrides().family)
           .unwrap_or_else(|| SharedString::from(crate::TERMINAL_FONT_FAMILY));
+        // Cell metrics are cached on the view across frames, keyed by
+        // (family, font size, scale factor): the sample shaping below is
+        // expensive and the snapped result is deterministic per key. The font
+        // setters invalidate the cache. The key is built before `family` is
+        // moved into the font.
+        let scale_factor = window.scale_factor();
+        let metrics_key = (family.clone(), font_size, scale_factor);
+        let snap = |value: Pixels| px((f32::from(value) * scale_factor).floor() / scale_factor);
         let font = gpui::Font {
           family,
           // Ligatures are wrong in a terminal: they would merge glyphs across
@@ -792,43 +915,63 @@ impl Element for TerminalElement {
           fallbacks: crate::font_fallbacks_with(crate::platform_font_fallbacks()),
           ..window.text_style().font()
         };
-        // Measure the monospace cell size with the real shaper (the same
-        // path that paints the runs), like the code editor does — not with a
-        // single-glyph `advance` guess. Shaping a sample of `m`s and averaging
-        // yields a sub-pixel-precise cell width that matches actual glyph
-        // positioning.
-        const SAMPLE_CHARS: usize = 10;
-        let sample = window.text_system().shape_line(
-          SharedString::from("m".repeat(SAMPLE_CHARS)),
-          font_size,
-          &[TextRun {
-            len: SAMPLE_CHARS,
-            font: font.clone(),
-            color: palette.foreground,
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-          }],
-          None,
-        );
-        let measured_cell_width = if sample.width > px(0.0) {
-          sample.width / SAMPLE_CHARS as f32
-        } else {
-          px(font_size.to_f64() as f32 * 0.6)
-        };
-        // 1.3 is the conventional terminal line height multiplier.
-        let measured_line_height = px(font_size.to_f64() as f32 * 1.3);
 
-        // Snap both metrics to whole device pixels. The grid count and every
-        // paint position below derive from these values; a fractional cell
-        // would accumulate drift across columns/rows and push the last
-        // row/column past the viewport (the overflow grew with the window
-        // size because the column count used floored device pixels while
-        // paint positioned runs at the unrounded width).
-        let scale_factor = window.scale_factor();
-        let snap = |value: Pixels| px((f32::from(value) * scale_factor).floor() / scale_factor);
-        let cell_width = snap(measured_cell_width);
-        let line_height = snap(measured_line_height);
+        let cached_metrics = self
+          .view
+          .read(cx)
+          .cell_metrics_cache
+          .clone()
+          .filter(|cache| cache.key == metrics_key)
+          .map(|cache| (cache.cell_width, cache.line_height));
+        let (cell_width, line_height) = match cached_metrics {
+          Some(metrics) => metrics,
+          None => {
+            // Measure the monospace cell size with the real shaper (the same
+            // path that paints the runs), like the code editor does — not
+            // with a single-glyph `advance` guess. Shaping a sample of `m`s
+            // and averaging yields a sub-pixel-precise cell width that
+            // matches actual glyph positioning.
+            const SAMPLE_CHARS: usize = 10;
+            let sample = window.text_system().shape_line(
+              SharedString::from("m".repeat(SAMPLE_CHARS)),
+              font_size,
+              &[TextRun {
+                len: SAMPLE_CHARS,
+                font: font.clone(),
+                color: TerminalPalette::from_theme(cx.theme()).foreground,
+                background_color: None,
+                underline: None,
+                strikethrough: None,
+              }],
+              None,
+            );
+            let measured_cell_width = if sample.width > px(0.0) {
+              sample.width / SAMPLE_CHARS as f32
+            } else {
+              px(font_size.to_f64() as f32 * 0.6)
+            };
+            // 1.3 is the conventional terminal line height multiplier.
+            let measured_line_height = px(font_size.to_f64() as f32 * 1.3);
+
+            // Snap both metrics to whole device pixels. The grid count and
+            // every paint position below derive from these values; a
+            // fractional cell would accumulate drift across columns/rows and
+            // push the last row/column past the viewport (the overflow grew
+            // with the window size because the column count used floored
+            // device pixels while paint positioned runs at the unrounded
+            // width).
+            let cell_width = snap(measured_cell_width);
+            let line_height = snap(measured_line_height);
+            self.view.update(cx, |view, _| {
+              view.cell_metrics_cache = Some(CellMetricsCache {
+                key: metrics_key,
+                cell_width,
+                line_height,
+              });
+            });
+            (cell_width, line_height)
+          }
+        };
 
         // Fit a whole number of lines and columns, then center the character
         // grid in the viewport: the leftover space is split evenly on both
@@ -856,51 +999,121 @@ impl Element for TerminalElement {
           lines,
         );
 
-        // Resize the session when the viewport changed, then take a fresh
-        // short-lock snapshot for this frame. The snapshot is stored on the
-        // view behind an `Arc` and reused here, so each frame copies the
-        // visible grid exactly once (Zed's `sync`/`last_content` pattern:
-        // never hold the emulator lock across layout/paint, never clone the
-        // grid twice).
+        // Resize the session when the viewport changed, then reuse the
+        // previous snapshot while the emulator content is unchanged: the
+        // revision check below skips the lock-held full-grid rebuild (and
+        // the grid layout further down) on frames only triggered by cursor
+        // blink or hover. The session's revision starts above the empty
+        // snapshot's, so the first frame always takes a real snapshot. The
+        // snapshot is stored on the view behind an `Arc` and reused here, so
+        // each frame copies the visible grid exactly once (Zed's
+        // `sync`/`last_content` pattern: never hold the emulator lock across
+        // layout/paint, never clone the grid twice).
         let content = self.view.update(cx, |view, _| {
           if view.session().bounds() != dimensions {
             view.session().resize(dimensions);
           }
-          let snapshot = std::sync::Arc::new(view.session().snapshot());
-          view.content = snapshot.clone();
-          snapshot
+          if view.content.revision != view.session().revision() {
+            let snapshot = std::sync::Arc::new(view.session().snapshot());
+            view.content = snapshot.clone();
+          }
+          view.content.clone()
         });
 
-        // Presentation options and link providers, read once per frame.
-        let view_options = self.view.read(cx).view_options().clone();
-        let link_providers = self.view.read(cx).link_providers().to_vec();
-
         // Colors the application set via OSC 10/11/12 override the theme.
-        let palette = palette.with_dynamic_colors(&content.dynamic_colors);
-        let background_color = palette.background;
+        // Resolved once per frame and shared with paint via `PrepaintState`.
+        let palette =
+          TerminalPalette::from_theme(cx.theme()).with_dynamic_colors(&content.dynamic_colors);
 
         // Annotated links: per-line column ranges for the underline pass.
+        // Computed from the snapshot content and cached on the view until the
+        // content revision or the provider/annotation state changes.
         let link_columns = if view_options.link_annotation && !link_providers.is_empty() {
-          let mut columns: HashMap<i32, Vec<StdRange<usize>>> = HashMap::new();
-          for row in 0..content.screen_lines {
-            for link in super::link::links_for_row(&content, row, &link_providers) {
+          let cached = self
+            .view
+            .read(cx)
+            .link_columns_cache
+            .clone()
+            .filter(|cache| {
+              cache.matches(
+                content.revision,
+                link_providers.len(),
+                view_options.link_annotation,
+              )
+            })
+            .map(|cache| cache.columns);
+          match cached {
+            Some(columns) => columns,
+            None => {
+              let mut columns: HashMap<i32, Vec<StdRange<usize>>> = HashMap::new();
+              for row in 0..content.screen_lines {
+                for link in super::link::links_for_row(&content, row, &link_providers) {
+                  columns
+                    .entry(link.range.start.line)
+                    .or_default()
+                    .push(link.range.start.column..link.range.end.column);
+                }
+              }
+              let columns = std::sync::Arc::new(columns);
+              self.view.update(cx, |view, _| {
+                view.link_columns_cache = Some(LinkColumnsCache {
+                  content_revision: content.revision,
+                  providers_len: link_providers.len(),
+                  link_annotation: view_options.link_annotation,
+                  columns: columns.clone(),
+                });
+              });
               columns
-                .entry(link.range.start.line)
-                .or_default()
-                .push(link.range.start.column..link.range.end.column);
             }
           }
-          columns
         } else {
-          HashMap::new()
+          let empty: HashMap<i32, Vec<StdRange<usize>>> = HashMap::new();
+          std::sync::Arc::new(empty)
         };
-        let (background_rects, batched_runs, block_rects) =
-          Self::layout_grid_with_links(&content, font.clone(), font_size, &palette, &link_columns);
+
+        // Grid layout, cached on the view: an unchanged content revision,
+        // font, palette, and link-column set produce an identical layout, so
+        // unchanged frames skip the whole grid pass.
+        let layout_key = GridLayoutKey {
+          content_revision: content.revision,
+          font: font.clone(),
+          font_size,
+          palette,
+          link_columns: link_columns.clone(),
+        };
+        let cached_layout = self
+          .view
+          .read(cx)
+          .grid_layout_cache
+          .clone()
+          .filter(|cache| cache.key == layout_key)
+          .map(|cache| (cache.background_rects, cache.batched_runs, cache.block_rects));
+        let (background_rects, batched_runs, block_rects) = match cached_layout {
+          Some(layout) => layout,
+          None => {
+            let (background_rects, batched_runs, block_rects) =
+              Self::layout_grid_with_links(&content, &font, font_size, &palette, &link_columns);
+            let (background_rects, batched_runs, block_rects) = (
+              std::sync::Arc::new(background_rects),
+              std::sync::Arc::new(batched_runs),
+              std::sync::Arc::new(block_rects),
+            );
+            self.view.update(cx, |view, _| {
+              view.grid_layout_cache = Some(GridLayoutCache {
+                key: layout_key,
+                background_rects: background_rects.clone(),
+                batched_runs: batched_runs.clone(),
+                block_rects: block_rects.clone(),
+              });
+            });
+            (background_rects, batched_runs, block_rects)
+          }
+        };
 
         // Selection rectangles, in viewport coordinates.
         let selection_rects = content
           .selection
-          .map(|selection| Self::selection_rects(selection, &content, theme.selection))
+          .map(|selection| Self::selection_rects(selection, &content, cx.theme().selection))
           .unwrap_or_default();
 
         // Cursor layout. The rectangle doubles as the IME anchor.
@@ -990,8 +1203,8 @@ impl Element for TerminalElement {
           hitbox,
           dimensions,
           origin,
-          background_color,
-          font: font.clone(),
+          palette,
+          font,
           font_size,
           background_rects,
           selection_rects,
@@ -1009,15 +1222,16 @@ impl Element for TerminalElement {
     bounds: Bounds<Pixels>, _request_layout: &mut Self::RequestLayoutState,
     prepaint: &mut Self::PrepaintState, window: &mut Window, cx: &mut App,
   ) {
-    // Dynamic colors also apply here so IME composition stays legible on
-    // application-repainted backgrounds.
-    let palette = TerminalPalette::from_theme(cx.theme())
-      .with_dynamic_colors(&self.view.read(cx).content.dynamic_colors);
+    // The palette was resolved in prepaint (theme + application colors);
+    // reusing it keeps paint consistent with the frame that was laid out.
+    let palette = prepaint.palette;
 
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
       let cursor = prepaint.cursor.take();
       let ime_cursor_bounds = prepaint.ime_cursor_bounds;
-      let marked_text = self.view.read(cx).marked_text().map(str::to_string);
+      // SharedString clone: a cheap copy made only while IME composition is
+      // active (None most frames).
+      let marked_text = self.view.read(cx).marked_text.clone();
       // Links under the pointer get a pointing hand; otherwise the beam.
       let pointer_cursor = self.view.read(cx).hovered_link().is_some();
 
@@ -1050,24 +1264,24 @@ impl Element for TerminalElement {
         |_, window, cx| {
           window.handle_input(&self.focus, input_handler, cx);
 
-          window.paint_quad(fill(bounds, prepaint.background_color));
+          window.paint_quad(fill(bounds, prepaint.palette.background));
 
-          for rect in &prepaint.background_rects {
+          for rect in prepaint.background_rects.iter() {
             rect.paint(prepaint.origin, &prepaint.dimensions, window);
           }
           for rect in &prepaint.selection_rects {
             rect.paint(prepaint.origin, &prepaint.dimensions, window);
           }
-          for rect in &prepaint.block_rects {
+          for rect in prepaint.block_rects.iter() {
             rect.paint(prepaint.origin, &prepaint.dimensions, window);
           }
 
-          for run in &prepaint.batched_runs {
+          for run in prepaint.batched_runs.iter() {
             run.paint(prepaint.origin, &prepaint.dimensions, window, cx);
           }
 
           // IME composition text, drawn on an opaque background at the cursor.
-          if let (Some(marked_text), Some(ime_bounds)) = (marked_text.as_ref(), ime_cursor_bounds) {
+          if let (Some(marked_text), Some(ime_bounds)) = (marked_text, ime_cursor_bounds) {
             let ime_bounds = ime_bounds + prepaint.origin;
             let marked_style = TextRun {
               len: marked_text.len(),
@@ -1081,7 +1295,7 @@ impl Element for TerminalElement {
               ..Default::default()
             };
             let shaped = window.text_system().shape_line(
-              SharedString::from(marked_text.clone()),
+              marked_text,
               prepaint.font_size,
               &[marked_style],
               None,
@@ -1197,7 +1411,7 @@ impl gpui::InputHandler for TerminalInputHandler {
       return;
     };
     view.update(cx, |view, cx| {
-      view.marked_text = Some(new_text.to_string());
+      view.marked_text = Some(SharedString::from(new_text));
       cx.notify();
     });
   }
@@ -1254,10 +1468,13 @@ fn is_blank(cell: &Cell) -> bool {
     && cell.zerowidth.is_empty()
 }
 
-/// Resolves a cell into a GPUI text run with terminal styling applied.
+/// Resolves a cell into its paint style, borrowing the base font.
+///
+/// The owned run font (with the cell's weight/style override applied) is
+/// built once per run by [`BatchedTextRunBuilder::finish`], not per cell.
 fn cell_style(
-  cell: &Cell, fg: CellColor, palette: &TerminalPalette, font: gpui::Font, link_underline: bool,
-) -> TextRun {
+  cell: &Cell, fg: CellColor, palette: &TerminalPalette, font: &gpui::Font, link_underline: bool,
+) -> CellTextStyle {
   let mut color = palette.convert(&fg);
   if cell.flags.contains(CellFlags::DIM) {
     color.a *= 0.7;
@@ -1301,17 +1518,12 @@ fn cell_style(
     FontStyle::Normal
   };
 
-  TextRun {
-    len: cell.c.len_utf8(),
-    font: gpui::Font {
-      weight,
-      style,
-      ..font
-    },
+  CellTextStyle {
     color,
-    background_color: None,
     underline,
     strikethrough,
+    weight,
+    style,
   }
 }
 
@@ -1622,7 +1834,7 @@ mod tests {
     link_columns.insert(0, vec![1..2, 5..6]);
     let (_, runs, _) = TerminalElement::layout_grid_with_links(
       &content,
-      default_font(),
+      &default_font(),
       px(14.),
       &palette(),
       &link_columns,

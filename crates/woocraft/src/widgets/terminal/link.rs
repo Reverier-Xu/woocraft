@@ -204,6 +204,13 @@ fn osc8_links(cells: &[IndexedCell], line: i32) -> Vec<GridLink> {
   links
 }
 
+/// The grid line number and cells of viewport row `row`, or `None` past the
+/// grid. Shared by the row-link entry points below.
+fn row_cells(content: &Content, row: usize) -> Option<(i32, &[IndexedCell])> {
+  let cells = content.row(row)?;
+  Some((row as i32 - content.display_offset as i32, cells))
+}
+
 /// Runs all `providers` against one viewport row and converts the resulting
 /// text-offset spans into [`GridLink`]s.
 ///
@@ -212,10 +219,9 @@ fn osc8_links(cells: &[IndexedCell], line: i32) -> Vec<GridLink> {
 pub fn links_for_row(
   content: &Content, row: usize, providers: &[Arc<dyn LinkProvider>],
 ) -> Vec<GridLink> {
-  let Some(cells) = content.row(row) else {
+  let Some((line, cells)) = row_cells(content, row) else {
     return Vec::new();
   };
-  let line = row as i32 - content.display_offset as i32;
   let context = line_context(cells);
   if context.text.trim().is_empty() && cells.iter().all(|cell| cell.cell.hyperlink.is_none()) {
     return Vec::new();
@@ -243,10 +249,9 @@ pub fn links_for_row(
 pub fn all_links_for_row(
   content: &Content, row: usize, providers: &[Arc<dyn LinkProvider>],
 ) -> Vec<GridLink> {
-  let Some(cells) = content.row(row) else {
+  let Some((line, cells)) = row_cells(content, row) else {
     return Vec::new();
   };
-  let line = row as i32 - content.display_offset as i32;
   let mut all = osc8_links(cells, line);
   all.extend(links_for_row(content, row, providers));
   all
