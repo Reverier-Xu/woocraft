@@ -99,6 +99,13 @@ pub struct DockArea {
 }
 
 /// DockItem is a tree structure that represents the layout of the dock.
+///
+/// The `items`/`sizes`/`active_ix` fields on each variant are
+/// **construction-time mirrors**: they hold the values the tree was built
+/// with, but drag-and-drop restructures only mutate the live view entities,
+/// so the mirrors go stale immediately afterwards. Read structure through the
+/// `view` entities (or the `find_panel` / `has_real_panels` helpers, which
+/// already traverse the entity graph). See `docs/dock-layout-refactor.md`.
 #[derive(Clone)]
 pub enum DockItem {
   /// Split layout
@@ -106,8 +113,11 @@ pub enum DockItem {
     axis: Axis,
     /// Self size, only used for build split panels
     size: Option<Pixels>,
+    /// Construction-time mirror of the initial [`StackPanel`] children; not
+    /// maintained after layout changes.
     items: Vec<DockItem>,
-    /// Items sizes
+    /// Items sizes (construction-time mirror; live sizes live in the
+    /// [`StackPanel`]'s `ResizableState`)
     sizes: Vec<Option<Pixels>>,
     view: Entity<StackPanel>,
   },
@@ -115,7 +125,11 @@ pub enum DockItem {
   Tabs {
     /// Self size, only used for build split panels
     size: Option<Pixels>,
+    /// Construction-time mirror of the initial [`TabPanel`] panels; not
+    /// maintained after layout changes.
     items: Vec<Arc<dyn PanelView>>,
+    /// Construction-time mirror of the initial [`TabPanel`] active index; not
+    /// maintained after tab switches.
     active_ix: usize,
     view: Entity<TabPanel>,
   },
@@ -129,6 +143,8 @@ pub enum DockItem {
   Tiles {
     /// Self size, only used for build split panels
     size: Option<Pixels>,
+    /// Construction-time mirror of the initial [`Tiles`] items (including
+    /// their bounds); not maintained after tile drags.
     items: Vec<TileItem>,
     view: Entity<Tiles>,
   },
@@ -160,12 +176,41 @@ impl std::fmt::Debug for DockItem {
 
 impl DockItem {
   /// Return true if this dock item tree contains any real (user) panels.
+  ///
+  /// Traversal goes through the live view entities: the `items` mirrors are
+  /// construction-time values that go stale after drag-and-drop restructures
+  /// (see `docs/dock-layout-refactor.md`). An empty [`TabPanel`] kept as a
+  /// drop target does not count as real content.
   pub fn has_real_panels(&self, cx: &App) -> bool {
     match self {
       Self::Tabs { view, .. } => !view.read(cx).panels.is_empty(),
-      Self::Split { items, .. } => items.iter().any(|item| item.has_real_panels(cx)),
+      Self::Split { view, .. } => view
+        .read(cx)
+        .panels
+        .iter()
+        .any(|panel| Self::view_has_real_panels(panel, cx)),
       Self::Panel { .. } => true,
       Self::Tiles { view, .. } => !view.read(cx).panels().is_empty(),
+    }
+  }
+
+  /// Entity-graph variant of [`Self::has_real_panels`] for panels held by a
+  /// [`StackPanel`].
+  fn view_has_real_panels(panel: &Arc<dyn PanelView>, cx: &App) -> bool {
+    let view = panel.view();
+    if let Ok(tab_panel) = view.clone().downcast::<TabPanel>() {
+      !tab_panel.read(cx).panels.is_empty()
+    } else if let Ok(stack_panel) = view.clone().downcast::<StackPanel>() {
+      stack_panel
+        .read(cx)
+        .panels
+        .iter()
+        .any(|panel| Self::view_has_real_panels(panel, cx))
+    } else if let Ok(tiles) = view.downcast::<Tiles>() {
+      !tiles.read(cx).panels().is_empty()
+    } else {
+      // A plain user panel always counts as real content.
+      true
     }
   }
 
@@ -381,84 +426,96 @@ impl DockItem {
     }
   }
 
-  /// Find existing panel in the dock item.
-  pub fn find_panel(&self, panel: Arc<dyn PanelView>) -> Option<Arc<dyn PanelView>> {
+  /// Find `panel` in the live view graph behind this item, compared by view
+  /// identity (same semantics as `PartialEq for dyn PanelView`).
+  ///
+  /// Traverses entity state instead of the construction-time `items` mirror,
+  /// so panels moved in or out via drag-and-drop are reflected (see
+  /// `docs/dock-layout-refactor.md`).
+  pub fn find_panel(&self, panel: Arc<dyn PanelView>, cx: &App) -> Option<Arc<dyn PanelView>> {
     match self {
-      Self::Split { items, .. } => items.iter().find_map(|item| item.find_panel(panel.clone())),
-      Self::Tabs { items, .. } => items.iter().find(|item| *item == &panel).cloned(),
-      Self::Panel { view, .. } => Some(view.clone()),
-      Self::Tiles { items, .. } => items.iter().find_map(|item| {
-        if item.panel == panel.clone() {
-          Some(item.panel.clone())
-        } else {
-          None
-        }
-      }),
+      Self::Tabs { view, .. } => view.read(cx).panels.iter().find(|p| *p == &panel).cloned(),
+      Self::Split { view, .. } => view
+        .read(cx)
+        .panels
+        .iter()
+        .find_map(|child| Self::find_panel_in_view(child, &panel, cx)),
+      Self::Panel { view, .. } => (*view == panel).then_some(view.clone()),
+      Self::Tiles { view, .. } => view
+        .read(cx)
+        .panels()
+        .iter()
+        .find(|item| item.panel.view() == panel.view())
+        .map(|item| item.panel.clone()),
+    }
+  }
+
+  /// Entity-graph search for [`Self::find_panel`] over a panel held by a
+  /// [`StackPanel`].
+  fn find_panel_in_view(
+    view: &Arc<dyn PanelView>, panel: &Arc<dyn PanelView>, cx: &App,
+  ) -> Option<Arc<dyn PanelView>> {
+    if view == panel {
+      return Some(panel.clone());
+    }
+    let any_view = view.view();
+    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
+      tab_panel.read(cx).panels.iter().find(|p| *p == panel).cloned()
+    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
+      stack_panel
+        .read(cx)
+        .panels
+        .iter()
+        .find_map(|child| Self::find_panel_in_view(child, panel, cx))
+    } else if let Ok(tiles) = any_view.downcast::<Tiles>() {
+      tiles
+        .read(cx)
+        .panels()
+        .iter()
+        .find(|item| &item.panel == panel)
+        .map(|item| item.panel.clone())
+    } else {
+      None
     }
   }
 
   /// Add a panel to the dock item.
+  ///
+  /// The panel is registered on the live view entities only; the `items`
+  /// mirrors on this enum are construction-time values and are not updated
+  /// (see `docs/dock-layout-refactor.md`).
   pub fn add_panel(
     &mut self, panel: Arc<dyn PanelView>, dock_area: &WeakEntity<DockArea>,
     bounds: Option<Bounds<Pixels>>, window: &mut Window, cx: &mut App,
   ) {
     match self {
-      Self::Tabs { view, items, .. } => {
-        let panel_id = panel.view().entity_id();
-        items.push(panel.clone());
+      Self::Tabs { view, .. } => {
         view.update(cx, |tab_panel, cx| {
           tab_panel.add_panel(panel, window, cx);
         });
-        // Transitional double-bookkeeping guard: `DockItem::items` mirrors
-        // `TabPanel.panels` until the layout tree converges into the entity;
-        // catch desyncs in debug builds.
-        debug_assert!(
-          items.iter().any(|p| p.view().entity_id() == panel_id)
-            && view
-              .read(cx)
-              .panels
-              .iter()
-              .any(|p| p.view().entity_id() == panel_id),
-          "panel must be registered on both DockItem items and TabPanel.panels after add_panel"
-        );
       }
-      Self::Split { view, items, .. } => {
-        // Iter items to add panel to the first tabs
-        for item in items.iter_mut() {
-          if let DockItem::Tabs { view, .. } = item {
-            let panel_id = panel.view().entity_id();
-            view.update(cx, |tab_panel, cx| {
-              tab_panel.add_panel(panel.clone(), window, cx);
-            });
-            debug_assert!(
-              view
-                .read(cx)
-                .panels
-                .iter()
-                .any(|p| p.view().entity_id() == panel_id),
-              "panel must be added to the target TabPanel entity"
-            );
-            return;
-          }
+      Self::Split { view, .. } => {
+        // Add to the first direct TabPanel child in the live entity graph.
+        let first_tabs = view
+          .read(cx)
+          .panels
+          .iter()
+          .find_map(|panel| panel.view().downcast::<TabPanel>().ok());
+        if let Some(tab_panel) = first_tabs {
+          tab_panel.update(cx, |tab_panel, cx| {
+            tab_panel.add_panel(panel, window, cx);
+          });
+          return;
         }
 
         // Unable to find tabs, create new tabs
         let new_item = Self::tabs(vec![panel.clone()], dock_area, window, cx);
-        let new_item_id = new_item.view().entity_id(cx);
-        items.push(new_item.clone());
+        let new_item_view = new_item.view();
         view.update(cx, |stack_panel, cx| {
-          stack_panel.add_panel(new_item.view(), None, dock_area.clone(), window, cx);
+          stack_panel.add_panel(new_item_view, None, dock_area.clone(), window, cx);
         });
-        debug_assert!(
-          view
-            .read(cx)
-            .panels
-            .iter()
-            .any(|p| p.view().entity_id() == new_item_id),
-          "new tabs item must be added to the StackPanel entity"
-        );
       }
-      Self::Tiles { view, items, .. } => {
+      Self::Tiles { view, .. } => {
         let tile_item = TileItem::new(
           Arc::new(cx.new(|cx| {
             let mut tab_panel = TabPanel::new(None, dock_area.clone(), window, cx);
@@ -467,26 +524,21 @@ impl DockItem {
           })),
           bounds.unwrap_or_else(|| TileMeta::default().bounds),
         );
-        let tile_panel_id = tile_item.panel.view().entity_id();
-
-        items.push(tile_item.clone());
         view.update(cx, |tiles, cx| {
           tiles.add_item(tile_item, dock_area, window, cx);
         });
-        debug_assert!(
-          view
-            .read(cx)
-            .panels()
-            .iter()
-            .any(|item| item.panel.view().entity_id() == tile_panel_id),
-          "new tile item must be added to the Tiles entity"
-        );
       }
       Self::Panel { .. } => {}
     }
   }
 
   /// Remove a panel from the dock item.
+  ///
+  /// Removal happens on the live view entities only; the `items` mirrors are
+  /// construction-time values and are not updated (see
+  /// `docs/dock-layout-refactor.md`). The [`StackPanel`] recursion keeps the
+  /// previous behavior of the mirror recursion, including firing
+  /// [`Panel::on_removed`] and empty-TabPanel cleanup per visited child.
   pub fn remove_panel(&self, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App) {
     match self {
       DockItem::Tabs { view, .. } => {
@@ -503,10 +555,13 @@ impl DockItem {
           "panel must be removed from TabPanel.panels by remove_panel"
         );
       }
-      DockItem::Split { items, view, .. } => {
-        // For each child item, set collapsed state
-        for item in items {
-          item.remove_panel(panel.clone(), window, cx);
+      DockItem::Split { view, .. } => {
+        // Recurse through the live entity graph: the `items` mirror is stale
+        // after drag-and-drop restructures. Children are cloned first because
+        // removing a panel can prune empty TabPanels from the stack.
+        let children = view.read(cx).panels.to_vec();
+        for child in children {
+          Self::remove_panel_from_view(&child, panel.clone(), window, cx);
         }
         view.update(cx, |split, cx| {
           split.remove_panel(panel, window, cx);
@@ -530,6 +585,28 @@ impl DockItem {
     }
   }
 
+  /// Entity-graph removal for [`Self::remove_panel`] over a panel held by a
+  /// [`StackPanel`].
+  fn remove_panel_from_view(
+    view: &Arc<dyn PanelView>, panel: Arc<dyn PanelView>, window: &mut Window, cx: &mut App,
+  ) {
+    let any_view = view.view();
+    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
+      tab_panel.update(cx, |tab_panel, cx| {
+        tab_panel.remove_panel(panel, window, cx);
+      });
+    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
+      let children = stack_panel.read(cx).panels.to_vec();
+      for child in children {
+        Self::remove_panel_from_view(&child, panel.clone(), window, cx);
+      }
+    } else if let Ok(tiles) = any_view.downcast::<Tiles>() {
+      tiles.update(cx, |tiles, cx| {
+        tiles.remove(panel, window, cx);
+      });
+    }
+  }
+
   pub fn set_collapsed(&self, collapsed: bool, window: &mut Window, cx: &mut App) {
     match self {
       DockItem::Tabs { view, .. } => {
@@ -537,15 +614,36 @@ impl DockItem {
           tab_panel.set_collapsed(collapsed, window, cx);
         });
       }
-      DockItem::Split { items, .. } => {
-        // For each child item, set collapsed state
-        for item in items {
-          item.set_collapsed(collapsed, window, cx);
+      DockItem::Split { view, .. } => {
+        // Recurse through the live entity graph: the `items` mirror is stale
+        // after drag-and-drop restructures.
+        let children = view.read(cx).panels.to_vec();
+        for panel in children {
+          Self::set_collapsed_on_view(&panel, collapsed, window, cx);
         }
       }
       DockItem::Tiles { .. } => {}
       DockItem::Panel { view, .. } => view.set_active(!collapsed, window, cx),
     }
+  }
+
+  /// Entity-graph collapse for [`Self::set_collapsed`] over a panel held by a
+  /// [`StackPanel`].
+  fn set_collapsed_on_view(
+    panel: &Arc<dyn PanelView>, collapsed: bool, window: &mut Window, cx: &mut App,
+  ) {
+    let any_view = panel.view();
+    if let Ok(tab_panel) = any_view.clone().downcast::<TabPanel>() {
+      tab_panel.update(cx, |tab_panel, cx| {
+        tab_panel.set_collapsed(collapsed, window, cx);
+      });
+    } else if let Ok(stack_panel) = any_view.clone().downcast::<StackPanel>() {
+      let children = stack_panel.read(cx).panels.to_vec();
+      for child in children {
+        Self::set_collapsed_on_view(&child, collapsed, window, cx);
+      }
+    }
+    // Tiles have no collapsed state, matching the previous mirror recursion.
   }
 
   /// Recursively traverses to find the left-most and top-most TabPanel.
