@@ -16,7 +16,7 @@ type TabCloseHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
 
 /// Fixed width of a horizontal tab. Few tabs leave whitespace in the bar,
 /// many tabs keep this width and ellipsize their labels (the bar scrolls).
-const TAB_WIDTH: Rems = rems(9.);
+const TAB_WIDTH: Rems = rems(12.);
 
 /// A Tab element for the [`super::TabBar`].
 #[derive(IntoElement)]
@@ -206,12 +206,17 @@ impl RenderOnce for Tab {
 
     let tooltip_label = self.label.clone();
     let hover_group = SharedString::from(format!("tab-hover-{}", self.ix));
-    let hover_bg = cx.theme().foreground.opacity(opacity::transparent::HOVER);
+    // Selection lights up the whole tab unit (label and close button
+    // together); hover is left to each button's own action.
+    let selected_bg = cx.theme().foreground.opacity(opacity::transparent::ACTIVE);
+    let selected_fg = cx.theme().primary;
 
+    // The button itself stays unselected: the selection background is painted
+    // by the tab base so it spans the whole group instead of stacking on top
+    // of the button.
     let mut button = Button::new(button_id)
       .with_size(self.size)
       .flat()
-      .selected(self.selected)
       .disabled(self.disabled)
       .tab_stop(false);
 
@@ -300,8 +305,8 @@ impl RenderOnce for Tab {
       .when(!self.icon_only, |this| this.w(TAB_WIDTH).flex_shrink_0())
       .rounded(self.size.component_radius())
       .group(hover_group.clone())
-      .when(!self.disabled, |this| {
-        this.group_hover(hover_group, |this| this.bg(hover_bg))
+      .when(self.selected, |this| {
+        this.bg(selected_bg).text_color(selected_fg)
       })
       .child(group)
       .on_mouse_down(MouseButton::Left, |_, _, cx| {

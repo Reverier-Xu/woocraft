@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{
   Anchor, AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
   RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
-  Window, div, prelude::FluentBuilder as _, px,
+  Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
@@ -158,24 +158,10 @@ impl RenderOnce for TabBar {
       })
       .collect();
 
-    // Between two adjacent tabs that are both inactive, render a short
-    // centered divider so the inactive tabs read as separated slots; active
-    // tabs carry their own background and need no separator.
-    let selected_flags: Vec<bool> = tabs.iter().map(|tab| tab.selected).collect();
-    let divider_height = self.size.em(0.5);
-    let mut tabs_children: Vec<AnyElement> = Vec::with_capacity(tabs.len() * 2);
-    for (ix, tab) in tabs.into_iter().enumerate() {
-      if !vertical && ix > 0 && !tab.selected && !selected_flags[ix - 1] {
-        tabs_children.push(
-          div()
-            .w(px(1.))
-            .h(divider_height)
-            .bg(cx.theme().border)
-            .into_any_element(),
-        );
-      }
-      tabs_children.push(tab.into_any_element());
-    }
+    let tabs_children: Vec<AnyElement> = tabs
+      .into_iter()
+      .map(IntoElement::into_any_element)
+      .collect();
 
     if vertical {
       self
