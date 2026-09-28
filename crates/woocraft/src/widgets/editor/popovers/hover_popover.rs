@@ -2,9 +2,9 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
   AnyElement, App, AppContext as _, AvailableSpace, Bounds, Element, ElementId, Entity,
-  InteractiveElement, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Render,
+  InteractiveElement, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Rems, Render,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Window, deferred, div, point,
-  prelude::FluentBuilder as _, px,
+  prelude::FluentBuilder as _, px, rems,
 };
 
 use super::render_markdown;
@@ -70,7 +70,7 @@ pub(crate) struct Popover {
   style: StyleRefinement,
   editor: Entity<InputState>,
   range: Range<usize>,
-  width_limit: Range<Pixels>,
+  width_limit: Range<Rems>,
   content_builder: Box<ContentBuilder>,
 }
 
@@ -92,7 +92,7 @@ impl Popover {
       editor,
       range,
       style: StyleRefinement::default(),
-      width_limit: px(200.)..px(500.),
+      width_limit: rems(13.)..rems(31.),
       content_builder: Box::new(move |window, cx| (f)(window, cx).into_any_element()),
     }
   }
@@ -164,9 +164,11 @@ impl Element for Popover {
     let max_width = self
       .width_limit
       .end
-      .min(window.bounds().size.width - SNAP_TO_EDGE * 2)
-      .max(px(200.));
-    let max_height = (window.bounds().size.height - SNAP_TO_EDGE * 2).min(px(320.));
+      .to_pixels(window.rem_size())
+      .min(window.bounds().size.width - SNAP_TO_EDGE.to_pixels(window.rem_size()) * 2)
+      .max(self.width_limit.start.to_pixels(window.rem_size()));
+    let max_height = (window.bounds().size.height - SNAP_TO_EDGE.to_pixels(window.rem_size()) * 2)
+      .min(rems(20.).to_pixels(window.rem_size()));
 
     let is_open = *open_state.read(cx);
 
@@ -189,9 +191,10 @@ impl Element for Popover {
     .into_any_element();
 
     let popover_size = popover.layout_as_root(AvailableSpace::min_size(), window, cx);
-    const SNAP_TO_EDGE: Pixels = px(8.);
-    let top_space = trigger_bounds.top() - SNAP_TO_EDGE;
-    let right_space = window.bounds().size.width - trigger_bounds.left() - SNAP_TO_EDGE;
+    const SNAP_TO_EDGE: Rems = rems(0.5);
+    let snap_to_edge = SNAP_TO_EDGE.to_pixels(window.rem_size());
+    let top_space = trigger_bounds.top() - snap_to_edge;
+    let right_space = window.bounds().size.width - trigger_bounds.left() - snap_to_edge;
 
     let mut pos = point(
       trigger_bounds.left(),

@@ -16,7 +16,7 @@
 //! Theme::sync_system_appearance(&mut cx);
 //! ```
 
-use gpui::{App, Global, Pixels, WindowAppearance, px};
+use gpui::{App, Global, Rems, WindowAppearance, rems};
 use serde::{Deserialize, Serialize};
 
 mod color;
@@ -91,14 +91,36 @@ pub struct Theme {
   pub mode: ThemeMode,
   pub tokens: ThemeTokens,
   pub colors: ThemeColors,
-  pub font_size: Pixels,
-  pub icon_size: Pixels,
-  pub radius: Pixels,
-  pub radius_lg: Pixels,
-  pub radius_container: Pixels,
-  pub tile_grid_size: Pixels,
-  pub tile_radius: Pixels,
+  #[serde(with = "rems_serde")]
+  pub font_size: Rems,
+  #[serde(with = "rems_serde")]
+  pub icon_size: Rems,
+  #[serde(with = "rems_serde")]
+  pub radius: Rems,
+  #[serde(with = "rems_serde")]
+  pub radius_lg: Rems,
+  #[serde(with = "rems_serde")]
+  pub radius_container: Rems,
+  #[serde(with = "rems_serde")]
+  pub tile_grid_size: Rems,
+  #[serde(with = "rems_serde")]
+  pub tile_radius: Rems,
   pub scrollbar_show: ScrollbarShow,
+}
+
+/// Serde adapter for [`Rems`], which GPUI does not implement `Serialize`/
+/// `Deserialize` for. Sizes are persisted as the plain `f32` number of rems.
+mod rems_serde {
+  use gpui::{Rems, rems};
+  use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+  pub fn serialize<S: Serializer>(value: &Rems, serializer: S) -> Result<S::Ok, S::Error> {
+    value.0.serialize(serializer)
+  }
+
+  pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Rems, D::Error> {
+    Ok(rems(f32::deserialize(deserializer)?))
+  }
 }
 
 impl Default for Theme {
@@ -108,13 +130,13 @@ impl Default for Theme {
       mode: ThemeMode::Light,
       colors: ThemeColors::from_tokens(tokens, false),
       tokens,
-      font_size: px(16.),
-      icon_size: px(16.),
-      radius: px(4.),
-      radius_lg: px(8.),
-      radius_container: px(6.),
-      tile_grid_size: px(10.),
-      tile_radius: px(6.),
+      font_size: rems(1.),
+      icon_size: rems(1.),
+      radius: rems(0.25),
+      radius_lg: rems(0.5),
+      radius_container: rems(0.375),
+      tile_grid_size: rems(0.625),
+      tile_radius: rems(0.375),
       scrollbar_show: ScrollbarShow::default(),
     }
   }

@@ -39,8 +39,8 @@ use std::sync::Arc;
 use gpui::{
   App, AppContext as _, Bounds, Context, ElementId, Entity, EventEmitter, Hsla,
   InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
-  Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window, canvas,
-  div, fill, point, prelude::FluentBuilder as _, px, size,
+  Pixels, Point, Rems, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
+  canvas, div, fill, point, prelude::FluentBuilder as _, px, rems, size,
 };
 use palette::{FromColor, Hsl, OklabHue, Oklch, Srgb};
 
@@ -51,13 +51,13 @@ use crate::{
 
 const CHROMA_MAX: f32 = 0.4;
 const HUE_MAX: f32 = 360.0;
-const WARNING_LINE_THICKNESS: Pixels = px(2.0);
+const WARNING_LINE_THICKNESS: Rems = rems(0.125);
 /// Fixed number of gradient segments per channel slider. 96 segments are
 /// visually indistinguishable from per-pixel segmentation (gpui-kit uses the
 /// same fixed step count) and keep the cached color table size constant.
 const GRADIENT_STEPS: usize = 96;
-const POINTER_OUTER_WIDTH: Pixels = px(4.0);
-const POINTER_INNER_WIDTH: Pixels = px(2.0);
+const POINTER_OUTER_WIDTH: Rems = rems(0.25);
+const POINTER_INNER_WIDTH: Rems = rems(0.125);
 
 /// RGBA color representation for the color picker.
 ///
@@ -397,7 +397,7 @@ impl ColorPickerState {
     cx: &mut Context<Self>,
   ) {
     let bounds = self.channel_bounds[channel.index()];
-    if bounds.size.width <= px(0.0) {
+    if bounds.size.width <= px(0.) {
       return;
     }
 
@@ -540,10 +540,10 @@ impl RenderOnce for ColorPicker {
           .items_center()
           .justify_between()
           .child(
-            h_flex().items_center().gap(px(8.0)).child(
+            h_flex().items_center().gap(rems(0.5)).child(
               div()
-                .size(px(14.0))
-                .rounded(px(4.0))
+                .size(rems(0.875))
+                .rounded(rems(0.25))
                 .border_1()
                 .border_color(cx.theme().border)
                 .bg(Hsla::from(swatch_color)),
@@ -576,7 +576,7 @@ impl RenderOnce for ColorPicker {
           state.sync_hex_input_display(window, cx);
         });
         let hex_input = state.read(cx).hex_input();
-        let mut content = v_flex().w(px(320.0)).gap(px(8.0));
+        let mut content = v_flex().w(rems(20.)).gap(rems(0.5));
 
         if let Some(hex_input) = hex_input {
           content = content.child(Input::new(&hex_input));
@@ -619,7 +619,7 @@ fn render_channel_row(
   let ratio = channel.normalized_value(current_oklch);
 
   v_flex()
-    .gap(px(4.0))
+    .gap(rems(0.25))
     .child(
       h_flex()
         .w_full()
@@ -630,7 +630,7 @@ fn render_channel_row(
         .child(
           h_flex()
             .items_center()
-            .gap(px(6.0))
+            .gap(rems(0.375))
             .child(
               div()
                 .text_color(if out_of_gamut {
@@ -654,7 +654,7 @@ fn render_channel_row(
       div()
         .id((channel_id, channel.id_label()))
         .relative()
-        .h(size.track_height() + px(8.0))
+        .h(size.track_height() + rems(0.5))
         .w_full()
         .rounded(cx.theme().radius)
         .overflow_hidden()
@@ -700,6 +700,10 @@ fn paint_channel(
   cx: &mut App,
 ) {
   let steps = stops.len();
+  let rem_size = window.rem_size();
+  let warning_line_thickness = WARNING_LINE_THICKNESS.to_pixels(rem_size);
+  let pointer_outer_width = POINTER_OUTER_WIDTH.to_pixels(rem_size);
+  let pointer_inner_width = POINTER_INNER_WIDTH.to_pixels(rem_size);
 
   for (ix, stop) in stops.iter().enumerate() {
     let start_ratio = ix as f32 / steps as f32;
@@ -707,7 +711,7 @@ fn paint_channel(
 
     let x = bounds.origin.x + bounds.size.width * start_ratio;
     let next_x = bounds.origin.x + bounds.size.width * end_ratio;
-    let segment_width = (next_x - x).max(px(1.0));
+    let segment_width = (next_x - x).max(px(1.));
     let segment = Bounds::new(
       point(x, bounds.origin.y),
       size(segment_width, bounds.size.height),
@@ -722,8 +726,8 @@ fn paint_channel(
     window.paint_quad(fill(segment, color));
     if stop.out_of_gamut {
       let warning_segment = Bounds::new(
-        point(x, bounds.bottom() - WARNING_LINE_THICKNESS),
-        size(segment_width, WARNING_LINE_THICKNESS),
+        point(x, bounds.bottom() - warning_line_thickness),
+        size(segment_width, warning_line_thickness),
       );
       window.paint_quad(fill(warning_segment, cx.theme().warning));
     }
@@ -731,12 +735,12 @@ fn paint_channel(
 
   let center_x = bounds.origin.x + bounds.size.width * ratio;
   let outer = Bounds::new(
-    point(center_x - POINTER_OUTER_WIDTH / 2.0, bounds.origin.y),
-    size(POINTER_OUTER_WIDTH, bounds.size.height),
+    point(center_x - pointer_outer_width / 2.0, bounds.origin.y),
+    size(pointer_outer_width, bounds.size.height),
   );
   let inner = Bounds::new(
-    point(center_x - POINTER_INNER_WIDTH / 2.0, bounds.origin.y),
-    size(POINTER_INNER_WIDTH, bounds.size.height),
+    point(center_x - pointer_inner_width / 2.0, bounds.origin.y),
+    size(pointer_inner_width, bounds.size.height),
   );
   window.paint_quad(fill(outer, cx.theme().background));
   window.paint_quad(fill(inner, cx.theme().foreground));

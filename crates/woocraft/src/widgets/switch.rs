@@ -31,7 +31,7 @@ use std::rc::Rc;
 use gpui::{
   Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement as _,
   IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme, ColorExt, Size, StyleSized, StyledExt, duration, h_flex, opacity};
@@ -198,11 +198,12 @@ impl RenderOnce for Switch {
       .detach();
     }
 
-    let track_h = self.size.track_height();
-    let track_w = self.size.track_height() * 1.5;
-    let thumb_size = self.size.thumb_size();
+    let rem_size = window.rem_size();
+    let track_h = self.size.track_height().to_pixels(rem_size);
+    let track_w = track_h * 1.5;
+    let thumb_size = self.size.thumb_size().to_pixels(rem_size);
     let thumb_offset = thumb_size / 2.0;
-    let track_thickness = self.size.track_thickness();
+    let track_thickness = self.size.track_thickness().to_pixels(rem_size);
     let track_radius = self.size.component_radius();
 
     let track_bg = cx.theme().muted;
@@ -226,11 +227,11 @@ impl RenderOnce for Switch {
     };
 
     let max_x = track_w - thumb_size;
-    let thumb_x = if checked { max_x } else { gpui::px(0.0) };
+    let thumb_x = if checked { max_x } else { px(0.) };
     let filled_w = if checked {
       thumb_x + thumb_offset
     } else {
-      gpui::px(0.0)
+      px(0.)
     };
 
     let filled_track: AnyElement = div()

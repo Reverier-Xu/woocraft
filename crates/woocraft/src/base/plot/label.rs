@@ -1,20 +1,21 @@
 use std::fmt::Debug;
 
 use gpui::{
-  App, Bounds, FontWeight, Hsla, Pixels, Point, SharedString, TextAlign, TextRun, Window, point, px,
+  App, Bounds, FontWeight, Hsla, Pixels, Point, Rems, SharedString, TextAlign, TextRun, Window,
+  point, px, rems,
 };
 
 use super::origin_point;
 
-pub const TEXT_SIZE: f32 = 10.;
-pub const TEXT_GAP: f32 = 2.;
-pub const TEXT_HEIGHT: f32 = TEXT_SIZE + TEXT_GAP;
+pub const TEXT_SIZE: Rems = rems(0.625);
+pub const TEXT_GAP: Rems = rems(0.125);
+pub const TEXT_HEIGHT: Rems = rems(0.75);
 
 pub struct Text {
   pub text: SharedString,
   pub origin: Point<Pixels>,
   pub color: Hsla,
-  pub font_size: Pixels,
+  pub font_size: Rems,
   pub font_weight: FontWeight,
   pub align: TextAlign,
 }
@@ -29,14 +30,14 @@ impl Text {
       text: text.into(),
       origin,
       color,
-      font_size: TEXT_SIZE.into(),
+      font_size: TEXT_SIZE,
       font_weight: FontWeight::NORMAL,
       align: TextAlign::Left,
     }
   }
 
   /// Set the font size of the Text.
-  pub fn font_size(mut self, font_size: impl Into<Pixels>) -> Self {
+  pub fn font_size(mut self, font_size: impl Into<Rems>) -> Self {
     self.font_size = font_size.into();
     self
   }
@@ -83,6 +84,7 @@ impl PlotLabel {
     } in self.0.iter()
     {
       let origin = origin_point(origin.x, origin.y, bounds.origin);
+      let font_size = font_size.to_pixels(window.rem_size());
 
       let text_run = TextRun {
         len: text.len(),
@@ -96,16 +98,16 @@ impl PlotLabel {
       if let Ok(text) =
         window
           .text_system()
-          .shape_text(text.clone(), *font_size, &[text_run], None, None)
+          .shape_text(text.clone(), font_size, &[text_run], None, None)
       {
         for line in text {
           let origin = match align {
             TextAlign::Left => origin,
-            TextAlign::Right => origin - point(line.size(*font_size).width, px(0.)),
-            _ => origin - point(line.size(*font_size).width / 2., px(0.)),
+            TextAlign::Right => origin - point(line.size(font_size).width, px(0.)),
+            _ => origin - point(line.size(font_size).width / 2., px(0.)),
           };
 
-          let _ = line.paint(origin, *font_size, *align, None, window, cx);
+          let _ = line.paint(origin, font_size, *align, None, window, cx);
         }
       }
     }

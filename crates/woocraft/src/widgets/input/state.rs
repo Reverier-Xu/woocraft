@@ -11,7 +11,7 @@ use gpui::{
   GlobalElementId, InspectorElementId, InteractiveElement as _, IntoElement, KeyBinding,
   KeyDownEvent, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
   ParentElement as _, Pixels, Render, RenderOnce, SharedString, StyleRefinement, Styled, TextStyle,
-  UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px, relative,
+  UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px, relative, rems,
 };
 use regex::Regex;
 use serde::Deserialize;
@@ -523,7 +523,7 @@ impl InputState {
     let (display, shaped) = self.cached_display();
     let cursor_display_index = self.text_byte_to_display_index(display, self.cursor());
     let cursor_x = shaped.x_for_index(cursor_display_index);
-    let horizontal_padding = px(4.);
+    let horizontal_padding = rems(0.25).to_pixels(window.rem_size());
     let left_edge = self.horizontal_scroll + horizontal_padding;
     let right_edge = self.horizontal_scroll + viewport_width - horizontal_padding;
 
@@ -1478,11 +1478,7 @@ impl RenderOnce for Input {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let state_view = self.state.read(cx);
     let focused = state_view.focus_handle.is_focused(window) && !state_view.disabled;
-    let gap_x = match self.size {
-      Size::Small => px(4.),
-      Size::Large => px(8.),
-      _ => px(6.),
-    };
+    let gap_x = self.size.component_gap();
 
     let bg = if state_view.disabled {
       cx.theme().muted
@@ -1568,22 +1564,22 @@ impl RenderOnce for Input {
             top_left: if self.border_corners.top_left {
               cx.theme().radius
             } else {
-              px(0.)
+              rems(0.)
             },
             top_right: if self.border_corners.top_right {
               cx.theme().radius
             } else {
-              px(0.)
+              rems(0.)
             },
             bottom_left: if self.border_corners.bottom_left {
               cx.theme().radius
             } else {
-              px(0.)
+              rems(0.)
             },
             bottom_right: if self.border_corners.bottom_right {
               cx.theme().radius
             } else {
-              px(0.)
+              rems(0.)
             },
           })
           .when(self.bordered, |this| {

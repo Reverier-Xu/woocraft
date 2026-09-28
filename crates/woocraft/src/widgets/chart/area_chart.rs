@@ -120,7 +120,7 @@ where
     }
 
     let width = bounds.size.width.as_f32();
-    let height = bounds.size.height.as_f32() - AXIS_GAP;
+    let height = bounds.size.height.as_f32() - AXIS_GAP.to_pixels(window.rem_size()).as_f32();
 
     let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
 

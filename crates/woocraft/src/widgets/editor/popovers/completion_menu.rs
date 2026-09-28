@@ -3,14 +3,14 @@ use std::rc::Rc;
 use gpui::{
   Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
   Half as _, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point,
-  Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
-  prelude::FluentBuilder, px, relative,
+  Rems, Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
+  prelude::FluentBuilder, px, relative, rems,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
-const MAX_MENU_WIDTH: Pixels = px(320.);
-const MAX_MENU_HEIGHT: Pixels = px(240.);
-const POPOVER_GAP: Pixels = px(4.);
+const MAX_MENU_WIDTH: Rems = rems(20.);
+const MAX_MENU_HEIGHT: Rems = rems(15.);
+const POPOVER_GAP: Rems = rems(0.25);
 
 use super::{editor_popover, render_markdown};
 use crate::{
@@ -384,10 +384,13 @@ impl Render for CompletionMenu {
       .selected_item()
       .and_then(|item| item.documentation.clone());
 
-    let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
+    let rem_size = window.rem_size();
+    let menu_width = MAX_MENU_WIDTH.to_pixels(rem_size);
+    let popover_gap = POPOVER_GAP.to_pixels(rem_size);
+    let max_width = menu_width.min(window.bounds().size.width - pos.x);
     let abs_pos = self.editor.read(cx).input_bounds.origin + pos;
-    let vertical_layout = abs_pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
-      > window.bounds().size.width;
+    let vertical_layout =
+      abs_pos.x + menu_width + popover_gap + menu_width + popover_gap > window.bounds().size.width;
 
     deferred(
       div()
@@ -402,7 +405,7 @@ impl Render for CompletionMenu {
         .child(
           editor_popover("completion-menu", cx)
             .max_w(max_width)
-            .min_w(px(120.))
+            .min_w(rems(8.))
             .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT)),
         )
         .when_some(selected_documentation, |this, documentation| {

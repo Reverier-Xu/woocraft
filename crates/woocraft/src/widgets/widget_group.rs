@@ -2,8 +2,8 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui::{
   AnyElement, App, Axis, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement,
-  ParentElement as _, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
-  div, prelude::FluentBuilder, px,
+  ParentElement as _, Rems, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  Window, div, prelude::FluentBuilder, px, rems,
 };
 
 use crate::{
@@ -17,6 +17,10 @@ pub enum WidgetGroupChild {
   Button(Box<Button>),
   Input(Box<Input>),
   Element(AnyElement),
+  /// A plain element rendered as-is: no borders, padding or forced height.
+  /// Use it for children that manage their own presentation (e.g. a wrapper
+  /// that reveals its content on hover).
+  Raw(AnyElement),
 }
 
 impl WidgetGroupChild {
@@ -25,6 +29,7 @@ impl WidgetGroupChild {
       Self::Button(button) => button.is_selected(),
       Self::Input(input) => input.is_selected(),
       Self::Element(_) => false,
+      Self::Raw(_) => false,
     }
   }
 }
@@ -102,6 +107,15 @@ impl WidgetGroup {
     self
   }
 
+  /// Add a plain element to the group without any group styling (no border,
+  /// padding or forced height). The element is rendered as-is.
+  pub fn raw_child(mut self, child: impl IntoElement) -> Self {
+    self
+      .children
+      .push(WidgetGroupChild::Raw(child.into_any_element()));
+    self
+  }
+
   pub fn children(mut self, children: impl IntoIterator<Item = WidgetGroupChild>) -> Self {
     self.children.extend(children);
     self
@@ -169,12 +183,20 @@ impl WidgetGroup {
     }
   }
 
-  fn corner_pixels(corners: Corners<bool>, radius: gpui::Pixels) -> Corners<gpui::Pixels> {
+  fn corner_pixels(corners: Corners<bool>, radius: Rems) -> Corners<Rems> {
     Corners {
-      top_left: if corners.top_left { radius } else { px(0.) },
-      top_right: if corners.top_right { radius } else { px(0.) },
-      bottom_left: if corners.bottom_left { radius } else { px(0.) },
-      bottom_right: if corners.bottom_right { radius } else { px(0.) },
+      top_left: if corners.top_left { radius } else { rems(0.) },
+      top_right: if corners.top_right { radius } else { rems(0.) },
+      bottom_left: if corners.bottom_left {
+        radius
+      } else {
+        rems(0.)
+      },
+      bottom_right: if corners.bottom_right {
+        radius
+      } else {
+        rems(0.)
+      },
     }
   }
 
@@ -328,6 +350,10 @@ impl RenderOnce for WidgetGroup {
 
     let children_len = self.children.len();
     let effective_size = self.size.unwrap_or_default();
+    // Flat/Link groups carry no borders, so they get no separators either —
+    // the children are meant to read as one borderless unit (e.g. a dock tab
+    // and its close button).
+    let show_dividers = !matches!(effective_variant, ButtonVariant::Flat | ButtonVariant::Link);
 
     div()
       .id(self.id)
@@ -367,7 +393,7 @@ impl RenderOnce for WidgetGroup {
             );
             let mut elements = Vec::with_capacity(2);
 
-            if ix > 0 {
+            if ix > 0 && show_dividers {
               let color = Self::divider_color(prev_active_color, active_color, self.disabled, cx);
               elements.push(Self::divider(self.layout, color, effective_size));
             }
@@ -401,6 +427,7 @@ impl RenderOnce for WidgetGroup {
                 self.layout,
               )
               .into_any_element(),
+              WidgetGroupChild::Raw(element) => element,
               WidgetGroupChild::Element(element) => Self::strip_edge_borders(
                 h_flex()
                   .items_center()

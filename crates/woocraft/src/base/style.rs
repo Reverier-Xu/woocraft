@@ -3,10 +3,26 @@
 //! Provides PixelsExt for Pixels conversions, helper functions for flex layouts
 //! (h_flex, v_flex), and style-related traits. Font configuration lives in
 //! [`super::fonts`].
+//!
+//! # Rem-based sizing
+//!
+//! All non-border sizes (spacing, gaps, dimensions, radii, font sizes, icon
+//! sizes) are expressed in `rem`, so changing the window root font size scales
+//! the whole UI — including text metrics — together. Values were normalized
+//! from the previous pixel-based design at the default `1 rem = 16 px`
+//! baseline, so the appearance is unchanged at that root size.
+//!
+//! Deliberate exceptions that stay in pixels:
+//! - border widths, because hairlines must remain device-crisp;
+//! - box shadows, because GPUI's [`BoxShadow`] stores pixels;
+//! - runtime geometry measured from text shaping, canvas paths, drag positions
+//!   and device-pixel snapping (editor viewports, terminal cells, plot/chart
+//!   coordinates). Those already scale indirectly when the font size derived
+//!   from `rem` changes.
 
 use gpui::{
-  BoxShadow, Corners, DefiniteLength, Div, Edges, Hsla, Pixels, Refineable, StyleRefinement,
-  Styled, div, point, px,
+  AbsoluteLength, BoxShadow, Corners, DefiniteLength, Div, Edges, Hsla, Pixels, Refineable, Rems,
+  StyleRefinement, Styled, div, point, rems,
 };
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +47,40 @@ impl PixelsExt for Pixels {
 
   fn as_f64(&self) -> f64 {
     f64::from(*self)
+  }
+}
+
+/// Arithmetic helpers for [`Rems`] that GPUI does not provide.
+///
+/// GPUI only implements `Rems * Pixels`. Design code frequently needs to scale
+/// a rem length by a scalar factor, so this trait exposes an explicit
+/// [`RemsExt::scale`] method (operator overloads for foreign types are not
+/// possible due to the orphan rule).
+pub trait RemsExt {
+  /// Multiplies this rem length by a scalar `factor`.
+  fn scale(self, factor: f32) -> Rems;
+
+  /// Returns the smaller of the two rem lengths.
+  fn min(self, other: Rems) -> Rems;
+
+  /// Returns the larger of the two rem lengths.
+  fn max(self, other: Rems) -> Rems;
+}
+
+impl RemsExt for Rems {
+  #[inline]
+  fn scale(self, factor: f32) -> Rems {
+    rems(self.0 * factor)
+  }
+
+  #[inline]
+  fn min(self, other: Rems) -> Rems {
+    if other.0 < self.0 { other } else { self }
+  }
+
+  #[inline]
+  fn max(self, other: Rems) -> Rems {
+    if other.0 > self.0 { other } else { self }
   }
 }
 
@@ -127,7 +177,9 @@ pub trait StyledExt: Styled + Sized {
   font_weight!(font_extrabold, EXTRA_BOLD);
   font_weight!(font_black, BLACK);
 
-  fn corner_radius(self, radius: Corners<Pixels>) -> Self {
+  fn corner_radius<L>(self, radius: Corners<L>) -> Self
+  where
+    L: Into<AbsoluteLength> + Clone + std::fmt::Debug + Default + PartialEq, {
     self
       .rounded_tl(radius.top_left)
       .rounded_tr(radius.top_right)
@@ -182,97 +234,100 @@ impl Size {
     }
   }
 
+  /// Font size for this size step.
+  ///
+  /// Returns a length in ems relative to this tier's font size.
+  ///
+  /// GPUI has no native `em` unit, so component-internal metrics are computed
+  /// as multiples of [`Size::text_size`] in Rust. With the normalized scale
+  /// (`text_size` = 0.75 / 1 / 1.25 rem) `1em` is exactly the tier font size
+  /// and `2em` is the target single-line component height, so an em reference
+  /// frame keeps every internal gap/padding proportional to the component's
+  /// own text.
   #[inline]
-  pub fn text_size(&self) -> Pixels {
+  pub fn em(&self, factor: f32) -> Rems {
+    rems(self.text_size().0 * factor)
+  }
+
+  /// Font size for this size step (the em base).
+  ///
+  /// Small: 0.75rem (12px), Medium: 1rem (16px), Large: 1.25rem (20px) at
+  /// the default `1rem = 16px` baseline.
+  #[inline]
+  pub fn text_size(&self) -> Rems {
     match self {
-      Size::Small => px(14.),
-      Size::Medium => px(16.),
-      Size::Large => px(18.),
+      Size::Small => rems(0.75),
+      Size::Medium => rems(1.),
+      Size::Large => rems(1.25),
     }
   }
 
   #[inline]
-  pub fn icon_size(&self) -> Pixels {
+  pub fn icon_size(&self) -> Rems {
     self.text_size()
   }
 
+  /// Target single-line border-box height: `2em`.
   #[inline]
-  pub fn component_height(&self) -> Pixels {
+  pub fn component_height(&self) -> Rems {
+    self.em(2.)
+  }
+
+  #[inline]
+  pub fn container_height(&self) -> Rems {
     match self {
-      Size::Small => px(24.),
-      Size::Medium => px(32.),
-      Size::Large => px(40.),
+      Size::Small => rems(2.),
+      Size::Medium => rems(2.5),
+      Size::Large => rems(3.),
     }
   }
 
   #[inline]
-  pub fn container_height(&self) -> Pixels {
-    match self {
-      Size::Small => px(32.),
-      Size::Medium => px(40.),
-      Size::Large => px(48.),
-    }
-  }
-
-  #[inline]
-  pub fn multiline_container_height(&self, lines: u32) -> Pixels {
+  pub fn multiline_container_height(&self, lines: u32) -> Rems {
     let lines = lines.max(1) as f32;
-    self.container_height() * lines
+    rems(self.container_height().0 * lines)
   }
 
   #[inline]
-  pub fn component_radius(&self) -> Pixels {
-    match self {
-      Size::Small => px(2.),
-      Size::Medium => px(4.),
-      Size::Large => px(6.),
-    }
+  pub fn component_radius(&self) -> Rems {
+    self.em(0.25)
   }
 
   #[inline]
-  pub fn container_radius(&self) -> Pixels {
+  pub fn container_radius(&self) -> Rems {
     match self {
-      Size::Small => px(4.),
-      Size::Medium => px(6.),
-      Size::Large => px(8.),
+      Size::Small => rems(0.25),
+      Size::Medium => rems(0.375),
+      Size::Large => rems(0.5),
     }
   }
 
   /// Horizontal (left/right) container padding.
   ///
-  /// Semantically independent from [`Size::container_py`] even though the
-  /// current scale gives both the same values; the axes may diverge in the
-  /// future, so callers should not collapse the two calls.
+  /// Containers are aligned on the absolute rem grid (independent of the inner
+  /// font), so both axes use a flat 0.25rem.
   #[inline]
-  pub fn container_px(&self) -> Pixels {
-    match self {
-      Size::Small => px(2.),
-      Size::Medium => px(4.),
-      Size::Large => px(6.),
-    }
+  pub fn container_px(&self) -> Rems {
+    rems(0.25)
   }
 
   /// Vertical (top/bottom) container padding.
   ///
-  /// Semantically independent from [`Size::container_px`] even though the
-  /// current scale gives both the same values; the axes may diverge in the
-  /// future, so callers should not collapse the two calls.
+  /// Flat 0.25rem like the horizontal axis: a container closes on
+  /// `container_height` because its inner content is a full-size component
+  /// (`2em` = `component_height`), so `2em + 2 × 0.25rem = 2.5rem` at Medium.
   #[inline]
-  pub fn container_py(&self) -> Pixels {
-    match self {
-      Size::Small => px(2.),
-      Size::Medium => px(4.),
-      Size::Large => px(6.),
-    }
+  pub fn container_py(&self) -> Rems {
+    rems(0.25)
   }
 
   #[inline]
-  pub fn table_row_height(&self) -> Pixels {
+  pub fn table_row_height(&self) -> Rems {
     self.component_height()
   }
 
   #[inline]
-  pub fn table_cell_padding(&self) -> Edges<Pixels> {
+  pub fn table_cell_padding(&self) -> Edges<Rems> {
     let padding = self.container_px();
     Edges {
       top: self.container_py(),
@@ -308,24 +363,24 @@ impl Size {
     if other < *self { other } else { *self }
   }
 
-  pub fn component_px(&self) -> Pixels {
-    match self {
-      Self::Small => px(4.),
-      Self::Medium => px(8.),
-      Self::Large => px(12.),
-    }
+  /// Horizontal component padding: `0.5em`.
+  #[inline]
+  pub fn component_px(&self) -> Rems {
+    self.em(0.5)
   }
 
-  pub fn component_py(&self) -> Pixels {
-    match self {
-      Size::Small => px(2.),
-      Size::Medium => px(4.),
-      Size::Large => px(6.),
-    }
+  /// Vertical component padding: `0.5em - 1px`.
+  ///
+  /// Chosen so a single-line component with a 1px border closes on
+  /// `component_height` (`2em`): `1em + 2*(0.5em - 1px) + 2*1px = 2em`. Height
+  /// is never fixed, so multi-line content simply grows.
+  #[inline]
+  pub fn component_py(&self) -> Rems {
+    rems(self.em(0.5).0 - 0.0625)
   }
 
   #[inline]
-  pub fn component_padding(&self) -> Edges<Pixels> {
+  pub fn component_padding(&self) -> Edges<Rems> {
     let px = self.component_px();
     Edges {
       top: self.component_py(),
@@ -336,7 +391,7 @@ impl Size {
   }
 
   #[inline]
-  pub fn container_padding(&self) -> Edges<Pixels> {
+  pub fn container_padding(&self) -> Edges<Rems> {
     let px = self.container_px();
     Edges {
       top: self.container_py(),
@@ -346,88 +401,54 @@ impl Size {
     }
   }
 
-  /// Spacing between inner components in a Container (container-level)
-  /// Small: 2px, Medium: 4px, Large: 8px
+  /// Spacing between inner components in a Container (container-level).
+  ///
+  /// Flat 0.25rem so containers align on the absolute grid.
   #[inline]
-  pub fn container_gap(&self) -> Pixels {
-    match self {
-      Size::Small => px(2.),
-      Size::Medium => px(4.),
-      Size::Large => px(8.),
-    }
+  pub fn container_gap(&self) -> Rems {
+    rems(0.25)
   }
 
-  /// Spacing between inner elements in a component (component-level)
-  /// Small: 4px, Medium: 8px, Large: 12px
+  /// Spacing between inner elements in a component (component-level): `0.5em`.
   #[inline]
-  pub fn component_gap(&self) -> Pixels {
-    match self {
-      Size::Small => px(4.),
-      Size::Medium => px(8.),
-      Size::Large => px(12.),
-    }
+  pub fn component_gap(&self) -> Rems {
+    self.em(0.5)
   }
 
-  /// Height system for interactive tracks/sliders
-  /// Small: 16px, Medium: 20px, Large: 24px
+  /// Height system for interactive tracks/sliders: `1.25em`.
   #[inline]
-  pub fn track_height(&self) -> Pixels {
-    match self {
-      Size::Small => px(16.),
-      Size::Medium => px(20.),
-      Size::Large => px(24.),
-    }
+  pub fn track_height(&self) -> Rems {
+    self.em(1.25)
   }
 
-  /// Slider thumb size (based on track_height)
-  /// Small: 12px, Medium: 16px, Large: 20px
+  /// Slider thumb size: `1em` (equals the tier font size).
   #[inline]
-  pub fn thumb_size(&self) -> Pixels {
-    match self {
-      Size::Small => px(12.),
-      Size::Medium => px(16.),
-      Size::Large => px(20.),
-    }
+  pub fn thumb_size(&self) -> Rems {
+    self.text_size()
   }
 
-  /// Track/slider thickness
-  /// Small: 1.5px, Medium: 2px, Large: 3px
+  /// Track/slider thickness: `0.125em`.
   #[inline]
-  pub fn track_thickness(&self) -> Pixels {
-    match self {
-      Size::Small => px(1.5),
-      Size::Medium => px(2.),
-      Size::Large => px(3.),
-    }
+  pub fn track_thickness(&self) -> Rems {
+    self.em(0.125)
   }
 
-  /// Badge dot size (follows component height)
-  /// Small: 4px, Medium: 6px, Large: 8px
+  /// Badge dot size: `0.375em`.
   #[inline]
-  pub fn badge_dot_size(&self) -> Pixels {
-    match self {
-      Size::Small => px(4.),
-      Size::Medium => px(6.),
-      Size::Large => px(8.),
-    }
+  pub fn badge_dot_size(&self) -> Rems {
+    self.em(0.375)
   }
 
   /// Circular progress bar diameter (based on container height)
-  /// Small: 32px, Medium: 40px, Large: 48px
   #[inline]
-  pub fn circle_diameter(&self) -> Pixels {
+  pub fn circle_diameter(&self) -> Rems {
     self.container_height()
   }
 
-  /// Stroke width
-  /// Small: 2px, Medium: 3px, Large: 4px
+  /// Stroke width: `0.25em`.
   #[inline]
-  pub fn stroke_width(&self) -> Pixels {
-    match self {
-      Size::Small => px(2.),
-      Size::Medium => px(3.),
-      Size::Large => px(4.),
-    }
+  pub fn stroke_width(&self) -> Rems {
+    self.em(0.25)
   }
 }
 
@@ -499,11 +520,14 @@ pub trait StyleSized<T: Styled> {
 impl<T: Styled> StyleSized<T> for T {
   #[inline]
   fn component_size(self, size: Size) -> Self {
+    // No fixed height: the computed `component_py` plus the content determine
+    // the height, so multi-line content can grow. `line_height` is pinned to
+    // `1em` so a single line closes exactly on `component_height`.
     self
       .component_px(size)
       .component_py(size)
-      .component_h(size)
       .component_rounded(size)
+      .line_height(size.text_size())
   }
 
   #[inline]
@@ -647,6 +671,8 @@ impl<T: Styled> StyleSized<T> for T {
 use crate::base::theme::Theme;
 
 pub trait CardStyle: Styled + Sized {
+  /// Bordered card surface. Reserved for components/popovers that must read as
+  /// a raised panel; layout containers use [`CardStyle::container_style`].
   #[inline]
   fn card_style(self, theme: &Theme) -> Self {
     self
@@ -657,9 +683,21 @@ pub trait CardStyle: Styled + Sized {
       .rounded(theme.radius_container)
   }
 
+  /// Borderless container surface. Layout containers carry no border per the
+  /// design rules; add an explicit 1px `Divider` element when separation is
+  /// needed.
+  #[inline]
+  fn container_style(self, theme: &Theme) -> Self {
+    self
+      .bg(theme.card)
+      .text_color(theme.card_foreground)
+      .rounded(theme.radius_container)
+  }
+
+  /// Floating popover surface: borderless + shadow.
   #[inline]
   fn popover_style(self, theme: &Theme) -> Self {
-    self.card_style(theme).shadow_sm()
+    self.container_style(theme).shadow_sm()
   }
 
   #[inline]
@@ -672,7 +710,7 @@ impl<E: Styled> CardStyle for E {}
 
 #[cfg(test)]
 mod tests {
-  use gpui::px;
+  use gpui::rems;
 
   use super::Size;
 
@@ -715,45 +753,45 @@ mod tests {
 
   #[test]
   fn test_size_metrics() {
-    assert_eq!(Size::Small.text_size(), px(14.));
-    assert_eq!(Size::Medium.text_size(), px(16.));
-    assert_eq!(Size::Large.text_size(), px(18.));
+    assert_eq!(Size::Small.text_size(), rems(0.75));
+    assert_eq!(Size::Medium.text_size(), rems(1.));
+    assert_eq!(Size::Large.text_size(), rems(1.25));
 
-    assert_eq!(Size::Small.icon_size(), px(14.));
-    assert_eq!(Size::Medium.icon_size(), px(16.));
-    assert_eq!(Size::Large.icon_size(), px(18.));
+    assert_eq!(Size::Small.icon_size(), rems(0.75));
+    assert_eq!(Size::Medium.icon_size(), rems(1.));
+    assert_eq!(Size::Large.icon_size(), rems(1.25));
 
-    assert_eq!(Size::Small.component_height(), px(24.));
-    assert_eq!(Size::Medium.component_height(), px(32.));
-    assert_eq!(Size::Large.component_height(), px(40.));
+    assert_eq!(Size::Small.component_height(), rems(1.5));
+    assert_eq!(Size::Medium.component_height(), rems(2.));
+    assert_eq!(Size::Large.component_height(), rems(2.5));
 
-    assert_eq!(Size::Small.container_height(), px(32.));
-    assert_eq!(Size::Medium.container_height(), px(40.));
-    assert_eq!(Size::Large.container_height(), px(48.));
+    assert_eq!(Size::Small.container_height(), rems(2.));
+    assert_eq!(Size::Medium.container_height(), rems(2.5));
+    assert_eq!(Size::Large.container_height(), rems(3.));
 
-    assert_eq!(Size::Medium.multiline_container_height(1), px(40.));
-    assert_eq!(Size::Medium.multiline_container_height(2), px(80.));
+    assert_eq!(Size::Medium.multiline_container_height(1), rems(2.5));
+    assert_eq!(Size::Medium.multiline_container_height(2), rems(5.));
 
-    assert_eq!(Size::Small.component_radius(), px(2.));
-    assert_eq!(Size::Medium.component_radius(), px(4.));
-    assert_eq!(Size::Large.component_radius(), px(6.));
+    assert_eq!(Size::Small.component_radius(), rems(0.1875));
+    assert_eq!(Size::Medium.component_radius(), rems(0.25));
+    assert_eq!(Size::Large.component_radius(), rems(0.3125));
 
-    assert_eq!(Size::Small.container_radius(), px(4.));
-    assert_eq!(Size::Medium.container_radius(), px(6.));
-    assert_eq!(Size::Large.container_radius(), px(8.));
+    assert_eq!(Size::Small.container_radius(), rems(0.25));
+    assert_eq!(Size::Medium.container_radius(), rems(0.375));
+    assert_eq!(Size::Large.container_radius(), rems(0.5));
 
-    assert_eq!(Size::Small.component_px(), px(4.));
-    assert_eq!(Size::Medium.component_px(), px(8.));
-    assert_eq!(Size::Large.component_px(), px(12.));
+    assert_eq!(Size::Small.component_px(), rems(0.375));
+    assert_eq!(Size::Medium.component_px(), rems(0.5));
+    assert_eq!(Size::Large.component_px(), rems(0.625));
 
-    assert_eq!(Size::Small.component_py(), px(2.));
-    assert_eq!(Size::Medium.component_py(), px(4.));
-    assert_eq!(Size::Large.component_py(), px(6.));
+    assert_eq!(Size::Small.component_py(), rems(0.3125));
+    assert_eq!(Size::Medium.component_py(), rems(0.4375));
+    assert_eq!(Size::Large.component_py(), rems(0.5625));
 
     let padding = Size::Medium.component_padding();
-    assert_eq!(padding.top, px(4.));
-    assert_eq!(padding.bottom, px(4.));
-    assert_eq!(padding.left, px(8.));
-    assert_eq!(padding.right, px(8.));
+    assert_eq!(padding.top, rems(0.4375));
+    assert_eq!(padding.bottom, rems(0.4375));
+    assert_eq!(padding.left, rems(0.5));
+    assert_eq!(padding.right, rems(0.5));
   }
 }

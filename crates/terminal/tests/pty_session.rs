@@ -30,7 +30,9 @@ fn echo_marker_then_exit() {
   .expect("failed to spawn session");
 
   assert!(session.pid().is_some(), "the child pid should be exposed");
-  assert!(session.is_alive());
+  // NOTE: no `is_alive()` assertion here — `sh -c "echo …"` can already have
+  // exited by the time `spawn_with_events` returns on a loaded CI runner.
+  // Liveness is asserted after `wait_for_exit_blocking` below.
 
   let text =
     wait_for_text_blocking(&events, &session, "woocraft-marker-42", TIMEOUT).expect("marker");

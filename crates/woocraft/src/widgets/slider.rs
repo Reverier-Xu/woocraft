@@ -42,7 +42,7 @@ use gpui::{
   EventEmitter, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
   ParentElement, Pixels, Render, RenderOnce, SharedString, Stateful,
   StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, px, relative,
+  prelude::FluentBuilder as _, px, relative, rems,
 };
 
 use crate::{ActiveTheme, ElementExt, Size, StyledExt, opacity};
@@ -321,7 +321,7 @@ impl SliderState {
       self.bounds.size.height
     };
 
-    if total <= px(0.0) {
+    if total <= px(0.) {
       self.active_thumb_start = false;
       return;
     }
@@ -346,7 +346,7 @@ impl SliderState {
       self.bounds.size.height
     };
 
-    if total <= px(0.0) {
+    if total <= px(0.) {
       return;
     }
 
@@ -528,7 +528,7 @@ impl RenderOnce for Slider {
         this.h(self.size.component_height()).w_full()
       })
       .when(matches!(axis, Axis::Vertical), |this| {
-        this.w(self.size.component_height()).h(px(120.0))
+        this.w(self.size.component_height()).h(rems(8.))
       })
       .items_center()
       .justify_center()

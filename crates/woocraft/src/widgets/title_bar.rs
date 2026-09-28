@@ -106,7 +106,7 @@ impl TitleBar {
     TitlebarOptions {
       title: None,
       appears_transparent: true,
-      traffic_light_position: Some(gpui::point(px(9.0), px(13.0))),
+      traffic_light_position: Some(gpui::point(px(9.), px(13.))),
     }
   }
 
@@ -322,7 +322,6 @@ impl RenderOnce for TitleBar {
         .items_center()
         .justify_between()
         .container_size(TITLE_BAR_SIZE)
-        .container_h(TITLE_BAR_SIZE)
         .border_color(cx.theme().border)
         .bg(cx.theme().card)
         .refine_style(&style)

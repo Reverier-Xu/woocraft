@@ -4,8 +4,9 @@ use std::{ops::Deref, sync::Arc};
 
 use gpui::{
   App, AppContext, Context, Element, Empty, Entity, InteractiveElement, IntoElement,
-  MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, Style, StyleRefinement,
-  Styled as _, WeakEntity, Window, deferred, div, prelude::FluentBuilder as _, px,
+  MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Rems, Render, Style,
+  StyleRefinement, Styled as _, WeakEntity, Window, deferred, div, prelude::FluentBuilder as _, px,
+  rems,
 };
 
 use super::{
@@ -17,7 +18,7 @@ use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
 /// Side docks (left/right) include a vertical tab rail plus title-bar controls.
 /// They need a larger minimum width than the generic panel minimum to prevent
 /// title/content overflow.
-const SIDE_DOCK_MIN_SIZE: Pixels = px(16.0 * 16.0);
+const SIDE_DOCK_MIN_SIZE: Rems = rems(16.);
 
 #[derive(Clone)]
 pub(super) struct ResizePanel;
@@ -64,16 +65,16 @@ pub struct Dock {
 
 impl Dock {
   #[inline]
-  fn min_size_for_placement(placement: DockPlacement) -> Pixels {
+  fn min_size_for_placement(placement: DockPlacement, rem_size: Pixels) -> Pixels {
     match placement {
-      DockPlacement::Left | DockPlacement::Right => SIDE_DOCK_MIN_SIZE,
-      DockPlacement::Bottom | DockPlacement::Center => PANEL_MIN_SIZE,
+      DockPlacement::Left | DockPlacement::Right => SIDE_DOCK_MIN_SIZE.to_pixels(rem_size),
+      DockPlacement::Bottom | DockPlacement::Center => PANEL_MIN_SIZE.to_pixels(rem_size),
     }
   }
 
   #[inline]
-  fn min_size(&self) -> Pixels {
-    Self::min_size_for_placement(self.placement)
+  fn min_size(&self, rem_size: Pixels) -> Pixels {
+    Self::min_size_for_placement(self.placement, rem_size)
   }
 
   #[inline]
@@ -102,7 +103,7 @@ impl Dock {
       dock_area,
       region,
       collapsed: false,
-      size: px(200.0),
+      size: rems(13.).to_pixels(window.rem_size()),
       tab_bar_direction,
       preview_size: None,
       resizing: false,
@@ -201,7 +202,7 @@ impl Dock {
       DockPlacement::Bottom => TabBarDirection::default(),
       DockPlacement::Center => TabBarDirection::default(),
     };
-    let min_size = Self::min_size_for_placement(placement);
+    let min_size = Self::min_size_for_placement(placement, window.rem_size());
 
     let mut region = DockRegion::from_panel_state(panel, RootKind::Any, &dock_area, window, cx);
     region.set_dock(cx.entity().downgrade());
@@ -239,8 +240,8 @@ impl Dock {
   }
 
   /// Set the size of the Dock.
-  pub fn set_size(&mut self, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
-    self.size = size.max(self.min_size());
+  pub fn set_size(&mut self, size: Pixels, window: &mut Window, cx: &mut Context<Self>) {
+    self.size = size.max(self.min_size(window.rem_size()));
     self.preview_size = None;
     cx.notify();
   }
@@ -338,7 +339,7 @@ impl Dock {
   /// Compute the dock preview size from the latest captured mouse position.
   /// Called once per frame during render so that high-frequency mouse events
   /// are coalesced into a single layout pass.
-  fn apply_pending_resize(&mut self, cx: &mut Context<Self>) {
+  fn apply_pending_resize(&mut self, window: &Window, cx: &mut Context<Self>) {
     let Some(mouse_position) = self.pending_resize_position.take() else {
       return;
     };
@@ -379,13 +380,18 @@ impl Dock {
       DockPlacement::Bottom => area_bounds.bottom() - mouse_position.y,
       DockPlacement::Center => unreachable!(),
     };
+    let panel_min = PANEL_MIN_SIZE.to_pixels(window.rem_size());
     let max_size = match self.placement {
-      DockPlacement::Left => area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size,
-      DockPlacement::Right => area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size,
-      DockPlacement::Bottom => area_bounds.size.height - PANEL_MIN_SIZE,
+      DockPlacement::Left => area_bounds.size.width - panel_min - right_dock_size,
+      DockPlacement::Right => area_bounds.size.width - panel_min - left_dock_size,
+      DockPlacement::Bottom => area_bounds.size.height - panel_min,
       DockPlacement::Center => unreachable!(),
     };
-    self.preview_size = Some(size.clamp(self.min_size(), max_size).round());
+    self.preview_size = Some(
+      size
+        .clamp(self.min_size(window.rem_size()), max_size)
+        .round(),
+    );
     // This runs during render; the current frame already picks up the new
     // preview_size, so do not schedule another notification here.
   }
@@ -406,10 +412,11 @@ impl Dock {
 }
 
 impl Render for Dock {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
-    self.apply_pending_resize(cx);
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl gpui::IntoElement {
+    self.apply_pending_resize(window, cx);
 
-    let collapsed_width = px(40.0);
+    let collapsed_width = rems(2.5).to_pixels(window.rem_size()) + px(1.);
+    let collapsed_height = Size::Medium.container_height().to_pixels(window.rem_size()) + px(1.);
     let view = cx.entity().clone();
 
     let create_resize_handle = || {
@@ -464,8 +471,8 @@ impl Render for Dock {
         DockPlacement::Center => unreachable!(),
       })
       .when(self.collapsed, |this| match self.placement {
-        DockPlacement::Left | DockPlacement::Right => this.w(collapsed_width + px(1.0)),
-        DockPlacement::Bottom => this.h(Size::Medium.container_height() + px(1.0)),
+        DockPlacement::Left | DockPlacement::Right => this.w(collapsed_width),
+        DockPlacement::Bottom => this.h(collapsed_height),
         DockPlacement::Center => this,
       })
       .map(|this| {

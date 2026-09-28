@@ -90,8 +90,10 @@ impl<T> Bar<T> {
     self
   }
 
-  fn path(&self, bounds: &Bounds<Pixels>) -> (Vec<PaintQuad>, PlotLabel) {
+  fn path(&self, bounds: &Bounds<Pixels>, rem_size: Pixels) -> (Vec<PaintQuad>, PlotLabel) {
     let origin = bounds.origin;
+    let text_gap = TEXT_GAP.to_pixels(rem_size);
+    let text_height = TEXT_HEIGHT.to_pixels(rem_size);
     let mut graph = vec![];
     let mut labels = vec![];
 
@@ -124,9 +126,9 @@ impl<T> Bar<T> {
             point(
               px(x_tick + self.band_width / 2.),
               if is_negative {
-                px(y_tick + TEXT_GAP)
+                px(y_tick) + text_gap
               } else {
-                px(y_tick - TEXT_HEIGHT)
+                px(y_tick) - text_height
               },
             ),
           ));
@@ -139,7 +141,7 @@ impl<T> Bar<T> {
 
   /// Paint the Bar.
   pub fn paint(&self, bounds: &Bounds<Pixels>, window: &mut Window, cx: &mut App) {
-    let (graph, labels) = self.path(bounds);
+    let (graph, labels) = self.path(bounds, window.rem_size());
     for quad in graph {
       window.paint_quad(quad);
     }

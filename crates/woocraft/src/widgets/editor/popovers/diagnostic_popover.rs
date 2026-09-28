@@ -44,7 +44,7 @@ impl DiagnosticPopover {
       return;
     }
 
-    let padding = px(5.);
+    let padding = px(4.);
     let bounds = Bounds {
       origin: self.bounds.origin.map(|v| v - padding),
       size: self.bounds.size.map(|v| v + padding * 2.),

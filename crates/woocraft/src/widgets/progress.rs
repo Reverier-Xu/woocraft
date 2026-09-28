@@ -8,10 +8,12 @@ use std::f32::consts::TAU;
 
 use gpui::{
   AnyElement, App, Hsla, IntoElement, ParentElement, PathBuilder, RenderOnce, SharedString,
-  StyleRefinement, Styled, Window, canvas, div, point, px, relative,
+  StyleRefinement, Styled, Window, canvas, div, point, relative, rems,
 };
 
-use crate::{ActiveTheme, Size, StyleSized, StyledExt, h_flex, translate_woocraft, v_flex};
+use crate::{
+  ActiveTheme, RemsExt, Size, StyleSized, StyledExt, h_flex, translate_woocraft, v_flex,
+};
 
 #[derive(IntoElement)]
 /// Linear progress bar showing completion percentage.
@@ -183,14 +185,14 @@ impl_styled!(ProgressCircle);
 impl_sizable!(ProgressCircle);
 
 impl RenderOnce for ProgressCircle {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let color = self.color.unwrap_or(cx.theme().primary);
     let track_color = self.track_color.unwrap_or(color.opacity(0.2));
     let text_color = self.text_color.unwrap_or(cx.theme().muted_foreground);
     let percentage_text = format!("{:.0}%", self.value);
 
     let diameter = self.size.circle_diameter();
-    let stroke = self.size.stroke_width();
+    let stroke = self.size.stroke_width().to_pixels(window.rem_size());
 
     let progress = (self.value / 100.0).clamp(0.0, 1.0);
 
@@ -261,7 +263,7 @@ impl RenderOnce for ProgressCircle {
           .size_full()
           .items_center()
           .justify_center()
-          .text_size(self.size.text_size().min(px(14.0)))
+          .text_size(self.size.text_size().min(rems(0.875)))
           .text_color(text_color)
           .child(percentage_text),
       )

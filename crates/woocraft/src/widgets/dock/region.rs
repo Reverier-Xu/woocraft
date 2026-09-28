@@ -10,7 +10,7 @@ use std::{
   sync::Arc,
 };
 
-use gpui::{App, AppContext, Axis, Entity, WeakEntity, Window};
+use gpui::{App, AppContext, Axis, Entity, WeakEntity, Window, px};
 
 use super::{
   Dock, DockArea, DockLayout, NodeId, PaneRef, PaneTree, PanelId, PanelInfo, PanelRegistry,
@@ -249,7 +249,7 @@ impl DockRegion {
             Some(stack) => stack.read(cx).sizes(cx),
             None => sizes
               .iter()
-              .map(|slot| slot.unwrap_or(PANEL_MIN_SIZE))
+              .map(|slot| slot.unwrap_or_else(|| PANEL_MIN_SIZE.to_pixels(px(16.))))
               .collect(),
           };
           state.info = PanelInfo::stack(sizes, axis);

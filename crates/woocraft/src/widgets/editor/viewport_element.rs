@@ -3,8 +3,9 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
   App, Bounds, ContentMask, DispatchPhase, Element, ElementId, ElementInputHandler, Entity, Font,
   GlobalElementId, HighlightStyle, Hsla, IntoElement, LayoutId, LineFragment, MouseButton,
-  MouseMoveEvent, MouseUpEvent, Path, Pixels, ShapedLine, SharedString, StrikethroughStyle, Style,
-  TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative, size,
+  MouseMoveEvent, MouseUpEvent, Path, Pixels, Rems, ShapedLine, SharedString, StrikethroughStyle,
+  Style, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative, rems,
+  size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -21,9 +22,9 @@ use super::{
 use crate::{ActiveTheme as _, ColorExt as _, Selection, ThemeMode, ThemeTokens, paint_caret};
 
 const OVERSCAN_ROWS: usize = 2;
-const LINE_NUMBER_LEFT_MARGIN: Pixels = px(24.);
-const LINE_NUMBER_GUTTER_RIGHT_PADDING: Pixels = px(8.);
-const LINE_NUMBER_TEXT_GAP: Pixels = px(16.);
+const LINE_NUMBER_LEFT_MARGIN: Rems = rems(1.5);
+const LINE_NUMBER_GUTTER_RIGHT_PADDING: Rems = rems(0.5);
+const LINE_NUMBER_TEXT_GAP: Rems = rems(1.);
 
 pub(super) struct ViewportElement {
   pub(crate) state: Entity<InputState>,
@@ -1158,8 +1159,11 @@ impl Element for ViewportElement {
         }
 
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
-          let gutter_width =
-            (prepaint.last_layout.line_number_width - LINE_NUMBER_TEXT_GAP).max(px(0.));
+          let rem_size = window.rem_size();
+          let text_gap = LINE_NUMBER_TEXT_GAP.to_pixels(rem_size);
+          let gutter_right_padding = LINE_NUMBER_GUTTER_RIGHT_PADDING.to_pixels(rem_size);
+          let left_margin = LINE_NUMBER_LEFT_MARGIN.to_pixels(rem_size);
+          let gutter_width = (prepaint.last_layout.line_number_width - text_gap).max(px(0.));
           let mut offset_y = prepaint.last_layout.visible_top;
 
           for (ix, lines) in line_numbers.iter().enumerate() {
@@ -1177,10 +1181,10 @@ impl Element for ViewportElement {
 
             for line in lines {
               let line_x = (input_bounds.origin.x + prepaint.last_layout.line_number_width
-                - LINE_NUMBER_TEXT_GAP
-                - LINE_NUMBER_GUTTER_RIGHT_PADDING
+                - text_gap
+                - gutter_right_padding
                 - line.width)
-                .max(input_bounds.origin.x + LINE_NUMBER_LEFT_MARGIN);
+                .max(input_bounds.origin.x + left_margin);
               let p = point(line_x, origin.y + offset_y);
               _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
               offset_y += line_height;

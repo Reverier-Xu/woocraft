@@ -5,9 +5,9 @@ use std::{
 };
 
 use gpui::{
-  App, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement, Render,
-  RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, px, relative,
+  App, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement, Rems,
+  Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  Window, div, prelude::FluentBuilder as _, px, relative, rems,
 };
 
 use crate::{
@@ -440,11 +440,11 @@ pub struct NotificationCenter {
   state: Entity<NotificationState>,
   style: StyleRefinement,
   placement: NotificationPlacement,
-  margin_top: gpui::Pixels,
-  margin_right: gpui::Pixels,
-  margin_bottom: gpui::Pixels,
-  margin_left: gpui::Pixels,
-  width: gpui::Pixels,
+  margin_top: Rems,
+  margin_right: Rems,
+  margin_bottom: Rems,
+  margin_left: Rems,
+  width: Rems,
   size: Size,
 }
 
@@ -454,11 +454,11 @@ impl NotificationCenter {
       state: state.clone(),
       style: StyleRefinement::default(),
       placement: NotificationPlacement::TopRight,
-      margin_top: px(16.0),
-      margin_right: px(16.0),
-      margin_bottom: px(16.0),
-      margin_left: px(16.0),
-      width: px(360.0),
+      margin_top: rems(1.),
+      margin_right: rems(1.),
+      margin_bottom: rems(1.),
+      margin_left: rems(1.),
+      width: rems(23.),
       size: Size::Medium,
     }
   }
@@ -468,9 +468,7 @@ impl NotificationCenter {
     self
   }
 
-  pub fn margins(
-    mut self, top: gpui::Pixels, right: gpui::Pixels, bottom: gpui::Pixels, left: gpui::Pixels,
-  ) -> Self {
+  pub fn margins(mut self, top: Rems, right: Rems, bottom: Rems, left: Rems) -> Self {
     self.margin_top = top;
     self.margin_right = right;
     self.margin_bottom = bottom;
@@ -478,7 +476,7 @@ impl NotificationCenter {
     self
   }
 
-  pub fn width(mut self, width: gpui::Pixels) -> Self {
+  pub fn width(mut self, width: Rems) -> Self {
     self.width = width;
     self
   }
@@ -512,6 +510,7 @@ impl RenderOnce for NotificationCenter {
 
     let item_count = self.state.read(cx).items.len();
     let placement = self.placement;
+    let half_width = rems(-(self.width.0 / 2.0));
 
     let container = v_flex()
       .id("notification-center")
@@ -534,19 +533,14 @@ impl RenderOnce for NotificationCenter {
       )
       .when(
         matches!(placement, NotificationPlacement::TopCenter),
-        |this| this.top(self.margin_top).left_1_2().ml(-(self.width / 2.0)),
+        |this| this.top(self.margin_top).left_1_2().ml(half_width),
       )
       .when(
         matches!(placement, NotificationPlacement::BottomCenter),
-        |this| {
-          this
-            .bottom(self.margin_bottom)
-            .left_1_2()
-            .ml(-(self.width / 2.0))
-        },
+        |this| this.bottom(self.margin_bottom).left_1_2().ml(half_width),
       )
       .w(self.width)
-      .max_h(px(560.0))
+      .max_h(rems(35.))
       .container_gap(self.size)
       .when(placement.is_bottom(), |this| this.flex_col_reverse())
       .refine_style(&self.style);
@@ -678,13 +672,13 @@ impl RenderOnce for NotificationCard {
         this.child(
           div()
             .w_full()
-            .h(px(2.0))
-            .rounded(px(1.0))
+            .h(rems(0.125))
+            .rounded(px(1.))
             .bg(cx.theme().border.opacity(0.35))
             .child(
               div()
                 .h_full()
-                .rounded(px(1.0))
+                .rounded(px(1.))
                 .bg(icon_color)
                 .w(relative(progress_ratio)),
             ),

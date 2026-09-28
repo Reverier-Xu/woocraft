@@ -139,19 +139,29 @@ impl RenderOnce for TabBar {
       self.last_empty_space
     };
 
-    let tabs_children = self.children.into_iter().enumerate().map(|(ix, child)| {
-      item_labels.push((child.label.clone(), child.disabled));
-      child
-        .ix(ix)
-        .with_size(self.size)
-        .set_icon_only(vertical)
-        .when_some(self.selected_index, |this, selected_ix| {
-          this.selected(selected_ix == ix)
-        })
-        .when_some(self.on_click.clone(), move |this, on_click| {
-          this.on_click(move |_, window, cx| on_click(&ix, window, cx))
-        })
-    });
+    let tabs: Vec<Tab> = self
+      .children
+      .into_iter()
+      .enumerate()
+      .map(|(ix, child)| {
+        item_labels.push((child.label.clone(), child.disabled));
+        child
+          .ix(ix)
+          .with_size(self.size)
+          .set_icon_only(vertical)
+          .when_some(self.selected_index, |this, selected_ix| {
+            this.selected(selected_ix == ix)
+          })
+          .when_some(self.on_click.clone(), move |this, on_click| {
+            this.on_click(move |_, window, cx| on_click(&ix, window, cx))
+          })
+      })
+      .collect();
+
+    let tabs_children: Vec<AnyElement> = tabs
+      .into_iter()
+      .map(IntoElement::into_any_element)
+      .collect();
 
     if vertical {
       self
@@ -193,7 +203,6 @@ impl RenderOnce for TabBar {
         .flex()
         .items_center()
         .container_size(self.size)
-        .container_h(self.size)
         .container_gap(self.size)
         .text_color(cx.theme().tab_foreground)
         .refine_style(&self.style)

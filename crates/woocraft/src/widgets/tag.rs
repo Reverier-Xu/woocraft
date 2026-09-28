@@ -22,8 +22,8 @@
 //! ```
 
 use gpui::{
-  AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
-  StyleRefinement, Styled, Window, div, px,
+  AbsoluteLength, AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+  RenderOnce, StyleRefinement, Styled, Window, div, rems,
 };
 
 use crate::{ActiveTheme, Size, StyleSized, StyledExt};
@@ -61,7 +61,7 @@ pub struct Tag {
   variant: TagVariant,
   outline: bool,
   size: Size,
-  rounded: Option<Pixels>,
+  rounded: Option<AbsoluteLength>,
   custom_bg: Option<Hsla>,
   custom_fg: Option<Hsla>,
   custom_border: Option<Hsla>,
@@ -153,14 +153,14 @@ impl Tag {
   /// Sets the corner radius to a specific pixel value.
   ///
   /// Defaults to theme radius if not set.
-  pub fn rounded(mut self, radius: impl Into<Pixels>) -> Self {
+  pub fn rounded(mut self, radius: impl Into<AbsoluteLength>) -> Self {
     self.rounded = Some(radius.into());
     self
   }
 
   /// Sets a fully rounded (pill) style with large border radius.
   pub fn rounded_full(mut self) -> Self {
-    self.rounded = Some(px(999.0));
+    self.rounded = Some(rems(63.).into());
     self
   }
 
@@ -239,7 +239,7 @@ impl RenderOnce for Tag {
     } else {
       default_fg
     };
-    let rounded = self.rounded.unwrap_or(cx.theme().radius);
+    let rounded = self.rounded.unwrap_or(cx.theme().radius.into());
 
     // Tag/Badge Medium = Small Input Size
     let size = self.size.smaller();

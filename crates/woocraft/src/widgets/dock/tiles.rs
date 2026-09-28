@@ -7,9 +7,9 @@ use std::{
 use gpui::{
   AnyElement, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty, EntityId,
   EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, MouseButton,
-  MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Render, ScrollHandle, SharedString,
-  Size, StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div,
-  prelude::FluentBuilder, px, size,
+  MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, Rems, Render, ScrollHandle,
+  SharedString, Size, StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div,
+  prelude::FluentBuilder, px, rems, size,
 };
 
 use super::{
@@ -23,9 +23,9 @@ use crate::{ActiveTheme, ElementExt, Icon, IconName, ScrollbarShow, h_flex, v_fl
 
 actions!(tiles, [Undo, Redo]);
 
-const MINIMUM_SIZE: Size<Pixels> = size(px(100.), px(100.));
-const DRAG_BAR_HEIGHT: Pixels = px(30.);
-const HANDLE_SIZE: Pixels = px(5.0);
+const MINIMUM_SIZE: Size<Rems> = size(rems(6.), rems(6.));
+const DRAG_BAR_HEIGHT: Rems = rems(1.875);
+const HANDLE_SIZE: Rems = rems(0.375);
 
 #[derive(Clone, PartialEq, Debug)]
 struct TileChange {
@@ -365,14 +365,16 @@ impl Tiles {
   }
 
   /// Apply boundary constraints to the panel origin
-  fn apply_boundary_constraints(&self, mut origin: Point<Pixels>) -> Point<Pixels> {
+  fn apply_boundary_constraints(
+    &self, mut origin: Point<Pixels>, rem_size: Pixels,
+  ) -> Point<Pixels> {
     // Top boundary
     if origin.y < px(0.) {
       origin.y = px(0.);
     }
 
-    // Left boundary (allow partial off-screen but keep 64px visible)
-    let min_left = -self.dragging_initial_bounds.size.width + px(64.);
+    // Left boundary (allow partial off-screen but keep 4rem visible)
+    let min_left = -self.dragging_initial_bounds.size.width + rems(4.).to_pixels(rem_size);
     if origin.x < min_left {
       origin.x = min_left;
     }
@@ -380,7 +382,9 @@ impl Tiles {
     origin
   }
 
-  fn update_position(&mut self, mouse_position: Point<Pixels>, cx: &mut Context<Self>) {
+  fn update_position(
+    &mut self, mouse_position: Point<Pixels>, window: &Window, cx: &mut Context<Self>,
+  ) {
     let Some(dragging_id) = self.dragging_id else {
       return;
     };
@@ -395,7 +399,7 @@ impl Tiles {
     let mut new_origin = self.dragging_initial_bounds.origin + delta;
 
     // Apply magnetic snap before boundary checks
-    let snap_threshold = cx.theme().tile_grid_size;
+    let snap_threshold = cx.theme().tile_grid_size.to_pixels(window.rem_size());
     let dragging_bounds = Bounds {
       origin: new_origin,
       size: self.dragging_initial_bounds.size,
@@ -412,7 +416,7 @@ impl Tiles {
     }
 
     // Apply boundary constraints after snapping
-    new_origin = self.apply_boundary_constraints(new_origin);
+    new_origin = self.apply_boundary_constraints(new_origin, window.rem_size());
 
     // Update position without grid rounding (smooth dragging). The final
     // aligned position is pushed to history once on mouse up (see
@@ -425,7 +429,7 @@ impl Tiles {
 
   fn resize(
     &mut self, new_x: Option<Pixels>, new_y: Option<Pixels>, new_width: Option<Pixels>,
-    new_height: Option<Pixels>, _: &mut Window, cx: &mut Context<'_, Self>,
+    new_height: Option<Pixels>, window: &mut Window, cx: &mut Context<'_, Self>,
   ) {
     let Some(resizing_id) = self.resizing_id else {
       return;
@@ -436,7 +440,7 @@ impl Tiles {
 
     // Read the grid size once for the whole resize pass instead of once per
     // axis inside `round_to_nearest_ten`.
-    let grid_size = cx.theme().tile_grid_size;
+    let grid_size = cx.theme().tile_grid_size.to_pixels(window.rem_size());
     let previous_bounds = item.bounds;
     let final_x = if let Some(x) = new_x {
       round_to_nearest_ten(x, grid_size)
@@ -622,8 +626,9 @@ impl Tiles {
   /// geometry, cursor and drag-delta math are all derived from the
   /// [`ResizeSide`] in [`resize_handle`].
   fn render_resize_handles(
-    &mut self, _: &mut Window, cx: &mut Context<Self>, entity_id: EntityId, item: &TileItem,
+    &mut self, window: &mut Window, cx: &mut Context<Self>, entity_id: EntityId, item: &TileItem,
   ) -> Vec<AnyElement> {
+    let handle_size = HANDLE_SIZE.to_pixels(window.rem_size());
     [
       ResizeSide::Left,
       ResizeSide::Right,
@@ -638,7 +643,7 @@ impl Tiles {
         entity_id,
         item.id,
         item.bounds,
-        -HANDLE_SIZE + px(1.),
+        -handle_size + px(1.),
         cx,
       )
     })
@@ -692,16 +697,18 @@ impl Tiles {
         cx.stop_propagation();
         cx.new(|_| drag.clone())
       })
-      .on_drag_move(cx.listener(
-        move |this, e: &DragMoveEvent<DragMoving>, _, cx| match e.drag(cx) {
-          DragMoving(id) => {
-            if *id != entity_id {
-              return;
+      .on_drag_move(
+        cx.listener(
+          move |this, e: &DragMoveEvent<DragMoving>, window, cx| match e.drag(cx) {
+            DragMoving(id) => {
+              if *id != entity_id {
+                return;
+              }
+              this.update_position(e.event.position, window, cx);
             }
-            this.update_position(e.event.position, cx);
-          }
-        },
-      ))
+          },
+        ),
+      )
       .into_any_element()
   }
 
@@ -734,8 +741,6 @@ impl Tiles {
     v_flex()
       .occlude()
       .bg(cx.theme().background)
-      .border_1()
-      .border_color(cx.theme().border)
       .absolute()
       .left(item.bounds.origin.x)
       .top(item.bounds.origin.y)
@@ -765,7 +770,7 @@ impl Tiles {
   }
 
   /// Handle the mouse up event to finalize drag or resize operations
-  fn on_mouse_up(&mut self, _: &mut Window, cx: &mut Context<'_, Tiles>) {
+  fn on_mouse_up(&mut self, window: &mut Window, cx: &mut Context<'_, Tiles>) {
     // Check if a drag or resize was active
     if self.dragging_id.is_some() || self.resizing_id.is_some() || self.resizing_drag_data.is_some()
     {
@@ -779,7 +784,7 @@ impl Tiles {
         let current_bounds = self.panels[idx].bounds;
 
         // Apply grid alignment to final position
-        let grid_size = cx.theme().tile_grid_size;
+        let grid_size = cx.theme().tile_grid_size.to_pixels(window.rem_size());
         let aligned_origin = round_point_to_nearest_ten(current_bounds.origin, grid_size);
 
         if initial_bounds.origin != aligned_origin || initial_bounds.size != current_bounds.size {
@@ -894,43 +899,45 @@ fn resize_handle_container(side: ResizeSide, offset: Pixels, item_bounds: &Bound
 /// Compute the target rect components for a resize drag of `side`, as
 /// `(x, y, width, height)` where `None` means "keep the current value".
 fn resize_drag_target(
-  side: ResizeSide, drag: &ResizeDrag, position: Point<Pixels>,
+  side: ResizeSide, drag: &ResizeDrag, position: Point<Pixels>, rem_size: Pixels,
 ) -> (
   Option<Pixels>,
   Option<Pixels>,
   Option<Pixels>,
   Option<Pixels>,
 ) {
+  let min_w = MINIMUM_SIZE.width.to_pixels(rem_size);
+  let min_h = MINIMUM_SIZE.height.to_pixels(rem_size);
   match side {
     ResizeSide::Left => {
       let delta = drag.last_position.x - position.x;
       let new_x = (drag.last_bounds.origin.x - delta).max(px(0.0));
       let size_delta = drag.last_bounds.origin.x - new_x;
-      let new_width = (drag.last_bounds.size.width + size_delta).max(MINIMUM_SIZE.width);
+      let new_width = (drag.last_bounds.size.width + size_delta).max(min_w);
       (Some(new_x), None, Some(new_width), None)
     }
     ResizeSide::Right => {
       let delta = position.x - drag.last_position.x;
-      let new_width = (drag.last_bounds.size.width + delta).max(MINIMUM_SIZE.width);
+      let new_width = (drag.last_bounds.size.width + delta).max(min_w);
       (None, None, Some(new_width), None)
     }
     ResizeSide::Top => {
       let delta = drag.last_position.y - position.y;
       let new_y = (drag.last_bounds.origin.y - delta).max(px(0.));
       let size_delta = drag.last_position.y - new_y;
-      let new_height = (drag.last_bounds.size.height + size_delta).max(MINIMUM_SIZE.width);
+      let new_height = (drag.last_bounds.size.height + size_delta).max(min_w);
       (None, Some(new_y), None, Some(new_height))
     }
     ResizeSide::Bottom => {
       let delta = position.y - drag.last_position.y;
-      let new_height = (drag.last_bounds.size.height + delta).max(MINIMUM_SIZE.width);
+      let new_height = (drag.last_bounds.size.height + delta).max(min_w);
       (None, None, None, Some(new_height))
     }
     ResizeSide::BottomRight => {
       let delta_x = position.x - drag.last_position.x;
       let delta_y = position.y - drag.last_position.y;
-      let new_width = (drag.last_bounds.size.width + delta_x).max(MINIMUM_SIZE.width);
-      let new_height = (drag.last_bounds.size.height + delta_y).max(MINIMUM_SIZE.height);
+      let new_width = (drag.last_bounds.size.width + delta_x).max(min_w);
+      let new_height = (drag.last_bounds.size.height + delta_y).max(min_h);
       (None, None, Some(new_width), Some(new_height))
     }
   }
@@ -973,7 +980,7 @@ fn resize_handle(
             }
 
             let (new_x, new_y, new_width, new_height) =
-              resize_drag_target(side, drag_data, e.event.position);
+              resize_drag_target(side, drag_data, e.event.position, window.rem_size());
             this.resize(new_x, new_y, new_width, new_height, window, cx);
           }
         },

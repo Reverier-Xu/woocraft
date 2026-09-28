@@ -2,14 +2,14 @@ use std::rc::Rc;
 
 use gpui::{
   Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
-  Half as _, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
+  Half as _, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Rems, Render,
   RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
-  prelude::FluentBuilder, px, relative,
+  prelude::FluentBuilder, px, relative, rems,
 };
 use lsp_types::CodeAction;
 
-const MAX_MENU_WIDTH: Pixels = px(320.);
-const MAX_MENU_HEIGHT: Pixels = px(480.);
+const MAX_MENU_WIDTH: Rems = rems(20.);
+const MAX_MENU_HEIGHT: Rems = rems(30.);
 
 use super::editor_popover;
 use crate::{
@@ -295,7 +295,9 @@ impl Render for CodeActionMenu {
       return Empty.into_any_element();
     };
 
-    let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
+    let max_width = MAX_MENU_WIDTH
+      .to_pixels(window.rem_size())
+      .min(window.bounds().size.width - pos.x);
 
     deferred(
       editor_popover("code-action-menu", cx)
@@ -303,7 +305,7 @@ impl Render for CodeActionMenu {
         .left(pos.x)
         .top(pos.y)
         .max_w(max_width)
-        .min_w(px(120.))
+        .min_w(rems(8.))
         .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
         .on_mouse_down_out(cx.listener(|this, _, _, cx| {
           this.hide(cx);

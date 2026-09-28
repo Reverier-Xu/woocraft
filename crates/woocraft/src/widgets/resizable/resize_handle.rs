@@ -7,7 +7,7 @@ use gpui::{
 };
 
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);
-pub(crate) const HANDLE_HIT_PADDING: Pixels = px(3.);
+pub(crate) const HANDLE_HIT_PADDING: Pixels = px(4.);
 
 type DragHandler<E> = dyn Fn(&Point<Pixels>, &mut Window, &mut App) -> Entity<E>;
 

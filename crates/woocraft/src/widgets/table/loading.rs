@@ -1,5 +1,5 @@
 use gpui::{
-  IntoElement, ParentElement as _, RenderOnce, Styled, div, prelude::FluentBuilder as _, px,
+  IntoElement, ParentElement as _, RenderOnce, Styled, div, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{ActiveTheme, Size, TableThemeExt, h_flex, v_flex};
@@ -56,7 +56,13 @@ impl RenderOnce for LoadingRow {
     } else {
       cx.theme().foreground.opacity(0.06)
     };
-    let placeholder = |w| div().h(height).w(w).rounded(px(4.0)).bg(placeholder_color);
+    let placeholder = |w| {
+      div()
+        .h(height)
+        .w(w)
+        .rounded(rems(0.25))
+        .bg(placeholder_color)
+    };
 
     h_flex()
       .gap_3()
@@ -74,11 +80,11 @@ impl RenderOnce for LoadingRow {
         h_flex()
           .gap_3()
           .flex_1()
-          .child(placeholder(px(96.0)))
-          .child(placeholder(px(192.0)))
-          .child(placeholder(px(64.0))),
+          .child(placeholder(rems(6.)))
+          .child(placeholder(rems(12.)))
+          .child(placeholder(rems(4.))),
       )
-      .child(placeholder(px(96.0)))
+      .child(placeholder(rems(6.)))
   }
 }
 
