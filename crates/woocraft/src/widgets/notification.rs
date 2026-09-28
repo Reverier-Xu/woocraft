@@ -11,8 +11,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconName, Size, StyleSized,
-  StyledExt, duration, h_flex, v_flex,
+  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Easing, Icon, IconName, Presence, Size,
+  StyleSized, StyledExt, Transition, duration, h_flex, v_flex,
 };
 
 /// Handler type invoked when a notification (or its action) is clicked.
@@ -40,6 +40,10 @@ impl NotificationPlacement {
       self,
       Self::BottomLeft | Self::BottomRight | Self::BottomCenter
     )
+  }
+
+  fn is_left(self) -> bool {
+    matches!(self, Self::TopLeft | Self::BottomLeft)
   }
 }
 
@@ -555,7 +559,14 @@ impl RenderOnce for NotificationCenter {
       .items
       .iter()
       .map(|item| {
-        NotificationCard::new(item.id, item.data.clone(), &self.state, self.size).into_any_element()
+        NotificationCard::new(
+          item.id,
+          item.data.clone(),
+          &self.state,
+          self.size,
+          placement.is_left(),
+        )
+        .into_any_element()
       })
       .collect();
 
@@ -569,24 +580,40 @@ struct NotificationCard {
   data: Notification,
   state: Entity<NotificationState>,
   size: Size,
+  /// Cards anchored at the left edge slide in from the left.
+  from_left: bool,
 }
 
 impl NotificationCard {
-  fn new(id: usize, data: Notification, state: &Entity<NotificationState>, size: Size) -> Self {
+  fn new(
+    id: usize, data: Notification, state: &Entity<NotificationState>, size: Size, from_left: bool,
+  ) -> Self {
     Self {
       id,
       data,
       state: state.clone(),
       size,
+      from_left,
     }
   }
 }
 
 impl RenderOnce for NotificationCard {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let icon_color = self.data.type_.color(cx);
     let icon = self.data.icon.unwrap_or_else(|| self.data.type_.icon());
     let progress_ratio = self.state.read(cx).progress_ratio(self.id);
+
+    // Enter animation: fade in and slide from the anchored edge. The card's
+    // keyed presence state is dropped when the card leaves, so a re-pushed id
+    // replays the entrance. Exit animations are not installed: removal is a
+    // queue pop, and keeping the card mounted through an exit phase would
+    // conflict with the countdown's shared tick loop.
+    let enter = Presence::new((self.id, "notification-card-enter"), true)
+      .transition(Transition::new(duration::NOTIFICATION_ENTER).easing(Easing::EaseOut))
+      .sample(window, cx)
+      .progress;
+    let slide = if self.from_left { -24.0 } else { 24.0 } * (1.0 - enter);
 
     v_flex()
       .id(("notification-card", self.id as u64))
@@ -594,6 +621,9 @@ impl RenderOnce for NotificationCard {
       .popover_style(cx.theme())
       .container_padding(self.size)
       .items_start()
+      .opacity(enter)
+      .relative()
+      .left(px(slide))
       .on_hover({
         let state = self.state.clone();
         let id = self.id;

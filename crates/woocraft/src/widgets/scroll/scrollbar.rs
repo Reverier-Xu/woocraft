@@ -16,6 +16,13 @@ use gpui::{
 
 use crate::{ActiveTheme, ScrollbarShow};
 
+// Motion note: the thumb fade-out deliberately stays on a wall-clock
+// (`Instant`) fade driven by `request_animation_frame`, not the motion system
+// (`crate::base::motion`). The fade is one branch of a hover / scroll-activity
+// / idle-timer state machine evaluated in paint; rewriting it as a keyed
+// target-value transition would require restructuring that state machine for
+// no visual change.
+
 const WIDTH: Rems = rems(1.);
 const MIN_THUMB_SIZE: f32 = 48.;
 

@@ -26,15 +26,18 @@
 //!   })
 //! ```
 
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  Animation, AnimationExt as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement as _,
-  IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
+  AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement,
+  RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+  prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme, ColorExt, Size, StyleSized, StyledExt, duration, h_flex, opacity};
+use crate::{
+  ActiveTheme, ColorExt, Easing, Size, StyleSized, StyledExt, Transition, duration, h_flex,
+  opacity, transition,
+};
 
 type SwitchClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
@@ -168,35 +171,17 @@ impl RenderOnce for Switch {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
     let id = self.id.clone();
-    // (settled state, pending animation target, epoch of the pending timer)
-    let toggle_state = window.use_keyed_state(id.clone(), cx, |_, _| (checked, None::<bool>, 0u32));
-    let (prev_checked, pending_target, epoch) = *toggle_state.read(cx);
-    let should_animate = !self.disabled && prev_checked != checked;
-    let animation_duration = duration::SWITCH_TOGGLE;
 
-    // Spawn the settle timer only once per animation target, so parent
-    // re-renders during an animation do not accumulate duplicate timers.
-    if should_animate && pending_target != Some(checked) {
-      let epoch = epoch + 1;
-      toggle_state.update(cx, |state, _| {
-        state.1 = Some(checked);
-        state.2 = epoch;
-      });
-      cx.spawn({
-        let toggle_state = toggle_state.clone();
-        async move |cx| {
-          cx.background_executor().timer(animation_duration).await;
-          toggle_state.update(cx, |state, _| {
-            // A newer animation target superseded this timer.
-            if state.2 == epoch {
-              state.0 = checked;
-              state.1 = None;
-            }
-          });
-        }
-      })
-      .detach();
-    }
+    // Motion policy: a keyed target-value transition replaces the previous
+    // settle-timer scheme. Interrupting a toggle mid-flight reverses from the
+    // sampled value instead of snapping back to the animation's start, and
+    // reduced motion resolves the target immediately without frames.
+    let policy = Transition::new(if self.disabled {
+      Duration::ZERO
+    } else {
+      duration::SWITCH_TOGGLE
+    })
+    .easing(Easing::EaseOut);
 
     let rem_size = window.rem_size();
     let track_h = self.size.track_height().to_pixels(rem_size);
@@ -213,63 +198,66 @@ impl RenderOnce for Switch {
       SwitchVariant::Warning => cx.theme().warning,
       SwitchVariant::Danger => cx.theme().danger,
     };
+    let thumb_border_checked = active_color;
+    let thumb_border_unchecked = cx.theme().muted_foreground.opacity(0.7);
+    let thumb_bg_checked = cx.theme().background;
+    let thumb_bg_unchecked = cx.theme().muted.opacity(0.85);
 
-    let thumb_border_color = if checked {
-      active_color
-    } else {
-      cx.theme().muted_foreground.opacity(0.7)
-    };
-
-    let thumb_bg = if checked {
-      cx.theme().background
-    } else {
-      cx.theme().muted.opacity(0.85)
-    };
+    // One normalized progress drives the thumb slide and the filled track;
+    // the thumb's border and background cross-fade with the same policy.
+    let progress = transition(
+      (id.clone(), "progress"),
+      if checked { 1.0 } else { 0.0 },
+      policy.clone(),
+      window,
+      cx,
+    );
+    let thumb_border_color = transition(
+      (id.clone(), "thumb-border"),
+      if checked {
+        thumb_border_checked
+      } else {
+        thumb_border_unchecked
+      },
+      policy.clone(),
+      window,
+      cx,
+    );
+    let thumb_bg = transition(
+      (id.clone(), "thumb-bg"),
+      if checked {
+        thumb_bg_checked
+      } else {
+        thumb_bg_unchecked
+      },
+      policy,
+      window,
+      cx,
+    );
 
     let max_x = track_w - thumb_size;
-    let thumb_x = if checked { max_x } else { px(0.) };
-    let filled_w = if checked {
-      thumb_x + thumb_offset
-    } else {
-      px(0.)
-    };
+    let thumb_x = max_x * progress;
+    let total_w = max_x + thumb_offset;
+    let filled_w = total_w * progress;
 
     let filled_track: AnyElement = div()
       .absolute()
       .left_0()
       .top((track_h - track_thickness) / 2.0)
       .h(track_thickness)
+      .w(filled_w)
       .rounded_full()
       .bg(if self.disabled {
         active_color.opacity(opacity::DISABLED)
       } else {
         active_color
       })
-      .map(|this| {
-        if should_animate {
-          let total_w = max_x + thumb_offset;
-          this
-            .with_animation(
-              ElementId::NamedInteger("switch-fill".into(), checked as u64),
-              Animation::new(animation_duration).with_easing(gpui::ease_out_quint()),
-              move |this, delta| {
-                let width = if checked {
-                  total_w * delta
-                } else {
-                  total_w - total_w * delta
-                };
-                this.w(width)
-              },
-            )
-            .into_any_element()
-        } else {
-          this.w(filled_w).into_any_element()
-        }
-      });
+      .into_any_element();
 
     let thumb: AnyElement = div()
       .absolute()
       .top((track_h - thumb_size) / 2.0)
+      .left(thumb_x)
       .size(thumb_size)
       .rounded_full()
       .border_2()
@@ -280,26 +268,7 @@ impl RenderOnce for Switch {
       })
       .bg(thumb_bg)
       .when(self.disabled, |this| this.opacity(0.7))
-      .map(|this| {
-        if should_animate {
-          this
-            .with_animation(
-              ElementId::NamedInteger("switch-thumb".into(), checked as u64),
-              Animation::new(animation_duration),
-              move |this, delta| {
-                let x = if checked {
-                  max_x * delta
-                } else {
-                  max_x - max_x * delta
-                };
-                this.left(x)
-              },
-            )
-            .into_any_element()
-        } else {
-          this.left(thumb_x).into_any_element()
-        }
-      });
+      .into_any_element();
 
     h_flex()
       .id(id.clone())

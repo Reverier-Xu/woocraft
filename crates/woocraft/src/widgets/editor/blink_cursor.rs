@@ -11,6 +11,11 @@ pub(super) const CURSOR_WIDTH: Pixels = CARET_THICKNESS;
 
 /// Editor caret animation controller.
 /// Uses the same timing and opacity curve as widgets/input caret.
+///
+/// Kept off the motion system (`crate::base::motion`): the blink is a
+/// continuous loop coupled to focus and typing activity (typing pauses the
+/// blink, focus loss stops it), which is controller logic, not a keyed
+/// target-value transition.
 pub(crate) struct BlinkCursor {
   active: bool,
   epoch: usize,

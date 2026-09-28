@@ -15,6 +15,11 @@ use crate::{
   h_flex,
 };
 
+// Motion note: expand/collapse is not animated. Rows render as a flattened,
+// index-keyed list (see `TreeState::row_id`); a height reveal would need the
+// children nested in a measured container, which conflicts with flattening
+// and virtualization.
+
 const CONTEXT: &str = "Tree";
 
 type TreeRenderItem = Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> AnyElement>;

@@ -3,7 +3,10 @@ use gpui::{
   SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
 };
 
-use crate::{ActiveTheme, CardStyle, Kbd, Size, StyleSized, StyledExt, h_flex};
+use crate::{
+  ActiveTheme, CardStyle, Easing, Kbd, Presence, Size, StyleSized, StyledExt, Transition, duration,
+  h_flex,
+};
 
 type TooltipElementBuilder = Box<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
@@ -109,12 +112,21 @@ impl Render for TooltipView {
     // the cached value.
     let key_binding = self.key_binding.clone();
 
+    // Fade in when the tooltip mounts. The view only exists while the tooltip
+    // is shown, so its keyed presence state drops on hide and every show
+    // replays the entrance.
+    let enter = Presence::new((cx.entity_id().as_u64() as usize, "tooltip-enter"), true)
+      .transition(Transition::new(duration::TOOLTIP_ENTER).easing(Easing::EaseOut))
+      .sample(window, cx)
+      .progress;
+
     h_flex()
       .m_3()
       .tooltip_style(cx.theme())
       .justify_between()
       .component_padding(self.size)
       .component_gap(self.size)
+      .opacity(enter)
       .refine_style(&self.style)
       .map(|this| match self.content {
         TooltipContent::Text(ref text) => this.child(text.clone()),

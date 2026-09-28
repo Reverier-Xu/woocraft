@@ -3,6 +3,11 @@
 //! Progress displays a filled bar representing progress from 0% to 100%,
 //! typically used during file uploads, downloads, or long-running operations.
 //! Includes an optional label and percentage text, with customizable colors.
+//!
+//! Motion note: value changes are not animated. `Progress` is `RenderOnce`
+//! without a stable `ElementId`, and the motion system
+//! (`crate::base::motion`) keys its retained state by element id, so a smooth
+//! value transition would first need an id-bearing API.
 
 use std::f32::consts::TAU;
 

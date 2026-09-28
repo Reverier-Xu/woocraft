@@ -1,3 +1,9 @@
+//! Caret blinking is a continuous loop, not a target-value transition, so it
+//! stays on GPUI's `with_animation(repeat)` rather than the motion system in
+//! [`crate::base::motion`]: the motion system drives finite, keyed value
+//! transitions (and honours reduced motion by resolving to the target at
+//! once), while a blink has no target to settle on.
+
 use std::time::Duration;
 
 use gpui::{
