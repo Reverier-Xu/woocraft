@@ -18,6 +18,12 @@
 //!   (via delegate)
 //! - **Smooth Dragging**: Immediate visual feedback while dragging
 //!
+//! Motion note: the thumb is not sprung. A spring would have to suspend travel
+//! while the pointer drags (`Spring::with_travel`), but `SliderState` does not
+//! track the drag lifecycle, and the thumb position is a layout-relative
+//! percentage — animating it would re-run layout every frame instead of
+//! staying paint-only.
+//!
 //! # Example
 //! ```rust,ignore
 //! // Volume slider (0-100)

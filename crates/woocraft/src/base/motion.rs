@@ -19,6 +19,28 @@
 //!
 //! Every primitive consults `App::reduce_motion` and resolves immediately
 //! without requesting frames when it is set.
+//!
+//! # Component adoption
+//!
+//! - **switch** — thumb slide, fill width, and thumb colors transition via
+//!   [`transition`] (replaces the former settle-timer scheme; interruptions
+//!   reverse from the sampled value).
+//! - **checkbox** — checkmark fade plus fill/border cross-fade.
+//! - **dialog**, **popover**, **tooltip**, **notification** cards — enter
+//!   animations via [`Presence`]; their overlay/card subtrees unmount when
+//!   closed, so keyed state drops and each open replays the entrance. Exit
+//!   animations are not installed (would require exit-phase mounting support in
+//!   the overlay/queue lifecycles).
+//!
+//! Deliberately not on this system, with reasons recorded at each site:
+//! caret blink and spinner rotation (continuous loops, GPUI's repeating
+//! `with_animation` is the right tool), the editor's blink cursor (focus- and
+//! typing-coupled controller), the scrollbar fade (hover/scroll/idle state
+//! machine evaluated in paint), the notification countdown bar (one shared
+//! tick loop for the whole queue), `Progress` (no stable element id), tree
+//! expand/collapse (flattened index-keyed rows), and the slider thumb (no
+//! drag-lifecycle state; layout-relative positions would re-layout per
+//! frame).
 
 use std::{rc::Rc, time::Duration};
 

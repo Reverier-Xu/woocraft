@@ -3,6 +3,10 @@
 //! Spinner renders an animated icon that continuously rotates, commonly
 //! displayed while content is loading, processing, or waiting. Fully
 //! customizable: change the icon, rotation speed, and color.
+//!
+//! The rotation is a continuous loop, not a target-value transition, so it
+//! stays on GPUI's `with_animation(repeat)` rather than the motion system in
+//! [`crate::base::motion`].
 
 use std::time::Duration;
 

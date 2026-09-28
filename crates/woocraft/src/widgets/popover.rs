@@ -8,9 +8,10 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Anchor, CardStyle, ElementExt, Selectable, Size, StyleSized, StyledExt,
+  ActiveTheme, Anchor, CardStyle, Easing, ElementExt, Presence, Selectable, Size, StyleSized,
+  StyledExt, Transition,
   actions::{Cancel, POPOVER_CONTEXT},
-  h_flex,
+  duration, h_flex,
 };
 
 type PopoverTriggerBuilder = Box<dyn FnOnce(bool, &Window, &App) -> AnyElement + 'static>;
@@ -313,7 +314,7 @@ impl RenderOnce for Popover {
       });
 
     let el = div()
-      .id(self.id)
+      .id(self.id.clone())
       .child(trigger_el)
       .on_mouse_down(self.mouse_button, {
         let state = state.clone();
@@ -344,9 +345,29 @@ impl RenderOnce for Popover {
       return el;
     }
 
+    // Enter animation: fade in and slide a few pixels toward the anchor. The
+    // content subtree only exists while open, so its keyed presence state is
+    // dropped on close and every open replays the entrance. Exit animations
+    // are intentionally not installed — they would require keeping the
+    // overlay mounted through an exit phase, which the deferred overlay
+    // lifecycle does not support today.
+    let enter = Presence::new((self.id.clone(), "enter"), true)
+      .transition(Transition::new(duration::POPOVER_ENTER).easing(Easing::EaseOut))
+      .sample(window, cx)
+      .progress;
+    // Anchored below the trigger, the content slides down into place;
+    // anchored above, it rises.
+    let slide = match self.anchor {
+      Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => (1.0 - enter) * 6.0,
+      Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => (1.0 - enter) * -6.0,
+    };
+
     let popover_content = Self::render_popover_content(self.anchor, self.size, window, cx)
       .track_focus(&focus_handle)
       .key_context(POPOVER_CONTEXT)
+      .opacity(enter)
+      .relative()
+      .top(px(slide))
       .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
       .when_some(self.content, |this, content| {
         this.child(state.update(cx, |state, cx| (content)(state, window, cx)))

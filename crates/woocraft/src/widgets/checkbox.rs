@@ -25,7 +25,7 @@
 //!   })
 //! ```
 
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
   AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, MouseButton,
@@ -33,7 +33,10 @@ use gpui::{
   prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyleSized, StyledExt, h_flex};
+use crate::{
+  ActiveTheme, Easing, Icon, IconName, Sizable, Size, StyleSized, StyledExt, Transition, duration,
+  h_flex, transition,
+};
 
 type CheckboxClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
 
@@ -132,16 +135,45 @@ impl RenderOnce for Checkbox {
       .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
       .read(cx)
       .clone();
-    let indicator_color = if checked {
-      cx.theme().primary
+
+    // Check transitions: the checkmark fades in and the indicator's fill and
+    // border cross-fade to the primary color, all interruptible and reduced
+    // motion aware. Disabled checkboxes resolve without animation.
+    let policy = Transition::new(if self.disabled {
+      Duration::ZERO
     } else {
-      cx.theme().background
-    };
-    let border_color = if checked {
-      cx.theme().primary
-    } else {
-      cx.theme().input
-    };
+      duration::CHECKBOX_TOGGLE
+    })
+    .easing(Easing::EaseOut);
+    let check_opacity = transition(
+      (self.id.clone(), "check"),
+      if checked { 1.0 } else { 0.0 },
+      policy.clone(),
+      window,
+      cx,
+    );
+    let indicator_color = transition(
+      (self.id.clone(), "fill"),
+      if checked {
+        cx.theme().primary
+      } else {
+        cx.theme().background
+      },
+      policy.clone(),
+      window,
+      cx,
+    );
+    let border_color = transition(
+      (self.id.clone(), "border"),
+      if checked {
+        cx.theme().primary
+      } else {
+        cx.theme().input
+      },
+      policy,
+      window,
+      cx,
+    );
 
     h_flex()
       .id(self.id)
@@ -165,7 +197,7 @@ impl RenderOnce for Checkbox {
               Icon::new(IconName::Checkmark)
                 .with_size(self.size.smaller())
                 .text_color(cx.theme().primary_foreground)
-                .when(!checked, |this| this.opacity(0.0)),
+                .opacity(check_opacity),
             ),
           ),
       )

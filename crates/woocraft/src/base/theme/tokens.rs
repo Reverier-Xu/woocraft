@@ -24,4 +24,15 @@ pub mod duration {
   pub const SWITCH_TOGGLE: Duration = Duration::from_millis(150);
   pub const NOTIFICATION_DEFAULT: Duration = Duration::from_secs(5);
   pub const ANIMATION_FRAME: Duration = Duration::from_millis(33);
+
+  /// Checkbox indicator fade/color transition.
+  pub const CHECKBOX_TOGGLE: Duration = Duration::from_millis(150);
+  /// Dialog backdrop fade + panel rise on open.
+  pub const DIALOG_ENTER: Duration = Duration::from_millis(180);
+  /// Popover content fade + slide on open.
+  pub const POPOVER_ENTER: Duration = Duration::from_millis(120);
+  /// Tooltip fade-in when shown.
+  pub const TOOLTIP_ENTER: Duration = Duration::from_millis(100);
+  /// Notification item slide-in on push.
+  pub const NOTIFICATION_ENTER: Duration = Duration::from_millis(200);
 }

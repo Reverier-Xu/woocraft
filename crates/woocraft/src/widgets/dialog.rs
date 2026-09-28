@@ -42,10 +42,10 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Icon, IconLabel, IconName, Sizable,
-  Size, StyleSized,
+  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Easing, Icon, IconLabel, IconName,
+  Presence, Sizable, Size, StyleSized, Transition,
   actions::{Cancel, DIALOG_CONTEXT},
-  h_flex, v_flex,
+  duration, h_flex, v_flex,
   widgets::window_border::WINDOW_SHADOW_SIZE,
   window_paddings,
 };
@@ -328,6 +328,17 @@ impl RenderOnce for Dialog {
       return div().id(self.id).size_0().into_any_element();
     }
 
+    // Enter animation: the backdrop fades in and the panel rises into place.
+    // The overlay subtree only exists while open, so its keyed presence state
+    // is dropped on close and every open plays the entrance from zero. Exit
+    // animations are intentionally not installed: they would require keeping
+    // the overlay mounted through an exit phase, which the deferred overlay
+    // lifecycle does not support today.
+    let enter = Presence::new((self.id.clone(), "enter"), true)
+      .transition(Transition::new(duration::DIALOG_ENTER).easing(Easing::EaseOut))
+      .sample(window, cx)
+      .progress;
+
     // ── Window geometry for correct overlay sizing ───────────────────────
     //
     // Use the current window bounds as the overlay reference rect.
@@ -474,6 +485,10 @@ impl RenderOnce for Dialog {
       .when_some(height, |this: gpui::Stateful<gpui::Div>, h| this.h(h))
       // Elevated shadow
       .shadow(vec![DIALOG_PANEL_SHADOW])
+      // Enter animation: fade in and rise slightly.
+      .opacity(enter)
+      .relative()
+      .top(px((1.0 - enter) * 8.0))
       .when_some(header_el, |this, hdr| this.child(hdr))
       .child(body_el)
       // Stop click events from bubbling to the backdrop.
@@ -495,8 +510,8 @@ impl RenderOnce for Dialog {
       .rounded_tr(overlay_corners.top_right)
       .rounded_bl(overlay_corners.bottom_left)
       .rounded_br(overlay_corners.bottom_right)
-      // Semi-transparent dark scrim.
-      .bg(cx.theme().background.opacity(0.35))
+      // Semi-transparent dark scrim, faded in with the enter transition.
+      .bg(cx.theme().background.opacity(0.35 * enter))
       // Always block pointer events reaching content underneath.
       .occlude()
       // Center the dialog panel.
