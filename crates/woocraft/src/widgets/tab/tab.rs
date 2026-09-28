@@ -8,7 +8,7 @@ use gpui::{
 
 use crate::{
   Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size, Tooltip,
-  h_flex,
+  WidgetGroup, h_flex,
 };
 
 type TabClickHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
@@ -236,10 +236,11 @@ impl RenderOnce for Tab {
 
     let close_button = if self.closable {
       let mut close_btn = Button::new(close_button_id)
-        .small()
+        .with_size(self.size)
         .flat()
         .icon(Icon::new(IconName::Dismiss))
-        .tab_stop(false);
+        .tab_stop(false)
+        .disabled(self.disabled);
 
       if let Some(on_close) = self.on_close {
         close_btn = close_btn.on_click(move |event, window, cx| {
@@ -252,13 +253,24 @@ impl RenderOnce for Tab {
     } else {
       None
     };
-    button = button.when_some(close_button, |this, btn| this.pr_1().child(btn));
+
+    // The close button is a sibling of the tab button (grouped into one flat
+    // unit), not a child of it: nesting a smaller button inside the tab would
+    // stretch the tab's content box and blow past `2em`, inflating the tab
+    // bar. As siblings both stay full-size `2em` and the bar closes on its
+    // container height.
+    button = button.when(self.closable, |this| this.pr_1());
+
+    let group = WidgetGroup::new(("tab-group", self.ix))
+      .flat()
+      .child(button)
+      .when_some(close_button, |this, btn| this.child(btn));
 
     self
       .base
       .id(self.ix)
       .items_center()
-      .child(button)
+      .child(group)
       .on_mouse_down(MouseButton::Left, |_, _, cx| {
         cx.stop_propagation();
       })

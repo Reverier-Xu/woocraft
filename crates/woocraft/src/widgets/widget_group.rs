@@ -336,6 +336,10 @@ impl RenderOnce for WidgetGroup {
 
     let children_len = self.children.len();
     let effective_size = self.size.unwrap_or_default();
+    // Flat/Link groups carry no borders, so they get no separators either —
+    // the children are meant to read as one borderless unit (e.g. a dock tab
+    // and its close button).
+    let show_dividers = !matches!(effective_variant, ButtonVariant::Flat | ButtonVariant::Link);
 
     div()
       .id(self.id)
@@ -375,7 +379,7 @@ impl RenderOnce for WidgetGroup {
             );
             let mut elements = Vec::with_capacity(2);
 
-            if ix > 0 {
+            if ix > 0 && show_dividers {
               let color = Self::divider_color(prev_active_color, active_color, self.disabled, cx);
               elements.push(Self::divider(self.layout, color, effective_size));
             }
