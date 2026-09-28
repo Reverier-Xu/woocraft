@@ -7977,10 +7977,12 @@ version = "0.5.7"
 dependencies = [
  "aho-corasick",
  "anyhow",
+ "ashpd",
  "async-channel",
  "chrono",
  "crossbeam-channel",
  "enum-iterator",
+ "futures",
  "gpui-pre",
  "gpui-pre-macros",
  "gpui-pre-platform",

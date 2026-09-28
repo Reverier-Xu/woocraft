@@ -94,17 +94,25 @@ gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }
 gpui = { workspace = true, features = ["test-support"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# The reduced-motion preference, read through the XDG desktop portal's
+# Settings interface. The same version and features `gpui-pre-linux` already
+# pulls in, so this adds no new code to the build.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "settings"] }
+# Stream combinators for the portal change signal (already in the tree via gpui).
+futures = "0.3"
 zbus = { version = "5", features = ["blocking"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }
-objc2-app-kit = { version = "0.3", optional = true, features = [
+# Tray support plus the reduced-motion preference (NSWorkspace).
+objc2-app-kit = { version = "0.3", features = [
   "NSApplication",
   "NSImage",
   "NSMenu",
   "NSMenuItem",
   "NSStatusBar",
   "NSStatusItem",
+  "NSWorkspace",
 ] }
 objc2-foundation = { version = "0.3", optional = true, features = [
   "NSData",
@@ -112,7 +120,8 @@ objc2-foundation = { version = "0.3", optional = true, features = [
 ] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62", optional = true, features = [
+# Tray support plus the reduced-motion preference (SystemParametersInfoW).
+windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
@@ -131,9 +140,7 @@ tray = [
   "dep:crossbeam-channel",
   "dep:image",
   "dep:zbus",
-  "dep:windows",
   "dep:objc2",
-  "dep:objc2-app-kit",
   "dep:objc2-foundation",
 ]
 terminal = ["dep:woocraft-terminal"]
