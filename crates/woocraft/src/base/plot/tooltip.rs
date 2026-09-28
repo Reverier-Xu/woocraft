@@ -1,6 +1,6 @@
 use gpui::{
-  AnyElement, App, Div, Half as _, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
+  AnyElement, App, Div, Half as _, Hsla, IntoElement, ParentElement, Pixels, Point, Rems,
+  RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px, rems,
 };
 
 use crate::{ActiveTheme, v_flex};
@@ -109,7 +109,7 @@ impl RenderOnce for CrossLine {
 #[derive(IntoElement)]
 pub struct Dot {
   point: Point<Pixels>,
-  size: Pixels,
+  size: Rems,
   stroke: Hsla,
   fill: Hsla,
 }
@@ -118,14 +118,14 @@ impl Dot {
   pub fn new(point: Point<Pixels>) -> Self {
     Self {
       point,
-      size: px(6.),
+      size: rems(0.375),
       stroke: gpui::transparent_black(),
       fill: gpui::transparent_black(),
     }
   }
 
   /// Set the size of the dot.
-  pub fn size(mut self, size: impl Into<Pixels>) -> Self {
+  pub fn size(mut self, size: impl Into<Rems>) -> Self {
     self.size = size.into();
     self
   }
@@ -144,14 +144,15 @@ impl Dot {
 }
 
 impl RenderOnce for Dot {
-  fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
+    let size = self.size.to_pixels(window.rem_size());
     let border_width = px(1.);
-    let offset = self.size / 2. - border_width / 2.;
+    let offset = size / 2. - border_width / 2.;
 
     div()
       .absolute()
-      .w(self.size)
-      .h(self.size)
+      .w(size)
+      .h(size)
       .rounded_full()
       .border(border_width)
       .border_color(self.stroke)
@@ -268,7 +269,7 @@ impl RenderOnce for Tooltip {
         if self.appearance {
           this
             .absolute()
-            .min_w(px(168.))
+            .min_w(rems(11.))
             .p_2()
             .border_1()
             .border_color(cx.theme().border)

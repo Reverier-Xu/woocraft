@@ -34,7 +34,7 @@ use gpui::{
   AnyElement, App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter,
   FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
   ParentElement as _, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription,
-  Window, div, prelude::FluentBuilder as _, px,
+  Window, div, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{
@@ -545,7 +545,7 @@ impl RenderOnce for DatePicker {
               Calendar::new(&state_for_popover.read(cx).calendar)
                 .number_of_months(number_of_months)
                 .border_0()
-                .rounded(px(0.0))
+                .rounded(rems(0.))
                 .p_0()
                 .with_size(size),
             )

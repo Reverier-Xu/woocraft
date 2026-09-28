@@ -32,7 +32,7 @@
 
 use gpui::{
   AnyElement, App, Hsla, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
-  div, prelude::FluentBuilder as _, px,
+  div, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{ActiveTheme, Icon, Sizable, Size, StyleSized, StyledExt, h_flex};
@@ -171,11 +171,11 @@ impl RenderOnce for Badge {
           .bg(badge_color)
           .text_color(text_color)
           .text_xs()
-          .top(-px(5.0))
-          .right(-px(6.0))
+          .top(-rems(0.375))
+          .right(-rems(0.375))
           .component_padding(size)
           .min_w(size.component_height())
-          .line_height(px(12.0))
+          .line_height(rems(0.75))
           .child(count)
           .into_any_element()
       }

@@ -193,7 +193,6 @@ impl RenderOnce for TabBar {
         .flex()
         .items_center()
         .container_size(self.size)
-        .container_h(self.size)
         .container_gap(self.size)
         .text_color(cx.theme().tab_foreground)
         .refine_style(&self.style)

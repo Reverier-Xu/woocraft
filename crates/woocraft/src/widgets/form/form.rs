@@ -1,5 +1,5 @@
 use gpui::{
-  App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled, Window,
+  App, Axis, IntoElement, ParentElement, Rems, RenderOnce, StyleRefinement, Styled, Window,
 };
 
 use super::{Field, FieldProps};
@@ -34,7 +34,7 @@ impl Form {
     self
   }
 
-  pub fn label_width(mut self, width: Pixels) -> Self {
+  pub fn label_width(mut self, width: Rems) -> Self {
     self.props.label_width = Some(width);
     self
   }

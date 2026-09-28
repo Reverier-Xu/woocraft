@@ -66,8 +66,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, ColorExt, Icon, IconName, InteractionColors, Sizable, Size, StyleSized, StyledExt,
-  h_flex, opacity, spinner_animation,
+  ActiveTheme, ColorExt, Icon, IconName, InteractionColors, RemsExt, Sizable, Size, StyleSized,
+  StyledExt, h_flex, opacity, spinner_animation,
 };
 
 type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -660,11 +660,12 @@ impl RenderOnce for Button {
       .children(self.children)
       .text_size(self.size.text_size());
 
+    let rem_size = window.rem_size();
     let radius = match self.rounded {
-      ButtonRounded::None => px(0.0),
-      ButtonRounded::Small => theme.radius / 2.0,
-      ButtonRounded::Medium => theme.radius,
-      ButtonRounded::Large => theme.radius_container,
+      ButtonRounded::None => px(0.),
+      ButtonRounded::Small => theme.radius.scale(0.5).to_pixels(rem_size),
+      ButtonRounded::Medium => theme.radius.to_pixels(rem_size),
+      ButtonRounded::Large => theme.radius_container.to_pixels(rem_size),
       ButtonRounded::Size(radius) => radius,
     };
 
@@ -684,22 +685,22 @@ impl RenderOnce for Button {
       .rounded_tl(if self.border_corners.top_left {
         radius
       } else {
-        px(0.0)
+        px(0.)
       })
       .rounded_tr(if self.border_corners.top_right {
         radius
       } else {
-        px(0.0)
+        px(0.)
       })
       .rounded_bl(if self.border_corners.bottom_left {
         radius
       } else {
-        px(0.0)
+        px(0.)
       })
       .rounded_br(if self.border_corners.bottom_right {
         radius
       } else {
-        px(0.0)
+        px(0.)
       })
       .when(self.selected, |this| {
         this

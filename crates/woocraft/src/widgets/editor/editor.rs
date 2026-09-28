@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{
   AnyElement, App, Context, DefiniteLength, EdgesRefinement, Entity, Focusable,
   InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
-  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
+  StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative,
 };
 
 use super::state::{CONTEXT, Copy, Cut, InputState, Paste, SelectAll};
@@ -165,11 +165,7 @@ impl RenderOnce for Editor {
 
     let state = self.state.read(cx);
     let focused = state.focus_handle.is_focused(window) && !state.disabled;
-    let gap_x = match self.size {
-      Size::Small => px(4.),
-      Size::Large => px(8.),
-      _ => px(6.),
-    };
+    let gap_x = self.size.component_gap();
 
     let bg = if state.disabled {
       cx.theme().muted

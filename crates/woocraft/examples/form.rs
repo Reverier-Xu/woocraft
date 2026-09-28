@@ -1,6 +1,6 @@
 use gpui::{
   App, AppContext, Bounds, Context, Entity, IntoElement, ParentElement, Render, Size as GpuiSize,
-  Styled, Window, WindowBounds, WindowOptions, div, px,
+  Styled, Window, WindowBounds, WindowOptions, div, px, rems,
 };
 use woocraft::{
   ActiveTheme, Button, ButtonVariants as _, Checkbox, Disableable, Input, InputState, Label,
@@ -95,7 +95,7 @@ impl Render for FormWindow {
                 .bg(cx.theme().card)
                 .child(
                   v_form()
-                    .label_width(px(150.))
+                    .label_width(rems(9.375))
                     .child(
                       field()
                         .label("Display Name")
@@ -221,7 +221,7 @@ impl Render for FormWindow {
                 .child(
                   h_form()
                     .columns(2)
-                    .label_width(px(120.))
+                    .label_width(rems(7.5))
                     .child(
                       field()
                         .label("API Host")

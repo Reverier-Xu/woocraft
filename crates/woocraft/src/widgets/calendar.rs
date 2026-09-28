@@ -43,8 +43,8 @@ use chrono::{Datelike, NaiveDate};
 use gpui::{
   App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
   InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
-  StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
-  relative,
+  StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
+  relative, rems,
 };
 
 use crate::{
@@ -732,9 +732,9 @@ impl Calendar {
       .gap_0p5()
       .gap_y_3()
       .map(|this| match self.size {
-        Size::Small => this.mt_2().gap_y_2().w(px(208.0)),
-        Size::Large => this.mt_4().gap_y_4().w(px(292.0)),
-        _ => this.mt_3().gap_y_3().w(px(264.0)),
+        Size::Small => this.mt_2().gap_y_2().w(rems(13.)),
+        Size::Large => this.mt_4().gap_y_4().w(rems(18.)),
+        _ => this.mt_3().gap_y_3().w(rems(17.)),
       })
       .justify_between()
       .flex_wrap()
@@ -772,9 +772,9 @@ impl Calendar {
       .id("years")
       .gap_0p5()
       .map(|this| match self.size {
-        Size::Small => this.mt_2().gap_y_2().w(px(208.0)),
-        Size::Large => this.mt_4().gap_y_4().w(px(292.0)),
-        _ => this.mt_3().gap_y_3().w(px(264.0)),
+        Size::Small => this.mt_2().gap_y_2().w(rems(13.)),
+        Size::Large => this.mt_4().gap_y_4().w(rems(18.)),
+        _ => this.mt_3().gap_y_3().w(rems(17.)),
       })
       .justify_between()
       .flex_wrap()
@@ -825,8 +825,6 @@ impl RenderOnce for Calendar {
     v_flex()
       .id(self.id.clone())
       .track_focus(&self.state.read(cx).focus_handle)
-      .border_1()
-      .border_color(cx.theme().border)
       .rounded(cx.theme().radius_container)
       .p_3()
       .gap_0p5()

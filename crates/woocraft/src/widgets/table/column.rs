@@ -1,6 +1,6 @@
 use gpui::{
   Bounds, Context, Edges, Empty, EntityId, IntoElement, ParentElement as _, Pixels, Render,
-  SharedString, Styled as _, TextAlign, Window, div, prelude::FluentBuilder, px,
+  SharedString, Styled as _, TextAlign, Window, div, prelude::FluentBuilder, px, rems,
 };
 
 use crate::{ActiveTheme as _, TableThemeExt};
@@ -67,7 +67,7 @@ impl Default for Column {
       resizable: true,
       movable: true,
       selectable: true,
-      min_width: px(20.0),
+      min_width: px(20.),
       max_width: px(f32::MAX),
     }
   }
@@ -302,8 +302,8 @@ impl Render for DragColumn {
       .border_color(cx.theme().border)
       .shadow_md()
       .w(self.width)
-      .min_w(px(100.))
-      .max_w(px(450.))
+      .min_w(rems(6.))
+      .max_w(rems(28.))
       .child(self.name.clone())
   }
 }

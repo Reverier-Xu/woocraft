@@ -1,6 +1,8 @@
 use std::ops::Range;
 
-use gpui::{Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Window, px};
+use gpui::{
+  Along, Axis, Bounds, Context, ElementId, EventEmitter, IsZero, Pixels, Rems, Window, px, rems,
+};
 
 use crate::PixelsExt;
 
@@ -10,7 +12,7 @@ mod resize_handle;
 pub use panel::*;
 pub(crate) use resize_handle::*;
 
-pub(crate) const PANEL_MIN_SIZE: Pixels = px(100.);
+pub(crate) const PANEL_MIN_SIZE: Rems = rems(6.);
 
 pub fn h_resizable(id: impl Into<ElementId>) -> ResizablePanelGroup {
   ResizablePanelGroup::new(id).axis(Axis::Horizontal)
@@ -36,6 +38,9 @@ pub struct ResizableState {
   /// mouse events within one display interval are coalesced into a single
   /// layout pass.
   pending_resize: Option<(usize, Pixels)>,
+  /// Root font size captured from the last windowed render; used to resolve
+  /// rem-based sizes inside windowless state methods.
+  rem_size: Pixels,
 }
 
 impl Default for ResizableState {
@@ -47,11 +52,22 @@ impl Default for ResizableState {
       resizing_panel_ix: None,
       bounds: Bounds::default(),
       pending_resize: None,
+      rem_size: px(16.),
     }
   }
 }
 
 impl ResizableState {
+  #[inline]
+  pub(crate) fn min_panel_size(&self) -> Pixels {
+    PANEL_MIN_SIZE.to_pixels(self.rem_size)
+  }
+
+  #[inline]
+  pub(crate) fn set_rem_size(&mut self, rem_size: Pixels) {
+    self.rem_size = rem_size;
+  }
+
   pub fn sizes(&self) -> &Vec<Pixels> {
     &self.sizes
   }
@@ -75,7 +91,7 @@ impl ResizableState {
       ..Default::default()
     };
 
-    let size = size.unwrap_or(PANEL_MIN_SIZE);
+    let size = size.unwrap_or_else(|| self.min_panel_size());
     let container_size = self.container_size().max(px(1.));
     let total_leftover_size = (container_size - size).max(px(1.));
 
@@ -107,7 +123,7 @@ impl ResizableState {
       self
         .panels
         .extend(vec![ResizablePanelState::default(); diff]);
-      self.sizes.extend(vec![PANEL_MIN_SIZE; diff]);
+      self.sizes.extend(vec![self.min_panel_size(); diff]);
       changed = true;
     }
 
@@ -143,7 +159,7 @@ impl ResizableState {
         .sum();
       if container > fixed {
         Some(px(
-          ((container - fixed) / free_count as f32).max(PANEL_MIN_SIZE.as_f32()),
+          ((container - fixed) / free_count as f32).max(self.min_panel_size().as_f32()),
         ))
       } else {
         // The container is unknown on a freshly created stack (its bounds
@@ -158,7 +174,7 @@ impl ResizableState {
     };
     for (ix, slot) in sizes.into_iter().enumerate() {
       let resolved = slot.or(free_share);
-      self.sizes[ix] = resolved.unwrap_or(PANEL_MIN_SIZE);
+      self.sizes[ix] = resolved.unwrap_or_else(|| self.min_panel_size());
       self.panels[ix].size = resolved;
     }
     cx.notify();
@@ -177,7 +193,7 @@ impl ResizableState {
         self
           .panels
           .extend(vec![ResizablePanelState::default(); diff]);
-        self.sizes.extend(vec![PANEL_MIN_SIZE; diff]);
+        self.sizes.extend(vec![self.min_panel_size(); diff]);
       }
       std::cmp::Ordering::Less => {
         self.panels.truncate(panels_count);
@@ -193,7 +209,7 @@ impl ResizableState {
     cx: &mut Context<Self>,
   ) {
     let size = bounds.size.along(self.axis);
-    if self.sizes[panel_ix].as_f32() == PANEL_MIN_SIZE.as_f32() {
+    if self.sizes[panel_ix].as_f32() == self.min_panel_size().as_f32() {
       self.sizes[panel_ix] = size;
       self.panels[panel_ix].size = Some(size);
     }
@@ -256,7 +272,7 @@ impl ResizableState {
 
   fn panel_size_range(&self, ix: usize) -> Range<Pixels> {
     let Some(panel) = self.panels.get(ix) else {
-      return PANEL_MIN_SIZE..Pixels::MAX;
+      return self.min_panel_size()..Pixels::MAX;
     };
 
     panel.size_range.clone()

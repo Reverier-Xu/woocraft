@@ -3,9 +3,9 @@ use std::{ops::Range, rc::Rc};
 use gpui::{
   AnyElement, App, AppContext, ClickEvent, Context, ElementId, Entity, EntityId, EventEmitter,
   FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, ListSizingBehavior,
-  MouseButton, MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, SharedString,
+  MouseButton, MouseDownEvent, ParentElement, Pixels, Rems, Render, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, UniformListScrollHandle, Window, div,
-  prelude::FluentBuilder as _, px, uniform_list,
+  prelude::FluentBuilder as _, px, rems, uniform_list,
 };
 
 use crate::{
@@ -87,11 +87,9 @@ impl Render for DragTreeItem {
       .bg(cx.theme().card)
       .text_color(cx.theme().foreground)
       .opacity(0.9)
-      .border_1()
-      .border_color(cx.theme().border)
       .shadow_md()
       .rounded_md()
-      .max_w(px(300.))
+      .max_w(rems(19.))
       .overflow_hidden()
       .text_ellipsis()
       .child(self.label.clone())
@@ -318,7 +316,7 @@ impl TreeState {
         .relative()
         .items_center()
         .component_gap(Size::Medium)
-        .pl(px(16.) * entry.depth())
+        .pl(rems(entry.depth() as f32))
         .child(Icon::new(entry.icon_or_default()))
         .child(div().flex_1().truncate().min_w_0().child(content))
         .when(is_folder && !is_loading, |this| {
@@ -330,9 +328,6 @@ impl TreeState {
   fn render_guide_layers(
     &self, ix: usize, entry: &TreeEntry, cx: &mut Context<Self>,
   ) -> Vec<AnyElement> {
-    const ROW_CENTER_Y: f32 = 16.0;
-    const BRANCH_LEN: f32 = 12.0;
-
     let mut layers = Vec::new();
     let depth = entry.depth();
     let has_children = self.model.subtree_end(ix) > ix + 1;
@@ -346,7 +341,7 @@ impl TreeState {
         layers.push(
           div()
             .absolute()
-            .left(Self::guide_x(ancestor_depth) + px(8.))
+            .left(rems(Self::guide_x(ancestor_depth).0 + 0.5))
             .top_0()
             .bottom_0()
             .w(px(1.))
@@ -366,7 +361,7 @@ impl TreeState {
         .get(parent_ix)
         .map(|e| e.depth())
         .unwrap_or(0);
-      let x = Self::guide_x(branch_depth) + px(8.);
+      let x = rems(Self::guide_x(branch_depth).0 + 0.5);
       let current_has_next_sibling = self.model.has_next_sibling(ix);
 
       layers.push(
@@ -375,7 +370,7 @@ impl TreeState {
           .left(x)
           .top_0()
           .w(px(1.))
-          .when(!current_has_next_sibling, |this| this.h(px(ROW_CENTER_Y)))
+          .when(!current_has_next_sibling, |this| this.h(rems(1.)))
           .when(current_has_next_sibling, |this| this.bottom_0())
           .bg(color)
           .into_any_element(),
@@ -384,8 +379,8 @@ impl TreeState {
         div()
           .absolute()
           .left(x)
-          .top(px(ROW_CENTER_Y))
-          .w(px(BRANCH_LEN))
+          .top(rems(1.))
+          .w(rems(0.75))
           .h(px(1.))
           .bg(color)
           .into_any_element(),
@@ -397,8 +392,8 @@ impl TreeState {
       layers.push(
         div()
           .absolute()
-          .left(Self::guide_x(depth) + px(8.))
-          .top(px(ROW_CENTER_Y * 2.))
+          .left(rems(Self::guide_x(depth).0 + 0.5))
+          .top(rems(2.))
           .bottom_0()
           .w(px(1.))
           .bg(color)
@@ -409,8 +404,8 @@ impl TreeState {
     layers
   }
 
-  fn guide_x(depth: usize) -> gpui::Pixels {
-    px(2.) + px(14.) * depth as f32
+  fn guide_x(depth: usize) -> Rems {
+    rems(0.125 + 0.875 * depth as f32)
   }
 
   fn on_action_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {

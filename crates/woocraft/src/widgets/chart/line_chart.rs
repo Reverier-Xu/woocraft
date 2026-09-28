@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
-use gpui::{App, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, Window, canvas};
+use gpui::{
+  App, Bounds, IntoElement, Pixels, RenderOnce, SharedString, Styled, Window, canvas, rems,
+};
 use num_traits::{Num, ToPrimitive};
 
 use super::axes::{XTickAlign, paint_axes};
@@ -99,7 +101,7 @@ where
     };
 
     let width = bounds.size.width.as_f32();
-    let height = bounds.size.height.as_f32() - AXIS_GAP;
+    let height = bounds.size.height.as_f32() - AXIS_GAP.to_pixels(window.rem_size()).as_f32();
 
     // Single accessor pass: each datum's (x, y) is materialized once and the
     // results drive both scale domains (and, through them, the tick lookups
@@ -139,7 +141,7 @@ where
       .stroke_width(2.);
 
     if self.dot {
-      line = line.dot().dot_size(8.).dot_fill_color(stroke);
+      line = line.dot().dot_size(rems(0.5)).dot_fill_color(stroke);
     }
 
     line.paint(&bounds, window);

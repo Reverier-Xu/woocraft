@@ -4,8 +4,9 @@ use gpui::{
   Action, Anchor, AnchoredPositionMode, AnyElement, App, AppContext, AsKeystroke, Bounds,
   ClickEvent, Context, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
   InteractiveElement, IntoElement, KeyBinding, Keystroke, MouseDownEvent, OwnedMenuItem,
-  ParentElement, Pixels, Point, Render, ScrollHandle, SharedString, StatefulInteractiveElement,
-  Styled, Subscription, WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
+  ParentElement, Pixels, Point, Rems, Render, ScrollHandle, SharedString,
+  StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, anchored, div,
+  prelude::FluentBuilder, px, rems,
 };
 
 use crate::{
@@ -302,7 +303,7 @@ pub struct PopupMenu {
   pub(crate) action_context: Option<FocusHandle>,
   selected_index: Option<usize>,
   min_width: Option<Pixels>,
-  max_width: Option<Pixels>,
+  max_width: Option<Rems>,
   max_height: Option<Pixels>,
   bounds: Bounds<Pixels>,
   size: Size,
@@ -375,8 +376,8 @@ impl PopupMenu {
     self
   }
 
-  /// Set max width of the popup menu, default is 500px
-  pub fn max_w(mut self, width: impl Into<Pixels>) -> Self {
+  /// Set max width of the popup menu, default is 31rem (496px)
+  pub fn max_w(mut self, width: impl Into<Rems>) -> Self {
     self.max_width = Some(width.into());
     self
   }
@@ -976,16 +977,16 @@ impl PopupMenu {
   }
 
   #[inline]
-  fn max_width(&self) -> Pixels {
-    self.max_width.unwrap_or(px(500.))
+  fn max_width(&self, rem_size: Pixels) -> Pixels {
+    self.max_width.unwrap_or(rems(31.)).to_pixels(rem_size)
   }
 
   /// Calculate the anchor corner and offset for child submenu
   fn update_submenu_menu_anchor(&mut self, window: &Window) {
     let bounds = self.bounds;
-    let max_width = self.max_width();
-    let horizontal_gap = self.size.container_px();
-    let vertical_shift = self.size.container_py();
+    let max_width = self.max_width(window.rem_size());
+    let horizontal_gap = self.size.container_px().to_pixels(window.rem_size());
+    let vertical_shift = self.size.container_py().to_pixels(window.rem_size());
 
     let (anchor, mut offset) = if max_width + bounds.origin.x > window.bounds().size.width {
       (
@@ -1156,13 +1157,13 @@ impl PopupMenu {
               .child(Icon::new(IconName::ChevronRight).text_color(cx.theme().muted_foreground)),
           )
           .when(selected, |this| {
-            let horizontal_gap = self.size.container_px();
-            let vertical_shift = self.size.container_py();
+            let horizontal_gap = self.size.container_px().to_pixels(window.rem_size());
+            let vertical_shift = self.size.container_py().to_pixels(window.rem_size());
 
             let (position_mode, position, anchor, offset) = if let Some(item_bounds) =
               self.item_bounds.get(ix).copied()
             {
-              let submenu_max_width = menu.read(cx).max_width();
+              let submenu_max_width = menu.read(cx).max_width(window.rem_size());
               let open_left =
                 item_bounds.origin.x + item_bounds.size.width + horizontal_gap + submenu_max_width
                   > window.bounds().right();
@@ -1257,7 +1258,7 @@ impl Render for PopupMenu {
 
     let max_height = self.max_height.unwrap_or_else(|| {
       let window_half_height = window.window_bounds().get_bounds().size.height * 0.5;
-      window_half_height.min(px(450.))
+      window_half_height.min(rems(28.).to_pixels(window.rem_size()))
     });
 
     let has_left_icon = self
@@ -1279,7 +1280,7 @@ impl Render for PopupMenu {
         .collect();
     }
 
-    let max_width = self.max_width();
+    let max_width = self.max_width(window.rem_size());
     let options = RenderOptions {
       has_left_icon,
       check_side: self.check_side,

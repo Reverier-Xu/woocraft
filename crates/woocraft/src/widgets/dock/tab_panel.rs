@@ -1095,7 +1095,6 @@ impl TabPanel {
           .overflow_hidden()
           .gap_1()
           .container_size(Size::Medium)
-          .container_h(Size::Medium)
           .when_some(bottom_dock_button, |this, btn| this.child(btn))
           .child(
             div()
@@ -1136,7 +1135,6 @@ impl TabPanel {
         .items_center()
         .gap_1()
         .container_size(Size::Medium)
-        .container_h(Size::Medium)
         .when_some(bottom_dock_button, |this, btn| this.child(btn))
         .child(
           div()

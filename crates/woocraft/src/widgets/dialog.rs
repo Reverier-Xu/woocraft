@@ -19,8 +19,8 @@
 //! // Render a dialog from a view's render method:
 //! Dialog::new("my-dialog")
 //!     .mode(DialogMode::Modal)
-//!     .width(px(480.))
-//!     .height(px(320.))
+//!     .width(rems(30.))
+//!     .height(rems(20.))
 //!     .title("Confirm Action")
 //!     .open(self.dialog_open)
 //!     .on_close(cx.listener(|this, _, _, cx| {
@@ -37,8 +37,8 @@ use std::rc::Rc;
 use gpui::{
   AnyElement, App, BoxShadow, Corners, Decorations, DismissEvent, ElementId, EventEmitter,
   FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
-  Pixels, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
-  anchored, deferred, div, point, prelude::FluentBuilder as _, px,
+  Pixels, Rems, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
+  anchored, deferred, div, point, prelude::FluentBuilder as _, px, rems,
 };
 
 use crate::{
@@ -355,26 +355,26 @@ impl RenderOnce for Dialog {
     // Compute the corner radii for the overlay so that it tracks the
     // rounded window corners regardless of decoration mode or tiling state.
     let border_radius = cx.theme().radius_container;
-    let overlay_corners: Corners<Pixels> = match decorations {
-      Decorations::Server => Corners::all(px(0.)),
+    let overlay_corners: Corners<Rems> = match decorations {
+      Decorations::Server => Corners::all(rems(0.)),
       Decorations::Client { tiling } => Corners {
         top_left: if tiling.top || tiling.left {
-          px(0.)
+          rems(0.)
         } else {
           border_radius
         },
         top_right: if tiling.top || tiling.right {
-          px(0.)
+          rems(0.)
         } else {
           border_radius
         },
         bottom_left: if tiling.bottom || tiling.left {
-          px(0.)
+          rems(0.)
         } else {
           border_radius
         },
         bottom_right: if tiling.bottom || tiling.right {
-          px(0.)
+          rems(0.)
         } else {
           border_radius
         },

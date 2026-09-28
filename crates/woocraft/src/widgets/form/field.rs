@@ -2,11 +2,11 @@ use std::rc::Rc;
 
 use gpui::{
   AlignItems, AnyElement, AnyView, App, Axis, Div, ElementId, InteractiveElement as _, IntoElement,
-  ParentElement, Pixels, Rems, RenderOnce, SharedString, Styled, Window, div,
-  prelude::FluentBuilder as _, px,
+  ParentElement, Rems, RenderOnce, SharedString, Styled, Window, div, prelude::FluentBuilder as _,
+  rems,
 };
 
-use crate::{ActiveTheme as _, AxisExt, Size, StyledExt, h_flex, v_flex};
+use crate::{ActiveTheme as _, AxisExt, RemsExt, Size, StyledExt, h_flex, v_flex};
 
 type FieldElementBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>;
 
@@ -15,7 +15,7 @@ pub(super) struct FieldProps {
   pub(super) size: Size,
   pub(super) layout: Axis,
   pub(super) columns: usize,
-  pub(super) label_width: Option<Pixels>,
+  pub(super) label_width: Option<Rems>,
   pub(super) label_text_size: Option<Rems>,
 }
 
@@ -25,7 +25,7 @@ impl Default for FieldProps {
       size: Size::default(),
       layout: Axis::Vertical,
       columns: 1,
-      label_width: Some(px(140.0)),
+      label_width: Some(rems(9.)),
       label_text_size: None,
     }
   }
@@ -230,17 +230,13 @@ impl RenderOnce for Field {
     }
 
     #[inline]
-    fn wrap_label(label_width: Option<Pixels>) -> Div {
+    fn wrap_label(label_width: Option<Rems>) -> Div {
       div().when_some(label_width, |this, width| this.w(width).flex_shrink_0())
     }
 
-    let outer_gap = match self.props.size {
-      Size::Small => px(6.0),
-      Size::Medium => px(8.0),
-      Size::Large => px(12.0),
-    };
+    let outer_gap = self.props.size.component_gap();
     let inner_gap = if layout.is_horizontal() {
-      outer_gap / 2.0
+      outer_gap.scale(0.5)
     } else {
       outer_gap / 4.0
     };

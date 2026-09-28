@@ -7,10 +7,10 @@ use gpui::{
   Along, AnyElement, App, AppContext, Axis, Bounds, Context, Element, ElementId, Empty, Entity,
   EventEmitter, InteractiveElement as _, IntoElement, IsZero as _, MouseMoveEvent, MouseUpEvent,
   ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window, div, prelude::FluentBuilder,
-  px,
+  px, rems,
 };
 
-use super::{PANEL_MIN_SIZE, ResizableState, resizable_panel, resize_handle};
+use super::{ResizableState, resizable_panel, resize_handle};
 use crate::{ActiveTheme as _, ElementExt, h_flex, v_flex};
 
 type ResizeHandler = dyn Fn(&Entity<ResizableState>, &mut Window, &mut App);
@@ -114,7 +114,9 @@ impl RenderOnce for ResizablePanelGroup {
     };
 
     let panels_count = self.children.len();
+    let rem_size = window.rem_size();
     state.update(cx, |state, cx| {
+      state.set_rem_size(rem_size);
       state.sync_panels_count(self.axis, panels_count, cx);
       state.apply_pending_resize(cx);
     });
@@ -211,7 +213,7 @@ pub struct ResizablePanel {
   panel_ix: usize,
   state: Option<Entity<ResizableState>>,
   initial_size: Option<Pixels>,
-  size_range: Range<Pixels>,
+  size_range: Option<Range<Pixels>>,
   children: Vec<AnyElement>,
   visible: bool,
 }
@@ -222,7 +224,7 @@ impl ResizablePanel {
       panel_ix: 0,
       initial_size: None,
       state: None,
-      size_range: PANEL_MIN_SIZE..Pixels::MAX,
+      size_range: None,
       axis: Axis::Horizontal,
       children: vec![],
       visible: true,
@@ -240,7 +242,7 @@ impl ResizablePanel {
   }
 
   pub fn size_range(mut self, range: impl Into<Range<Pixels>>) -> Self {
-    self.size_range = range.into();
+    self.size_range = Some(range.into());
     self
   }
 }
@@ -252,7 +254,7 @@ impl ParentElement for ResizablePanel {
 }
 
 impl RenderOnce for ResizablePanel {
-  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     if !self.visible {
       return div().id(("resizable-panel", self.panel_ix));
     }
@@ -261,7 +263,10 @@ impl RenderOnce for ResizablePanel {
       .state
       .expect("BUG: The `state` in ResizablePanel should be present.");
     let display_size = state.read(cx).display_size(self.panel_ix);
-    let size_range = self.size_range.clone();
+    let size_range = self
+      .size_range
+      .clone()
+      .unwrap_or_else(|| rems(6.).to_pixels(window.rem_size())..Pixels::MAX);
     let content = div().flex_1().size_full().children(self.children);
 
     div()
@@ -291,9 +296,11 @@ impl RenderOnce for ResizablePanel {
       })
       .on_prepaint({
         let state = state.clone();
+        let panel_ix = self.panel_ix;
+        let size_range = size_range.clone();
         move |bounds, _, cx| {
           state.update(cx, |state, cx| {
-            state.update_panel_size(self.panel_ix, bounds, self.size_range, cx)
+            state.update_panel_size(panel_ix, bounds, size_range, cx)
           })
         }
       })

@@ -1,8 +1,8 @@
 // @reference: https://d3js.org/d3-shape/line
 
 use gpui::{
-  Background, BorderStyle, Bounds, Hsla, PaintQuad, Path, PathBuilder, Pixels, Point, Window, px,
-  quad, size,
+  Background, BorderStyle, Bounds, Hsla, PaintQuad, Path, PathBuilder, Pixels, Point, Rems, Window,
+  px, quad, rems, size,
 };
 
 use crate::base::plot::{StrokeStyle, origin_point};
@@ -16,7 +16,7 @@ pub struct Line<T> {
   stroke_width: Pixels,
   stroke_style: StrokeStyle,
   dot: bool,
-  dot_size: Pixels,
+  dot_size: Rems,
   dot_fill_color: Hsla,
   dot_stroke_color: Option<Hsla>,
 }
@@ -31,7 +31,7 @@ impl<T> Default for Line<T> {
       stroke_width: px(1.),
       stroke_style: Default::default(),
       dot: false,
-      dot_size: px(4.),
+      dot_size: rems(0.25),
       dot_fill_color: gpui::transparent_black(),
       dot_stroke_color: None,
     }
@@ -92,7 +92,7 @@ impl<T> Line<T> {
   }
 
   /// Set the size of the dots on the Line.
-  pub fn dot_size(mut self, dot_size: impl Into<Pixels>) -> Self {
+  pub fn dot_size(mut self, dot_size: impl Into<Rems>) -> Self {
     self.dot_size = dot_size.into();
     self
   }
@@ -110,10 +110,11 @@ impl<T> Line<T> {
   }
 
   /// Paint the dots on the Line.
-  fn paint_dot(&self, dot: Point<Pixels>) -> PaintQuad {
+  fn paint_dot(&self, dot: Point<Pixels>, rem_size: Pixels) -> PaintQuad {
+    let dot_size = self.dot_size.to_pixels(rem_size);
     quad(
-      gpui::bounds(dot, size(self.dot_size, self.dot_size)),
-      self.dot_size / 2.,
+      gpui::bounds(dot, size(dot_size, dot_size)),
+      dot_size / 2.,
       self.dot_fill_color,
       px(1.),
       self.dot_stroke_color.unwrap_or(self.dot_fill_color),
@@ -121,8 +122,11 @@ impl<T> Line<T> {
     )
   }
 
-  fn path(&self, bounds: &Bounds<Pixels>) -> (Option<Path<Pixels>>, Vec<PaintQuad>) {
+  fn path(
+    &self, bounds: &Bounds<Pixels>, rem_size: Pixels,
+  ) -> (Option<Path<Pixels>>, Vec<PaintQuad>) {
     let origin = bounds.origin;
+    let dot_size = self.dot_size.to_pixels(rem_size);
     let mut builder = PathBuilder::stroke(self.stroke_width);
     let mut dots = vec![];
     let mut paint_dots = vec![];
@@ -135,9 +139,9 @@ impl<T> Line<T> {
         let pos = origin_point(px(x), px(y), origin);
 
         if self.dot {
-          let dot_radius = self.dot_size.as_f32() / 2.;
+          let dot_radius = dot_size.as_f32() / 2.;
           let dot_pos = origin_point(px(x - dot_radius), px(y - dot_radius), origin);
-          paint_dots.push(self.paint_dot(dot_pos));
+          paint_dots.push(self.paint_dot(dot_pos, rem_size));
         }
 
         dots.push(pos);
@@ -193,7 +197,7 @@ impl<T> Line<T> {
 
   /// Paint the Line.
   pub fn paint(&self, bounds: &Bounds<Pixels>, window: &mut Window) {
-    let (path, dots) = self.path(bounds);
+    let (path, dots) = self.path(bounds, window.rem_size());
     if let Some(path) = path {
       window.paint_path(path, self.stroke);
     }
@@ -218,7 +222,7 @@ mod tests {
       .y(|v| Some(*v * 2.));
 
     let bounds = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(100.)));
-    let (path, dots) = line.path(&bounds);
+    let (path, dots) = line.path(&bounds, px(16.));
 
     assert!(path.is_some());
     assert!(dots.is_empty());
@@ -229,7 +233,7 @@ mod tests {
       .y(|v| Some(*v * 2.))
       .dot();
 
-    let (_, dots) = line_with_dots.path(&bounds);
+    let (_, dots) = line_with_dots.path(&bounds, px(16.));
     assert_eq!(dots.len(), 3);
   }
 }

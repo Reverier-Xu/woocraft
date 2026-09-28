@@ -1,6 +1,6 @@
 use gpui::{
-  App, Bounds, FontWeight, Hsla, PathBuilder, Pixels, Point, SharedString, TextAlign, Window,
-  point, px,
+  App, Bounds, FontWeight, Hsla, PathBuilder, Pixels, Point, Rems, SharedString, TextAlign, Window,
+  point, px, rems,
 };
 
 use super::{
@@ -8,13 +8,13 @@ use super::{
   origin_point,
 };
 
-pub const AXIS_GAP: f32 = 18.;
+pub const AXIS_GAP: Rems = rems(1.125);
 
 pub struct AxisText {
   pub text: SharedString,
   pub tick: Pixels,
   pub color: Hsla,
-  pub font_size: Pixels,
+  pub font_size: Rems,
   pub align: TextAlign,
 }
 
@@ -24,12 +24,12 @@ impl AxisText {
       text: text.into(),
       tick: tick.into(),
       color,
-      font_size: TEXT_SIZE.into(),
+      font_size: TEXT_SIZE,
       align: TextAlign::Left,
     }
   }
 
-  pub fn font_size(mut self, font_size: impl Into<Pixels>) -> Self {
+  pub fn font_size(mut self, font_size: impl Into<Rems>) -> Self {
     self.font_size = font_size.into();
     self
   }
@@ -72,13 +72,14 @@ impl PlotAxis {
   }
 
   /// Set the x-label of the Axis.
-  pub fn x_label(mut self, label: impl IntoIterator<Item = AxisText>) -> Self {
+  pub fn x_label(mut self, label: impl IntoIterator<Item = AxisText>, rem_size: Pixels) -> Self {
     if let Some(x) = self.x {
+      let gap = rems(TEXT_GAP.0 * 3.).to_pixels(rem_size);
       self.x_label = label
         .into_iter()
         .map(|t| Text {
           text: t.text,
-          origin: point(t.tick, x + px(TEXT_GAP * 3.)),
+          origin: point(t.tick, x + gap),
           color: t.color,
           font_size: t.font_size,
           font_weight: FontWeight::NORMAL,
@@ -102,13 +103,14 @@ impl PlotAxis {
   }
 
   /// Set the y-label of the Axis.
-  pub fn y_label(mut self, label: impl IntoIterator<Item = AxisText>) -> Self {
+  pub fn y_label(mut self, label: impl IntoIterator<Item = AxisText>, rem_size: Pixels) -> Self {
     if let Some(y) = self.y {
+      let gap = TEXT_GAP.to_pixels(rem_size);
       self.y_label = label
         .into_iter()
         .map(|t| Text {
           text: t.text,
-          origin: point(y + px(TEXT_GAP), t.tick),
+          origin: point(y + gap, t.tick),
           color: t.color,
           font_size: t.font_size,
           font_weight: FontWeight::NORMAL,

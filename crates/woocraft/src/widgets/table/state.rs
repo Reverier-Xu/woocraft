@@ -5,7 +5,7 @@ use gpui::{
   FocusHandle, Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton,
   MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
   StatefulInteractiveElement as _, Styled, Task, TextStyle, UniformListScrollHandle, Window, div,
-  prelude::FluentBuilder, px, uniform_list,
+  prelude::FluentBuilder, px, rems, uniform_list,
 };
 
 use super::*;
@@ -752,19 +752,22 @@ where
       .map(|edges| edges.left + edges.right)
       .unwrap_or_else(|| {
         let default_padding = self.options.size.table_cell_padding();
-        default_padding.left + default_padding.right
+        rems(default_padding.left.0 + default_padding.right.0).to_pixels(window.rem_size())
       });
 
     let sort_icon_width = if self.sortable && column.sort.is_some() {
       // Header labels are IconLabel (default Medium), while sort icon uses a
       // Small icon-only Button. Reserve the delta over the baseline label
       // paddings to prevent header text clipping.
-      Size::Small.component_height() + Size::Medium.component_gap() - Size::Medium.component_px()
-        + Size::Medium.container_px()
+      let delta = Size::Small.component_height().0 + Size::Medium.component_gap().0
+        - Size::Medium.component_px().0
+        + Size::Medium.container_px().0;
+      rems(delta).to_pixels(window.rem_size())
     } else {
       px(0.)
     };
-    let estimated = max_text_width + padding + sort_icon_width + px(32.);
+    let estimated =
+      max_text_width + padding + sort_icon_width + rems(2.).to_pixels(window.rem_size());
 
     estimated.clamp(column.min_width, column.max_width)
   }
@@ -805,8 +808,12 @@ where
       .count()
   }
 
-  fn page_item_count(&self) -> usize {
-    let row_height = self.options.size.table_row_height();
+  fn page_item_count(&self, window: &Window) -> usize {
+    let row_height = self
+      .options
+      .size
+      .table_row_height()
+      .to_pixels(window.rem_size());
     let height = self.bounds.size.height;
     let count = (height / row_height).floor() as usize;
     count.saturating_sub(1).max(1)
@@ -1031,9 +1038,9 @@ where
   }
 
   pub(crate) fn action_select_page_up(
-    &mut self, _: &SelectPageUp, _: &mut Window, cx: &mut Context<Self>,
+    &mut self, _: &SelectPageUp, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    let step = self.page_item_count();
+    let step = self.page_item_count(window);
 
     // Cell selection mode: move up by page within the same column
     if self.selection_mode.is_cell() {
@@ -1054,14 +1061,14 @@ where
   }
 
   pub(crate) fn action_select_page_down(
-    &mut self, _: &SelectPageDown, _: &mut Window, cx: &mut Context<Self>,
+    &mut self, _: &SelectPageDown, window: &mut Window, cx: &mut Context<Self>,
   ) {
     let rows_count = self.delegate.rows_count(cx);
     if rows_count == 0 {
       return;
     }
 
-    let step = self.page_item_count();
+    let step = self.page_item_count(window);
 
     // Cell selection mode: move down by page within the same column
     if self.selection_mode.is_cell() {
@@ -1867,7 +1874,7 @@ where
           // Render empty row selector cell for fake rows
           this.child(
             div()
-              .w(px(40.))
+              .w(rems(2.5))
               .h_full()
               .flex_shrink_0()
               .component_size(self.options.size),
@@ -1971,7 +1978,11 @@ where
     let loading = self.delegate.loading(cx);
     let bordered = self.options.bordered;
 
-    let row_height = self.options.size.table_row_height();
+    let row_height = self
+      .options
+      .size
+      .table_row_height()
+      .to_pixels(window.rem_size());
     let total_height = self
       .vertical_scroll_handle
       .0

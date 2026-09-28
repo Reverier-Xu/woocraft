@@ -30,7 +30,8 @@ pub(super) fn paint_axes(
   data_len: usize, tick_label: impl Fn(usize) -> Option<(SharedString, f32)>, tick_margin: usize,
   align: XTickAlign, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App,
 ) {
-  let height = bounds.size.height.as_f32() - AXIS_GAP;
+  let rem_size = window.rem_size();
+  let height = bounds.size.height.as_f32() - AXIS_GAP.to_pixels(rem_size).as_f32();
 
   let x_label = (0..data_len).filter_map(|i| {
     if (i + 1) % tick_margin != 0 {
@@ -48,7 +49,7 @@ pub(super) fn paint_axes(
 
   PlotAxis::new()
     .x(height)
-    .x_label(x_label)
+    .x_label(x_label, rem_size)
     .stroke(cx.theme().border)
     .paint(&bounds, window, cx);
 

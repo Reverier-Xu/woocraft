@@ -2,8 +2,8 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui::{
   AnyElement, App, Axis, Corners, ElementId, Hsla, InteractiveElement as _, IntoElement,
-  ParentElement as _, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
-  div, prelude::FluentBuilder, px,
+  ParentElement as _, Rems, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  Window, div, prelude::FluentBuilder, px, rems,
 };
 
 use crate::{
@@ -169,12 +169,20 @@ impl WidgetGroup {
     }
   }
 
-  fn corner_pixels(corners: Corners<bool>, radius: gpui::Pixels) -> Corners<gpui::Pixels> {
+  fn corner_pixels(corners: Corners<bool>, radius: Rems) -> Corners<Rems> {
     Corners {
-      top_left: if corners.top_left { radius } else { px(0.) },
-      top_right: if corners.top_right { radius } else { px(0.) },
-      bottom_left: if corners.bottom_left { radius } else { px(0.) },
-      bottom_right: if corners.bottom_right { radius } else { px(0.) },
+      top_left: if corners.top_left { radius } else { rems(0.) },
+      top_right: if corners.top_right { radius } else { rems(0.) },
+      bottom_left: if corners.bottom_left {
+        radius
+      } else {
+        rems(0.)
+      },
+      bottom_right: if corners.bottom_right {
+        radius
+      } else {
+        rems(0.)
+      },
     }
   }
 
