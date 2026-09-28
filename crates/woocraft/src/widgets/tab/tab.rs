@@ -2,17 +2,21 @@ use std::rc::Rc;
 
 use gpui::{
   AnyElement, App, ClickEvent, Div, InteractiveElement, IntoElement, MouseButton, ParentElement,
-  RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
-  prelude::FluentBuilder as _,
+  Rems, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div,
+  prelude::FluentBuilder as _, rems,
 };
 
 use crate::{
-  Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size, Tooltip,
-  WidgetGroup, h_flex,
+  ActiveTheme, Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size,
+  Tooltip, WidgetGroup, h_flex, opacity,
 };
 
 type TabClickHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
 type TabCloseHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
+
+/// Fixed width of a horizontal tab. Few tabs leave whitespace in the bar,
+/// many tabs keep this width and ellipsize their labels (the bar scrolls).
+const TAB_WIDTH: Rems = rems(9.);
 
 /// A Tab element for the [`super::TabBar`].
 #[derive(IntoElement)]
@@ -196,11 +200,13 @@ impl Styled for Tab {
 impl_sizable!(Tab);
 
 impl RenderOnce for Tab {
-  fn render(self, _: &mut Window, _cx: &mut App) -> impl IntoElement {
+  fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let button_id = SharedString::from(format!("tab-{}", self.ix));
     let close_button_id = SharedString::from(format!("tab-close-{}", self.ix));
 
     let tooltip_label = self.label.clone();
+    let hover_group = SharedString::from(format!("tab-hover-{}", self.ix));
+    let hover_bg = cx.theme().foreground.opacity(opacity::transparent::HOVER);
 
     let mut button = Button::new(button_id)
       .with_size(self.size)
@@ -213,12 +219,21 @@ impl RenderOnce for Tab {
       button = button.on_click(move |event, window, cx| on_click(event, window, cx));
     }
     if let Some(icon) = self.icon {
-      button = button.child(icon);
+      button = button.child(icon.flex_shrink_0());
     }
     if !self.icon_only
       && let Some(label) = self.label
     {
-      button = button.child(label);
+      // The label wraps in a flexible truncating box so it ellipsizes inside
+      // the fixed tab width when the bar gets crowded.
+      button = button.child(
+        div()
+          .min_w_0()
+          .flex_1()
+          .truncate()
+          .text_center()
+          .child(label),
+      );
     }
     if let Some(prefix) = self.prefix {
       button = button.child(prefix);
@@ -233,6 +248,10 @@ impl RenderOnce for Tab {
     {
       button = button.tooltip(move |window, cx| Tooltip::new(label.clone()).build(window, cx));
     }
+
+    // Fill the tab width (minus the close button) so closable and plain
+    // tabs share the same fixed outer width.
+    button = button.min_w_0().flex_1();
 
     let close_button = if self.closable {
       let mut close_btn = Button::new(close_button_id)
@@ -249,9 +268,16 @@ impl RenderOnce for Tab {
         });
       }
 
-      Some(close_btn)
+      // The close affordance keeps its layout box (a fixed square) so the
+      // tab width is stable, but it only becomes visible while the tab is
+      // hovered.
+      div()
+        .flex_shrink_0()
+        .opacity(0.)
+        .group_hover(hover_group.clone(), |this| this.opacity(1.))
+        .child(close_btn)
     } else {
-      None
+      div()
     };
 
     // The close button is a sibling of the tab button (grouped into one flat
@@ -259,17 +285,24 @@ impl RenderOnce for Tab {
     // stretch the tab's content box and blow past `2em`, inflating the tab
     // bar. As siblings both stay full-size `2em` and the bar closes on its
     // container height.
-    button = button.when(self.closable, |this| this.pr_1());
-
     let group = WidgetGroup::new(("tab-group", self.ix))
       .flat()
+      .w_full()
       .child(button)
-      .when_some(close_button, |this, btn| this.child(btn));
+      .raw_child(close_button);
 
     self
       .base
       .id(self.ix)
       .items_center()
+      // Horizontal tabs are fixed-width; vertical (icon-only) tabs keep
+      // their natural size.
+      .when(!self.icon_only, |this| this.w(TAB_WIDTH).flex_shrink_0())
+      .rounded(self.size.component_radius())
+      .group(hover_group.clone())
+      .when(!self.disabled, |this| {
+        this.group_hover(hover_group, |this| this.bg(hover_bg))
+      })
       .child(group)
       .on_mouse_down(MouseButton::Left, |_, _, cx| {
         cx.stop_propagation();

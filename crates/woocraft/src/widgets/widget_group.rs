@@ -17,6 +17,10 @@ pub enum WidgetGroupChild {
   Button(Box<Button>),
   Input(Box<Input>),
   Element(AnyElement),
+  /// A plain element rendered as-is: no borders, padding or forced height.
+  /// Use it for children that manage their own presentation (e.g. a wrapper
+  /// that reveals its content on hover).
+  Raw(AnyElement),
 }
 
 impl WidgetGroupChild {
@@ -25,6 +29,7 @@ impl WidgetGroupChild {
       Self::Button(button) => button.is_selected(),
       Self::Input(input) => input.is_selected(),
       Self::Element(_) => false,
+      Self::Raw(_) => false,
     }
   }
 }
@@ -99,6 +104,15 @@ impl WidgetGroup {
 
   pub fn child(mut self, child: impl Into<WidgetGroupChild>) -> Self {
     self.children.push(child.into());
+    self
+  }
+
+  /// Add a plain element to the group without any group styling (no border,
+  /// padding or forced height). The element is rendered as-is.
+  pub fn raw_child(mut self, child: impl IntoElement) -> Self {
+    self
+      .children
+      .push(WidgetGroupChild::Raw(child.into_any_element()));
     self
   }
 
@@ -413,6 +427,7 @@ impl RenderOnce for WidgetGroup {
                 self.layout,
               )
               .into_any_element(),
+              WidgetGroupChild::Raw(element) => element,
               WidgetGroupChild::Element(element) => Self::strip_edge_borders(
                 h_flex()
                   .items_center()
