@@ -218,7 +218,11 @@ impl RenderOnce for Tab {
       .with_size(self.size)
       .flat()
       .disabled(self.disabled)
-      .tab_stop(false);
+      .tab_stop(false)
+      // Button's inner content row is `justify_center`; `expanded` switches
+      // it to fill-and-left-align so the tab content reads left-aligned.
+      // Icon-only (vertical) tabs keep their centered square look.
+      .when(!self.icon_only, |this| this.expand(true));
 
     if let Some(on_click) = self.on_click {
       button = button.on_click(move |event, window, cx| on_click(event, window, cx));
