@@ -16,7 +16,7 @@ type TabCloseHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
 
 /// Fixed width of a horizontal tab. Few tabs leave whitespace in the bar,
 /// many tabs keep this width and ellipsize their labels (the bar scrolls).
-const TAB_WIDTH: Rems = rems(12.);
+const TAB_WIDTH: Rems = rems(10.);
 
 /// A Tab element for the [`super::TabBar`].
 #[derive(IntoElement)]
@@ -230,15 +230,10 @@ impl RenderOnce for Tab {
       && let Some(label) = self.label
     {
       // The label wraps in a flexible truncating box so it ellipsizes inside
-      // the fixed tab width when the bar gets crowded.
-      button = button.child(
-        div()
-          .min_w_0()
-          .flex_1()
-          .truncate()
-          .text_center()
-          .child(label),
-      );
+      // the fixed tab width when the bar gets crowded. The box fills the row
+      // (the icon keeps its slot at the start) and left-aligns the text, so
+      // tab content is left-aligned rather than centered.
+      button = button.child(div().min_w_0().flex_1().truncate().child(label));
     }
     if let Some(prefix) = self.prefix {
       button = button.child(prefix);
