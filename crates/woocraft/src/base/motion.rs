@@ -223,14 +223,6 @@ impl From<Duration> for SignedDuration {
   }
 }
 
-/// Scales a duration by an f32 factor without losing nanoseconds to f32
-/// rounding. `Duration::mul_f32` on Rust ≤ 1.97 multiplies in f32 (`0.1` is
-/// not representable), turning `100ms * 1.0` into `100.000001ms` and pushing
-/// a transition one nanosecond past its expected end.
-fn scale_duration(duration: Duration, factor: f32) -> Duration {
-  Duration::from_nanos((duration.as_nanos() as f64 * factor as f64).round() as u64)
-}
-
 /// Identifies one independently transitioning value.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TransitionId(ElementId);
@@ -374,7 +366,7 @@ where
     } else {
       1.0
     };
-    let duration = scale_duration(policy.duration, reversing_factor);
+    let duration = policy.duration.mul_f32(reversing_factor);
     state.update(cx, |state, _| {
       state.from = sampled.clone();
       state.target = target.clone();
@@ -1433,19 +1425,6 @@ mod tests {
     let fixture = SequenceFixture::open(cx, Vec::new());
     assert_sample(fixture.last(), 0.0, 0, MotionStatus::Idle);
     assert_eq!(fixture.pending_frame(cx), 0);
-  }
-
-  #[test]
-  fn scaling_a_duration_by_one_is_exact() {
-    // Regression: `Duration::mul_f32` multiplied in f32 before Rust 1.98,
-    // turning `100ms * 1.0` into `100.000001ms` and leaving a finished
-    // transition `Running` one nanosecond past its end.
-    let duration = Duration::from_millis(100);
-    assert_eq!(super::scale_duration(duration, 1.0), duration);
-    assert_eq!(
-      super::scale_duration(duration, 0.5),
-      Duration::from_millis(50)
-    );
   }
 
   #[test]
