@@ -8,6 +8,8 @@
 //!
 //! # Features
 //! - **Checked State**: Toggle between true/false with click or Space key
+//! - **Indeterminate State**: Visual "partially checked" state for mixed
+//!   selections (e.g. a parent checkbox in a tree)
 //! - **Optional Label**: Display text label to the right of checkbox
 //! - **Keyboard Accessible**: Full keyboard support (Tab to focus, Space/Enter
 //!   to toggle)
@@ -53,6 +55,7 @@ pub struct Checkbox {
   label: Option<AnyElement>,
   children: Vec<AnyElement>,
   checked: bool,
+  indeterminate: bool,
   disabled: bool,
   size: Size,
   tab_stop: bool,
@@ -72,6 +75,7 @@ impl Checkbox {
       label: None,
       children: Vec::new(),
       checked: false,
+      indeterminate: false,
       disabled: false,
       size: Size::default(),
       tab_stop: true,
@@ -92,6 +96,17 @@ impl Checkbox {
   /// Set the initial checked state (default: unchecked/false).
   pub fn checked(mut self, checked: bool) -> Self {
     self.checked = checked;
+    self
+  }
+
+  /// Set the indeterminate ("partially checked") state.
+  ///
+  /// When true, the indicator shows a dash instead of a checkmark and uses
+  /// the checked color scheme. Clicking still toggles `checked`; the caller
+  /// is responsible for deriving `indeterminate` from its data (e.g. some,
+  /// but not all, children of a tree node are checked).
+  pub fn indeterminate(mut self, indeterminate: bool) -> Self {
+    self.indeterminate = indeterminate;
     self
   }
 
@@ -131,6 +146,8 @@ impl_parent_element!(Checkbox);
 impl RenderOnce for Checkbox {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let checked = self.checked;
+    let indeterminate = self.indeterminate;
+    let marked = checked || indeterminate;
     let focus_handle = window
       .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
       .read(cx)
@@ -147,14 +164,14 @@ impl RenderOnce for Checkbox {
     .easing(Easing::EaseOut);
     let check_opacity = transition(
       (self.id.clone(), "check"),
-      if checked { 1.0 } else { 0.0 },
+      if marked { 1.0 } else { 0.0 },
       policy.clone(),
       window,
       cx,
     );
     let indicator_color = transition(
       (self.id.clone(), "fill"),
-      if checked {
+      if marked {
         cx.theme().primary
       } else {
         cx.theme().background
@@ -165,7 +182,7 @@ impl RenderOnce for Checkbox {
     );
     let border_color = transition(
       (self.id.clone(), "border"),
-      if checked {
+      if marked {
         cx.theme().primary
       } else {
         cx.theme().input
@@ -174,6 +191,11 @@ impl RenderOnce for Checkbox {
       window,
       cx,
     );
+    let mark_icon = if indeterminate {
+      IconName::SubtractFilled
+    } else {
+      IconName::CheckmarkFilled
+    };
 
     h_flex()
       .id(self.id)
@@ -189,16 +211,22 @@ impl RenderOnce for Checkbox {
           .flex_none()
           .size(self.size.component_height() * 0.5)
           .rounded(self.size.component_radius())
-          .border_1()
+          .border(self.size.em(0.125))
           .border_color(border_color)
           .bg(indicator_color)
           .child(
-            h_flex().size_full().items_center().justify_center().child(
-              Icon::new(IconName::Checkmark)
-                .with_size(self.size.smaller())
-                .text_color(cx.theme().primary_foreground)
-                .opacity(check_opacity),
-            ),
+            h_flex()
+              .size_full()
+              .items_center()
+              .justify_center()
+              .border(self.size.em(0.125))
+              .border_color(cx.theme().background)
+              .child(
+                Icon::new(mark_icon)
+                  .with_size(self.size.smaller())
+                  .text_color(cx.theme().background)
+                  .opacity(check_opacity),
+              ),
           ),
       )
       .when_some(self.label, |this, label| this.child(label))
