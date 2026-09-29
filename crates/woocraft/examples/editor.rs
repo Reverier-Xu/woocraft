@@ -1,12 +1,17 @@
-use std::sync::Arc;
+use std::{
+  sync::{Arc, Mutex},
+  time::Duration,
+};
 
 use gpui::{
   App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
   Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, CodeEditor, DockArea, DockPlacement, EditorState,
-  IconName, Panel, PanelEvent, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
+  ActiveTheme, Button, ButtonVariants as _, CodeEditor, DockArea, DockPlacement, EditorActionSink,
+  EditorBackend, EditorBackendCapabilities, EditorContextMenuProvider, EditorHighlighterProvider,
+  EditorSnapshot, EditorState, IconName, Panel, PanelEvent, Rope, RopeEditorSnapshot, RopeExt,
+  Sizable, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
 mod common;
@@ -128,6 +133,239 @@ for file in src/*.rs; do
   echo "checking ${file}"
 done
 "#;
+
+// ---------------------------------------------------------------------------
+// Live log panel – a read-only editor streaming log batches through a custom
+// backend, with follow-tail scrolling.
+// ---------------------------------------------------------------------------
+
+/// A read-only editor backend whose content lives in shared state, so a
+/// producer outside the editor can append batches between frames.
+#[derive(Clone)]
+struct LiveLogBackend {
+  state: Arc<Mutex<LiveLogState>>,
+}
+
+struct LiveLogState {
+  text: Rope,
+  revision: u64,
+  seq: u64,
+}
+
+impl LiveLogBackend {
+  fn new() -> Self {
+    Self {
+      state: Arc::new(Mutex::new(LiveLogState {
+        text: Rope::from("woocraft log viewer ready\n"),
+        revision: 1,
+        seq: 0,
+      })),
+    }
+  }
+
+  /// Append a batch of realistic-looking log lines.
+  fn push(&self, lines: usize) {
+    const LEVELS: [&str; 5] = ["INFO", "WARN", "DEBUG", "ERROR", "TRACE"];
+    let mut state = self.state.lock().unwrap();
+    let mut batch = String::new();
+    for _ in 0..lines {
+      state.seq += 1;
+      let level = LEVELS[(state.seq % LEVELS.len() as u64) as usize];
+      let line = format!(
+        "2026-02-08 12:34:{:02}.{:03} [{level:>5}] worker-{:02} — processed request #{:06} successfully in {} ms\n",
+        (state.seq % 60) as u8,
+        (state.seq % 1000) as u16,
+        (state.seq % 8) + 1,
+        state.seq * 37,
+        3 + (state.seq % 40),
+      );
+      batch.push_str(&line);
+      if state.seq.is_multiple_of(17) {
+        batch.push_str(&format!(
+          "2026-02-08 12:34:{:02}.{:03} [{level:>5}] worker-{:02} — detail: payload {{\"id\": {:06}, \"path\": \"/api/v1/items?query=aVeryLongFilterStringToForceHorizontalScrolling\", \"ok\": true}}\n",
+          (state.seq % 60) as u8,
+          (state.seq % 1000) as u16,
+          (state.seq % 8) + 1,
+          state.seq * 37,
+        ));
+      }
+    }
+    let mut text = std::mem::take(&mut state.text);
+    text.replace(text.len()..text.len(), &batch);
+    state.text = text;
+    state.revision += 1;
+  }
+
+  fn line_count(&self) -> usize {
+    self.state.lock().unwrap().text.lines_len()
+  }
+}
+
+impl EditorActionSink for LiveLogBackend {}
+impl EditorContextMenuProvider for LiveLogBackend {}
+impl EditorHighlighterProvider for LiveLogBackend {}
+
+impl EditorBackend for LiveLogBackend {
+  fn revision(&self) -> u64 {
+    self.state.lock().unwrap().revision
+  }
+
+  fn capabilities(&self) -> EditorBackendCapabilities {
+    EditorBackendCapabilities::read_only()
+  }
+
+  fn snapshot(&self) -> Arc<dyn EditorSnapshot> {
+    let state = self.state.lock().unwrap();
+    Arc::new(RopeEditorSnapshot::new(state.revision, state.text.clone()))
+  }
+}
+
+struct LiveLogPanel {
+  backend: LiveLogBackend,
+  editor_state: Entity<EditorState>,
+  streaming: bool,
+  focus_handle: FocusHandle,
+}
+
+impl LiveLogPanel {
+  fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    let backend = LiveLogBackend::new();
+    backend.push(40);
+
+    let editor_state = cx.new(|cx| {
+      EditorState::new(window, cx)
+        .code_editor("text")
+        .read_only(true)
+        .follow_output(true)
+        .line_number(false)
+        .backend(backend.clone())
+    });
+
+    // Stream a small batch every few hundred milliseconds. The editor picks
+    // the changes up on its next render (revision bump), re-wraps only the
+    // appended lines and keeps the viewport pinned to the tail while the
+    // user has not scrolled away.
+    let stream = backend.clone();
+    cx.spawn_in(window, async move |this, cx| {
+      loop {
+        cx.background_executor()
+          .timer(Duration::from_millis(350))
+          .await;
+        if this
+          .update(cx, |panel, cx| {
+            if panel.streaming {
+              stream.push(2 + (panel.backend.line_count() % 5));
+              cx.notify();
+            }
+          })
+          .is_err()
+        {
+          // Panel dropped (dock closed) — stop streaming.
+          break;
+        }
+      }
+    })
+    .detach();
+
+    Self {
+      backend,
+      editor_state,
+      streaming: true,
+      focus_handle: cx.focus_handle(),
+    }
+  }
+}
+
+impl Panel for LiveLogPanel {
+  fn panel_name(&self) -> &'static str {
+    "LiveLogPanel"
+  }
+
+  fn tab_name(&self, _cx: &App) -> Option<SharedString> {
+    Some("Live Log".into())
+  }
+
+  fn title(&self, _cx: &App) -> SharedString {
+    "Live Log".into()
+  }
+
+  fn icon(&self, _cx: &App) -> IconName {
+    IconName::DocumentText
+  }
+
+  fn inner_padding(&self, _cx: &App) -> bool {
+    false
+  }
+}
+
+impl gpui::EventEmitter<PanelEvent> for LiveLogPanel {}
+
+impl Focusable for LiveLogPanel {
+  fn focus_handle(&self, _cx: &App) -> FocusHandle {
+    self.focus_handle.clone()
+  }
+}
+
+impl Render for LiveLogPanel {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let editor = self.editor_state.clone();
+    let streaming = self.streaming;
+    let line_count = self.backend.line_count();
+
+    v_flex()
+      .size_full()
+      .min_h_0()
+      .bg(cx.theme().background)
+      .child(
+        h_flex()
+          .h(px(32.))
+          .px_3()
+          .gap_2()
+          .items_center()
+          .justify_between()
+          .border_b_1()
+          .border_color(cx.theme().border)
+          .text_xs()
+          .text_color(cx.theme().muted_foreground)
+          .child(format!("Streaming log · {line_count} lines · read-only"))
+          .child(
+            h_flex()
+              .gap_2()
+              .child(
+                Button::new("log-stream")
+                  .label(if streaming { "Pause" } else { "Resume" })
+                  .small()
+                  .flat()
+                  .on_click(cx.listener(|this, _, _, cx| {
+                    this.streaming = !this.streaming;
+                    cx.notify();
+                  })),
+              )
+              .child(
+                Button::new("log-tail")
+                  .label("Jump to tail")
+                  .small()
+                  .flat()
+                  .on_click(move |_, window, cx| {
+                    editor.update(cx, |state, cx| {
+                      state.scroll_to_bottom(window, cx);
+                    });
+                  }),
+              ),
+          ),
+      )
+      .child(
+        div().flex_1().min_h_0().child(
+          CodeEditor::new(&self.editor_state)
+            .h_full()
+            .w_full()
+            .appearance(false)
+            .bordered(false)
+            .focus_bordered(false),
+        ),
+      )
+  }
+}
 
 struct EditorPanel {
   title: SharedString,
@@ -254,6 +492,7 @@ impl EditorDockExample {
     let markdown = Self::editor_panel("README.md", "markdown", MARKDOWN_SAMPLE, false, window, cx);
     let yaml = Self::editor_panel("docker-compose.yml", "yaml", YAML_SAMPLE, true, window, cx);
     let bash = Self::editor_panel("bootstrap.sh", "bash", BASH_SAMPLE, true, window, cx);
+    let live_log = cx.new(|cx| LiveLogPanel::new(window, cx));
 
     dock_area.update(cx, |dock, cx| {
       // Add panels to center area
@@ -264,6 +503,7 @@ impl EditorDockExample {
       // Add panels to side docks
       dock.add_to_left_dock(Arc::new(python.clone()), window, cx);
       dock.add_to_left_dock(Arc::new(toml.clone()), window, cx);
+      dock.add_to_bottom_dock(Arc::new(live_log.clone()), window, cx);
       dock.add_to_bottom_dock(Arc::new(json.clone()), window, cx);
       dock.add_to_bottom_dock(Arc::new(bash.clone()), window, cx);
       dock.add_to_right_dock(Arc::new(yaml.clone()), window, cx);
