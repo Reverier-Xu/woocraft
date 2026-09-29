@@ -161,6 +161,8 @@ pub struct ThemeTokens {
   pub success: f32,
   pub info: f32,
   pub accent: f32,
+  #[serde(default = "default_secondary_hue")]
+  pub secondary: f32,
   pub lightness: f32,
   pub chroma: f32,
   pub light_bg_lightness: f32,
@@ -171,6 +173,10 @@ pub struct ThemeTokens {
   pub syntax: SyntaxTokenHues,
 }
 
+fn default_secondary_hue() -> f32 {
+  290.0
+}
+
 impl Default for ThemeTokens {
   fn default() -> Self {
     Self {
@@ -179,7 +185,8 @@ impl Default for ThemeTokens {
       warning: 48.0,
       success: 150.0,
       info: 248.0,
-      accent: 130.0,
+      accent: 200.0,
+      secondary: 290.0,
       lightness: 0.64,
       chroma: 0.17,
       light_bg_lightness: 0.96,
@@ -312,14 +319,17 @@ impl ThemeColors {
     let foreground = pick_readable_text(background, light_theme_text, dark_theme_text);
     let card = to_hsla_from_oklch(card_lightness, bg_chroma, tokens.primary, 1.0);
     let card_foreground = foreground;
-    let accent = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.02, tokens.accent, 1.0);
+    let accent = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.03, tokens.accent, 1.0);
     let accent_foreground = foreground;
     let popover = background;
     let popover_foreground = foreground;
 
     let primary = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.primary, 1.0);
     let primary_foreground = pick_readable_text(primary, light_theme_text, dark_theme_text);
-    let muted = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.01, tokens.accent, 1.0);
+    // Muted is a neutral surface: background-derived lightness with the
+    // primary hue at very low chroma, like a solid version of the
+    // border/input overlay.
+    let muted = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.01, tokens.primary, 1.0);
     let muted_foreground = with_alpha(foreground, 0.75);
 
     let border = with_alpha(foreground, 0.1);
@@ -345,8 +355,21 @@ impl ThemeColors {
     let editor_line_number = with_alpha(foreground, if is_dark { 0.45 } else { 0.4 });
     let editor_active_line_number = foreground;
     let editor_invisible = with_alpha(foreground, 0.4);
-    let secondary = muted;
-    let secondary_hover = with_alpha(muted, 0.9);
+    // Secondary is its own purple-leaning surface so it no longer collapses
+    // into muted.
+    let secondary = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.03, tokens.secondary, 1.0);
+    let secondary_hover_lightness = if is_dark {
+      muted_lightness + 0.04
+    } else {
+      muted_lightness - 0.04
+    }
+    .clamp(0.0, 1.0);
+    let secondary_hover = to_hsla_from_oklch(
+      secondary_hover_lightness,
+      bg_chroma + 0.035,
+      tokens.secondary,
+      1.0,
+    );
     let secondary_foreground = foreground;
     let tab_bar = card;
     let tab_bar_segmented = muted;
