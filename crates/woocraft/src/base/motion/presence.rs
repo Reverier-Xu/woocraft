@@ -90,7 +90,8 @@ impl Presence {
       } else {
         1.0
       };
-      let duration = super::scale_duration(self.transition.duration, reversing_factor);
+      // See the note on `Duration::mul_f32` in `super::transition_with_status`.
+      let duration = self.transition.duration.mul_f32(reversing_factor);
       state.update(cx, |state, _| {
         state.from = sampled;
         state.target = target;

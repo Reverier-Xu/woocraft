@@ -29,7 +29,7 @@
 - **禁止引入 tokio / smol 等外部 async 运行时**：
   - 视图层只用 gpui 原生原语（`cx.spawn` / `Task` / `BackgroundExecutor` 等）；
   - 核心层只用 `async-channel`（runtime-agnostic）+ 自管理线程。
-- edition 2024、rust-version 1.95；代码注释与文档使用英文。
+- edition 2024、rust-version 1.98；代码注释与文档使用英文。
 
 ## Feature 机制（crates/woocraft）
 
