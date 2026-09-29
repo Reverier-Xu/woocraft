@@ -225,8 +225,10 @@ impl RenderOnce for OtpInput {
               }
               None => {
                 if focused_cell {
+                  // The caret matches the tier font size (1em), mirroring the
+                  // text input caret, instead of a fixed rem height.
                   div()
-                    .h_4()
+                    .h(self.size.text_size())
                     .child(render_caret(caret_color, animate_caret, "otp-caret-blink"))
                     .into_any_element()
                 } else {

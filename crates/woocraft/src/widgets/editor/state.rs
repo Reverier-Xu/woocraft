@@ -52,6 +52,9 @@ type ValidateFn<T> = dyn Fn(&str, &mut Context<T>) -> bool + 'static;
 /// whole prefix/suffix of the document.
 const WORD_BOUND_SCAN_WINDOW: usize = 4 * 1024;
 
+/// Drag-autoscroll speed cap, in display rows per second.
+const DRAG_AUTOSCROLL_MAX_ROWS_PER_SEC: f32 = 12.0;
+
 /// Formats `value` as decimal digits without going through `std::fmt`.
 ///
 /// Line numbers are formatted on the render path for every visible row, so
@@ -401,6 +404,18 @@ pub struct InputState {
   pub(super) last_bounds: Option<Bounds<Pixels>>,
   pub(super) selecting: bool,
   pub(super) scrollbar_dragging: bool,
+  /// Last pointer position of the in-progress drag selection, in window
+  /// coordinates. Autoscroll re-maps it after every scroll step, because the
+  /// content under the stationary pointer changes.
+  pub(super) drag_position: Point<Pixels>,
+  /// Signed drag-autoscroll speed in px/sec while the pointer rests beyond
+  /// the viewport edge margin; 0 while inside.
+  pub(super) drag_autoscroll_px_per_sec: f32,
+  /// Fractional px scrolled but not yet applied (scrolling is row-granular).
+  pub(super) drag_autoscroll_remainder: f32,
+  /// Whether the autoscroll tick loop is running. The loop clears it as it
+  /// exits, so an idle editor arms no timer at all.
+  pub(super) is_autoscrolling: bool,
   pub(super) top_row: usize,
   pub(super) size: Size,
   pub(super) disabled: bool,
@@ -514,6 +529,10 @@ impl InputState {
       last_layout: None,
       last_bounds: None,
       scrollbar_dragging: false,
+      drag_position: Point::default(),
+      drag_autoscroll_px_per_sec: 0.0,
+      drag_autoscroll_remainder: 0.0,
+      is_autoscrolling: false,
       top_row: 0,
       preferred_column: None,
       line_number_width_cache: None,
@@ -675,6 +694,120 @@ impl InputState {
       self.top_row.saturating_add(delta_rows as usize)
     };
     self.set_top_row(target_row, line_height)
+  }
+
+  /// Update the drag-autoscroll intent from the current pointer position and
+  /// make sure the tick loop is running while the pointer rests beyond the
+  /// viewport edges.
+  ///
+  /// Same model as Zed's `mouse_dragged`: within one line height of the top
+  /// or bottom edge (or beyond it) the document starts scrolling, with a
+  /// speed proportional to the overshoot distance. Unlike Zed — which only
+  /// scrolls on mouse-move events — woocraft drives the scroll from a tick
+  /// loop, so holding the pointer still outside the viewport keeps scrolling
+  /// and keeps extending the selection.
+  fn update_drag_autoscroll(
+    &mut self, position: Point<Pixels>, window: &mut Window, cx: &mut Context<Self>,
+  ) {
+    let line_height = self
+      .last_layout
+      .as_ref()
+      .map(|layout| layout.line_height)
+      .unwrap_or(window.line_height());
+
+    let Some(bounds) = self.last_bounds else {
+      self.drag_autoscroll_px_per_sec = 0.0;
+      return;
+    };
+
+    // Zed uses `line_height.min(bounds.height / 3)` as the edge margin.
+    let margin = line_height.min(bounds.size.height / 3.0);
+    let top = bounds.origin.y + margin;
+    let bottom = bounds.origin.y + bounds.size.height - margin;
+
+    let (direction, overshoot) = if position.y < top {
+      (-1.0, top - position.y)
+    } else if position.y > bottom {
+      (1.0, position.y - bottom)
+    } else {
+      (0.0, px(0.))
+    };
+
+    // Zed scales the per-move-event delta as `overshoot^1.2 / 100`; at ~60
+    // events per second that is `overshoot^1.2 * 0.6` px/sec. Cap the rate so
+    // far-out pointers stay controllable.
+    let max_px_per_sec = line_height.as_f32() * DRAG_AUTOSCROLL_MAX_ROWS_PER_SEC;
+    self.drag_autoscroll_px_per_sec =
+      direction * (overshoot.as_f32().powf(1.2) * 0.6).min(max_px_per_sec);
+
+    if self.drag_autoscroll_px_per_sec != 0.0 {
+      self.start_drag_autoscroll(window, cx);
+    }
+  }
+
+  /// Drive drag autoscroll from a single shared tick loop, like the
+  /// notification center's autohide loop: the loop ends itself once the
+  /// gesture is over or the pointer is back inside the viewport.
+  fn start_drag_autoscroll(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    if self.is_autoscrolling {
+      return;
+    }
+    self.is_autoscrolling = true;
+    cx.spawn_in(window, async move |state, cx| {
+      loop {
+        cx.background_executor()
+          .timer(crate::duration::ANIMATION_FRAME)
+          .await;
+
+        let Ok(running) = state.update(cx, |state, cx| state.drag_autoscroll_tick(cx)) else {
+          break;
+        };
+        if !running {
+          break;
+        }
+      }
+    })
+    .detach();
+  }
+
+  /// One autoscroll tick: apply the accumulated fractional scroll and, since
+  /// the content under the stationary pointer changed, re-extend the
+  /// selection to the (clamped) drag position. Returns false when the loop
+  /// should stop — the gesture ended, the pointer came back inside, or the
+  /// scroll hit its limit.
+  fn drag_autoscroll_tick(&mut self, cx: &mut Context<Self>) -> bool {
+    let Some(line_height) = self.last_layout.as_ref().map(|layout| layout.line_height) else {
+      self.is_autoscrolling = false;
+      return false;
+    };
+
+    if !self.selecting || self.drag_autoscroll_px_per_sec == 0.0 {
+      self.is_autoscrolling = false;
+      self.drag_autoscroll_remainder = 0.0;
+      return false;
+    }
+
+    self.drag_autoscroll_remainder +=
+      self.drag_autoscroll_px_per_sec * crate::duration::ANIMATION_FRAME.as_secs_f32();
+    let rows = (self.drag_autoscroll_remainder / line_height.as_f32()).trunc() as i64;
+    if rows == 0 {
+      return true;
+    }
+    self.drag_autoscroll_remainder -= rows as f32 * line_height.as_f32();
+
+    if !self.scroll_rows(rows, line_height) {
+      // Scroll limit reached: stop the loop instead of idling a timer. The
+      // next drag move beyond the edge restarts it.
+      self.is_autoscrolling = false;
+      return false;
+    }
+
+    let offset = self.index_for_mouse_position(self.drag_position);
+    if offset != self.cursor() {
+      self.select_to_drag(offset, cx);
+    }
+    cx.notify();
+    true
   }
 
   /// Display line number text for row.
@@ -1773,26 +1906,41 @@ impl InputState {
   pub(super) fn on_mouse_up(
     &mut self, event: &MouseUpEvent, _window: &mut Window, _cx: &mut Context<Self>,
   ) {
-    let offset = self.index_for_mouse_position(event.position);
-    self.emit_backend_action(EditorUserAction::MouseUp {
-      offset: offset as u64,
-      button: EditorPointerButton::from(event.button),
-    });
+    // Both the element-level handler and the window-level gesture listener
+    // call this; only a release that ends an active gesture (selection or
+    // scrollbar drag) belongs to this editor. The guard also makes the two
+    // call paths idempotent when a release on the editor reaches both.
+    if !self.selecting && !self.scrollbar_dragging {
+      return;
+    }
 
-    // Emit the final selection state to the backend after a drag selection.
-    if !self.selected_range.is_empty() {
-      self.emit_backend_action(EditorUserAction::Select {
-        range: (self.selected_range.start as u64)..(self.selected_range.end as u64),
-        reversed: self.selection_reversed,
+    // Backend pointer actions belong to the text gesture; a scrollbar drag
+    // never emitted a matching `MouseDown`.
+    if self.selecting {
+      let offset = self.index_for_mouse_position(event.position);
+      self.emit_backend_action(EditorUserAction::MouseUp {
+        offset: offset as u64,
+        button: EditorPointerButton::from(event.button),
       });
+
+      // Emit the final selection state to the backend after a drag selection.
+      if !self.selected_range.is_empty() {
+        self.emit_backend_action(EditorUserAction::Select {
+          range: (self.selected_range.start as u64)..(self.selected_range.end as u64),
+          reversed: self.selection_reversed,
+        });
+      }
+
+      if self.selected_range.is_empty() {
+        self.selection_reversed = false;
+      }
     }
 
-    if self.selected_range.is_empty() {
-      self.selection_reversed = false;
-    }
     self.scrollbar_dragging = false;
     self.selecting = false;
     self.selected_word_range = None;
+    self.drag_autoscroll_px_per_sec = 0.0;
+    self.drag_autoscroll_remainder = 0.0;
   }
 
   pub(super) fn on_mouse_move(
@@ -2043,14 +2191,34 @@ impl InputState {
     // - included the scroll offset.
     let inner_position = last_layout.content_position(bounds, position);
 
+    let line_count = last_layout.lines.len().min(last_layout.visible_lines.len());
     let mut y_offset = last_layout.visible_top;
-    for (line_layout, visible_line) in last_layout
+    for (i, (line_layout, visible_line)) in last_layout
       .lines
       .iter()
       .zip(last_layout.visible_lines.iter())
+      .enumerate()
+      .take(line_count)
     {
+      let line_height_total = line_layout.size(line_height).height;
       let line_origin = point(px(0.), y_offset);
-      let pos = inner_position - line_origin;
+      let mut pos = inner_position - line_origin;
+
+      // Drag selection is a global-pointer gesture: the pointer routinely
+      // leaves the editor — or the whole window — mid-drag. Clamp positions
+      // above the first / below the last visible line into the nearest line
+      // instead of letting them fall through to the end of the document.
+      if i == 0 && pos.y < px(0.) {
+        pos.y = px(0.);
+      }
+      if i == line_count - 1 && pos.y >= line_height_total {
+        pos.y = if line_height_total > px(1.) {
+          line_height_total - px(1.)
+        } else {
+          px(0.)
+        };
+      }
+
       if let Some(v) = line_layout.closest_index_for_position(pos, last_layout) {
         return if self.masked {
           self
@@ -2059,14 +2227,19 @@ impl InputState {
         } else {
           visible_line.line_start_offset + v
         };
-      } else if pos.y < px(0.) {
-        break;
       }
 
-      y_offset += line_layout.size(line_height).height;
+      y_offset += line_height_total;
     }
 
-    self.text.len()
+    // Unreachable once clamped — and it must stay that way: falling back to
+    // `text.len()` here is what turned an out-of-window drag into "select to
+    // end of document".
+    last_layout
+      .visible_lines
+      .last()
+      .map(|line| line.byte_range.end)
+      .unwrap_or(self.text.len())
   }
 
   /// Select the text from the current cursor position to the given offset.
@@ -2280,6 +2453,12 @@ impl InputState {
     if !self.selecting {
       return;
     }
+
+    self.drag_position = event.position;
+    // Beyond the viewport edges the drag keeps going: scroll at a rate
+    // proportional to the overshoot and keep extending the selection from
+    // the tick loop, even when the pointer stops moving.
+    self.update_drag_autoscroll(event.position, window, cx);
 
     let offset = self.index_for_mouse_position(event.position);
     if offset == self.cursor() {

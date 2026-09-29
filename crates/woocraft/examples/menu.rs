@@ -7,6 +7,8 @@ use woocraft::{
   StyledExt as _, ThemeMode, h_flex, v_flex, window_border,
 };
 
+mod common;
+
 #[derive(Default)]
 struct MenuWindow {
   selected: String,
@@ -23,7 +25,7 @@ impl MenuWindow {
 }
 
 impl Render for MenuWindow {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let view = cx.entity().clone();
 
     let menu_trigger = Button::new("menu-trigger")
@@ -93,41 +95,43 @@ impl Render for MenuWindow {
           }))
       });
 
-    window_border().child(
-      v_flex()
-        .size_full()
-        .p_6()
-        .gap_4()
-        .bg(cx.theme().background)
-        .text_color(cx.theme().foreground)
-        .child(
-          div()
-            .text_xl()
-            .font_semibold()
-            .child("Woocraft Menu Example"),
-        )
-        .child(
-          h_flex().gap_3().child(menu_trigger).child(
-            Button::new("theme-toggle")
-              .label("Toggle Theme")
-              .on_click(|_, _, cx| {
-                let mode = if cx.theme().mode.is_dark() {
-                  ThemeMode::Light
-                } else {
-                  ThemeMode::Dark
-                };
-                woocraft::Theme::set_mode(mode, cx);
-              }),
-          ),
-        )
-        .child(
-          div()
-            .text_sm()
-            .text_color(cx.theme().muted_foreground)
-            .child(format!("Last selected: {}", self.selected)),
-        )
-        .child(context_area),
-    )
+    window_border()
+      .child(
+        v_flex()
+          .size_full()
+          .p_6()
+          .gap_4()
+          .bg(cx.theme().background)
+          .text_color(cx.theme().foreground)
+          .child(
+            div()
+              .text_xl()
+              .font_semibold()
+              .child("Woocraft Menu Example"),
+          )
+          .child(
+            h_flex().gap_3().child(menu_trigger).child(
+              Button::new("theme-toggle")
+                .label("Toggle Theme")
+                .on_click(|_, _, cx| {
+                  let mode = if cx.theme().mode.is_dark() {
+                    ThemeMode::Light
+                  } else {
+                    ThemeMode::Dark
+                  };
+                  woocraft::Theme::set_mode(mode, cx);
+                }),
+            ),
+          )
+          .child(
+            div()
+              .text_sm()
+              .text_color(cx.theme().muted_foreground)
+              .child(format!("Last selected: {}", self.selected)),
+          )
+          .child(context_area),
+      )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

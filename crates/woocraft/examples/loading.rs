@@ -10,6 +10,8 @@ use woocraft::{
   h_flex, init, tree, v_flex, window_border,
 };
 
+mod common;
+
 fn demo_tree_with_loading(
   loading_item_id: Option<&str>, extra_children: &[(String, String)],
 ) -> Vec<TreeItem> {
@@ -132,61 +134,63 @@ impl LoadingWindow {
 }
 
 impl Render for LoadingWindow {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
-    window_border().child(
-      v_flex()
-        .size_full()
-        .min_h_0()
-        .child(TitleBar::new().title("Loading & Hot-Update Example"))
-        .child(
-          v_flex()
-            .size_full()
-            .min_h_0()
-            .p_6()
-            .gap_4()
-            .child(
-              div()
-                .text_xl()
-                .font_semibold()
-                .child("Loading & Hot-Update Demo"),
-            )
-            .child(
-              div()
-                .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .child(
-                  "Demonstrates loading spinners and hot-update support. \
+    window_border()
+      .child(
+        v_flex()
+          .size_full()
+          .min_h_0()
+          .child(TitleBar::new().title("Loading & Hot-Update Example"))
+          .child(
+            v_flex()
+              .size_full()
+              .min_h_0()
+              .p_6()
+              .gap_4()
+              .child(
+                div()
+                  .text_xl()
+                  .font_semibold()
+                  .child("Loading & Hot-Update Demo"),
+              )
+              .child(
+                div()
+                  .text_sm()
+                  .text_color(cx.theme().muted_foreground)
+                  .child(
+                    "Demonstrates loading spinners and hot-update support. \
                    Right-click tree items to see context menus that survive data updates. \
                    Selection, expand/collapse state, and scroll position are all preserved.",
-                ),
-            )
-            .child(
-              h_flex()
-                .gap_3()
-                .child(
-                  Button::new("theme-light")
-                    .label("Light")
-                    .small()
-                    .selected(!is_dark)
-                    .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
-                )
-                .child(
-                  Button::new("theme-dark")
-                    .label("Dark")
-                    .small()
-                    .selected(is_dark)
-                    .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
-                ),
-            )
-            .child(
-              h_flex()
-                .gap_6()
-                .child(self.render_tree_section(cx))
-                .child(self.render_list_section(cx)),
-            ),
-        ),
-    )
+                  ),
+              )
+              .child(
+                h_flex()
+                  .gap_3()
+                  .child(
+                    Button::new("theme-light")
+                      .label("Light")
+                      .small()
+                      .selected(!is_dark)
+                      .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
+                  )
+                  .child(
+                    Button::new("theme-dark")
+                      .label("Dark")
+                      .small()
+                      .selected(is_dark)
+                      .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
+                  ),
+              )
+              .child(
+                h_flex()
+                  .gap_6()
+                  .child(self.render_tree_section(cx))
+                  .child(self.render_list_section(cx)),
+              ),
+          ),
+      )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

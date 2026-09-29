@@ -10,6 +10,8 @@ use woocraft::{
   Panel, PanelEvent, PopupMenuItem, Size, StyleSized, TitleBar, TreeEvent, TreeItem, TreeState,
   h_flex, init, tree, v_flex, window_border,
 };
+
+mod common;
 #[cfg(debug_assertions)]
 use woocraft::{ScrollableElement, StyledExt};
 
@@ -776,26 +778,28 @@ impl CodeEditorApp {
 }
 
 impl Render for CodeEditorApp {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    window_border().child(
-      v_flex()
-        .size_full()
-        .min_h_0()
-        .on_action(cx.listener(Self::on_save))
-        .on_action(cx.listener(Self::on_toggle_left_dock))
-        .on_action(cx.listener(Self::on_toggle_inspector))
-        .on_action(cx.listener(Self::on_new_file))
-        .on_action(cx.listener(Self::on_quit))
-        .on_action(cx.listener(Self::on_about))
-        .child(
-          TitleBar::new()
-            .title("Woocraft Code Editor")
-            .app_menu_bar(self.app_menu_bar.clone())
-            .theme_button(true)
-            .language_button(true),
-        )
-        .child(self.dock_area.clone()),
-    )
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    window_border()
+      .child(
+        v_flex()
+          .size_full()
+          .min_h_0()
+          .on_action(cx.listener(Self::on_save))
+          .on_action(cx.listener(Self::on_toggle_left_dock))
+          .on_action(cx.listener(Self::on_toggle_inspector))
+          .on_action(cx.listener(Self::on_new_file))
+          .on_action(cx.listener(Self::on_quit))
+          .on_action(cx.listener(Self::on_about))
+          .child(
+            TitleBar::new()
+              .title("Woocraft Code Editor")
+              .app_menu_bar(self.app_menu_bar.clone())
+              .theme_button(true)
+              .language_button(true),
+          )
+          .child(self.dock_area.clone()),
+      )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

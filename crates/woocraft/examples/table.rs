@@ -10,6 +10,8 @@ use woocraft::{
   TableEvent, TableState, Tag, Theme, ThemeMode, h_flex, init, v_flex, window_border,
 };
 
+mod common;
+
 #[derive(Clone)]
 struct Employee {
   id: usize,
@@ -418,7 +420,7 @@ impl TableWindow {
 }
 
 impl Render for TableWindow {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
     let selected_info = {
       let table = self.table_state.read(cx);
@@ -433,164 +435,166 @@ impl Render for TableWindow {
       }
     };
 
-    window_border().child(
-      v_flex()
-        .size_full()
-        .p_6()
-        .gap_4()
-        .bg(cx.theme().background)
-        .text_color(cx.theme().foreground)
-        .child(
-          div()
-            .text_xl()
-            .font_semibold()
-            .child("Woocraft Table Example"),
-        )
-        .child(
-          h_flex()
-            .gap_3()
-            .child(
-              Button::new("table-theme-light")
-                .label("Light")
-                .selected(!is_dark)
-                .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
-            )
-            .child(
-              Button::new("table-theme-dark")
-                .label("Dark")
-                .selected(is_dark)
-                .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
-            )
-            .child(
-              Button::new("table-toggle-auto-width")
-                .label(if self.auto_width_mode {
-                  "Auto Width: ON"
-                } else {
-                  "Auto Width: OFF"
-                })
-                .when(self.auto_width_mode, |this| this.primary())
-                .on_click(cx.listener(|this, _, _, cx| {
-                  this.auto_width_mode = !this.auto_width_mode;
-                  cx.notify();
-                })),
-            )
-            .child(
-              Button::new("table-toggle-cell-mode")
-                .label(if self.cell_mode {
-                  "Cell Selection: ON"
-                } else {
-                  "Cell Selection: OFF"
-                })
-                .when(self.cell_mode, |this| this.primary())
-                .on_click(cx.listener(|this, _, _, cx| {
-                  this.cell_mode = !this.cell_mode;
-                  let cell_mode = this.cell_mode;
-                  this.table_state.update(cx, |table, cx| {
-                    table.cell_selectable = cell_mode;
-                    table.row_selectable = true;
-                    table.col_selectable = true;
-                    table.clear_selection(cx);
+    window_border()
+      .child(
+        v_flex()
+          .size_full()
+          .p_6()
+          .gap_4()
+          .bg(cx.theme().background)
+          .text_color(cx.theme().foreground)
+          .child(
+            div()
+              .text_xl()
+              .font_semibold()
+              .child("Woocraft Table Example"),
+          )
+          .child(
+            h_flex()
+              .gap_3()
+              .child(
+                Button::new("table-theme-light")
+                  .label("Light")
+                  .selected(!is_dark)
+                  .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
+              )
+              .child(
+                Button::new("table-theme-dark")
+                  .label("Dark")
+                  .selected(is_dark)
+                  .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
+              )
+              .child(
+                Button::new("table-toggle-auto-width")
+                  .label(if self.auto_width_mode {
+                    "Auto Width: ON"
+                  } else {
+                    "Auto Width: OFF"
+                  })
+                  .when(self.auto_width_mode, |this| this.primary())
+                  .on_click(cx.listener(|this, _, _, cx| {
+                    this.auto_width_mode = !this.auto_width_mode;
                     cx.notify();
-                  });
-                  cx.notify();
-                })),
-            )
-            .child(
-              Button::new("table-dump")
-                .label("Dump Preview")
-                .on_click(cx.listener(|this, _, _, cx| {
-                  let (headers, rows) = this.table_state.read(cx).dump(cx);
-                  let mut lines = vec![headers.join(", ")];
-                  lines.extend(
-                    rows
-                      .into_iter()
-                      .take(6)
-                      .map(|row| row.into_iter().collect::<Vec<_>>().join(", ")),
-                  );
-                  this.dump_preview = lines.join("\n");
-                  cx.notify();
-                })),
-            ),
-        )
-        .child(
-          h_flex()
-            .gap_3()
-            .child(Input::new(&self.query_state).cleanable(true).w(px(360.)))
-            .child(
-              Button::new("table-apply-filter")
-                .label("Apply Filter")
-                .on_click(cx.listener(|this, _, _, cx| {
-                  let query = this.query_state.read(cx).value().trim().to_string();
-                  this.table_state.update(cx, |table, cx| {
-                    table.delegate_mut().set_query(query);
-                    table.clear_selection(cx);
+                  })),
+              )
+              .child(
+                Button::new("table-toggle-cell-mode")
+                  .label(if self.cell_mode {
+                    "Cell Selection: ON"
+                  } else {
+                    "Cell Selection: OFF"
+                  })
+                  .when(self.cell_mode, |this| this.primary())
+                  .on_click(cx.listener(|this, _, _, cx| {
+                    this.cell_mode = !this.cell_mode;
+                    let cell_mode = this.cell_mode;
+                    this.table_state.update(cx, |table, cx| {
+                      table.cell_selectable = cell_mode;
+                      table.row_selectable = true;
+                      table.col_selectable = true;
+                      table.clear_selection(cx);
+                      cx.notify();
+                    });
                     cx.notify();
-                  });
-                })),
-            )
-            .child(
-              Button::new("table-clear-filter")
-                .default()
-                .label("Clear")
-                .on_click(cx.listener(|this, _, window, cx| {
-                  this
-                    .query_state
-                    .update(cx, |input, cx| input.set_value("", window, cx));
-                  this.table_state.update(cx, |table, cx| {
-                    table.delegate_mut().set_query(String::new());
-                    table.clear_selection(cx);
+                  })),
+              )
+              .child(
+                Button::new("table-dump")
+                  .label("Dump Preview")
+                  .on_click(cx.listener(|this, _, _, cx| {
+                    let (headers, rows) = this.table_state.read(cx).dump(cx);
+                    let mut lines = vec![headers.join(", ")];
+                    lines.extend(
+                      rows
+                        .into_iter()
+                        .take(6)
+                        .map(|row| row.into_iter().collect::<Vec<_>>().join(", ")),
+                    );
+                    this.dump_preview = lines.join("\n");
                     cx.notify();
-                  });
-                })),
+                  })),
+              ),
+          )
+          .child(
+            h_flex()
+              .gap_3()
+              .child(Input::new(&self.query_state).cleanable(true).w(px(360.)))
+              .child(
+                Button::new("table-apply-filter")
+                  .label("Apply Filter")
+                  .on_click(cx.listener(|this, _, _, cx| {
+                    let query = this.query_state.read(cx).value().trim().to_string();
+                    this.table_state.update(cx, |table, cx| {
+                      table.delegate_mut().set_query(query);
+                      table.clear_selection(cx);
+                      cx.notify();
+                    });
+                  })),
+              )
+              .child(
+                Button::new("table-clear-filter")
+                  .default()
+                  .label("Clear")
+                  .on_click(cx.listener(|this, _, window, cx| {
+                    this
+                      .query_state
+                      .update(cx, |input, cx| input.set_value("", window, cx));
+                    this.table_state.update(cx, |table, cx| {
+                      table.delegate_mut().set_query(String::new());
+                      table.clear_selection(cx);
+                      cx.notify();
+                    });
+                  })),
+              ),
+          )
+          .child(
+            div()
+              .text_sm()
+              .text_color(cx.theme().muted_foreground)
+              .child(format!(
+                "Selected: {} | Last Event: {}",
+                selected_info, self.last_event
+              )),
+          )
+          .child(
+            div()
+              .text_xs()
+              .text_color(cx.theme().muted_foreground)
+              .child(
+                "Auto width samples header + first 3 rows; Actions column is force-set to 140px.",
+              ),
+          )
+          .child(
+            div().flex_1().min_h(px(420.0)).child(
+              Table::new(&self.table_state)
+                .auto_detect_col_width(self.auto_width_mode)
+                .stripe(true)
+                .bordered(true)
+                .scrollbar_visible(true, true),
             ),
-        )
-        .child(
-          div()
-            .text_sm()
-            .text_color(cx.theme().muted_foreground)
-            .child(format!(
-              "Selected: {} | Last Event: {}",
-              selected_info, self.last_event
-            )),
-        )
-        .child(
-          div()
-            .text_xs()
-            .text_color(cx.theme().muted_foreground)
-            .child(
-              "Auto width samples header + first 3 rows; Actions column is force-set to 140px.",
-            ),
-        )
-        .child(
-          div().flex_1().min_h(px(420.0)).child(
-            Table::new(&self.table_state)
-              .auto_detect_col_width(self.auto_width_mode)
-              .stripe(true)
-              .bordered(true)
-              .scrollbar_visible(true, true),
-          ),
-        )
-        .when(!self.dump_preview.is_empty(), |this| {
-          this
-            .child(
-              h_flex()
-                .text_xs()
-                .text_color(cx.theme().muted_foreground)
-                .font_medium()
-                .child("Dump Preview (first 6 rows):"),
-            )
-            .child(
-              h_flex()
-                .text_xs()
-                .bg(cx.theme().card)
-                .rounded(cx.theme().radius_container)
-                .border_1()
-                .border_color(cx.theme().border)
-                .p_3()
-                .child(self.dump_preview.clone()),
-            )
-        }),
-    )
+          )
+          .when(!self.dump_preview.is_empty(), |this| {
+            this
+              .child(
+                h_flex()
+                  .text_xs()
+                  .text_color(cx.theme().muted_foreground)
+                  .font_medium()
+                  .child("Dump Preview (first 6 rows):"),
+              )
+              .child(
+                h_flex()
+                  .text_xs()
+                  .bg(cx.theme().card)
+                  .rounded(cx.theme().radius_container)
+                  .border_1()
+                  .border_color(cx.theme().border)
+                  .p_3()
+                  .child(self.dump_preview.clone()),
+              )
+          }),
+      )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

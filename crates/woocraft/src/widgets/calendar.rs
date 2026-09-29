@@ -44,7 +44,7 @@ use gpui::{
   App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
   InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
   StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
-  relative, rems,
+  relative,
 };
 
 use crate::{
@@ -550,7 +550,9 @@ impl Calendar {
         this.child(
           h_flex()
             .justify_center()
-            .gap_3()
+            // Same tier-relative gap (0.75em) as the multi-month header so
+            // both views space the month/year cluster identically.
+            .gap(self.size.em(0.75))
             .child(
               Button::new("month")
                 .flat()
@@ -595,11 +597,9 @@ impl Calendar {
             .children((0..self.number_of_months).map(|n| {
               h_flex()
                 .justify_center()
-                .map(|this| match self.size {
-                  Size::Small => this.gap_2(),
-                  Size::Large => this.gap_4(),
-                  _ => this.gap_3(),
-                })
+                // Gap between the month and year names tracks the size tier
+                // (0.75em) instead of hard-coded rem steps.
+                .gap(self.size.em(0.75))
                 .child(state.month_name(n))
                 .child(state.year_name(n))
             })),
@@ -630,10 +630,14 @@ impl Calendar {
   ) -> Stateful<Div> {
     h_flex()
       .id(id.into())
+      // Day/month/year cell edge is 2.25em of the size tier (2.25rem at
+      // Medium) so the cell grid scales with the calendar's size instead of
+      // hard-coded rem steps.
+      .size(self.size.em(2.25))
       .map(|this| match self.size {
-        Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
-        Size::Large => this.size_10().rounded(cx.theme().radius * 2.0),
-        _ => this.size_9().rounded(cx.theme().radius),
+        Size::Small => this.rounded(cx.theme().radius / 2.0),
+        Size::Large => this.rounded(cx.theme().radius * 2.0),
+        _ => this.rounded(cx.theme().radius),
       })
       .justify_center()
       .when(muted, |this| {
@@ -681,10 +685,12 @@ impl Calendar {
 
     h_flex()
       .map(|this| match self.size {
-        Size::Small => this.gap_3().text_sm(),
-        Size::Large => this.gap_5().text_base(),
-        _ => this.gap_4().text_sm(),
+        Size::Large => this.text_base(),
+        _ => this.text_sm(),
       })
+      // Gap between the month grids equals the tier text size (0.75/1/1.25rem),
+      // the same values the previous hard-coded gap_3/gap_4/gap_5 steps used.
+      .gap(self.size.text_size())
       .justify_between()
       .children(state.days().iter().enumerate().map(|(offset_month, days)| {
         // The month number only depends on the offset; resolve it once per
@@ -711,11 +717,10 @@ impl Calendar {
 
   fn render_week(&self, week: impl Into<SharedString>, _: &mut Window, cx: &App) -> Div {
     h_flex()
-      .map(|this| match self.size {
-        Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
-        Size::Large => this.size_10().rounded(cx.theme().radius),
-        _ => this.size_9().rounded(cx.theme().radius),
-      })
+      // Same tier-relative cell edge (2.25em) as the day cells so the
+      // weekday header row aligns with the day grid.
+      .size(self.size.em(2.25))
+      .rounded(cx.theme().radius)
       .justify_center()
       .text_color(cx.theme().muted_foreground)
       .text_sm()
@@ -728,14 +733,13 @@ impl Calendar {
     let current_month = state.current_month;
 
     h_flex()
-      .mt_3()
       .gap_0p5()
-      .gap_y_3()
-      .map(|this| match self.size {
-        Size::Small => this.mt_2().gap_y_2().w(rems(13.)),
-        Size::Large => this.mt_4().gap_y_4().w(rems(18.)),
-        _ => this.mt_3().gap_y_3().w(rems(17.)),
-      })
+      // Row gap and top margin track the size tier (0.75em; the previous
+      // hard-coded steps were 0.5/0.75/1rem), and the grid width is 17em of
+      // the tier (13/17/18rem before) so it stays in step with the day grid.
+      .mt(self.size.em(0.75))
+      .gap_y(self.size.em(0.75))
+      .w(self.size.em(17.))
       .justify_between()
       .flex_wrap()
       .children(months.iter().enumerate().map(|(ix, month)| {
@@ -771,11 +775,11 @@ impl Calendar {
     h_flex()
       .id("years")
       .gap_0p5()
-      .map(|this| match self.size {
-        Size::Small => this.mt_2().gap_y_2().w(rems(13.)),
-        Size::Large => this.mt_4().gap_y_4().w(rems(18.)),
-        _ => this.mt_3().gap_y_3().w(rems(17.)),
-      })
+      // Same tier-relative metrics as the months grid (0.75em row gap and
+      // margin, 17em width).
+      .mt(self.size.em(0.75))
+      .gap_y(self.size.em(0.75))
+      .w(self.size.em(17.))
       .justify_between()
       .flex_wrap()
       .children(current_page_years.iter().enumerate().map(|(ix, year)| {

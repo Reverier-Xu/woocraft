@@ -230,12 +230,17 @@ impl ViewportElement {
     window.on_mouse_event({
       let state = self.state.clone();
 
-      move |_event: &MouseUpEvent, phase, _window, cx| {
+      move |event: &MouseUpEvent, phase, window, cx| {
         if phase != DispatchPhase::Bubble {
           return;
         }
-        state.update(cx, |state, _| {
-          state.scrollbar_dragging = false;
+        state.update(cx, |state, cx| {
+          // Gesture end is a window-level concern (same model as Zed's
+          // editor): a drag that started in this editor can be released
+          // anywhere — over another element or outside the window entirely —
+          // and the element-level `on_mouse_up` never fires in that case.
+          state.on_mouse_up(event, window, cx);
+          cx.notify();
         });
       }
     });

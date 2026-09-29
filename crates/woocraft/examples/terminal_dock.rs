@@ -24,6 +24,8 @@ use woocraft::{
 };
 use woocraft_terminal::{SpawnOptions, TerminalBounds, TerminalSession};
 
+mod common;
+
 actions!(
   terminal_dock_example,
   [NewTerminal, RunBuildInTerminal, ClearActiveTerminal]
@@ -276,21 +278,23 @@ impl TerminalDockDemo {
 }
 
 impl Render for TerminalDockDemo {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    window_border().child(
-      v_flex()
-        .size_full()
-        .min_h_0()
-        .on_action(cx.listener(Self::on_new_terminal))
-        .on_action(cx.listener(Self::on_run_build))
-        .on_action(cx.listener(Self::on_clear_terminal))
-        .child(
-          TitleBar::new()
-            .title("Woocraft Terminal Dock Example")
-            .app_menu_bar(self.app_menu_bar.clone()),
-        )
-        .child(self.dock_area.clone()),
-    )
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    window_border()
+      .child(
+        v_flex()
+          .size_full()
+          .min_h_0()
+          .on_action(cx.listener(Self::on_new_terminal))
+          .on_action(cx.listener(Self::on_run_build))
+          .on_action(cx.listener(Self::on_clear_terminal))
+          .child(
+            TitleBar::new()
+              .title("Woocraft Terminal Dock Example")
+              .app_menu_bar(self.app_menu_bar.clone()),
+          )
+          .child(self.dock_area.clone()),
+      )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

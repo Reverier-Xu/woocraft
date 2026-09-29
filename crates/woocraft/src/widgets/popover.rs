@@ -355,11 +355,12 @@ impl RenderOnce for Popover {
       .transition(Transition::new(duration::POPOVER_ENTER).easing(Easing::EaseOut))
       .sample(window, cx)
       .progress;
-    // Anchored below the trigger, the content slides down into place;
-    // anchored above, it rises.
+    // Anchored below the trigger, the content emerges from the trigger edge
+    // and slides down into place; anchored above, it starts tucked under the
+    // trigger and rises.
     let slide = match self.anchor {
-      Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => (1.0 - enter) * 6.0,
-      Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => (1.0 - enter) * -6.0,
+      Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => (1.0 - enter) * -6.0,
+      Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => (1.0 - enter) * 6.0,
     };
 
     let popover_content = Self::render_popover_content(self.anchor, self.size, window, cx)

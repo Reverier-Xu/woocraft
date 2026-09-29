@@ -206,11 +206,18 @@ impl RenderOnce for ListItem {
             this.child(
               div()
                 .flex_none()
-                .w_5()
+                // Reserved slot so the layout does not shift when the check
+                // appears; its width tracks the item size (1.25em of the
+                // tier) instead of a fixed rem width.
+                .w(self.size.em(1.25))
                 .items_center()
                 .justify_center()
                 .when(self.confirmed, |this| {
-                  this.child(icon.small().text_color(cx.theme().muted_foreground))
+                  this.child(
+                    icon
+                      .with_size(self.size.smaller())
+                      .text_color(cx.theme().muted_foreground),
+                  )
                 }),
             )
           }),
