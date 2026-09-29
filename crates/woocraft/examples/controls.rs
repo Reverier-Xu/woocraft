@@ -458,7 +458,7 @@ impl ControlsWindow {
     });
     let date_picker_range_state = cx.new(|cx| {
       let mut state = DatePickerState::range(window, cx)
-        .date_format("%Y/%m/%d")
+        .date_format("%Y-%m-%d")
         .number_of_months(2)
         .disabled_matcher(Matcher::custom(move |date| {
           let weekday = date.weekday().num_days_from_sunday();

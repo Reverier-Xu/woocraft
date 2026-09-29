@@ -197,7 +197,7 @@ impl RenderOnce for ProgressCircle {
     let percentage_text = format!("{:.0}%", self.value);
 
     let diameter = self.size.circle_diameter();
-    let stroke = self.size.stroke_width().to_pixels(window.rem_size());
+    let stroke = self.size.track_thickness().to_pixels(window.rem_size());
 
     let progress = (self.value / 100.0).clamp(0.0, 1.0);
 

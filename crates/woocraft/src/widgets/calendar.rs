@@ -43,8 +43,8 @@ use chrono::{Datelike, NaiveDate};
 use gpui::{
   App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
   InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
-  StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
-  relative,
+  StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+  relative, rems,
 };
 
 use crate::{
@@ -484,7 +484,23 @@ impl Calendar {
         cx,
       )
       .when(is_today && !is_active, |this| {
-        this.border_1().border_color(cx.theme().border)
+        // Today marker: a small primary dot under the day number. Absolutely
+        // positioned so it does not shift the cell layout.
+        this.child(
+          div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .bottom(rems(0.25))
+            .flex()
+            .justify_center()
+            .child(
+              div()
+                .size(rems(0.125))
+                .rounded_full()
+                .bg(cx.theme().primary),
+            ),
+        )
       })
       .when(!disabled, |this| {
         this.on_click(
@@ -648,19 +664,33 @@ impl Calendar {
         })
       })
       .when(secondary_active, |this| {
+        // In-range days reuse the primary hue at low alpha so the range reads
+        // as one continuous band with the selected endpoints.
         this
           .bg(if muted {
-            cx.theme().accent.opacity(0.5)
+            cx.theme().primary.opacity(0.12)
           } else {
-            cx.theme().accent
+            cx.theme().primary.opacity(0.25)
           })
-          .text_color(cx.theme().accent_foreground)
+          .text_color(if muted {
+            cx.theme().muted_foreground
+          } else {
+            cx.theme().foreground
+          })
       })
       .when(!active && !disabled, |this| {
+        // Hover stays on the primary hue like the range band, just fainter
+        // than the in-range fill so the two states remain distinguishable.
         this.hover(|this| {
-          this
-            .bg(cx.theme().accent)
-            .text_color(cx.theme().accent_foreground)
+          if secondary_active {
+            this
+              .bg(cx.theme().primary.opacity(0.4))
+              .text_color(cx.theme().foreground)
+          } else {
+            this
+              .bg(cx.theme().primary.opacity(0.15))
+              .text_color(cx.theme().foreground)
+          }
         })
       })
       .when(active, |this| {
