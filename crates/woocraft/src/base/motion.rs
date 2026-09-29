@@ -946,12 +946,16 @@ mod tests {
       cx,
       Transition::new(Duration::from_millis(100)).delay(Duration::from_millis(20)),
     );
+    eprintln!("CI-TRACE after open: samples={:?}", fixture.samples.borrow().iter().map(|s| s.status).collect::<Vec<_>>());
     assert_eq!(fixture.render(cx, 1.0).status, MotionStatus::Delayed);
+    eprintln!("CI-TRACE after render(1.0): samples={:?}", fixture.samples.borrow().iter().map(|s| s.status).collect::<Vec<_>>());
 
     cx.executor().advance_clock(Duration::from_millis(20));
     assert_eq!(fixture.render(cx, 1.0).status, MotionStatus::Running);
+    eprintln!("CI-TRACE after +20 render: samples={:?}", fixture.samples.borrow().iter().map(|s| s.status).collect::<Vec<_>>());
     cx.executor().advance_clock(Duration::from_millis(100));
     assert_eq!(fixture.render(cx, 1.0).status, MotionStatus::Finished);
+    eprintln!("CI-TRACE after +100 render: samples={:?}", fixture.samples.borrow().iter().map(|s| s.status).collect::<Vec<_>>());
   }
 
   #[gpui::test]
