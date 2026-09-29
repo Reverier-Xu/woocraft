@@ -276,38 +276,28 @@ impl WidgetGroup {
     }
   }
 
-  fn divider(layout: Axis, color: Hsla, size: Size) -> AnyElement {
+  fn divider(layout: Axis, color: Hsla) -> AnyElement {
     match layout {
       Axis::Horizontal => div()
         .w(px(1.))
-        .h(size.component_height())
+        .h_full()
+        .flex_shrink_0()
         .bg(color)
-        .ml(px(-1.))
         .into_any_element(),
       Axis::Vertical => div()
         .h(px(1.))
         .w_full()
+        .flex_shrink_0()
         .bg(color)
-        .mt(px(-1.))
         .into_any_element(),
     }
   }
 
-  /// Strips the edge border (and its margin) of grouped children so adjacent
-  /// children share a single divider instead of stacking two borders.
-  fn strip_edge_borders<T: Styled + FluentBuilder>(
-    this: T, hide_leading: bool, hide_trailing: bool, layout: Axis,
-  ) -> T {
-    let horizontal = matches!(layout, Axis::Horizontal);
-    this
-      .when(hide_leading && horizontal, |this| {
-        this.ml(px(0.)).border_l_0()
-      })
-      .when(hide_leading && !horizontal, |this| {
-        this.mt(px(0.)).border_t_0()
-      })
-      .when(hide_trailing && horizontal, |this| this.border_r(px(0.)))
-      .when(hide_trailing && !horizontal, |this| this.border_b(px(0.)))
+  /// Strips every border of a framed group's children: the group's container
+  /// owns the outer frame and the dividers, so a child keeping any border
+  /// would double the frame or shift its content by the border's width.
+  fn strip_borders<T: Styled + FluentBuilder>(this: T, framed: bool) -> T {
+    this.when(framed, |this| this.border_0())
   }
 }
 
@@ -346,14 +336,36 @@ impl RenderOnce for WidgetGroup {
       None
     };
     let clicked_ix = Rc::new(Cell::new(None));
-    let mut prev_active_color: Option<Hsla> = None;
 
     let children_len = self.children.len();
-    let effective_size = self.size.unwrap_or_default();
-    // Flat/Link groups carry no borders, so they get no separators either —
-    // the children are meant to read as one borderless unit (e.g. a dock tab
-    // and its close button).
-    let show_dividers = !matches!(effective_variant, ButtonVariant::Flat | ButtonVariant::Link);
+    // Flat/Link groups carry no frame or dividers — the children are meant to
+    // read as one borderless unit (e.g. a dock tab and its close button).
+    let framed = !matches!(effective_variant, ButtonVariant::Flat | ButtonVariant::Link);
+
+    // Active colors drive divider coloring, and a focused input child turns
+    // the frame into its focus ring.
+    let active_colors: Vec<Option<Hsla>> = self
+      .children
+      .iter()
+      .map(|child| {
+        Self::active_border_color(child, effective_variant, self.outline, self.disabled, window, cx)
+      })
+      .collect();
+    let frame_color = {
+      let input_focused = self
+        .children
+        .iter()
+        .any(|child| matches!(child, WidgetGroupChild::Input(input) if input.is_active(window, cx)));
+      if input_focused {
+        Self::input_active_border_color(self.disabled, cx)
+      } else {
+        let mut color = cx.theme().input;
+        if self.disabled {
+          color.a *= 0.6;
+        }
+        color
+      }
+    };
 
     div()
       .id(self.id)
@@ -370,6 +382,16 @@ impl RenderOnce for WidgetGroup {
           .items_center()
           .when(!self.compact, |this| this.gap_0())
       })
+      // Framed groups own the outer border: children render without borders
+      // and the group inserts 1px dividers between them, so no child's
+      // content shifts by a border width.
+      .when(framed, |this| {
+        this
+          .border_1()
+          .border_color(frame_color)
+          .rounded(cx.theme().radius)
+          .overflow_hidden()
+      })
       .refine_style(&self.style)
       .children(
         self
@@ -378,38 +400,33 @@ impl RenderOnce for WidgetGroup {
           .enumerate()
           .flat_map(|(ix, child)| {
             let clicked_ix = clicked_ix.clone();
-            let is_first = ix == 0;
-            let is_last = ix + 1 == children_len;
-            let hide_leading_border = !is_first;
-            let hide_trailing_border = !is_last;
             let corners = Self::corners_for(ix, children_len, self.layout);
-            let active_color = Self::active_border_color(
-              &child,
-              effective_variant,
-              self.outline,
-              self.disabled,
-              window,
-              cx,
-            );
+            let active_color = active_colors[ix];
+            // Framed children render square and borderless: the container
+            // clips them to the frame's rounded corners.
+            let square_corners: Corners<bool> = Corners {
+              top_left: false,
+              top_right: false,
+              bottom_left: false,
+              bottom_right: false,
+            };
             let mut elements = Vec::with_capacity(2);
 
-            if ix > 0 && show_dividers {
-              let color = Self::divider_color(prev_active_color, active_color, self.disabled, cx);
-              elements.push(Self::divider(self.layout, color, effective_size));
+            if ix > 0 && framed {
+              let color =
+                Self::divider_color(active_colors[ix - 1], active_color, self.disabled, cx);
+              elements.push(Self::divider(self.layout, color));
             }
-            prev_active_color = active_color;
 
             let child = match child {
-              WidgetGroupChild::Button(button) => Self::strip_edge_borders(
+              WidgetGroupChild::Button(button) => Self::strip_borders(
                 button
                   .disabled(self.disabled)
-                  .border_corners(corners)
+                  .border_corners(if framed { square_corners } else { corners })
                   .when_some(self.variant, |this, variant| this.with_variant(variant))
                   .when_some(self.size, |this, size| this.with_size(size))
                   .when(self.outline, |this| this.outline(true)),
-                hide_leading_border,
-                hide_trailing_border,
-                self.layout,
+                framed,
               )
               .when(self.on_click.is_some() && !self.disabled, |this| {
                 this.on_click(move |_, _, _| {
@@ -417,36 +434,35 @@ impl RenderOnce for WidgetGroup {
                 })
               })
               .into_any_element(),
-              WidgetGroupChild::Input(input) => Self::strip_edge_borders(
+              WidgetGroupChild::Input(input) => Self::strip_borders(
                 input
                   .disabled(self.disabled)
-                  .border_corners(corners)
-                  .with_size(effective_size),
-                hide_leading_border,
-                hide_trailing_border,
-                self.layout,
+                  .border_corners(if framed { square_corners } else { corners })
+                  .with_size(self.size.unwrap_or_default()),
+                framed,
               )
               .into_any_element(),
               WidgetGroupChild::Raw(element) => element,
-              WidgetGroupChild::Element(element) => Self::strip_edge_borders(
-                h_flex()
+              WidgetGroupChild::Element(element) => {
+                let wrapper = h_flex()
                   .items_center()
-                  .component_h(effective_size)
-                  .px(effective_size.component_px())
+                  .component_h(self.size.unwrap_or_default())
+                  .px(self.size.unwrap_or_default().component_px())
                   .bg(if self.disabled {
                     cx.theme().muted
                   } else {
                     cx.theme().background
-                  })
-                  .border_1()
-                  .border_color(cx.theme().input)
-                  .corner_radius(Self::corner_pixels(corners, cx.theme().radius)),
-                hide_leading_border,
-                hide_trailing_border,
-                self.layout,
-              )
-              .child(element)
-              .into_any_element(),
+                  });
+                let wrapper = if framed {
+                  wrapper
+                } else {
+                  wrapper
+                    .border_1()
+                    .border_color(cx.theme().input)
+                    .corner_radius(Self::corner_pixels(corners, cx.theme().radius))
+                };
+                wrapper.child(element).into_any_element()
+              }
             };
 
             elements.push(child);
