@@ -43,8 +43,8 @@ use chrono::{Datelike, NaiveDate};
 use gpui::{
   App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
   InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
-  StatefulInteractiveElement, StyleRefinement, Styled, Window, prelude::FluentBuilder as _,
-  relative,
+  StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+  relative, rems,
 };
 
 use crate::{
@@ -484,7 +484,23 @@ impl Calendar {
         cx,
       )
       .when(is_today && !is_active, |this| {
-        this.border_1().border_color(cx.theme().border)
+        // Today marker: a small primary dot under the day number. Absolutely
+        // positioned so it does not shift the cell layout.
+        this.child(
+          div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .bottom(rems(0.25))
+            .flex()
+            .justify_center()
+            .child(
+              div()
+                .size(rems(0.125))
+                .rounded_full()
+                .bg(cx.theme().primary),
+            ),
+        )
       })
       .when(!disabled, |this| {
         this.on_click(
