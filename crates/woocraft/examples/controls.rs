@@ -1,18 +1,19 @@
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use gpui::{
   App, AppContext, Bounds, Context, Entity, IntoElement, Menu, ParentElement, Render,
-  ScrollStrategy, Size as GpuiSize, Styled, Subscription, Task, Window, WindowBounds,
+  ScrollStrategy, SharedString, Size as GpuiSize, Styled, Subscription, Task, Window, WindowBounds,
   WindowOptions, div, px,
 };
 use woocraft::{
   ActiveTheme, AppMenuBar, Avatar, AvatarGroup, Badge, Breadcrumb, BreadcrumbItem, Button,
-  ButtonVariants, Calendar, CalendarEvent, CalendarState, Checkbox, DatePicker, DatePickerEvent,
-  DatePickerState, DateRangePreset, Disableable, Divider, Icon, IconLabel, IndexPath, Input,
-  InputState, Kbd, Label, Link, List, ListDelegate, ListItem, ListState, Matcher, Notification,
-  NotificationCenter, NotificationPlacement, NotificationState, NotificationType, NumberInput,
-  OtpInput, OtpState, Pagination, Popover, PopupMenuItem, Progress, ProgressCircle,
-  ScrollableElement, Selectable, Sizable, Slider, SliderState, Spinner, StyledExt, Switch, Tag,
-  Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup, h_flex, init, v_flex, window_border,
+  ButtonVariants, Calendar, CalendarEvent, CalendarState, Checkbox, CheckboxGroup, CheckboxOption,
+  DatePicker, DatePickerEvent, DatePickerState, DateRangePreset, Disableable, Divider, Icon,
+  IconLabel, IndexPath, Input, InputState, Kbd, Label, Link, List, ListDelegate, ListItem,
+  ListState, Matcher, Notification, NotificationCenter, NotificationPlacement, NotificationState,
+  NotificationType, NumberInput, OtpInput, OtpState, Pagination, Popover, PopupMenuItem, Progress,
+  ProgressCircle, Radio, RadioGroup, RadioOption, ScrollableElement, Selectable, Sizable, Slider,
+  SliderState, Spinner, StyledExt, Switch, Tag, Theme, ThemeMode, TitleBar, Tooltip, WidgetGroup,
+  h_flex, init, v_flex, window_border,
 };
 
 mod common;
@@ -346,6 +347,10 @@ impl ListDelegate for DemoListDelegate {
 
 struct ControlsWindow {
   checked: bool,
+  checkbox_group_selected: Vec<SharedString>,
+  checkbox_tree_selected: Vec<SharedString>,
+  radio_group_selected: Option<SharedString>,
+  radio_tree_selected: Option<SharedString>,
   switched: bool,
   slider_state: Entity<SliderState>,
   notification_state: Entity<NotificationState>,
@@ -507,6 +512,10 @@ impl ControlsWindow {
 
       Self {
         checked: false,
+        checkbox_group_selected: vec!["email".into()],
+        checkbox_tree_selected: vec!["react".into()],
+        radio_group_selected: Some("email".into()),
+        radio_tree_selected: Some("react".into()),
         switched: true,
         slider_state,
         notification_state,
@@ -814,6 +823,136 @@ impl Render for ControlsWindow {
                     )
                     .child(Label::new(format!("checked = {}", self.checked))),
                 )
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      Checkbox::new("demo-checkbox-indeterminate")
+                        .indeterminate(true)
+                        .label("Indeterminate"),
+                    )
+                    .child(Label::new("standalone indeterminate state")),
+                )
+                .child(div().text_sm().child("Checkbox Group"))
+                .child(
+                  CheckboxGroup::new("demo-checkbox-group")
+                    .horizontal()
+                    .options([
+                      CheckboxOption::new("notification", "Notification"),
+                      CheckboxOption::new("email", "Email"),
+                      CheckboxOption::new("sms", "SMS"),
+                      CheckboxOption::new("push", "Push").disabled(true),
+                    ])
+                    .selected(self.checkbox_group_selected.clone())
+                    .on_change(cx.listener(
+                      |this, selected: &Vec<SharedString>, _, cx| {
+                        this.checkbox_group_selected = selected.clone();
+                        cx.notify();
+                      },
+                    )),
+                )
+                .child(Label::new(format!(
+                  "checkbox_group = {:?}",
+                  self.checkbox_group_selected
+                )))
+                .child(div().text_sm().child("Checkbox Group (tree)"))
+                .child(
+                  div().w(px(360.)).child(
+                    CheckboxGroup::new("demo-checkbox-tree")
+                      .option(
+                        CheckboxOption::new("frontend", "Frontend")
+                          .child(CheckboxOption::new("react", "React"))
+                          .child(CheckboxOption::new("vue", "Vue")),
+                      )
+                      .option(
+                        CheckboxOption::new("backend", "Backend")
+                          .child(CheckboxOption::new("rust", "Rust"))
+                          .child(CheckboxOption::new("node", "Node")),
+                      )
+                      .selected(self.checkbox_tree_selected.clone())
+                      .on_change(cx.listener(
+                        |this, selected: &Vec<SharedString>, _, cx| {
+                          this.checkbox_tree_selected = selected.clone();
+                          cx.notify();
+                        },
+                      )),
+                  ),
+                )
+                .child(Label::new(format!(
+                  "checkbox_tree = {:?}",
+                  self.checkbox_tree_selected
+                )))
+                .child(
+                  h_flex()
+                    .items_center()
+                    .gap_3()
+                    .child(
+                      Radio::new("demo-radio-selected")
+                        .checked(true)
+                        .label("Selected"),
+                    )
+                    .child(
+                      Radio::new("demo-radio-unselected")
+                        .checked(false)
+                        .label("Unselected"),
+                    )
+                    .child(
+                      Radio::new("demo-radio-disabled")
+                        .checked(true)
+                        .disabled(true)
+                        .label("Disabled"),
+                    ),
+                )
+                .child(div().text_sm().child("Radio Group"))
+                .child(
+                  RadioGroup::new("demo-radio-group")
+                    .horizontal()
+                    .options([
+                      RadioOption::new("notification", "Notification"),
+                      RadioOption::new("email", "Email"),
+                      RadioOption::new("sms", "SMS"),
+                      RadioOption::new("push", "Push").disabled(true),
+                    ])
+                    .selected(self.radio_group_selected.clone())
+                    .on_change(cx.listener(
+                      |this, selected: &SharedString, _, cx| {
+                        this.radio_group_selected = Some(selected.clone());
+                        cx.notify();
+                      },
+                    )),
+                )
+                .child(Label::new(format!(
+                  "radio_group = {:?}",
+                  self.radio_group_selected
+                )))
+                .child(div().text_sm().child("Radio Group (tree)"))
+                .child(
+                  div().w(px(360.)).child(
+                    RadioGroup::new("demo-radio-tree")
+                      .option(
+                        RadioOption::new("frontend", "Frontend")
+                          .child(RadioOption::new("react", "React"))
+                          .child(RadioOption::new("vue", "Vue")),
+                      )
+                      .option(
+                        RadioOption::new("backend", "Backend")
+                          .child(RadioOption::new("rust", "Rust"))
+                          .child(RadioOption::new("node", "Node")),
+                      )
+                      .selected(self.radio_tree_selected.clone())
+                      .on_change(cx.listener(
+                        |this, selected: &SharedString, _, cx| {
+                          this.radio_tree_selected = Some(selected.clone());
+                          cx.notify();
+                        },
+                      )),
+                  ),
+                )
+                .child(Label::new(format!(
+                  "radio_tree = {:?}",
+                  self.radio_tree_selected
+                )))
                 .child(
                   h_flex()
                     .items_center()
