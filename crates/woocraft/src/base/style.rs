@@ -444,12 +444,6 @@ impl Size {
   pub fn circle_diameter(&self) -> Rems {
     self.container_height()
   }
-
-  /// Stroke width: `0.25em`.
-  #[inline]
-  pub fn stroke_width(&self) -> Rems {
-    self.em(0.25)
-  }
 }
 
 pub trait Selectable: Sized {
