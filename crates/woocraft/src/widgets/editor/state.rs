@@ -418,6 +418,15 @@ pub struct InputState {
   /// exits, so an idle editor arms no timer at all.
   pub(super) is_autoscrolling: bool,
   pub(super) top_row: usize,
+  /// Whether the editor should keep the viewport pinned to the end of the
+  /// document while its content grows, e.g. a read-only editor rendering a
+  /// live log stream.
+  pub(super) follow_output: bool,
+  /// Whether the viewport currently rests at the end of the document. User
+  /// scrolls away clear this; scrolling back to the end (or
+  /// [`Self::scroll_to_bottom`]) re-arms it. Only effective together with
+  /// `follow_output`, mirroring the terminal view's `scrolled_to_bottom`.
+  pub(super) stuck_to_bottom: bool,
   pub(super) size: Size,
   pub(super) disabled: bool,
   pub(super) read_only: bool,
@@ -535,6 +544,8 @@ impl InputState {
       drag_autoscroll_remainder: 0.0,
       is_autoscrolling: false,
       top_row: 0,
+      follow_output: false,
+      stuck_to_bottom: true,
       preferred_column: None,
       line_number_width_cache: None,
       whitespace_indicator_cache: None,
@@ -674,11 +685,12 @@ impl InputState {
   }
 
   pub(crate) fn set_top_row(&mut self, row: usize, line_height: Pixels) -> bool {
-    let clamped = viewport::clamp_top_row(
-      row,
-      self.display_row_count(),
-      self.viewport_rows(line_height),
-    );
+    let viewport_rows = self.viewport_rows(line_height);
+    let total_rows = self.display_row_count();
+    let clamped = viewport::clamp_top_row(row, total_rows, viewport_rows);
+    // Track whether the viewport rests at the end of the document; scrolling
+    // back down re-arms follow-output, scrolling away suspends it.
+    self.stuck_to_bottom = clamped >= viewport::max_top_row(total_rows, viewport_rows);
     if clamped == self.top_row {
       return false;
     }
@@ -686,6 +698,23 @@ impl InputState {
     self.top_row = clamped;
     self.diagnostic_popover = None;
     true
+  }
+
+  /// Re-pin the viewport to the end of the document while
+  /// [`Self::follow_output`] is armed and the user has not scrolled away.
+  ///
+  /// Called from prepaint, where the wrap metrics for this frame are fresh,
+  /// so newly appended output keeps the tail visible even when the document
+  /// grows by many rows between frames.
+  pub(crate) fn maintain_follow_output(&mut self, line_height: Pixels, cx: &mut Context<Self>) {
+    if !self.follow_output || !self.stuck_to_bottom {
+      return;
+    }
+
+    let target = viewport::max_top_row(self.display_row_count(), self.viewport_rows(line_height));
+    if self.top_row != target && self.set_top_row(target, line_height) {
+      cx.notify();
+    }
   }
 
   pub(crate) fn scroll_rows(&mut self, delta_rows: i64, line_height: Pixels) -> bool {
@@ -1275,8 +1304,14 @@ impl InputState {
       self.document_colors_revision += 1;
     }
 
-    // Move scroll to top
-    self.top_row = 0;
+    // Move scroll to top — unless the editor follows its output, in which
+    // case a live stream stays pinned to the tail instead of jumping to the
+    // top on every batch.
+    if self.follow_output {
+      self.stuck_to_bottom = true;
+    } else {
+      self.top_row = 0;
+    }
 
     cx.notify();
   }
@@ -1348,6 +1383,59 @@ impl InputState {
   /// Return whether the input field is read-only.
   pub fn is_read_only(&self) -> bool {
     self.read_only
+  }
+
+  /// Keep the viewport pinned to the end of the document while its content
+  /// grows — the "follow tail" behavior of log viewers and terminals.
+  ///
+  /// While enabled, appended output keeps the view at the bottom. The user
+  /// can still scroll up to inspect history, which suspends following until
+  /// they scroll back to the bottom (or call [`Self::scroll_to_bottom`]).
+  /// Pair this with [`Self::read_only`] for a live log panel driven by a
+  /// custom [`EditorBackend`](super::EditorBackend).
+  pub fn follow_output(mut self, follow: bool) -> Self {
+    self.follow_output = follow;
+    self
+  }
+
+  /// Enable or disable following the end of the document, see
+  /// [`Self::follow_output`]. Enabling it scrolls to the bottom immediately.
+  pub fn set_follow_output(&mut self, follow: bool, window: &mut Window, cx: &mut Context<Self>) {
+    if self.follow_output == follow {
+      return;
+    }
+
+    self.follow_output = follow;
+    if follow {
+      self.scroll_to_bottom(window, cx);
+    } else {
+      cx.notify();
+    }
+  }
+
+  /// Whether following the end of the document is enabled, see
+  /// [`Self::follow_output`].
+  pub fn is_follow_output(&self) -> bool {
+    self.follow_output
+  }
+
+  /// Whether the viewport currently rests at the end of the document —
+  /// `false` while the user has scrolled away with following enabled.
+  pub fn is_stuck_to_bottom(&self) -> bool {
+    self.stuck_to_bottom
+  }
+
+  /// Scroll to the end of the document and re-arm following (see
+  /// [`Self::follow_output`]).
+  pub fn scroll_to_bottom(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    let line_height = self
+      .last_layout
+      .as_ref()
+      .map(|layout| layout.line_height)
+      .unwrap_or(window.line_height());
+    if self.set_top_row(usize::MAX, line_height) {
+      cx.notify();
+    }
   }
 
   /// Set with password masked state.
@@ -3345,5 +3433,118 @@ mod tests {
       })
       .unwrap();
     cx.run_until_parked();
+  }
+
+  #[gpui::test]
+  fn follow_output_pins_viewport_to_the_tail(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    let backend = SharedLogBackend::default();
+    backend.push(&batch("stream", 200));
+
+    let window = cx.add_window(|window, cx| {
+      let state = cx.new(|cx| {
+        InputState::new(window, cx)
+          .code_editor("text")
+          .backend(backend.clone())
+          .read_only(true)
+          .follow_output(true)
+      });
+      Host(state)
+    });
+    cx.run_until_parked();
+
+    let expected_bottom = |state: &InputState| {
+      let line_height = state
+        .last_layout
+        .as_ref()
+        .map(|layout| layout.line_height)
+        .expect("layout after first frame");
+      viewport::max_top_row(state.display_row_count(), state.viewport_rows(line_height))
+    };
+
+    let bottom = window
+      .update(cx, |host, _, cx| {
+        let state = host.0.read(cx);
+        assert!(state.is_follow_output());
+        assert!(state.is_stuck_to_bottom());
+        (state.top_row, expected_bottom(state))
+      })
+      .unwrap();
+    assert!(bottom.1 > 0, "content must be taller than the viewport");
+    assert_eq!(bottom.0, bottom.1, "viewport pinned to the tail");
+
+    // Scrolling up suspends following…
+    window
+      .update(cx, |host, _, cx| {
+        host.0.update(cx, |state, cx| {
+          let line_height = state.last_layout.as_ref().unwrap().line_height;
+          state.scroll_rows(-10, line_height);
+          cx.notify();
+        });
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    let scrolled = window
+      .update(cx, |host, _, cx| {
+        let state = host.0.read(cx);
+        (state.top_row, state.is_stuck_to_bottom())
+      })
+      .unwrap();
+    assert!(scrolled.0 < bottom.0, "user scrolled up");
+    assert!(!scrolled.1, "following suspended");
+
+    // …so new output does NOT yank the viewport away from the user.
+    backend.push(&batch("stream", 50));
+    window
+      .update(cx, |host, _, cx| {
+        host.0.update(cx, |_, cx| cx.notify());
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    let parked = window
+      .update(cx, |host, _, cx| {
+        let state = host.0.read(cx);
+        (state.top_row, state.text_wrapper.len())
+      })
+      .unwrap();
+    assert_eq!(
+      parked.0, scrolled.0,
+      "viewport stays where the user left it"
+    );
+    assert_eq!(parked.1, 251, "layout still grows");
+
+    // Scrolling back to the bottom re-arms following…
+    window
+      .update(cx, |host, window, cx| {
+        host
+          .0
+          .update(cx, |state, cx| state.scroll_to_bottom(window, cx));
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    // …and the next batch keeps the tail visible again.
+    backend.push(&batch("stream", 50));
+    window
+      .update(cx, |host, _, cx| {
+        host.0.update(cx, |_, cx| cx.notify());
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    let resumed = window
+      .update(cx, |host, _, cx| {
+        let state = host.0.read(cx);
+        (
+          state.top_row,
+          state.is_stuck_to_bottom(),
+          expected_bottom(state),
+        )
+      })
+      .unwrap();
+    assert!(resumed.1, "following re-armed");
+    assert_eq!(resumed.0, resumed.2, "pinned to the new tail");
   }
 }
