@@ -5,14 +5,14 @@ use std::{
 };
 
 use gpui::{
-  App, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement, Rems,
-  Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  App, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+  Rems, Render, RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
   Window, div, prelude::FluentBuilder as _, px, relative, rems,
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Easing, Icon, IconName, Presence, Size,
-  StyleSized, StyledExt, Transition, duration, h_flex, v_flex,
+  ActiveTheme, Button, ButtonVariants, CardStyle, ColorExt, Easing, ElementExt, Icon, IconName,
+  Presence, Size, StyleSized, StyledExt, Transition, duration, h_flex, v_flex,
 };
 
 /// Handler type invoked when a notification (or its action) is clicked.
@@ -243,6 +243,13 @@ struct NotificationItem {
   data: Notification,
   started_at: Option<Instant>,
   hovered: bool,
+  /// Set when the notification is closing: the card stays mounted while its
+  /// exit animation plays and is purged once the animation completes.
+  closing: bool,
+  /// Last measured card height, recorded during prepaint while the card is
+  /// not closing. Drives the height collapse that lets the remaining cards
+  /// slide into the freed slot instead of jumping.
+  measured_height: Pixels,
 }
 
 pub struct NotificationState {
@@ -294,6 +301,8 @@ impl NotificationState {
       data: notification,
       started_at: None,
       hovered: false,
+      closing: false,
+      measured_height: px(0.),
     });
 
     while self.items.len() > self.max_items {
@@ -352,6 +361,7 @@ impl NotificationState {
     for item in &self.items {
       if item.data.autohide
         && !item.hovered
+        && !item.closing
         && item
           .started_at
           .is_some_and(|started_at| now.duration_since(started_at) >= item.data.duration)
@@ -365,10 +375,9 @@ impl NotificationState {
       self.close(id);
     }
 
-    let keep_running = self
-      .items
-      .iter()
-      .any(|item| item.data.autohide && !item.hovered && item.started_at.is_some());
+    let keep_running = self.items.iter().any(|item| {
+      item.data.autohide && !item.hovered && !item.closing && item.started_at.is_some()
+    });
     self.is_advancing = keep_running;
 
     if any_expired || keep_running {
@@ -430,10 +439,19 @@ impl NotificationState {
     Some((1.0 - elapsed / duration).clamp(0.0, 1.0))
   }
 
+  /// Start closing a notification.
+  ///
+  /// The item is kept in the queue with `closing` set so the card can play
+  /// its exit animation (fade, slide, and height collapse); the card purges
+  /// itself from the queue once the animation completes. Callers must notify
+  /// to trigger the render that starts the exit.
   pub fn close(&mut self, id: usize) {
-    self.items.retain(|item| item.id != id);
+    if let Some(item) = self.items.iter_mut().find(|item| item.id == id) {
+      item.closing = true;
+    }
   }
 
+  /// Drop every notification immediately, skipping exit animations.
   pub fn clear(&mut self) {
     self.items.clear();
   }
@@ -553,18 +571,36 @@ impl RenderOnce for NotificationCenter {
       return container.into_any_element();
     }
 
-    let cards: Vec<_> = self
+    // Snapshot the items before building cards: card rendering samples
+    // presence state and records measurements through `state.update`, which
+    // would conflict with a read borrow held across the build.
+    let items: Vec<_> = self
       .state
       .read(cx)
       .items
       .iter()
       .map(|item| {
-        NotificationCard::new(
+        (
           item.id,
           item.data.clone(),
+          item.closing,
+          item.measured_height,
+        )
+      })
+      .collect();
+
+    let cards: Vec<_> = items
+      .into_iter()
+      .map(|(id, data, closing, measured_height)| {
+        NotificationCard::new(
+          id,
+          data,
           &self.state,
           self.size,
           placement.is_left(),
+          placement.is_bottom(),
+          closing,
+          measured_height,
         )
         .into_any_element()
       })
@@ -582,11 +618,20 @@ struct NotificationCard {
   size: Size,
   /// Cards anchored at the left edge slide in from the left.
   from_left: bool,
+  /// Cards anchored at the bottom stack upward (column-reverse), which flips
+  /// which margin reclaims the flex gap during the exit collapse.
+  from_bottom: bool,
+  /// Whether the card is playing its exit animation.
+  closing: bool,
+  /// Natural card height measured while the card was not closing.
+  measured_height: Pixels,
 }
 
 impl NotificationCard {
+  #[allow(clippy::too_many_arguments)]
   fn new(
     id: usize, data: Notification, state: &Entity<NotificationState>, size: Size, from_left: bool,
+    from_bottom: bool, closing: bool, measured_height: Pixels,
   ) -> Self {
     Self {
       id,
@@ -594,6 +639,9 @@ impl NotificationCard {
       state: state.clone(),
       size,
       from_left,
+      from_bottom,
+      closing,
+      measured_height,
     }
   }
 }
@@ -604,40 +652,40 @@ impl RenderOnce for NotificationCard {
     let icon = self.data.icon.unwrap_or_else(|| self.data.type_.icon());
     let progress_ratio = self.state.read(cx).progress_ratio(self.id);
 
-    // Enter animation: fade in and slide from the anchored edge. The card's
-    // keyed presence state is dropped when the card leaves, so a re-pushed id
-    // replays the entrance. Exit animations are not installed: removal is a
-    // queue pop, and keeping the card mounted through an exit phase would
-    // conflict with the countdown's shared tick loop.
-    let enter = Presence::new((self.id, "notification-card-enter"), true)
-      .transition(Transition::new(duration::NOTIFICATION_ENTER).easing(Easing::EaseOut))
-      .sample(window, cx)
-      .progress;
-    let slide = if self.from_left { -24.0 } else { 24.0 } * (1.0 - enter);
+    // Enter fades and slides in from the anchored edge; close runs the same
+    // presence in reverse (fade + slide back out) while the wrapper below
+    // collapses the card's slot to zero height, so the remaining cards slide
+    // into place instead of jumping. When the exit completes the card purges
+    // itself from the queue.
+    let transition = if self.closing {
+      Transition::new(duration::NOTIFICATION_EXIT).easing(Easing::EaseIn)
+    } else {
+      Transition::new(duration::NOTIFICATION_ENTER).easing(Easing::EaseOut)
+    };
+    let sample = Presence::new((self.id, "notification-card"), !self.closing)
+      .transition(transition)
+      .sample(window, cx);
 
-    v_flex()
-      .id(("notification-card", self.id as u64))
+    if self.closing && !sample.should_render() {
+      // Exit finished: drop the item from the queue and notify, so the next
+      // frame rebuilds without this card's (empty) placeholder and its flex
+      // gap does not linger.
+      self.state.update(cx, |state, cx| {
+        state.items.retain(|item| item.id != self.id);
+        cx.notify();
+      });
+      return div().into_any_element();
+    }
+
+    let presence = sample.progress;
+    let slide = if self.from_left { -24.0 } else { 24.0 } * (1.0 - presence);
+    let gap = self.size.container_gap().to_pixels(window.rem_size());
+
+    let card = v_flex()
       .w_full()
       .popover_style(cx.theme())
       .container_padding(self.size)
       .items_start()
-      .opacity(enter)
-      .relative()
-      .left(px(slide))
-      .on_hover({
-        let state = self.state.clone();
-        let id = self.id;
-        move |is_hovered, window, cx| {
-          state.update(cx, |state, cx| {
-            if *is_hovered {
-              state.pause_and_reset_timer(id);
-            } else {
-              state.restart_timer(id, window, cx);
-            }
-            cx.notify();
-          });
-        }
-      })
       .child(
         h_flex()
           .w_full()
@@ -713,12 +761,71 @@ impl RenderOnce for NotificationCard {
                 .w(relative(progress_ratio)),
             ),
         )
+      });
+
+    // The wrapper owns the presence-driven opacity/slide and the exit
+    // collapse; the card inside keeps its natural height so its content is
+    // clipped by the shrinking slot instead of reflowing mid-animation.
+    div()
+      .id(("notification-card", self.id as u64))
+      .w_full()
+      .opacity(presence)
+      .relative()
+      .left(px(slide))
+      .on_hover({
+        let state = self.state.clone();
+        let id = self.id;
+        move |is_hovered, window, cx| {
+          state.update(cx, |state, cx| {
+            if *is_hovered {
+              state.pause_and_reset_timer(id);
+            } else {
+              state.restart_timer(id, window, cx);
+            }
+            cx.notify();
+          });
+        }
       })
-      .when_some(self.data.on_click.clone(), |this, on_click| {
-        this.cursor_pointer().on_click(move |_, window, cx| {
-          on_click(window, cx);
+      .on_prepaint({
+        let state = self.state.clone();
+        let id = self.id;
+        let closing = self.closing;
+        move |bounds, _, cx| {
+          // Record the natural card height for the exit collapse. Skipped
+          // while closing: the wrapper's explicit collapsing height would
+          // otherwise feed back into the measurement.
+          if closing {
+            return;
+          }
+          state.update(cx, |state, _| {
+            if let Some(item) = state.items.iter_mut().find(|item| item.id == id)
+              && item.measured_height != bounds.size.height
+            {
+              item.measured_height = bounds.size.height;
+            }
+          });
+        }
+      })
+      .when(self.closing, |this| {
+        // Reclaim the flex gap around this slot in step with the height
+        // collapse, so removing the card at the end of the exit leaves the
+        // remaining cards exactly where the animation put them.
+        let collapse = -gap * (1.0 - presence);
+        this
+          .h(self.measured_height * presence)
+          .overflow_hidden()
+          .when(self.from_bottom, |this| this.mt(collapse))
+          .when(!self.from_bottom, |this| this.mb(collapse))
+      })
+      .when(!self.closing, |this| {
+        this.when_some(self.data.on_click.clone(), |this, on_click| {
+          this.cursor_pointer().on_click(move |_, window, cx| {
+            on_click(window, cx);
+          })
         })
       })
+      .child(card)
+      .into_any_element()
   }
 }
 

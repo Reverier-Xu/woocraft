@@ -7,6 +7,8 @@ use woocraft::{
   StyledExt, Theme, ThemeMode, h_flex, init, v_flex,
 };
 
+mod common;
+
 #[derive(Default)]
 struct ButtonWindow {
   clicks: usize,
@@ -19,7 +21,7 @@ impl ButtonWindow {
 }
 
 impl Render for ButtonWindow {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
 
     v_flex()
@@ -134,6 +136,7 @@ impl Render for ButtonWindow {
               .label("Search"),
           ),
       )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

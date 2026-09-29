@@ -7,6 +7,8 @@ use woocraft::{
   StyledExt, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
+mod common;
+
 struct ColorPickerWindow {
   color_state: Entity<ColorPickerState>,
   _color_subscription: Subscription,
@@ -31,7 +33,7 @@ impl ColorPickerWindow {
 }
 
 impl Render for ColorPickerWindow {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let value = self.color_state.read(cx).value();
     let is_dark = cx.theme().mode.is_dark();
 
@@ -87,7 +89,8 @@ impl Render for ColorPickerWindow {
               "HSLA: h={:.1}, s={:.3}, l={:.3}, a={:.3}",
               value.hsla.hue, value.hsla.saturation, value.hsla.lightness, value.hsla.alpha
             ))),
-        ),
+        )
+        .child(common::rem_size_control(window, cx)),
     )
   }
 }

@@ -9,6 +9,8 @@ use woocraft::{
   IconName, Panel, PanelEvent, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
+mod common;
+
 const RUST_SAMPLE: &str = r#"use std::collections::HashMap;
 
 fn collect_scores(names: &[&str]) -> HashMap<String, usize> {
@@ -277,71 +279,73 @@ impl EditorDockExample {
 }
 
 impl Render for EditorDockExample {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let view = cx.entity().clone();
 
-    window_border().child(
-      v_flex()
-        .size_full()
-        .min_h_0()
-        .child(TitleBar::new().title("Woocraft Editor Example"))
-        .child(
-          h_flex()
-            .h(px(48.))
-            .px_4()
-            .gap_2()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().title_bar)
-            .child(
-              Button::new("dock-theme")
-                .label("Toggle Theme")
-                .on_click(|_, _, cx| {
-                  let next = if cx.theme().mode.is_dark() {
-                    ThemeMode::Light
-                  } else {
-                    ThemeMode::Dark
-                  };
-                  Theme::set_mode(next, cx);
-                }),
-            )
-            .child(Button::new("toggle-left").label("Left").flat().on_click({
-              let view = view.clone();
-              move |_, window, cx| {
-                view.update(cx, |this, cx| {
-                  this.dock_area.update(cx, |dock, cx| {
-                    dock.toggle_dock(DockPlacement::Left, window, cx);
-                  });
-                });
-              }
-            }))
-            .child(
-              Button::new("toggle-bottom")
-                .label("Bottom")
-                .flat()
-                .on_click({
-                  let view = view.clone();
-                  move |_, window, cx| {
-                    view.update(cx, |this, cx| {
-                      this.dock_area.update(cx, |dock, cx| {
-                        dock.toggle_dock(DockPlacement::Bottom, window, cx);
-                      });
+    window_border()
+      .child(
+        v_flex()
+          .size_full()
+          .min_h_0()
+          .child(TitleBar::new().title("Woocraft Editor Example"))
+          .child(
+            h_flex()
+              .h(px(48.))
+              .px_4()
+              .gap_2()
+              .border_b_1()
+              .border_color(cx.theme().border)
+              .bg(cx.theme().title_bar)
+              .child(
+                Button::new("dock-theme")
+                  .label("Toggle Theme")
+                  .on_click(|_, _, cx| {
+                    let next = if cx.theme().mode.is_dark() {
+                      ThemeMode::Light
+                    } else {
+                      ThemeMode::Dark
+                    };
+                    Theme::set_mode(next, cx);
+                  }),
+              )
+              .child(Button::new("toggle-left").label("Left").flat().on_click({
+                let view = view.clone();
+                move |_, window, cx| {
+                  view.update(cx, |this, cx| {
+                    this.dock_area.update(cx, |dock, cx| {
+                      dock.toggle_dock(DockPlacement::Left, window, cx);
                     });
-                  }
-                }),
-            )
-            .child(Button::new("toggle-right").label("Right").flat().on_click(
-              move |_, window, cx| {
-                view.update(cx, |this, cx| {
-                  this.dock_area.update(cx, |dock, cx| {
-                    dock.toggle_dock(DockPlacement::Right, window, cx);
                   });
-                });
-              },
-            )),
-        )
-        .child(self.dock_area.clone()),
-    )
+                }
+              }))
+              .child(
+                Button::new("toggle-bottom")
+                  .label("Bottom")
+                  .flat()
+                  .on_click({
+                    let view = view.clone();
+                    move |_, window, cx| {
+                      view.update(cx, |this, cx| {
+                        this.dock_area.update(cx, |dock, cx| {
+                          dock.toggle_dock(DockPlacement::Bottom, window, cx);
+                        });
+                      });
+                    }
+                  }),
+              )
+              .child(Button::new("toggle-right").label("Right").flat().on_click(
+                move |_, window, cx| {
+                  view.update(cx, |this, cx| {
+                    this.dock_area.update(cx, |dock, cx| {
+                      dock.toggle_dock(DockPlacement::Right, window, cx);
+                    });
+                  });
+                },
+              )),
+          )
+          .child(self.dock_area.clone()),
+      )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

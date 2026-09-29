@@ -404,11 +404,11 @@ impl DatePicker {
   }
 }
 
-fn clear_button(id: impl Into<ElementId>, cx: &App) -> Button {
+fn clear_button(id: impl Into<ElementId>, size: Size, cx: &App) -> Button {
   Button::new(id)
     .icon(Icon::new(IconName::DismissCircle))
     .flat()
-    .small()
+    .with_size(size.smaller())
     .tab_stop(false)
     .text_color(cx.theme().muted_foreground)
 }
@@ -452,9 +452,16 @@ impl RenderOnce for DatePicker {
       .child(
         h_flex()
           .w_full()
+          .relative()
           .items_center()
           .justify_between()
           .min_w_0()
+          // The clear button lives in an absolute overlay pinned to the right
+          // edge, so it cannot stretch the trigger's layout height. Reserve
+          // its width plus a gap so the title never runs underneath it.
+          .when(show_clean, |this| {
+            this.pr(self.size.smaller().component_height() + rems(0.25))
+          })
           .child(
             div()
               .min_w_0()
@@ -464,37 +471,39 @@ impl RenderOnce for DatePicker {
               })
               .child(display_title),
           )
-          .child(
-            h_flex()
-              .items_center()
-              .gap_1()
-              .when(show_clean, |this| {
-                this.child(
-                  div()
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                      cx.stop_propagation();
-                    })
-                    .child(
-                      clear_button(("date-picker-clean", self.state.entity_id()), cx).on_click({
-                        let state = self.state.clone();
-                        move |_, window, cx| {
-                          state.update(cx, |state, cx| {
-                            state.clean(&ClickEvent::default(), window, cx);
-                            state.focus_handle.focus(window, cx);
-                          });
-                        }
-                      }),
-                    ),
-                )
-              })
-              .when(!show_clean, |this| {
-                this.child(
-                  Icon::new(IconName::Calendar)
-                    .with_size(self.size.smaller())
-                    .text_color(cx.theme().muted_foreground),
-                )
-              }),
-          ),
+          .when(!show_clean, |this| {
+            this.child(
+              Icon::new(IconName::Calendar)
+                .with_size(self.size.smaller())
+                .text_color(cx.theme().muted_foreground),
+            )
+          })
+          .when(show_clean, |this| {
+            this.child(
+              div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .right_0()
+                .flex()
+                .items_center()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                  cx.stop_propagation();
+                })
+                .child(
+                  clear_button(("date-picker-clean", self.state.entity_id()), self.size, cx)
+                    .on_click({
+                      let state = self.state.clone();
+                      move |_, window, cx| {
+                        state.update(cx, |state, cx| {
+                          state.clean(&ClickEvent::default(), window, cx);
+                          state.focus_handle.focus(window, cx);
+                        });
+                      }
+                    }),
+                ),
+            )
+          }),
       );
 
     let state_for_popover = self.state.clone();

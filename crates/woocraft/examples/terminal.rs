@@ -25,6 +25,8 @@ use woocraft::{
 };
 use woocraft_terminal::{ChildStatus, SpawnOptions, TerminalBounds, TerminalSession};
 
+mod common;
+
 actions!(terminal_example, [Quit]);
 
 /// A minimal URL detector: spans starting at `http://` or `https://` and
@@ -255,6 +257,7 @@ impl Render for TerminalDemo {
             .child(div().text_sm().text_color(theme.warning).child(message)),
         )
       })
+      .child(common::rem_size_control(window, cx))
   }
 }
 

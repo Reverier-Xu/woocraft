@@ -27,6 +27,8 @@ pub mod duration {
 
   /// Checkbox indicator fade/color transition.
   pub const CHECKBOX_TOGGLE: Duration = Duration::from_millis(150);
+  /// Slider/switch thumb grow and brighten on hover.
+  pub const THUMB_HOVER: Duration = Duration::from_millis(150);
   /// Dialog backdrop fade + panel rise on open.
   pub const DIALOG_ENTER: Duration = Duration::from_millis(180);
   /// Popover content fade + slide on open.
@@ -35,4 +37,6 @@ pub mod duration {
   pub const TOOLTIP_ENTER: Duration = Duration::from_millis(100);
   /// Notification item slide-in on push.
   pub const NOTIFICATION_ENTER: Duration = Duration::from_millis(200);
+  /// Notification item fade-out and collapse on close.
+  pub const NOTIFICATION_EXIT: Duration = Duration::from_millis(160);
 }

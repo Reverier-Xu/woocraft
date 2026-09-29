@@ -1192,13 +1192,18 @@ impl Render for InputState {
           div()
             .absolute()
             .left(caret_left)
-            .top_0p5()
-            .bottom_0p5()
-            .child(render_caret(
+            .top_0()
+            .bottom_0()
+            .flex()
+            .items_center()
+            // The caret matches the font size (1em); the input's own height
+            // is content-driven, so it cannot be stretched into place via
+            // top/bottom insets.
+            .child(div().h(self.size.text_size()).child(render_caret(
               caret_color,
               animate_caret,
               "input-caret-blink",
-            )),
+            ))),
         )
       })
   }
@@ -1318,10 +1323,10 @@ impl Input {
     self.selected || (state.focus_handle.is_focused(window) && !state.disabled)
   }
 
-  fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
+  fn render_toggle_mask_button(state: Entity<InputState>, size: Size) -> impl IntoElement {
     Button::new("toggle-mask")
       .icon(Icon::new(IconName::Eye))
-      .small()
+      .with_size(size)
       .flat()
       .tab_stop(false)
       .on_click({
@@ -1352,11 +1357,11 @@ impl Selectable for Input {
 impl_styled!(Input);
 
 #[inline]
-fn clear_button(cx: &App) -> Button {
+fn clear_button(cx: &App, size: Size) -> Button {
   Button::new("clean")
     .icon(Icon::new(IconName::DismissCircle))
     .flat()
-    .small()
+    .with_size(size)
     .tab_stop(false)
     .text_color(cx.theme().muted_foreground)
 }
@@ -1488,7 +1493,31 @@ impl RenderOnce for Input {
 
     let show_clear_button =
       self.cleanable && !state_view.disabled && !state_view.loading && !state_view.text.is_empty();
-    let has_suffix = state_view.loading || self.mask_toggle || show_clear_button;
+    let loading = state_view.loading;
+    let has_suffix = loading || self.mask_toggle || show_clear_button;
+    // Trailing items (spinner, mask toggle, clear button) are painted in an
+    // absolute overlay pinned to the right edge, so they never stretch the
+    // input's layout height. The input instead reserves right padding sized
+    // to the overlay: one gap per item (the first keeps the text clear of the
+    // overlay, the rest separate the overlay's own items) plus each item's
+    // width (buttons are `component_height` squares, the spinner is `1em`).
+    let suffix_reserve = {
+      let mut width = 0.;
+      let mut items = 0.;
+      if loading {
+        width += self.size.text_size().0;
+        items += 1.;
+      }
+      if self.mask_toggle {
+        width += self.size.component_height().0;
+        items += 1.;
+      }
+      if show_clear_button {
+        width += self.size.component_height().0;
+        items += 1.;
+      }
+      rems(width + self.size.component_gap().0 * items)
+    };
     let placeholder = state_view.placeholder.clone();
     let show_placeholder = state_view.text.is_empty() && !focused;
     let state_focus_handle = state_view.focus_handle.clone();
@@ -1507,6 +1536,7 @@ impl RenderOnce for Input {
 
     let input = div()
       .id(("input", self.state.entity_id()))
+      .relative()
       .flex()
       .items_center()
       .line_height(relative(1.25))
@@ -1554,9 +1584,7 @@ impl RenderOnce for Input {
       )
       .size_full()
       .component_size(self.size)
-      .when(has_suffix, |this| this.pr_0())
       .cursor_text()
-      .gap(gap_x)
       .when(self.appearance, |this| {
         this
           .bg(bg)
@@ -1631,20 +1659,36 @@ impl RenderOnce for Input {
           }),
       )
       .when(has_suffix, |this| {
-        this.pr(self.size.component_px() / 2.).child(
+        this.pr(suffix_reserve).child(
           h_flex()
             .id("suffix")
-            .gap(gap_x)
-            .when(self.appearance, |this| this.bg(bg))
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .right_0()
             .items_center()
-            .when_some(self.state.read(cx).loading.then_some(()), |this, _| {
-              this.child(crate::Spinner::new().color(cx.theme().muted_foreground))
+            .gap(gap_x)
+            // Buttons are sized to the input's own tier (a `component_height`
+            // square, i.e. the full field height at that size); clipping
+            // keeps their hover background flush with the border box instead
+            // of painting over the border.
+            .overflow_hidden()
+            .when(self.appearance, |this| this.bg(bg))
+            .when(loading, |this| {
+              this.child(
+                crate::Spinner::new()
+                  .with_size(self.size)
+                  .color(cx.theme().muted_foreground),
+              )
             })
             .when(self.mask_toggle, |this| {
-              this.child(Self::render_toggle_mask_button(self.state.clone()))
+              this.child(Self::render_toggle_mask_button(
+                self.state.clone(),
+                self.size,
+              ))
             })
             .when(show_clear_button, |this| {
-              this.child(clear_button(cx).on_click({
+              this.child(clear_button(cx, self.size).on_click({
                 let state = self.state.clone();
                 move |_, window, cx| {
                   state.update(cx, |state, cx| {

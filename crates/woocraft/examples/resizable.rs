@@ -7,6 +7,8 @@ use woocraft::{
   v_flex, v_resizable,
 };
 
+mod common;
+
 fn panel_box(content: impl Into<String>, _cx: &App) -> AnyElement {
   div()
     .p_4()
@@ -24,7 +26,7 @@ impl ResizableWindow {
 }
 
 impl Render for ResizableWindow {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
 
     v_flex()
@@ -103,6 +105,7 @@ impl Render for ResizableWindow {
           .text_color(cx.theme().muted_foreground)
           .child("Drag separators between panels to resize."),
       )
+      .child(common::rem_size_control(window, cx))
   }
 }
 

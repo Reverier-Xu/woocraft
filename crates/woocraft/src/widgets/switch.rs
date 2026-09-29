@@ -186,10 +186,16 @@ impl RenderOnce for Switch {
     let rem_size = window.rem_size();
     let track_h = self.size.track_height().to_pixels(rem_size);
     let track_w = track_h * 1.5;
-    let thumb_size = self.size.thumb_size().to_pixels(rem_size);
-    let thumb_offset = thumb_size / 2.0;
     let track_thickness = self.size.track_thickness().to_pixels(rem_size);
     let track_radius = self.size.component_radius();
+    // Thumb: a borderless text-colored pill, 0.25em × 1em at rest, growing to
+    // 0.5em wide and brightening on hover. Its center always stays 0.5em
+    // away from the track ends.
+    let thumb_h = self.size.thumb_size().to_pixels(rem_size);
+    let thumb_w_rest = self.size.em(0.25).to_pixels(rem_size);
+    let thumb_w_hover = self.size.em(0.5).to_pixels(rem_size);
+    let thumb_inset = self.size.em(0.5).to_pixels(rem_size);
+    let thumb_radius = self.size.em(0.125);
 
     let track_bg = cx.theme().muted;
     let active_color = match self.variant {
@@ -198,47 +204,38 @@ impl RenderOnce for Switch {
       SwitchVariant::Warning => cx.theme().warning,
       SwitchVariant::Danger => cx.theme().danger,
     };
-    let thumb_border_checked = active_color;
-    let thumb_border_unchecked = cx.theme().muted_foreground.opacity(0.7);
-    let thumb_bg_checked = cx.theme().background;
-    let thumb_bg_unchecked = cx.theme().muted.opacity(0.85);
 
-    // One normalized progress drives the thumb slide and the filled track;
-    // the thumb's border and background cross-fade with the same policy.
+    // Hover grows and brightens the thumb through the same interruptible
+    // target-value transition scheme as the toggle; the hover flag itself is
+    // keyed element state fed by the track's hover listener.
+    let hover_state = window.use_keyed_state((id.clone(), "thumb-hovered"), cx, |_, _| false);
+    let hover_policy = Transition::new(if self.disabled {
+      Duration::ZERO
+    } else {
+      duration::THUMB_HOVER
+    })
+    .easing(Easing::EaseOut);
+    let hover_t = transition(
+      (id.clone(), "thumb-hover"),
+      if *hover_state.read(cx) { 1.0 } else { 0.0 },
+      hover_policy,
+      window,
+      cx,
+    );
+    let thumb_w = thumb_w_rest + (thumb_w_hover - thumb_w_rest) * hover_t;
+    let thumb_opacity = 0.6 + 0.2 * hover_t;
+
+    // One normalized progress drives the thumb slide and the filled track.
     let progress = transition(
       (id.clone(), "progress"),
       if checked { 1.0 } else { 0.0 },
-      policy.clone(),
-      window,
-      cx,
-    );
-    let thumb_border_color = transition(
-      (id.clone(), "thumb-border"),
-      if checked {
-        thumb_border_checked
-      } else {
-        thumb_border_unchecked
-      },
-      policy.clone(),
-      window,
-      cx,
-    );
-    let thumb_bg = transition(
-      (id.clone(), "thumb-bg"),
-      if checked {
-        thumb_bg_checked
-      } else {
-        thumb_bg_unchecked
-      },
       policy,
       window,
       cx,
     );
 
-    let max_x = track_w - thumb_size;
-    let thumb_x = max_x * progress;
-    let total_w = max_x + thumb_offset;
-    let filled_w = total_w * progress;
+    let thumb_x = thumb_inset + (track_w - thumb_inset * 2.) * progress - thumb_w / 2.;
+    let filled_w = (track_w - thumb_inset) * progress;
 
     let filled_track: AnyElement = div()
       .absolute()
@@ -256,17 +253,12 @@ impl RenderOnce for Switch {
 
     let thumb: AnyElement = div()
       .absolute()
-      .top((track_h - thumb_size) / 2.0)
+      .top((track_h - thumb_h) / 2.0)
       .left(thumb_x)
-      .size(thumb_size)
-      .rounded_full()
-      .border_2()
-      .border_color(if self.disabled {
-        thumb_border_color.opacity(0.35)
-      } else {
-        thumb_border_color
-      })
-      .bg(thumb_bg)
+      .w(thumb_w)
+      .h(thumb_h)
+      .rounded(thumb_radius)
+      .bg(cx.theme().foreground.opacity(thumb_opacity))
       .when(self.disabled, |this| this.opacity(0.7))
       .into_any_element();
 
@@ -299,14 +291,27 @@ impl RenderOnce for Switch {
           .child(filled_track)
           .child(thumb)
           .when(!self.disabled, |this| {
-            this.cursor_pointer().on_click({
-              let on_click = self.on_click.clone();
-              move |_: &ClickEvent, window, cx| {
-                if let Some(on_click) = on_click.as_ref() {
-                  on_click(&!checked, window, cx);
+            this
+              .cursor_pointer()
+              .on_hover({
+                let hover_state = hover_state.clone();
+                move |hovered, _, cx| {
+                  hover_state.update(cx, |state, cx| {
+                    if *state != *hovered {
+                      *state = *hovered;
+                      cx.notify();
+                    }
+                  });
                 }
-              }
-            })
+              })
+              .on_click({
+                let on_click = self.on_click.clone();
+                move |_: &ClickEvent, window, cx| {
+                  if let Some(on_click) = on_click.as_ref() {
+                    on_click(&!checked, window, cx);
+                  }
+                }
+              })
           }),
       )
       .when_some(self.label, |this, label| {
