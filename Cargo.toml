@@ -22,7 +22,9 @@ strip         = true
 
 [workspace.dependencies]
 aho-corasick                  = "1.1"
-alacritty_terminal            = { git = "https://github.com/zed-industries/alacritty", rev = "4c129667ce56611becdc82de6e28218c80e2e88f" }
+# crates.io cannot ship git deps; `crow-alacritty-terminal` is a bit-for-bit
+# publication of zed's pinned rev (4c129667), verified against the git checkout.
+alacritty_terminal            = { version = "0.2.0", package = "crow-alacritty-terminal" }
 anyhow                        = "1.0"
 async-channel                 = "2"
 chrono                        = "0.4"

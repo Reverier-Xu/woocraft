@@ -132,30 +132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alacritty_terminal"
-version = "0.26.1-dev"
-source = "git+https://github.com/zed-industries/alacritty?rev=4c129667ce56611becdc82de6e28218c80e2e88f#4c129667ce56611becdc82de6e28218c80e2e88f"
-dependencies = [
- "base64 0.22.1",
- "bitflags 2.13.2",
- "home",
- "libc",
- "log",
- "miow",
- "parking_lot",
- "piper",
- "polling",
- "regex-automata",
- "rustix",
- "rustix-openpty",
- "serde",
- "signal-hook",
- "unicode-width",
- "vte",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "aligned"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1352,6 +1328,31 @@ name = "crossbeam-utils"
 version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
+
+[[package]]
+name = "crow-alacritty-terminal"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fd1810068dbe8782756ad06593646aa9c5a90361b521d64dfa2b020316b0d06"
+dependencies = [
+ "base64 0.22.1",
+ "bitflags 2.13.2",
+ "home",
+ "libc",
+ "log",
+ "miow",
+ "parking_lot",
+ "piper",
+ "polling",
+ "regex-automata",
+ "rustix",
+ "rustix-openpty",
+ "serde",
+ "signal-hook",
+ "unicode-width",
+ "vte",
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "crunchy"
@@ -7973,7 +7974,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "woocraft"
-version = "0.5.7"
+version = "0.6.0"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -8060,11 +8061,11 @@ dependencies = [
 
 [[package]]
 name = "woocraft-terminal"
-version = "0.5.7"
+version = "0.6.0"
 dependencies = [
- "alacritty_terminal",
  "anyhow",
  "async-channel",
+ "crow-alacritty-terminal",
  "thiserror 2.0.21",
  "tracing",
  "vte",
