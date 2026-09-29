@@ -781,6 +781,7 @@ impl Element for ViewportElement {
     self.state.update(cx, |state, cx| {
       state.sync_wrap_metrics_for_view(wrap_width, window, cx);
       state.clamp_top_row(line_height);
+      state.maintain_follow_output(line_height, cx);
     });
 
     let state = self.state.read(cx);
