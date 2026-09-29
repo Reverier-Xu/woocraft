@@ -195,14 +195,14 @@ impl DatePickerState {
       date,
       calendar,
       open: false,
-      date_format: "%Y/%m/%d".into(),
+      date_format: "%Y-%m-%d".into(),
       number_of_months: 1,
       disabled_matcher: None,
       _subscriptions: subscriptions,
     }
   }
 
-  /// Set display format, default: `%Y/%m/%d`.
+  /// Set display format, default: `%Y-%m-%d`.
   pub fn date_format(mut self, format: impl Into<SharedString>) -> Self {
     self.date_format = format.into();
     self
