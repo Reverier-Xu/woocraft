@@ -27,6 +27,8 @@ pub mod duration {
 
   /// Checkbox indicator fade/color transition.
   pub const CHECKBOX_TOGGLE: Duration = Duration::from_millis(150);
+  /// Radio indicator fill/border color transition.
+  pub const RADIO_TOGGLE: Duration = Duration::from_millis(150);
   /// Slider/switch thumb grow and brighten on hover.
   pub const THUMB_HOVER: Duration = Duration::from_millis(150);
   /// Dialog backdrop fade + panel rise on open.
