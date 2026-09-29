@@ -31,6 +31,7 @@ use super::{
   mode::InputMode,
   movement::MoveDirection,
   popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
+  rope_ext::rope_diff_edit,
   search::{self, SearchPanel},
   text_wrapper::{LineLayout, TextWrapper},
   viewport,
@@ -1090,24 +1091,28 @@ impl InputState {
       .as_ref()
       .is_some_and(|change| self.can_apply_incremental_backend_change(&snapshot_rope, change));
 
-    self.text = snapshot_rope;
+    let previous_text = std::mem::replace(&mut self.text, snapshot_rope);
     self.text_revision += 1;
 
-    if change_matches_snapshot {
-      if let Some(change) = change.as_ref() {
-        self.text_wrapper.update(
-          &self.text,
-          &(change.range.start as usize..change.range.end as usize),
-          change.new_text.as_ref(),
-          window,
-          cx,
-        );
-      }
-    } else {
-      // Defer the actual rewrap to ViewportElement::prepaint, which has the
-      // up-to-date container bounds and can debounce rapid resize frames.
-      self.text_wrapper.set_default_text(&self.text);
+    if let Some(change) = change.as_ref().filter(|_| change_matches_snapshot) {
+      self.text_wrapper.update(
+        &self.text,
+        &(change.range.start as usize..change.range.end as usize),
+        change.new_text.as_ref(),
+        window,
+        cx,
+      );
+    } else if let Some((range, new_text)) = rope_diff_edit(&previous_text, &self.text) {
+      // External mutations (e.g. a log backend appending a batch of lines)
+      // arrive without an `EditorTextChange`. Diff the old and new ropes to
+      // derive the changed region, so the wrapper re-wraps only that region
+      // instead of rebuilding the whole layout — critical for streaming logs
+      // where the document grows far beyond the viewport.
+      self
+        .text_wrapper
+        .update(&self.text, &range, &new_text, window, cx);
     }
+    // Text unchanged: keep the wrapped layout as-is.
     self.refresh_backend_highlighter(force || change.is_some(), change.as_ref());
     self.lsp.update(&self.text, window, cx);
     self.update_search(cx);
@@ -3191,5 +3196,154 @@ impl Render for InputState {
       .children(self.diagnostic_popover.clone())
       .children(self.context_menu.as_ref().map(|menu| menu.render()))
       .children(self.hover_popover.clone())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::sync::{Arc, Mutex};
+
+  use gpui::{IntoElement, Render, TestAppContext, div};
+
+  use super::*;
+  use crate::{
+    Theme,
+    widgets::editor::{
+      EditorActionSink, EditorBackendCapabilities, EditorContextMenuProvider,
+      EditorHighlighterProvider, RopeEditorSnapshot,
+    },
+  };
+
+  /// A log-stream backend whose content lives outside the editor, so a test
+  /// (or a real producer) can push new batches between frames.
+  #[derive(Clone, Default)]
+  struct SharedLogBackend {
+    state: Arc<Mutex<SharedLogState>>,
+  }
+
+  #[derive(Default)]
+  struct SharedLogState {
+    text: Rope,
+    revision: u64,
+  }
+
+  impl SharedLogBackend {
+    fn push(&self, batch: &str) {
+      let mut state = self.state.lock().unwrap();
+      let mut text = std::mem::take(&mut state.text);
+      text.replace(text.len()..text.len(), batch);
+      state.text = text;
+      state.revision += 1;
+    }
+  }
+
+  impl EditorActionSink for SharedLogBackend {}
+  impl EditorContextMenuProvider for SharedLogBackend {}
+  impl EditorHighlighterProvider for SharedLogBackend {}
+
+  impl EditorBackend for SharedLogBackend {
+    fn revision(&self) -> u64 {
+      self.state.lock().unwrap().revision
+    }
+
+    fn capabilities(&self) -> EditorBackendCapabilities {
+      EditorBackendCapabilities::read_only()
+    }
+
+    fn snapshot(&self) -> Arc<dyn EditorSnapshot> {
+      let state = self.state.lock().unwrap();
+      Arc::new(RopeEditorSnapshot::new(state.revision, state.text.clone()))
+    }
+  }
+
+  struct Host(Entity<InputState>);
+
+  impl Render for Host {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+      div().size_full().child(self.0.clone())
+    }
+  }
+
+  fn batch(prefix: &str, rows: usize) -> String {
+    (0..rows).map(|i| format!("{prefix} line {i}\n")).collect()
+  }
+
+  #[gpui::test]
+  fn backend_log_stream_keeps_wrapped_layout_in_sync(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    let backend = SharedLogBackend::default();
+    backend.push(&batch("batch-1", 100));
+
+    let window = cx.add_window(|window, cx| {
+      let state = cx.new(|cx| {
+        InputState::new(window, cx)
+          .code_editor("text")
+          .backend(backend.clone())
+          .read_only(true)
+      });
+      Host(state)
+    });
+    cx.run_until_parked();
+
+    let (wrapped_rows, text_lines) = window
+      .update(cx, |host, _, cx| {
+        let state = host.0.read(cx);
+        (state.text_wrapper.len(), state.text.lines_len())
+      })
+      .unwrap();
+    assert_eq!(wrapped_rows, 101, "100 lines + trailing empty line");
+    assert_eq!(text_lines, 101);
+
+    // A second batch lands externally, without an `EditorTextChange`. The
+    // next frame must sync the wrapped layout to the new text. This is the
+    // regression: `set_default_text` used to pre-sync the wrapper's text, so
+    // the prepaint `sync` saw "text unchanged", kept the stale `lines`, and
+    // scrolling then indexed out of bounds.
+    backend.push(&batch("batch-2", 50));
+    window
+      .update(cx, |host, _, cx| {
+        host.0.update(cx, |_, cx| cx.notify());
+      })
+      .unwrap();
+    cx.run_until_parked();
+
+    window
+      .update(cx, |host, _, cx| {
+        let state = host.0.read(cx);
+        assert_eq!(state.text.lines_len(), 151);
+        assert_eq!(
+          state.text_wrapper.len(),
+          151,
+          "wrapped rows must follow the streamed text"
+        );
+        // The last wrapped line must be the (empty) trailing line of the new
+        // document, not a leftover of the first batch.
+        assert_eq!(
+          state.text_wrapper.line(150).map(|line| line.lines_len()),
+          Some(1)
+        );
+      })
+      .unwrap();
+
+    // Scrolling through the whole second batch must stay in bounds and reach
+    // the new tail.
+    window
+      .update(cx, |host, window, cx| {
+        host.0.update(cx, |state, cx| {
+          let line_height = state
+            .last_layout
+            .as_ref()
+            .map(|layout| layout.line_height)
+            .unwrap_or(window.line_height());
+          state.set_top_row(usize::MAX, line_height);
+          cx.notify();
+          assert!(state.top_row > 100, "tail moved into the second batch");
+          // Offset mapping for the very end of the new text stays in bounds.
+          let point = state.text_wrapper.offset_to_display_point(state.text.len());
+          assert!(point.row < state.text_wrapper.len().max(1));
+        });
+      })
+      .unwrap();
+    cx.run_until_parked();
   }
 }

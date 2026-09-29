@@ -67,6 +67,11 @@ pub(super) struct TextWrapper {
   display_row_starts: Vec<usize>,
 
   _initialized: bool,
+  /// Set when the text was swapped in without re-wrapping (the deferred
+  /// rewrap path, [`Self::set_default_text`]). The next [`Self::sync`] must
+  /// rebuild the wrapped lines even if the incoming text compares equal to
+  /// the stored one — `lines` still describes the previous text.
+  rewrap_pending: bool,
 }
 
 #[allow(unused)]
@@ -82,12 +87,22 @@ impl TextWrapper {
       lines: Vec::new(),
       display_row_starts: Vec::new(),
       _initialized: false,
+      rewrap_pending: false,
     }
   }
 
+  /// Swap in the text without re-wrapping it yet.
+  ///
+  /// The wrapped `lines` stay stale until the next [`Self::sync`] (or another
+  /// update) rebuilds them; `sync` treats the wrapper as dirty via an internal
+  /// pending flag, so the rebuild happens even when the caller later passes
+  /// the very same rope back. This is what makes the deferred rewrap safe:
+  /// merely assigning `text` here can never make `sync` believe the layout is
+  /// up to date.
   #[inline]
   pub(super) fn set_default_text(&mut self, text: &Rope) {
     self.text = text.clone();
+    self.rewrap_pending = true;
   }
 
   pub(super) fn text(&self) -> &Rope {
@@ -166,16 +181,27 @@ impl TextWrapper {
     self.lines.get(row)
   }
 
+  /// Whether the wrapped layout must be rebuilt for the given inputs.
+  ///
+  /// `true` when this wrapper was never built, when a deferred rewrap is
+  /// pending ([`Self::set_default_text`]), or when the text, font or wrap
+  /// width changed since the last build.
+  fn needs_rewrap(
+    &self, text: &Rope, font: &Font, font_size: Pixels, wrap_width: Option<Pixels>,
+  ) -> bool {
+    !self._initialized
+      || self.rewrap_pending
+      || self.text != *text
+      || !self.font.eq(font)
+      || self.font_size != font_size
+      || self.wrap_width != wrap_width
+  }
+
   pub(super) fn sync(
     &mut self, text: &Rope, font: Font, font_size: Pixels, wrap_width: Option<Pixels>,
     window: &Window, cx: &mut App,
   ) -> bool {
-    let text_changed = self.text != *text;
-    let font_changed = !self.font.eq(&font) || self.font_size != font_size;
-    let wrap_width_changed = self.wrap_width != wrap_width;
-
-    if !self._initialized || text_changed || font_changed || wrap_width_changed {
-      self._initialized = true;
+    if self.needs_rewrap(text, &font, font_size, wrap_width) {
       self.font = font;
       self.font_size = font_size;
       self.wrap_width = wrap_width;
@@ -297,44 +323,105 @@ impl TextWrapper {
     self.longest_row = LongestRow {
       row: longest_row_ix,
       len: longest_row_len,
-    }
+    };
+    // The wrapped layout now matches `changed_text` exactly.
+    self._initialized = true;
+    self.rewrap_pending = false;
   }
 
-  /// Update the text wrapper and recalculate the wrapped lines.
+  /// Rebuild the wrapped lines for the whole document from scratch.
   ///
-  /// If the `text` is the same as the current text, do nothing.
+  /// Unlike [`Self::update`], which splices the changed rows of an incremental
+  /// edit, this drops the previous `lines` entirely, so it stays correct when
+  /// the new text is unrelated to (or much shorter than) the previous one.
   fn update_all(&mut self, text: &Rope, window: &Window, cx: &mut App) {
-    // Avoid the full-text String allocation in `self.update`; we only need the
-    // text length for a whole-document re-wrap.
     let font = self.font.clone();
     let font_size = self.font_size;
     let mut line_wrapper = window.text_system().line_wrapper(font.clone(), font_size);
-    self._update(
-      text,
-      &(0..text.len()),
-      text.len(),
-      &mut |line_str, wrap_width| {
-        let fragment = LineFragment::Text { text: line_str };
-        let mut start = 0;
-        let mut wrapped_lines = Vec::new();
-        for boundary in line_wrapper.wrap_line(&[fragment], wrap_width) {
-          wrapped_lines.push(start..boundary.ix);
-          start = boundary.ix;
-        }
-        wrapped_lines.push(start..line_str.len());
-        wrapped_lines
-      },
-    );
+    self.rebuild_all(text, &mut |line_str, wrap_width| {
+      let fragment = LineFragment::Text { text: line_str };
+      let mut start = 0;
+      let mut wrapped_lines = Vec::new();
+      for boundary in line_wrapper.wrap_line(&[fragment], wrap_width) {
+        wrapped_lines.push(start..boundary.ix);
+        start = boundary.ix;
+      }
+      wrapped_lines.push(start..line_str.len());
+      wrapped_lines
+    });
+  }
+
+  /// The [`Self::update_all`] body without the text system, so tests can
+  /// inject a fake wrap function.
+  fn rebuild_all<F>(&mut self, text: &Rope, wrap_line: &mut F)
+  where
+    F: FnMut(&str, Pixels) -> Vec<Range<usize>>, {
+    let wrap_width = self.wrap_width;
+    let mut lines = Vec::new();
+    let mut display_row_starts = Vec::new();
+    let mut longest_row = LongestRow::default();
+    let mut soft_lines = 0;
+
+    for (row, line) in text.iter_lines().enumerate() {
+      let line_str = line.to_string();
+      let mut wrapped_lines = vec![];
+      let mut prev_boundary_ix = 0;
+
+      if line_str.len() > longest_row.len {
+        longest_row = LongestRow {
+          row,
+          len: line_str.len(),
+        };
+      }
+
+      // If wrap_width is None, skip wrapping to disable word wrap
+      if let Some(wrap_width) = wrap_width {
+        wrapped_lines = wrap_line(&line_str, wrap_width);
+        prev_boundary_ix = wrapped_lines.last().map(|range| range.end).unwrap_or(0);
+      }
+
+      // Add the remaining tail when wrapping did not already cover the full
+      // line.
+      if wrapped_lines.is_empty() || prev_boundary_ix < line.len() {
+        wrapped_lines.push(prev_boundary_ix..line.len());
+      }
+
+      display_row_starts.push(soft_lines);
+      soft_lines += wrapped_lines.len();
+      lines.push(LineItem {
+        line: Rope::from(line),
+        wrapped_lines,
+      });
+    }
+
+    self.text = text.clone();
+    self.lines = lines;
+    self.soft_lines = soft_lines;
+    self.display_row_starts = display_row_starts;
+    self.longest_row = longest_row;
+    self._initialized = true;
+    self.rewrap_pending = false;
   }
 
   /// Return display point (with soft wrap) from the given byte offset in the
   /// text.
   ///
-  /// Panics if the `offset` is out of bounds.
+  /// Out-of-bounds offsets are clamped to the end of the text.
   pub(crate) fn offset_to_display_point(&self, offset: usize) -> DisplayPoint {
     let row = self.text.offset_to_point(offset).row;
     let start = self.text.line_start_offset(row);
-    let line = &self.lines[row];
+    let Some(line) = self.lines.get(row) else {
+      // The wrapped layout has not caught up with the text yet (or the text
+      // is empty); point at the end of the last wrapped line.
+      let last_row = self.lines.len().saturating_sub(1);
+      let last_lines = self
+        .lines
+        .last()
+        .map(|line| line.lines_len().saturating_sub(1))
+        .unwrap_or(0);
+      let last_row_start = self.display_row_starts.get(last_row).copied().unwrap_or(0);
+      return DisplayPoint::new(last_row_start + last_lines, last_lines, 0);
+    };
 
     let wrapped_row = self
       .display_row_starts
@@ -362,11 +449,13 @@ impl TextWrapper {
   /// Return byte offset in the text from the given display point (with soft
   /// wrap).
   ///
-  /// Panics if the `point.row` is out of bounds.
+  /// Points beyond the wrapped layout clamp to the end of the text.
   pub(crate) fn display_point_to_offset(&self, point: DisplayPoint) -> usize {
     if let Some((row, local_row)) = self.display_row_to_line_row(point.row) {
       let line_start = self.text.line_start_offset(row);
-      let line = &self.lines[row];
+      let Some(line) = self.lines.get(row) else {
+        return self.text.len();
+      };
       if let Some(range) = line.wrapped_lines.get(local_row) {
         return line_start + (range.start + point.column).min(range.end);
       }
@@ -1059,6 +1148,110 @@ mod tests {
     assert_eq!(
       wrapper.soft_lines, 51,
       "shrunk document must shrink soft_lines"
+    );
+  }
+
+  #[test]
+  fn deferred_default_text_forces_rewrap_on_next_sync() {
+    let font = gpui::Font {
+      family: "Arial".into(),
+      weight: FontWeight::default(),
+      style: FontStyle::Normal,
+      features: FontFeatures::default(),
+      fallbacks: None,
+    };
+
+    fn no_wrap(_line: &str, _wrap_width: Pixels) -> Vec<Range<usize>> {
+      vec![]
+    }
+
+    let mut wrapper = TextWrapper::new(font, px(14.), None);
+    let first_batch = Rope::from(
+      (0..100)
+        .map(|i| format!("log line {i}\n"))
+        .collect::<String>(),
+    );
+    wrapper.rebuild_all(&first_batch, &mut no_wrap);
+    assert_eq!(wrapper.lines.len(), 101);
+
+    // The deferred-rewrap path (`set_default_text`) swaps the text without
+    // re-wrapping. This is the regression: the wrapper used to be considered
+    // in sync afterwards, leaving `lines` built from the old batch.
+    let second_batch = Rope::from(
+      (0..200)
+        .map(|i| format!("log line {i}\n"))
+        .collect::<String>(),
+    );
+    wrapper.set_default_text(&second_batch);
+    assert_eq!(wrapper.text(), &second_batch);
+    assert_eq!(
+      wrapper.lines.len(),
+      101,
+      "lines stay stale until the next sync"
+    );
+    assert!(
+      wrapper.needs_rewrap(&second_batch, &wrapper.font, wrapper.font_size, None),
+      "sync must rebuild even though the stored text is equal"
+    );
+
+    // The next sync rebuilds from the new text.
+    wrapper.rebuild_all(&second_batch, &mut no_wrap);
+    assert_eq!(wrapper.lines.len(), 201);
+    assert_eq!(wrapper.len(), 201);
+    assert!(!wrapper.needs_rewrap(&second_batch, &wrapper.font, wrapper.font_size, None));
+  }
+
+  #[test]
+  fn rebuild_all_replaces_lines_for_shrunk_text() {
+    let font = gpui::Font {
+      family: "Arial".into(),
+      weight: FontWeight::default(),
+      style: FontStyle::Normal,
+      features: FontFeatures::default(),
+      fallbacks: None,
+    };
+
+    fn no_wrap(_line: &str, _wrap_width: Pixels) -> Vec<Range<usize>> {
+      vec![]
+    }
+
+    let mut wrapper = TextWrapper::new(font, px(14.), None);
+    let long_text = Rope::from((0..200).map(|i| format!("line {i}\n")).collect::<String>());
+    wrapper.rebuild_all(&long_text, &mut no_wrap);
+    assert_eq!(wrapper.lines.len(), 201);
+
+    // A full rewrap of a much shorter document must not keep stale lines
+    // around (the old splice-based `update_all` clamped the removal range to
+    // the new text's extent, so shrinking left the tail of the old document
+    // behind).
+    let short_text = Rope::from((0..20).map(|i| format!("line {i}\n")).collect::<String>());
+    wrapper.rebuild_all(&short_text, &mut no_wrap);
+    assert_eq!(wrapper.lines.len(), 21);
+    assert_eq!(wrapper.len(), 21);
+    assert_eq!(wrapper.text(), &short_text);
+    assert_eq!(wrapper.line_row_to_display_row(20), 20);
+  }
+
+  #[test]
+  fn offset_to_display_point_clamps_when_lines_lag_text() {
+    let font = gpui::Font {
+      family: "Arial".into(),
+      weight: FontWeight::default(),
+      style: FontStyle::Normal,
+      features: FontFeatures::default(),
+      fallbacks: None,
+    };
+
+    let mut wrapper = TextWrapper::new(font, px(14.), None);
+    wrapper.rebuild_all(&Rope::from("one\ntwo\n"), &mut |_l, _w| vec![]);
+
+    // Simulate a transient desync: the text grows but `lines` still wraps
+    // the old document. Display-point mapping must clamp, not panic.
+    wrapper.text = Rope::from("one\ntwo\nthree\nfour\nfive\n");
+    let point = wrapper.offset_to_display_point(20);
+    assert!(
+      point.row <= wrapper.len(),
+      "clamped into the wrapped layout"
     );
   }
 }

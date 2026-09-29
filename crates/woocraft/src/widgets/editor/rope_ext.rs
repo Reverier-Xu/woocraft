@@ -417,12 +417,142 @@ impl RopeExt for Rope {
   }
 }
 
+/// Length in bytes of the longest common prefix of two ropes.
+///
+/// Compares chunk-by-chunk (effectively `memcmp` speed), so a shared prefix
+/// costs one pass over the identical bytes and stops at the first differing
+/// byte. The returned length is always a char boundary in both ropes, because
+/// both byte strings start with the same bytes.
+fn common_prefix_len(a: &Rope, b: &Rope) -> usize {
+  let mut a_chunks = a.chunks();
+  let mut b_chunks = b.chunks();
+  let mut a_chunk = a_chunks.next().unwrap_or("");
+  let mut b_chunk = b_chunks.next().unwrap_or("");
+  let mut prefix = 0;
+
+  loop {
+    if a_chunk.is_empty() {
+      a_chunk = a_chunks.next().unwrap_or("");
+    }
+    if b_chunk.is_empty() {
+      b_chunk = b_chunks.next().unwrap_or("");
+    }
+    if a_chunk.is_empty() || b_chunk.is_empty() {
+      return prefix;
+    }
+
+    let limit = a_chunk.len().min(b_chunk.len());
+    let matched = a_chunk.as_bytes()[..limit]
+      .iter()
+      .zip(b_chunk.as_bytes()[..limit].iter())
+      .take_while(|(x, y)| x == y)
+      .count();
+    prefix += matched;
+    if matched < limit {
+      return prefix;
+    }
+
+    a_chunk = &a_chunk[limit..];
+    b_chunk = &b_chunk[limit..];
+  }
+}
+
+/// Length in bytes of the longest common suffix of two ropes, considering at
+/// most `limit` bytes.
+///
+/// Walks the rope trees from the end with chunk cursors, because ropey's
+/// chunk iterator is not double-ended.
+fn common_suffix_len(a: &Rope, b: &Rope, limit: usize) -> usize {
+  if limit == 0 {
+    return 0;
+  }
+
+  let mut a_cursor = a.chunk_cursor();
+  while a_cursor.next() {}
+  let mut b_cursor = b.chunk_cursor();
+  while b_cursor.next() {}
+
+  let mut suffix = 0;
+  loop {
+    let a_chunk = a_cursor.chunk();
+    let b_chunk = b_cursor.chunk();
+    let limit_here = a_chunk.len().min(b_chunk.len()).min(limit - suffix);
+
+    let matched = a_chunk.as_bytes()[a_chunk.len() - limit_here..]
+      .iter()
+      .rev()
+      .zip(
+        b_chunk.as_bytes()[b_chunk.len() - limit_here..]
+          .iter()
+          .rev(),
+      )
+      .take_while(|(x, y)| x == y)
+      .count();
+    suffix += matched;
+    if matched < limit_here {
+      return suffix;
+    }
+    if suffix >= limit {
+      return suffix;
+    }
+
+    // Both chunks fully matched; step to the previous chunks. Running out
+    // of chunks on either side means everything compared equal so far.
+    if !a_cursor.prev() || !b_cursor.prev() {
+      return suffix;
+    }
+  }
+}
+
+/// Derive the minimal single edit (range in `old` + inserted text) that turns
+/// `old` into `new`, or `None` when the ropes are equal.
+///
+/// This lets the editor re-wrap only the changed region of an externally
+/// mutated document (e.g. a log backend appending batches of lines) instead
+/// of rebuilding the whole layout. The comparison cost is proportional to the
+/// changed region plus one `memcmp`-speed pass over the shared prefix — for
+/// append-only logs the prefix is the whole previous document, which is still
+/// far cheaper than re-wrapping every line.
+pub(crate) fn rope_diff_edit(old: &Rope, new: &Rope) -> Option<(Range<usize>, String)> {
+  let min_len = old.len().min(new.len());
+  let raw_prefix = common_prefix_len(old, new);
+  // The suffix must not reach into the common prefix.
+  let raw_suffix = common_suffix_len(old, new, min_len - raw_prefix);
+
+  // The divergence points can land inside a multi-byte character. Snap them
+  // to char boundaries that are valid in BOTH ropes: within the identical
+  // prefix/suffix regions both ropes share the same byte content, so walking
+  // a few bytes left/right finds a shared boundary (UTF-8 guarantees one
+  // within 4 bytes).
+  let mut prefix = raw_prefix;
+  while prefix > 0 && !(old.is_char_boundary(prefix) && new.is_char_boundary(prefix)) {
+    prefix -= 1;
+  }
+
+  let mut suffix = raw_suffix;
+  while suffix < min_len - prefix
+    && !(old.is_char_boundary(old.len() - suffix) && new.is_char_boundary(new.len() - suffix))
+  {
+    suffix += 1;
+  }
+
+  let old_range = prefix..old.len() - suffix;
+  let inserted_len = new.len() - suffix - prefix;
+  if old_range.is_empty() && inserted_len == 0 {
+    return None;
+  }
+
+  let inserted = new.slice(prefix..new.len() - suffix).to_string();
+  Some((old_range, inserted))
+}
+
 #[cfg(test)]
 mod tests {
   use gpui_sum_tree::Bias;
   use ropey::Rope;
   use tree_sitter::Point;
 
+  use super::rope_diff_edit;
   use crate::widgets::editor::{Position, RopeExt};
 
   #[test]
@@ -677,5 +807,95 @@ mod tests {
     assert_eq!(rope.offset_to_char_index(5), 3);
     assert_eq!(rope.offset_to_char_index(6), 4);
     assert_eq!(rope.offset_to_char_index(10), 5);
+  }
+
+  #[test]
+  fn test_rope_diff_edit_append() {
+    let old = Rope::from("one\ntwo\nthree\n");
+    let new = Rope::from("one\ntwo\nthree\nfour\nfive\n");
+
+    let (range, inserted) = rope_diff_edit(&old, &new).expect("append is an edit");
+    assert_eq!(range, old.len()..old.len());
+    assert_eq!(inserted, "four\nfive\n");
+  }
+
+  #[test]
+  fn test_rope_diff_edit_append_to_partial_last_line() {
+    let old = Rope::from("one\ntwo\nthre");
+    let new = Rope::from("one\ntwo\nthree\nfour");
+
+    let (range, inserted) = rope_diff_edit(&old, &new).expect("extending the last line is an edit");
+    assert_eq!(range, old.len()..old.len());
+    assert_eq!(inserted, "e\nfour");
+  }
+
+  #[test]
+  fn test_rope_diff_edit_middle_change() {
+    let old = Rope::from("one\ntypo\nthree\n");
+    let new = Rope::from("one\nfine\nthree\n");
+
+    let (range, inserted) = rope_diff_edit(&old, &new).expect("middle change is an edit");
+    assert_eq!(range, "one\n".len().."one\ntypo".len());
+    assert_eq!(inserted, "fine");
+  }
+
+  #[test]
+  fn test_rope_diff_edit_shrink() {
+    let old = Rope::from("a\nb\nc\nd\ne\nf\n");
+    let new = Rope::from("a\nb\nc\n");
+
+    let (range, inserted) = rope_diff_edit(&old, &new).expect("truncation is an edit");
+    assert_eq!(range, new.len()..old.len());
+    assert_eq!(inserted, "");
+  }
+
+  #[test]
+  fn test_rope_diff_edit_equal_and_replaced() {
+    assert_eq!(rope_diff_edit(&Rope::from(""), &Rope::from("")), None);
+    assert_eq!(
+      rope_diff_edit(&Rope::from("same"), &Rope::from("same")),
+      None
+    );
+
+    let (range, inserted) = rope_diff_edit(&Rope::from(""), &Rope::from("hello")).unwrap();
+    assert_eq!(range, 0..0);
+    assert_eq!(inserted, "hello");
+
+    let (range, inserted) = rope_diff_edit(&Rope::from("hello"), &Rope::from("")).unwrap();
+    assert_eq!(range, 0..5);
+    assert_eq!(inserted, "");
+  }
+
+  #[test]
+  fn test_rope_diff_edit_multibyte_boundaries() {
+    // Divergence inside multi-byte characters must still produce char
+    // boundary offsets, so the derived slice ranges never panic.
+    let old = Rope::from("前缀相同 中间不同 后缀相同");
+    let new = Rope::from("前缀相同 俩间不同 后缀相同");
+
+    let (range, inserted) = rope_diff_edit(&old, &new).expect("multibyte change is an edit");
+    assert_eq!(&old.slice(range.clone()).to_string(), "中");
+    assert_eq!(inserted, "俩");
+
+    // Fully disjoint multibyte texts.
+    let (range, inserted) = rope_diff_edit(&Rope::from("中文"), &Rope::from("英文")).unwrap();
+    assert_eq!(range, 0.."中".len());
+    assert_eq!(inserted, "英");
+  }
+
+  #[test]
+  fn test_rope_diff_edit_large_append_is_line_aligned() {
+    let old = Rope::from(
+      (0..1000)
+        .map(|i| format!("log line {i}\n"))
+        .collect::<String>(),
+    );
+    let mut text = old.to_string();
+    text.push_str(&"appended batch\n".repeat(50));
+    let new = Rope::from(text);
+
+    let (range, inserted) = rope_diff_edit(&old, &new).expect("batch append is an edit");
+    assert_eq!(range, old.len()..old.len());
+    assert_eq!(inserted, "appended batch\n".repeat(50));
   }
 }
