@@ -664,19 +664,33 @@ impl Calendar {
         })
       })
       .when(secondary_active, |this| {
+        // In-range days reuse the primary hue at low alpha so the range reads
+        // as one continuous band with the selected endpoints.
         this
           .bg(if muted {
-            cx.theme().accent.opacity(0.5)
+            cx.theme().primary.opacity(0.12)
           } else {
-            cx.theme().accent
+            cx.theme().primary.opacity(0.25)
           })
-          .text_color(cx.theme().accent_foreground)
+          .text_color(if muted {
+            cx.theme().muted_foreground
+          } else {
+            cx.theme().foreground
+          })
       })
       .when(!active && !disabled, |this| {
+        // Hover stays on the primary hue like the range band, just fainter
+        // than the in-range fill so the two states remain distinguishable.
         this.hover(|this| {
-          this
-            .bg(cx.theme().accent)
-            .text_color(cx.theme().accent_foreground)
+          if secondary_active {
+            this
+              .bg(cx.theme().primary.opacity(0.4))
+              .text_color(cx.theme().foreground)
+          } else {
+            this
+              .bg(cx.theme().primary.opacity(0.15))
+              .text_color(cx.theme().foreground)
+          }
         })
       })
       .when(active, |this| {
