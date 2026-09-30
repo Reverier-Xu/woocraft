@@ -11,7 +11,7 @@ publish      = true
 readme       = "README.md"
 repository   = "https://github.com/Reverier-Xu/woocraft"
 rust-version = "1.98"
-version      = "0.6.0"
+version      = "0.6.1"
 
 [profile.release]
 codegen-units = 1
@@ -21,24 +21,24 @@ panic         = "abort"
 strip         = true
 
 [workspace.dependencies]
-aho-corasick                  = "1.1"
+aho-corasick = "1.1"
 # crates.io cannot ship git deps; `crow-alacritty-terminal` is a bit-for-bit
 # publication of zed's pinned rev (4c129667), verified against the git checkout.
-alacritty_terminal            = { version = "0.2.0", package = "crow-alacritty-terminal" }
-anyhow                        = "1.0"
-async-channel                 = "2"
-chrono                        = "0.4"
-crossbeam-channel             = "0.5"
-enum-iterator                 = "2.3"
+alacritty_terminal = { version = "0.2.0", package = "crow-alacritty-terminal" }
+anyhow             = "1.0"
+async-channel      = "2"
+chrono             = "0.4"
+crossbeam-channel  = "0.5"
+enum-iterator      = "2.3"
 # NOTE: Temporary migration from git deps to the `gpui-pre-*` crates.io snapshots
 # published by Longbridge (huacnlee). Version 0.3.6 == zed@bcf6582. Exact pins are
 # required: each 0.3.x snapshot may contain breaking API changes (see longbridge/
 # gpui-kit#3156). Migrate back to the zed git source once an official stable gpui
 # release catches up.
-gpui                          = { version = "=0.3.6", package = "gpui-pre" }
-gpui-macros                   = { version = "=0.3.6", package = "gpui-pre-macros" }
-gpui_platform                 = { version = "=0.3.6", package = "gpui-pre-platform" }
-gpui_sum_tree                 = { version = "=0.3.6", package = "gpui-pre-sum-tree" }
+gpui                          = { version = "=0.3.7", package = "gpui-pre" }
+gpui-macros                   = { version = "=0.3.7", package = "gpui-pre-macros" }
+gpui_platform                 = { version = "=0.3.7", package = "gpui-pre-platform" }
+gpui_sum_tree                 = { version = "=0.3.7", package = "gpui-pre-sum-tree" }
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
 palette                       = "0.7"

@@ -18,9 +18,11 @@ aho-corasick                  = { workspace = true }
 anyhow                        = { workspace = true }
 async-channel                 = { workspace = true }
 chrono                        = { workspace = true }
+crossbeam-channel             = { workspace = true, optional = true }
 enum-iterator                 = { workspace = true }
 gpui                          = { workspace = true }
 gpui-macros                   = { workspace = true }
+gpui_sum_tree                 = { workspace = true }
 lsp-types                     = { workspace = true }
 num-traits                    = { workspace = true }
 palette                       = { workspace = true }
@@ -32,8 +34,6 @@ serde_json                    = { workspace = true }
 serde_repr                    = { workspace = true }
 smallvec                      = { workspace = true }
 smol                          = { workspace = true }
-gpui_sum_tree                 = { workspace = true }
-crossbeam-channel             = { workspace = true, optional = true }
 thiserror                     = { workspace = true }
 toml                          = { workspace = true }
 tracing                       = { workspace = true }
@@ -56,8 +56,8 @@ tree-sitter-html              = { workspace = true, optional = true }
 tree-sitter-java              = { workspace = true, optional = true }
 tree-sitter-javascript        = { workspace = true, optional = true }
 tree-sitter-jsdoc             = { workspace = true, optional = true }
-tree-sitter-julia             = { workspace = true, optional = true }
 tree-sitter-json              = { workspace = true }
+tree-sitter-julia             = { workspace = true, optional = true }
 tree-sitter-kotlin-sg         = { workspace = true, optional = true }
 tree-sitter-lua               = { workspace = true, optional = true }
 tree-sitter-make              = { workspace = true, optional = true }
@@ -82,13 +82,13 @@ tree-sitter-verilog           = { workspace = true, optional = true }
 tree-sitter-yaml              = { workspace = true, optional = true }
 tree-sitter-zig               = { workspace = true, optional = true }
 unicode-segmentation          = { workspace = true }
-woocraft-terminal             = { path = "../terminal", version = "0.6.0", optional = true }
+woocraft-terminal             = { path = "../terminal", version = "0.6.1", optional = true }
 
 # For assets embedding, optional and workspace to avoid unnecessary dependency for users who don't need it.
-rust-embed = { workspace = true, optional = true }
-rust-i18n  = { workspace = true }
-zstd       = { workspace = true, optional = true }
 gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }
+rust-embed    = { workspace = true, optional = true }
+rust-i18n     = { workspace = true }
+zstd          = { workspace = true, optional = true }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
@@ -97,10 +97,13 @@ gpui = { workspace = true, features = ["test-support"] }
 # The reduced-motion preference, read through the XDG desktop portal's
 # Settings interface. The same version and features `gpui-pre-linux` already
 # pulls in, so this adds no new code to the build.
-ashpd = { version = "0.13", default-features = false, features = ["async-io", "settings"] }
+ashpd = { version = "0.13", default-features = false, features = [
+  "async-io",
+  "settings",
+] }
 # Stream combinators for the portal change signal (already in the tree via gpui).
 futures = "0.3"
-zbus = { version = "5", features = ["blocking"], optional = true }
+zbus    = { version = "5", features = ["blocking"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = { version = "0.6", optional = true }
@@ -131,11 +134,17 @@ windows = { version = "0.62", features = [
 ] }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "webp"], optional = true }
+image = { version = "0.25", default-features = false, features = [
+  "png",
+  "jpeg",
+  "ico",
+  "webp",
+], optional = true }
 
 [features]
 default = ["resources", "tree-sitter-languages", "terminal"]
 resources = ["dep:rust-embed", "dep:zstd"]
+terminal = ["dep:woocraft-terminal"]
 tray = [
   "dep:crossbeam-channel",
   "dep:image",
@@ -143,7 +152,6 @@ tray = [
   "dep:objc2",
   "dep:objc2-foundation",
 ]
-terminal = ["dep:woocraft-terminal"]
 tree-sitter-languages = [
   "dep:tree-sitter-agda",
   "dep:tree-sitter-astro-next",
