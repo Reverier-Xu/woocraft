@@ -57,7 +57,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Easing, ElementExt, Size, StyledExt, Transition, duration, opacity, transition,
+  ActiveTheme, Easing, ElementExt, Size, StyledExt, Transition, duration, h_flex, opacity,
+  transition,
 };
 
 #[derive(Clone)]
@@ -646,7 +647,7 @@ impl RenderOnce for Slider {
         }
       });
 
-    div()
+    h_flex()
       .id(self.id)
       .when(matches!(axis, Axis::Horizontal), |this| {
         this.h(self.size.component_height()).w_full()

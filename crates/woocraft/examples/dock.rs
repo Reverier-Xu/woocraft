@@ -10,8 +10,6 @@ use woocraft::{
   StyledExt as _, TitleBar, v_flex, window_border,
 };
 
-mod common;
-
 actions!(
   dock_example_menu,
   [
@@ -250,42 +248,41 @@ impl DockExample {
 }
 
 impl Render for DockExample {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    window_border()
-      .child(
-        v_flex()
-          .size_full()
-          .min_h_0()
-          .on_action(cx.listener(Self::on_toggle_left_dock))
-          .on_action(cx.listener(Self::on_toggle_bottom_dock))
-          .on_action(cx.listener(Self::on_toggle_right_dock))
-          .on_action(cx.listener(Self::on_expand_all_docks))
-          .on_action(cx.listener(Self::on_collapse_all_docks))
-          .on_action(cx.listener(Self::on_reset_dock_sizes))
-          .on_action(cx.listener(Self::on_about_woocraft))
-          .on_action(cx.listener(Self::on_about_version))
-          .on_action(cx.listener(Self::on_about_license))
-          .on_action(cx.listener(Self::on_about_changelog_highlights))
-          .on_action(cx.listener(Self::on_about_changelog_roadmap))
-          .on_action(cx.listener(Self::on_about_credits_core))
-          .on_action(cx.listener(Self::on_about_credits_community))
-          .child(
-            TitleBar::new()
-              .title("Woocraft Dock Example")
-              .app_menu_bar(self.app_menu_bar.clone())
-              .title_menu(|menu, _, _| {
-                menu
-                  .item(PopupMenuItem::new("New Tab"))
-                  .item(PopupMenuItem::new("Split Pane"))
-                  .separator()
-                  .item(PopupMenuItem::new("Preferences"))
-              })
-              .theme_button(true)
-              .language_button(true),
-          )
-          .child(self.dock_area.clone()),
-      )
-      .child(common::rem_size_control(window, cx))
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    window_border().child(
+      v_flex()
+        .size_full()
+        .min_h_0()
+        .on_action(cx.listener(Self::on_toggle_left_dock))
+        .on_action(cx.listener(Self::on_toggle_bottom_dock))
+        .on_action(cx.listener(Self::on_toggle_right_dock))
+        .on_action(cx.listener(Self::on_expand_all_docks))
+        .on_action(cx.listener(Self::on_collapse_all_docks))
+        .on_action(cx.listener(Self::on_reset_dock_sizes))
+        .on_action(cx.listener(Self::on_about_woocraft))
+        .on_action(cx.listener(Self::on_about_version))
+        .on_action(cx.listener(Self::on_about_license))
+        .on_action(cx.listener(Self::on_about_changelog_highlights))
+        .on_action(cx.listener(Self::on_about_changelog_roadmap))
+        .on_action(cx.listener(Self::on_about_credits_core))
+        .on_action(cx.listener(Self::on_about_credits_community))
+        .child(
+          TitleBar::new()
+            .title("Woocraft Dock Example")
+            .zoom_button(true)
+            .app_menu_bar(self.app_menu_bar.clone())
+            .title_menu(|menu, _, _| {
+              menu
+                .item(PopupMenuItem::new("New Tab"))
+                .item(PopupMenuItem::new("Split Pane"))
+                .separator()
+                .item(PopupMenuItem::new("Preferences"))
+            })
+            .theme_button(true)
+            .language_button(true),
+        )
+        .child(self.dock_area.clone()),
+    )
   }
 }
 

@@ -3,6 +3,7 @@ loading = "Loading..."
 
 [tech.woooo.woocraft.title_bar]
 untitled = "Untitled"
+zoom_reset = "Reset Zoom"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Search..."

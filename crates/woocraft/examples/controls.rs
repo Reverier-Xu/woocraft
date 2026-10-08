@@ -16,8 +16,6 @@ use woocraft::{
   h_flex, init, v_flex, window_border,
 };
 
-mod common;
-
 #[derive(Clone)]
 struct DemoListEntry {
   title: &'static str,
@@ -547,7 +545,7 @@ impl ControlsWindow {
 }
 
 impl Render for ControlsWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let slider_value = self.slider_state.read(cx).value().end();
     let is_dark = cx.theme().mode.is_dark();
     let (
@@ -601,7 +599,8 @@ impl Render for ControlsWindow {
                 .item(PopupMenuItem::new("Settings"))
             })
             .theme_button(true)
-            .language_button(true),
+            .language_button(true)
+            .zoom_button(true),
         )
         .child(
             v_flex()
@@ -1483,7 +1482,6 @@ impl Render for ControlsWindow {
               NotificationCenter::new(&self.notification_state)
                 .placement(NotificationPlacement::BottomRight),
             )
-            .child(common::rem_size_control(window, cx))
   }
 }
 

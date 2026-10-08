@@ -3,6 +3,7 @@ loading = "加载中..."
 
 [tech.woooo.woocraft.title_bar]
 untitled = "未命名"
+zoom_reset = "重置缩放"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "搜索..."

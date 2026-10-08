@@ -8,8 +8,6 @@ use woocraft::{
   register_icon, v_flex,
 };
 
-mod common;
-
 #[derive(RustEmbed)]
 #[folder = "examples/assets"]
 #[include = "external/**/*.svg"]
@@ -25,7 +23,7 @@ impl ExternalIconWindow {
 }
 
 impl Render for ExternalIconWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     v_flex()
       .size_full()
       .p_6()
@@ -72,7 +70,6 @@ impl Render for ExternalIconWindow {
               .child(div().text_sm().child("External alias icon")),
           ),
       )
-      .child(common::rem_size_control(window, cx))
   }
 }
 

@@ -7,8 +7,6 @@ use woocraft::{
   ThemeMode, TitleBar, h_flex, init, v_flex, window_border,
 };
 
-mod common;
-
 #[derive(Default)]
 struct DialogWindow {
   light_open: bool,
@@ -23,7 +21,7 @@ impl DialogWindow {
 }
 
 impl Render for DialogWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let this = cx.entity().clone();
     let is_dark = cx.theme().mode.is_dark();
 
@@ -31,7 +29,11 @@ impl Render for DialogWindow {
       v_flex()
         .size_full()
         .min_h_0()
-        .child(TitleBar::new().title("Woocraft Dialog Example"))
+        .child(
+          TitleBar::new()
+            .title("Woocraft Dialog Example")
+            .zoom_button(true),
+        )
         .child(
           v_flex()
             .size_full()
@@ -204,7 +206,6 @@ impl Render for DialogWindow {
             ),
         ),
     )
-    .child(common::rem_size_control(window, cx))
   }
 }
 

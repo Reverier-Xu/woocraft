@@ -14,8 +14,6 @@ use woocraft::{
   Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
-mod common;
-
 struct PaletteWindow;
 
 impl PaletteWindow {
@@ -153,7 +151,7 @@ fn syntax_sections(theme: &Theme) -> Vec<(&'static str, Vec<(&'static str, Hsla)
 }
 
 impl Render for PaletteWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let theme = cx.theme();
     let colors = theme.colors;
     let tokens = theme.tokens;
@@ -248,7 +246,11 @@ impl Render for PaletteWindow {
       v_flex()
         .size_full()
         .min_h_0()
-        .child(TitleBar::new().title("Woocraft Theme Palette"))
+        .child(
+          TitleBar::new()
+            .title("Woocraft Theme Palette")
+            .zoom_button(true),
+        )
         .child(
           v_flex()
             .p_6()
@@ -307,8 +309,7 @@ impl Render for PaletteWindow {
                 .into_iter()
                 .map(|(title, colors)| section(title, colors, cx)),
             ),
-        )
-        .child(common::rem_size_control(window, cx)),
+        ),
     )
   }
 }

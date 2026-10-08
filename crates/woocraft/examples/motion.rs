@@ -29,8 +29,6 @@ use woocraft::{
   v_flex,
 };
 
-mod common;
-
 const START_MINUTES: u32 = 8 * 60;
 const END_MINUTES: u32 = 20 * 60;
 const DIGIT_HEIGHT: f32 = 38.0;
@@ -617,7 +615,6 @@ impl Render for MotionExample {
               .child(content),
           ),
       )
-      .child(common::rem_size_control(window, cx))
   }
 }
 

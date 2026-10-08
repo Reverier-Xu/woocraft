@@ -8,8 +8,6 @@ use woocraft::{
   v_flex, window_border,
 };
 
-mod common;
-
 fn demo_tree(expanded: bool) -> Vec<TreeItem> {
   vec![
     TreeItem::new("src", "src")
@@ -95,7 +93,7 @@ impl TreeWindow {
 }
 
 impl Render for TreeWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
     let selected_info = {
       let state = self.tree_state.read(cx);
@@ -119,7 +117,9 @@ impl Render for TreeWindow {
       v_flex()
         .size_full()
         .min_h_0()
-        .child(TitleBar::new().title("Woocraft Tree Example"))
+        .child(TitleBar::new().title("Woocraft Tree Example")
+              .zoom_button(true)
+            )
         .child(
           v_flex()
             .size_full()
@@ -270,7 +270,6 @@ impl Render for TreeWindow {
             ),
         ),
     )
-    .child(common::rem_size_control(window, cx))
   }
 }
 

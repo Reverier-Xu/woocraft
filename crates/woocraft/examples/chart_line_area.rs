@@ -6,8 +6,6 @@ use woocraft::{
   ActiveTheme, AreaChart, LineChart, Selectable, StyledExt, Theme, ThemeMode, h_flex, init, v_flex,
 };
 
-mod common;
-
 #[derive(Clone)]
 struct TrendRow {
   month: &'static str,
@@ -60,7 +58,7 @@ impl ChartWindow {
 }
 
 impl Render for ChartWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let data = trend_data();
     let line = LineChart::new(data.clone())
       .x(|d| d.month)
@@ -144,7 +142,6 @@ impl Render for ChartWindow {
           )
           .child(div().mt_3().w_full().h(px(260.)).child(area)),
       )
-      .child(common::rem_size_control(window, cx))
   }
 }
 

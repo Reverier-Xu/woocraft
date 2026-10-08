@@ -3,11 +3,10 @@ use gpui::{
   Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable as _,
-  StyledExt, Theme, ThemeMode, h_flex, init, v_flex,
+  ActiveTheme, Button, ButtonVariants as _, Disableable, Icon, IconName, ScrollableElement as _,
+  Selectable, Sizable as _, StyledExt, Theme, ThemeMode, TitleBar, h_flex, init, v_flex,
+  window_border,
 };
-
-mod common;
 
 #[derive(Default)]
 struct ButtonWindow {
@@ -21,21 +20,33 @@ impl ButtonWindow {
 }
 
 impl Render for ButtonWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
 
-    v_flex()
-      .size_full()
-      .p_6()
-      .gap_4()
-      .bg(cx.theme().background)
-      .text_color(cx.theme().foreground)
-      .child(
-        div()
-          .text_xl()
-          .font_semibold()
-          .child("Woocraft Button Preview"),
-      )
+    window_border().child(
+      v_flex()
+        .size_full()
+        .min_h_0()
+        .bg(cx.theme().background)
+        .text_color(cx.theme().foreground)
+        .child(
+          TitleBar::new()
+            .title("Woocraft Button Example")
+            .zoom_button(true),
+        )
+        .child(
+          v_flex()
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scrollbar()
+            .p_6()
+            .gap_4()
+            .child(
+              div()
+                .text_xl()
+                .font_semibold()
+                .child("Woocraft Button Preview"),
+            )
       .child(div().child("Theme"))
       .child(
         h_flex()
@@ -126,17 +137,18 @@ impl Render for ButtonWindow {
           ),
       )
       .child(div().text_sm().child("Icon"))
-      .child(
-        h_flex()
-          .gap_3()
-          .child(Button::new("btn-icon").icon(Icon::new(IconName::Settings)))
           .child(
-            Button::new("btn-label-icon")
-              .icon(Icon::new(IconName::SpinnerIos))
-              .label("Search"),
+            h_flex()
+              .gap_3()
+              .child(Button::new("btn-icon").icon(Icon::new(IconName::Settings)))
+              .child(
+                Button::new("btn-label-icon")
+                  .icon(Icon::new(IconName::SpinnerIos))
+                  .label("Search"),
+              ),
           ),
-      )
-      .child(common::rem_size_control(window, cx))
+        ),
+    )
   }
 }
 
@@ -152,6 +164,11 @@ fn main() {
         .open_window(
           WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitleBar::title_bar_options()),
+            #[cfg(target_os = "linux")]
+            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui::WindowDecorations::Client),
             ..Default::default()
           },
           |_window, cx| ButtonWindow::view(cx),

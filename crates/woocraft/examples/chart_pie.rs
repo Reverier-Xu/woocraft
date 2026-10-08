@@ -6,8 +6,6 @@ use woocraft::{
   ActiveTheme, PieChart, Selectable, StyledExt, Theme, ThemeMode, h_flex, init, v_flex,
 };
 
-mod common;
-
 #[derive(Clone)]
 struct Segment {
   label: &'static str,
@@ -49,7 +47,7 @@ impl ChartWindow {
 }
 
 impl Render for ChartWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let data = segment_data();
 
     let pie = PieChart::new(data.clone())
@@ -153,7 +151,6 @@ impl Render for ChartWindow {
               .child(format!("{:.1}%", item.value))
           })),
       )
-      .child(common::rem_size_control(window, cx))
   }
 }
 

@@ -7,8 +7,6 @@ use woocraft::{
   v_flex,
 };
 
-mod common;
-
 #[derive(Clone)]
 struct SalesRow {
   channel: &'static str,
@@ -99,7 +97,7 @@ impl ChartWindow {
 }
 
 impl Render for ChartWindow {
-  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let bars = BarChart::new(sales_data())
       .x(|d| d.channel)
       .y(|d| d.total)
@@ -178,7 +176,6 @@ impl Render for ChartWindow {
           )
           .child(div().mt_3().w_full().h(px(250.)).child(candles)),
       )
-      .child(common::rem_size_control(window, cx))
   }
 }
 
