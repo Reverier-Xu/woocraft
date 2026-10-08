@@ -10,7 +10,6 @@ use woocraft::{
   Panel, PanelEvent, PopupMenuItem, Size, StyleSized, TitleBar, TreeEvent, TreeItem, TreeState,
   h_flex, init, tree, v_flex, window_border,
 };
-
 #[cfg(debug_assertions)]
 use woocraft::{ScrollableElement, StyledExt};
 
