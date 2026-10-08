@@ -1,9 +1,9 @@
 //! Font configuration: primary family and fallback selection.
 //!
-//! The embedded [`crate::DEFAULT_FONT_FAMILY`] (Maple Mono) covers Latin plus
-//! terminal symbols; every other script resolves through the platform text
-//! stack. This module centralizes how the primary family and the fallback
-//! list are chosen:
+//! The embedded [`crate::DEFAULT_FONT_FAMILY`] (Iosevka Term) covers Latin,
+//! Greek, Cyrillic and symbol scripts with single-cell metrics; every other
+//! script resolves through the platform text stack. This module centralizes
+//! how the primary family and the fallback list are chosen:
 //!
 //! 1. Application overrides ([`set_font_overrides`]) always win — including
 //!    overriding the primary family itself (e.g. to a sans font).
@@ -12,10 +12,10 @@
 //!    locale-aware fontconfig probe on Linux, whose own cascade is a static
 //!    Noto wish-list instead of a user-language-ordered list.
 //!
-//! The same sans-preferring fallback applies to every widget, the terminal
-//! included: ASCII text stays monospace through the embedded primary font,
-//! and widgets may expose their own primary font setting (the terminal
-//! does). See `docs/font-fallback-design.md` for the full rationale.
+//! The same sans-preferring fallback applies to every widget; the terminal
+//! instead chains the embedded icon family first (see
+//! [`terminal_font_fallbacks`]), and widgets may expose their own primary
+//! font setting (the terminal does).
 
 use std::sync::{Arc, LazyLock, RwLock};
 
@@ -176,30 +176,60 @@ pub fn platform_monospace_font_fallbacks() -> Option<FontFallbacks> {
   }
 }
 
+/// Returns the fallback chain for grid-aligned text (the terminal): the
+/// embedded icon family ([`crate::SYMBOLS_FONT_FAMILY`]) first, then the
+/// locale-aware monospace platform chain for CJK.
+///
+/// The embedded primary family carries no Nerd Font glyphs, so terminal
+/// icon codepoints resolve through this single shared fallback face instead
+/// of being duplicated into every text face of the family. Application
+/// fallback overrides ([`set_font_overrides`]) replace the whole chain —
+/// including the icon family — when set.
+pub fn terminal_font_fallbacks() -> Option<FontFallbacks> {
+  #[cfg(target_os = "linux")]
+  let platform_families: Option<Vec<String>> = {
+    static FAMILIES: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
+    FAMILIES
+      .get_or_init(|| fontconfig_families("monospace"))
+      .clone()
+  };
+  #[cfg(not(target_os = "linux"))]
+  let platform_families: Option<Vec<String>> = None;
+
+  let mut families = vec![crate::SYMBOLS_FONT_FAMILY.to_owned()];
+  families.extend(platform_families.unwrap_or_default());
+  Some(FontFallbacks::from_fonts(families))
+}
+
+/// Queries fontconfig for the best families of `generic_family`, optionally
+/// constrained to the user's locale language. Callers own the caching.
+#[cfg(target_os = "linux")]
+fn fontconfig_families(generic_family: &str) -> Option<Vec<String>> {
+  let output = std::process::Command::new("fc-match")
+    .args([
+      "-s",
+      "-f",
+      "%{family}\n",
+      &match locale_language_tag() {
+        Some(lang) => format!("{generic_family}:lang={lang}"),
+        None => generic_family.to_string(),
+      },
+    ])
+    .output()
+    .ok()
+    .filter(|output| output.status.success())?;
+  let families = parse_fc_match_families(&String::from_utf8_lossy(&output.stdout));
+  (!families.is_empty()).then_some(families)
+}
+
 /// Queries fontconfig once (per caller-owned `cache`) for the best families
-/// of `generic_family`, optionally constrained to the user's locale language.
+/// of `generic_family` and wraps them into [`FontFallbacks`].
 #[cfg(target_os = "linux")]
 fn fontconfig_fallbacks(
   generic_family: &str, cache: &std::sync::OnceLock<Option<Vec<String>>>,
 ) -> Option<FontFallbacks> {
-  let families = cache.get_or_init(|| {
-    let output = std::process::Command::new("fc-match")
-      .args([
-        "-s",
-        "-f",
-        "%{family}\n",
-        &match locale_language_tag() {
-          Some(lang) => format!("{generic_family}:lang={lang}"),
-          None => generic_family.to_string(),
-        },
-      ])
-      .output()
-      .ok()
-      .filter(|output| output.status.success())?;
-    let families = parse_fc_match_families(&String::from_utf8_lossy(&output.stdout));
-    (!families.is_empty()).then_some(families)
-  });
-  families
+  cache
+    .get_or_init(|| fontconfig_families(generic_family))
     .as_ref()
     .map(|families| FontFallbacks::from_fonts(families.clone()))
 }

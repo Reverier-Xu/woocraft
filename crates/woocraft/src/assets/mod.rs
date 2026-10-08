@@ -383,8 +383,14 @@ mod tests {
     assert!(
       font_assets
         .iter()
-        .any(|path| path.as_ref().ends_with("fonts/maple-mono-regular.ttf")),
+        .any(|path| path.as_ref().ends_with("fonts/iosevka-term-regular.ttf")),
       "compressed font should be exposed via its original extension"
+    );
+    assert!(
+      font_assets.iter().any(|path| path
+        .as_ref()
+        .ends_with("fonts/symbols-nerd-font-mono-regular.ttf")),
+      "embedded icon fallback family should be listed"
     );
     assert!(
       font_assets
@@ -392,13 +398,19 @@ mod tests {
         .all(|path| !path.as_ref().ends_with(".zst")),
       "compression suffix should stay internal to asset loading"
     );
-    // The embedded family ships all static weights and both styles so that
-    // bold/italic terminal runs resolve within the same family.
+    // The embedded family ships the UI weight range plus Regular/Bold
+    // italics so that bold/italic terminal runs resolve within the same
+    // family, and one shared icon face backs the terminal fallback chain.
     for face in [
-      "maple-mono-regular",
-      "maple-mono-bold",
-      "maple-mono-italic",
-      "maple-mono-bolditalic",
+      "iosevka-term-light",
+      "iosevka-term-regular",
+      "iosevka-term-medium",
+      "iosevka-term-semibold",
+      "iosevka-term-bold",
+      "iosevka-term-extrabold",
+      "iosevka-term-italic",
+      "iosevka-term-bolditalic",
+      "symbols-nerd-font-mono-regular",
     ] {
       assert!(
         super::has_asset(&format!("{}/fonts/{face}.ttf", super::BUILTIN_ASSET_PREFIX)),
@@ -410,7 +422,7 @@ mod tests {
   #[cfg(feature = "resources")]
   #[test]
   fn builtin_fonts_are_decompressed_on_load() {
-    let raw_font = super::Assets::get("fonts/maple-mono-regular.ttf.zst")
+    let raw_font = super::Assets::get("fonts/iosevka-term-regular.ttf.zst")
       .expect("compressed font should be embedded in test builds");
 
     assert!(
@@ -419,7 +431,7 @@ mod tests {
     );
 
     let font_path = format!(
-      "{}/fonts/maple-mono-regular.ttf",
+      "{}/fonts/iosevka-term-regular.ttf",
       super::BUILTIN_ASSET_PREFIX
     );
     let loaded_font = super::load_builtin_asset(&font_path)

@@ -917,7 +917,9 @@ impl Element for TerminalElement {
           // Ligatures are wrong in a terminal: they would merge glyphs across
           // separately-styled cells and break the forced per-cell grid.
           features: gpui::FontFeatures::disable_ligatures(),
-          fallbacks: crate::font_fallbacks_with(crate::platform_font_fallbacks()),
+          // Icons resolve through the embedded Nerd Font symbol face before
+          // the platform CJK chain.
+          fallbacks: crate::font_fallbacks_with(crate::terminal_font_fallbacks()),
           ..window.text_style().font()
         };
 
@@ -1513,7 +1515,8 @@ fn cell_style(
     });
 
   // Bold/italic cells switch weight/style within the embedded multi-face
-  // family (`DEFAULT_FONT_FAMILY` now ships all static weights and italics).
+  // family (`TERMINAL_FONT_FAMILY` ships the same weight range plus
+  // Regular/Bold italics).
   // Requesting a face that exists keeps every run on the same metrics, so the
   // forced per-cell grid stays aligned. CJK runs resolve through the platform
   // fallback list; their glyph positions are still snapped to the cell grid.

@@ -33,13 +33,30 @@ pub use widgets::*;
 #[cfg(feature = "terminal")]
 pub use woocraft_terminal::alacritty_terminal;
 
-pub const DEFAULT_FONT_FAMILY: &str = "Maple Mono";
+/// The embedded primary UI family: Iosevka Term v34.9.0 (subset).
+///
+/// The subset keeps the upstream character set intact (7,758 codepoints:
+/// Latin, Greek, Cyrillic, IPA, braille, box drawing, math alphanumerics, …)
+/// plus the rich-text shaping features (`ccmp`, `locl`, `mark`, `mkmk`,
+/// `frac`, `dnom`, `numr`, `lnum`, `onum`, `zero`) while dropping
+/// ligatures and character/stylistic variants. Embedded faces: Light,
+/// Regular, Medium, SemiBold, Bold, ExtraBold and Regular/Bold italics.
+/// Every glyph is at most one cell wide, so the family also fits monospace
+/// grids; CJK still resolves through the platform fallback chain.
+pub const DEFAULT_FONT_FAMILY: &str = "Iosevka Term";
 
-/// The embedded terminal-optimized monospace family: Maple Mono NF (the
-/// Nerd Font build — Nerd Font icons, powerline, box drawing, braille and
-/// math symbols at uniform cell metrics). Regular/Bold/Italic/BoldItalic
-/// are embedded; CJK still resolves through the platform fallback chain.
-pub const TERMINAL_FONT_FAMILY: &str = "Maple Mono NF";
+/// The embedded terminal icon fallback: Symbols Nerd Font Mono v3.5.1
+/// (subset). One shared regular face covers the whole Nerd Font icon range
+/// (powerline, file/font logos, material design, …) at uniform single-cell
+/// advances, referenced from the terminal fallback chain instead of being
+/// duplicated into every text face.
+pub const SYMBOLS_FONT_FAMILY: &str = "Symbols Nerd Font Mono";
+
+/// The embedded terminal primary family: the same Iosevka Term faces as
+/// [`DEFAULT_FONT_FAMILY`] (single-cell symbol metrics, no ligatures);
+/// Nerd Font icons resolve through [`SYMBOLS_FONT_FAMILY`] via
+/// [`terminal_font_fallbacks`].
+pub const TERMINAL_FONT_FAMILY: &str = "Iosevka Term";
 
 pub fn init(cx: &mut gpui::App) {
   #[cfg(feature = "resources")]
