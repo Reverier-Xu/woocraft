@@ -290,6 +290,7 @@ impl RenderOnce for TitleBar {
     let is_client_decorated = matches!(decorations, Decorations::Client { .. });
     let is_linux = cfg!(target_os = "linux");
     let is_macos = cfg!(target_os = "macos");
+    #[cfg(target_os = "macos")]
     if is_macos {
       window.set_traffic_light_position(traffic_light_position(window.rem_size()));
     }

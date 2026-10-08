@@ -8068,7 +8068,6 @@ dependencies = [
  "anyhow",
  "async-channel",
  "crow-alacritty-terminal",
- "thiserror 2.0.21",
  "tracing",
  "vte",
 ]

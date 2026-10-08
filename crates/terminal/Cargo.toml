@@ -16,6 +16,5 @@ version      = { workspace = true }
 alacritty_terminal = { workspace = true }
 anyhow             = { workspace = true }
 async-channel      = { workspace = true }
-thiserror          = { workspace = true }
 tracing            = { workspace = true }
 vte                = { workspace = true }
