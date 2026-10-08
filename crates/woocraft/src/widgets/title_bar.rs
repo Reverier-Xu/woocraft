@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use gpui::{
   AnyElement, App, ClickEvent, Context, Decorations, InteractiveElement as _, IntoElement,
-  MouseButton, ParentElement, Render, RenderOnce, SharedString, StatefulInteractiveElement as _,
-  StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, div,
-  prelude::FluentBuilder as _, px,
+  MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, SharedString,
+  StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
+  WindowControlArea, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -21,7 +21,12 @@ const TITLE_BAR_SIZE: Size = Size::Medium;
 
 /// Left padding reserved for the native macOS traffic-light buttons
 /// (close / minimize / zoom) so the title-bar content never overlaps them.
-const TRAFFIC_LIGHT_PADDING: f32 = 68.0;
+const TRAFFIC_LIGHT_PADDING: f32 = 4.8;
+const TRAFFIC_LIGHT_MARGIN: f32 = 0.8;
+
+fn traffic_light_position(rem_size: Pixels) -> Point<Pixels> {
+    point(TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_MARGIN).to_pixels(rem_size), TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_MARGIN).to_pixels(rem_size))
+}
 
 #[derive(IntoElement)]
 pub struct TitleBar {
@@ -106,7 +111,7 @@ impl TitleBar {
     TitlebarOptions {
       title: None,
       appears_transparent: true,
-      traffic_light_position: Some(gpui::point(px(9.), px(13.))),
+      traffic_light_position: Some(traffic_light_position(px(16.))),
     }
   }
 
@@ -282,6 +287,9 @@ impl RenderOnce for TitleBar {
     let is_client_decorated = matches!(decorations, Decorations::Client { .. });
     let is_linux = cfg!(target_os = "linux");
     let is_macos = cfg!(target_os = "macos");
+    if is_macos {
+        window.set_traffic_light_position(traffic_light_position(window.rem_size()));
+    }
     let window_radius = cx.theme().radius_container;
     let title = title.unwrap_or_else(|| {
       let window_title = window.window_title();
@@ -377,7 +385,7 @@ impl RenderOnce for TitleBar {
             .when(window.is_fullscreen(), |this| this.pl_3())
             .when(
               is_macos && !window.is_fullscreen() && !window.is_simple_fullscreen(),
-              |this| this.pl(px(TRAFFIC_LIGHT_PADDING)),
+              |this| this.pl(TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_PADDING)),
             )
             .h_full()
             .justify_start()
