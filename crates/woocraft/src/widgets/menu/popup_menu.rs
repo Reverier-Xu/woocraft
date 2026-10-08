@@ -5,16 +5,16 @@ use gpui::{
   ClickEvent, Context, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
   InteractiveElement, IntoElement, KeyBinding, Keystroke, MouseDownEvent, OwnedMenuItem,
   ParentElement, Pixels, Point, Rems, Render, ScrollHandle, SharedString,
-  StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, anchored, div,
+  StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, anchored, deferred, div,
   prelude::FluentBuilder, px, rems,
 };
 
 use crate::{
   ActiveTheme, CardStyle, Disableable, Divider, ElementExt, Icon, IconLabel, IconName, Kbd,
-  ScrollableElement, Selectable, Size, StyleSized,
+  Selectable, Size, StyleSized,
   actions::{Cancel, Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
   h_flex, v_flex,
-  widgets::{Button, ButtonVariants},
+  widgets::{Button, ButtonVariants, Scrollbar, ScrollbarAxis},
 };
 
 const CONTEXT: &str = "PopupMenu";
@@ -76,8 +76,6 @@ pub enum PopupMenuItem {
     handler: Option<Rc<ClickHandler>>,
   },
   /// A submenu item that opens another popup menu.
-  ///
-  /// NOTE: This is only supported when the parent menu is not `scrollable`.
   Submenu {
     icon: Option<Icon>,
     label: SharedString,
@@ -312,7 +310,6 @@ pub struct PopupMenu {
 
   /// The parent menu of this menu, if this is a submenu
   parent_menu: Option<WeakEntity<Self>>,
-  scrollable: bool,
   external_link_icon: bool,
   scroll_handle: ScrollHandle,
   // This will update on render
@@ -341,7 +338,6 @@ impl PopupMenu {
       max_height: None,
       check_side: Side::Left,
       bounds: Bounds::default(),
-      scrollable: false,
       scroll_handle: ScrollHandle::default(),
       external_link_icon: true,
       size: Size::default(),
@@ -382,17 +378,12 @@ impl PopupMenu {
     self
   }
 
-  /// Set max height of the popup menu, default is half of the window height
+  /// Set max height of the popup menu, default is half of the window height.
+  ///
+  /// Every menu is height-bounded and scrolls on its own — with a built-in
+  /// scrollbar — once its items outgrow the bound.
   pub fn max_h(mut self, height: impl Into<Pixels>) -> Self {
     self.max_height = Some(height.into());
-    self
-  }
-
-  /// Set the menu to be scrollable to show vertical scrollbar.
-  ///
-  /// NOTE: If this is true, the sub-menus will cannot be support.
-  pub fn scrollable(mut self, scrollable: bool) -> Self {
-    self.scrollable = scrollable;
     self
   }
 
@@ -666,10 +657,6 @@ impl PopupMenu {
         }
         OwnedMenuItem::SystemMenu(_) => {}
       }
-    }
-
-    if self.menu_items.len() > 20 {
-      self.scrollable = true;
     }
 
     self
@@ -1203,21 +1190,28 @@ impl PopupMenu {
               )
             };
 
+            // The popover is deferred so it paints after the whole menu and
+            // escapes the scroll-area content mask: submenu items may live
+            // inside a scrolled (height-bounded) menu, and positioning stays
+            // window-anchored on the item's measured bounds either way.
             this.child(
-              anchored()
-                .position_mode(position_mode)
-                .position(position)
-                .anchor(anchor)
-                .offset(offset)
-                .child(
-                  v_flex()
-                    .id("submenu")
-                    .occlude()
-                    .popover_style(cx.theme())
-                    .container_padding(self.size)
-                    .child(menu.clone()),
-                )
-                .snap_to_window_with_margin(Edges::all(EDGE_PADDING)),
+              deferred(
+                anchored()
+                  .position_mode(position_mode)
+                  .position(position)
+                  .anchor(anchor)
+                  .offset(offset)
+                  .child(
+                    v_flex()
+                      .id("submenu")
+                      .occlude()
+                      .popover_style(cx.theme())
+                      .container_padding(self.size)
+                      .child(menu.clone()),
+                  )
+                  .snap_to_window_with_margin(Edges::all(EDGE_PADDING)),
+              )
+              .with_priority(1),
             )
           })
           .into_any_element()
@@ -1286,27 +1280,19 @@ impl Render for PopupMenu {
       check_side: self.check_side,
     };
 
-    v_flex()
-      .id("popup-menu")
-      .key_context(CONTEXT)
-      .track_focus(&self.focus_handle)
-      .on_action(cx.listener(Self::select_up))
-      .on_action(cx.listener(Self::select_down))
-      .on_action(cx.listener(Self::select_left))
-      .on_action(cx.listener(Self::select_right))
-      .on_action(cx.listener(Self::confirm))
-      .on_action(cx.listener(Self::dismiss))
-      .on_mouse_down_out(cx.listener(Self::on_mouse_down_out))
+    // Every menu owns its scrolling: the items area is height-bounded and
+    // scrolls whenever its content outgrows the bound. The scrollbar is a
+    // sibling overlay of the scroll area (never a child), so it stays put
+    // while the items scroll underneath it; it draws nothing while the
+    // content still fits.
+    let items = v_flex()
       .id("items")
       .min_w(rems(8.))
       .when_some(self.min_width, |this, min_width| this.min_w(min_width))
       .max_w(max_width)
-      .when(self.scrollable, |this| {
-        this
-          .max_h(max_height)
-          .overflow_y_scroll()
-          .track_scroll(&self.scroll_handle)
-      })
+      .max_h(max_height)
+      .overflow_y_scroll()
+      .track_scroll(&self.scroll_handle)
       .children(
         self
           .menu_items
@@ -1330,6 +1316,33 @@ impl Render for PopupMenu {
               })
               .child(self.render_item(ix, item, options, window, cx))
           }),
+      );
+
+    v_flex()
+      .id("popup-menu")
+      .key_context(CONTEXT)
+      .track_focus(&self.focus_handle)
+      .on_action(cx.listener(Self::select_up))
+      .on_action(cx.listener(Self::select_down))
+      .on_action(cx.listener(Self::select_left))
+      .on_action(cx.listener(Self::select_right))
+      .on_action(cx.listener(Self::confirm))
+      .on_action(cx.listener(Self::dismiss))
+      .on_mouse_down_out(cx.listener(Self::on_mouse_down_out))
+      .child(
+        div().relative().child(items).child(
+          div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .child(
+              Scrollbar::new(&self.scroll_handle)
+                .id("popup-menu-scrollbar")
+                .axis(ScrollbarAxis::Vertical),
+            ),
+        ),
       )
       .on_prepaint(move |bounds, _, cx| {
         view.update(cx, |r, cx| {
@@ -1339,10 +1352,120 @@ impl Render for PopupMenu {
           }
         })
       })
-      .when(self.scrollable, |this| {
-        // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu
-        // will cannot be displayed.
-        this.vertical_scrollbar(&self.scroll_handle)
-      })
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::ops::Deref as _;
+
+  use gpui::{
+    Modifiers, ScrollDelta, ScrollWheelEvent, Size, TestAppContext, TouchPhase, VisualTestContext,
+    WindowHandle, point, px, size,
+  };
+
+  use super::*;
+  use crate::Theme;
+
+  /// Window root hosting a single [`PopupMenu`] entity.
+  ///
+  /// The host pins the menu to the top-start edge (`items_start`) so the
+  /// menu hugs its content, matching how it is hosted inside an `anchored`
+  /// popover in production (where the popover sizes to its content).
+  struct MenuHost(Entity<PopupMenu>);
+
+  impl Render for MenuHost {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+      div().flex().items_start().child(self.0.clone())
+    }
+  }
+
+  /// Opens a window of `window_size` whose root is a popup menu with
+  /// `item_count` plain (icon-free) items; returns the menu entity, the
+  /// window handle and a visual context for event simulation.
+  fn open_menu_window(
+    cx: &mut TestAppContext, window_size: Size<Pixels>, item_count: usize,
+  ) -> (Entity<PopupMenu>, WindowHandle<MenuHost>, VisualTestContext) {
+    cx.set_global(Theme::default());
+
+    let window = cx.open_window(window_size, |window, cx| {
+      let menu = PopupMenu::build(window, cx, |menu, _, _| {
+        let mut menu = menu;
+        for i in 0..item_count {
+          menu = menu.item(PopupMenuItem::new(format!("Item {i}")));
+        }
+        menu
+      });
+      MenuHost(menu)
+    });
+
+    let menu = window.update(cx, |host, _, _| host.0.clone()).unwrap();
+    let visual = VisualTestContext::from_window(*window.deref(), cx);
+    visual.run_until_parked();
+    (menu, window, visual)
+  }
+
+  #[gpui::test]
+  fn long_menu_is_bounded_by_half_window_height(cx: &mut TestAppContext) {
+    let (menu, _, mut visual) = open_menu_window(cx, size(px(800.), px(600.)), 40);
+
+    // 40 items far exceed the default bound (half the window height, at
+    // most 28rem): the menu chrome must stay capped, not grow with content.
+    visual.update(|_, cx| {
+      assert_eq!(menu.read(cx).bounds.size.height, px(300.));
+    });
+  }
+
+  #[gpui::test]
+  fn max_h_override_is_respected(cx: &mut TestAppContext) {
+    let (menu, _, mut visual) = open_menu_window(cx, size(px(800.), px(600.)), 40);
+    menu.update(&mut visual.cx, |menu, cx| {
+      menu.max_height = Some(px(200.));
+      cx.notify();
+    });
+    visual.run_until_parked();
+
+    visual.update(|_, cx| {
+      assert_eq!(menu.read(cx).bounds.size.height, px(200.));
+    });
+  }
+
+  #[gpui::test]
+  fn short_menu_hugs_content(cx: &mut TestAppContext) {
+    let (menu, _, mut visual) = open_menu_window(cx, size(px(800.), px(600.)), 3);
+
+    visual.update(|_, cx| {
+      let height = menu.read(cx).bounds.size.height;
+      assert!(height < px(300.), "short menu must hug its content");
+      assert!(height > px(0.));
+    });
+  }
+
+  #[gpui::test]
+  fn scroll_wheel_scrolls_items_while_menu_stays_put(cx: &mut TestAppContext) {
+    let (menu, _window, mut visual) = open_menu_window(cx, size(px(800.), px(600.)), 40);
+
+    let (menu_origin, initial_first_item_y) = visual.update(|_, cx| {
+      let menu = menu.read(cx);
+      (menu.bounds.origin, menu.item_bounds[0].origin.y)
+    });
+
+    visual.simulate_event(ScrollWheelEvent {
+      position: point(px(100.), px(150.)),
+      delta: ScrollDelta::Lines(point(0., -3.)),
+      modifiers: Modifiers::default(),
+      touch_phase: TouchPhase::Moved,
+    });
+
+    visual.update(|_, cx| {
+      let menu = menu.read(cx);
+      // The items scrolled…
+      assert_ne!(menu.scroll_handle.offset().y, Pixels::ZERO);
+      assert_ne!(menu.item_bounds[0].origin.y, initial_first_item_y);
+      // …while the menu chrome (and with it the scrollbar overlay) did not
+      // move or resize.
+      assert_eq!(menu.bounds.origin, menu_origin);
+      assert_eq!(menu.bounds.size.height, px(300.));
+    });
   }
 }

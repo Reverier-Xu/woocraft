@@ -7,7 +7,7 @@ use gpui::{
   AnyElement, App, AppContext as _, ClickEvent, Context, Decorations, InteractiveElement as _,
   IntoElement, MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
-  WindowControlArea, div, point, prelude::FluentBuilder as _, px, rems,
+  WindowControlArea, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -31,10 +31,6 @@ const ZOOM_FACTOR_MAX: f32 = 2.0;
 const ZOOM_SLIDER_STEP: f32 = 5.0;
 /// Step of [`TitleBar::zoom_in`] and [`TitleBar::zoom_out`], in percent.
 const ZOOM_STEP: f32 = 10.0;
-
-/// Max height of the language menu, so a growing language list stays a
-/// bounded, scrollable dropdown instead of covering the window.
-const LANGUAGE_MENU_MAX_HEIGHT_REMS: f32 = 20.0;
 
 /// App-wide interface zoom multiplier applied on top of the base rem size.
 ///
@@ -709,13 +705,11 @@ impl RenderOnce for TitleBar {
                   .flat()
                   .medium()
                   .icon(Icon::new(IconName::Translate))
-                  .dropdown_menu(move |menu, window, _| {
-                    // Language lists grow with woocraft's coverage (and may
-                    // exceed the languages an app ships): cap the dropdown
-                    // height and let it scroll instead of filling the window.
-                    let mut menu = menu
-                      .scrollable(true)
-                      .max_h(rems(LANGUAGE_MENU_MAX_HEIGHT_REMS).to_pixels(window.rem_size()));
+                  .dropdown_menu(move |menu, _, _| {
+                    // The menu bounds its own height and scrolls (with a
+                    // built-in scrollbar) whenever the language list outgrows
+                    // the bound — no scroll setup at the call site.
+                    let mut menu = menu;
                     for locale_name in &languages {
                       let locale_name = locale_name.clone();
                       let is_selected = current_locale == locale_name
