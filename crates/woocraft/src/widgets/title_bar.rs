@@ -21,11 +21,14 @@ const TITLE_BAR_SIZE: Size = Size::Medium;
 
 /// Left padding reserved for the native macOS traffic-light buttons
 /// (close / minimize / zoom) so the title-bar content never overlaps them.
-const TRAFFIC_LIGHT_PADDING: f32 = 4.8;
+const TRAFFIC_LIGHT_PADDING: f32 = 64.0;
 const TRAFFIC_LIGHT_MARGIN: f32 = 0.8;
 
 fn traffic_light_position(rem_size: Pixels) -> Point<Pixels> {
-    point(TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_MARGIN).to_pixels(rem_size), TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_MARGIN).to_pixels(rem_size))
+  point(
+    TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_MARGIN).to_pixels(rem_size),
+    TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_MARGIN).to_pixels(rem_size),
+  )
 }
 
 #[derive(IntoElement)]
@@ -288,7 +291,7 @@ impl RenderOnce for TitleBar {
     let is_linux = cfg!(target_os = "linux");
     let is_macos = cfg!(target_os = "macos");
     if is_macos {
-        window.set_traffic_light_position(traffic_light_position(window.rem_size()));
+      window.set_traffic_light_position(traffic_light_position(window.rem_size()));
     }
     let window_radius = cx.theme().radius_container;
     let title = title.unwrap_or_else(|| {
@@ -385,7 +388,14 @@ impl RenderOnce for TitleBar {
             .when(window.is_fullscreen(), |this| this.pl_3())
             .when(
               is_macos && !window.is_fullscreen() && !window.is_simple_fullscreen(),
-              |this| this.pl(TITLE_BAR_SIZE.em(TRAFFIC_LIGHT_PADDING)),
+              |this| {
+                this.pl(
+                  px(TRAFFIC_LIGHT_PADDING)
+                    + TITLE_BAR_SIZE
+                      .em(TRAFFIC_LIGHT_MARGIN * 2)
+                      .to_pixels(window.rem_size()),
+                )
+              },
             )
             .h_full()
             .justify_start()
