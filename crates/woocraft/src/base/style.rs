@@ -691,7 +691,11 @@ pub trait CardStyle: Styled + Sized {
   /// Floating popover surface: borderless + shadow.
   #[inline]
   fn popover_style(self, theme: &Theme) -> Self {
-    self.container_style(theme).shadow_sm().border_1().border_color(theme.border)
+    self
+      .container_style(theme)
+      .shadow_sm()
+      .border_1()
+      .border_color(theme.border)
   }
 
   #[inline]

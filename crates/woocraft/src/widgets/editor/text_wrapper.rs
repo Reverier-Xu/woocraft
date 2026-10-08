@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-  App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
-  size,
+  App, Font, Half, IndentAdjustment, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign,
+  Window, point, px, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -237,7 +237,9 @@ impl TextWrapper {
         let fragment = LineFragment::Text { text: line_str };
         let mut start = 0;
         let mut wrapped_lines = Vec::new();
-        for boundary in line_wrapper.wrap_line(&[fragment], wrap_width) {
+        for boundary in
+          line_wrapper.wrap_line(&[fragment], wrap_width, IndentAdjustment::SameIndent)
+        {
           wrapped_lines.push(start..boundary.ix);
           start = boundary.ix;
         }
@@ -342,7 +344,8 @@ impl TextWrapper {
       let fragment = LineFragment::Text { text: line_str };
       let mut start = 0;
       let mut wrapped_lines = Vec::new();
-      for boundary in line_wrapper.wrap_line(&[fragment], wrap_width) {
+      for boundary in line_wrapper.wrap_line(&[fragment], wrap_width, IndentAdjustment::SameIndent)
+      {
         wrapped_lines.push(start..boundary.ix);
         start = boundary.ix;
       }

@@ -2,10 +2,10 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
   App, Bounds, ContentMask, DispatchPhase, Element, ElementId, ElementInputHandler, Entity, Font,
-  GlobalElementId, HighlightStyle, Hsla, IntoElement, LayoutId, LineFragment, MouseButton,
-  MouseMoveEvent, MouseUpEvent, Path, Pixels, Rems, ShapedLine, SharedString, StrikethroughStyle,
-  Style, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative, rems,
-  size,
+  GlobalElementId, HighlightStyle, Hsla, IndentAdjustment, IntoElement, LayoutId, LineFragment,
+  MouseButton, MouseMoveEvent, MouseUpEvent, Path, Pixels, Rems, ShapedLine, SharedString,
+  StrikethroughStyle, Style, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point,
+  px, relative, rems, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -681,7 +681,11 @@ impl ViewportElement {
     let probe = "*".repeat(probe_len);
     let mut wrapper = window.text_system().line_wrapper(font.clone(), font_size);
     wrapper
-      .wrap_line(&[LineFragment::Text { text: &probe }], wrap_width)
+      .wrap_line(
+        &[LineFragment::Text { text: &probe }],
+        wrap_width,
+        IndentAdjustment::SameIndent,
+      )
       .next()
       .map(|boundary| boundary.ix.max(1))
       .unwrap_or(probe_len)
