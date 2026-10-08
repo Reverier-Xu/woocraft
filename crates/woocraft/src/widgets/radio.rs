@@ -185,13 +185,14 @@ impl RenderOnce for Radio {
           .flex_none()
           .size(self.size.component_height() * 0.5)
           .rounded(self.size.component_radius())
-          .border(self.size.em(0.125))
+          .border_1()
           .border_color(border_color)
           .bg(indicator_color)
           .child(
             div()
               .size_full()
               .border(self.size.em(0.125))
+              .rounded(self.size.component_radius())
               .border_color(cx.theme().background),
           ),
       )

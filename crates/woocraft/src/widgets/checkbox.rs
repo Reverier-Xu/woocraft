@@ -211,7 +211,7 @@ impl RenderOnce for Checkbox {
           .flex_none()
           .size(self.size.component_height() * 0.5)
           .rounded(self.size.component_radius())
-          .border(self.size.em(0.125))
+          .border_1()
           .border_color(border_color)
           .bg(indicator_color)
           .child(
@@ -220,6 +220,7 @@ impl RenderOnce for Checkbox {
               .items_center()
               .justify_center()
               .border(self.size.em(0.125))
+              .rounded(self.size.component_radius())
               .border_color(cx.theme().background)
               .child(
                 Icon::new(mark_icon)
