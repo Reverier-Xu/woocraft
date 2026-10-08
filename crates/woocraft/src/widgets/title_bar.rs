@@ -392,7 +392,7 @@ impl RenderOnce for TitleBar {
                 this.pl(
                   px(TRAFFIC_LIGHT_PADDING)
                     + TITLE_BAR_SIZE
-                      .em(TRAFFIC_LIGHT_MARGIN * 2)
+                      .em(TRAFFIC_LIGHT_MARGIN * 2.0)
                       .to_pixels(window.rem_size()),
                 )
               },
