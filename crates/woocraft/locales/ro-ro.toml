@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Se încarcă..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Fără titlu"
+zoom_reset = "Resetează zoom-ul"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Caută..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Următor"
+previous = "Anterior"
+
+[tech.woooo.woocraft.dock]
+close    = "Închide"
+collapse = "Restrânge"
+expand   = "Extinde"
+unnamed  = "Fără titlu"
+zoom_in  = "Mărește"
+zoom_out = "Micșorează"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Copiază"
+cut               = "Taie"
+go_to_definition  = "Mergi la definiție"
+paste             = "Lipește"
+select_all        = "Selectează tot"
+show_code_actions = "Afișează acțiuni de cod"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Înlocuiește"
+replace_all = "Înlocuiește tot"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Copiază"
+cut        = "Taie"
+paste      = "Lipește"
+select_all = "Selectează tot"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Cromă"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Nuanță"
+hue_unit        = "°"
+lightness       = "Luminozitate"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Vi"
+monday    = "Lu"
+saturday  = "Sâ"
+sunday    = "Du"
+thursday  = "Jo"
+tuesday   = "Ma"
+wednesday = "Mi"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "aprilie"
+august    = "august"
+december  = "decembrie"
+february  = "februarie"
+january   = "ianuarie"
+july      = "iulie"
+june      = "iunie"
+march     = "martie"
+may       = "mai"
+november  = "noiembrie"
+october   = "octombrie"
+september = "septembrie"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Selectează data"
+
+[tech.woooo.woocraft.i18n]
+name = "Română"
+
+[tech.woooo.woocraft.menu]
+about            = "Despre"
+close_file       = "Închide fișierul"
+copy             = "Copiază"
+cut              = "Taie"
+edit             = "Editare"
+file             = "Fișier"
+find             = "Caută"
+help             = "Ajutor"
+new_file         = "Fișier nou"
+open_folder      = "Deschide dosarul…"
+paste            = "Lipește"
+quit             = "Ieșire"
+redo             = "Refă"
+save             = "Salvează"
+save_as          = "Salvează ca…"
+select_all       = "Selectează tot"
+toggle_inspector = "Afișează/ascunde inspectorul"
+toggle_sidebar   = "Afișează/ascunde bara laterală"
+undo             = "Anulează"
+view             = "Vizualizare"
+word_wrap        = "Comutare la limită de cuvânt"

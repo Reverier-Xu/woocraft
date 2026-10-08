@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Memuat..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Tanpa judul"
+zoom_reset = "Atur ulang zum"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Cari..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Berikutnya"
+previous = "Sebelumnya"
+
+[tech.woooo.woocraft.dock]
+close    = "Tutup"
+collapse = "Ciutkan"
+expand   = "Perluas"
+unnamed  = "Tanpa judul"
+zoom_in  = "Perbesar"
+zoom_out = "Perkecil"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Salin"
+cut               = "Potong"
+go_to_definition  = "Menuju definisi"
+paste             = "Tempel"
+select_all        = "Pilih semua"
+show_code_actions = "Tampilkan aksi kode"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Ganti"
+replace_all = "Ganti semua"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Salin"
+cut        = "Potong"
+paste      = "Tempel"
+select_all = "Pilih semua"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Saturasi"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Rona"
+hue_unit        = "°"
+lightness       = "Keterangan"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Jum"
+monday    = "Sen"
+saturday  = "Sab"
+sunday    = "Min"
+thursday  = "Kam"
+tuesday   = "Sel"
+wednesday = "Rab"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "April"
+august    = "Agustus"
+december  = "Desember"
+february  = "Februari"
+january   = "Januari"
+july      = "Juli"
+june      = "Juni"
+march     = "Maret"
+may       = "Mei"
+november  = "November"
+october   = "Oktober"
+september = "September"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Pilih tanggal"
+
+[tech.woooo.woocraft.i18n]
+name = "Bahasa Indonesia"
+
+[tech.woooo.woocraft.menu]
+about            = "Tentang"
+close_file       = "Tutup berkas"
+copy             = "Salin"
+cut              = "Potong"
+edit             = "Edit"
+file             = "Berkas"
+find             = "Cari"
+help             = "Bantuan"
+new_file         = "Berkas baru"
+open_folder      = "Buka folder…"
+paste            = "Tempel"
+quit             = "Keluar"
+redo             = "Ulangi"
+save             = "Simpan"
+save_as          = "Simpan sebagai…"
+select_all       = "Pilih semua"
+toggle_inspector = "Tampilkan/sembunyikan inspektur"
+toggle_sidebar   = "Tampilkan/sembunyikan bilah samping"
+undo             = "Urungkan"
+view             = "Tampilan"
+word_wrap        = "Lipat kata"

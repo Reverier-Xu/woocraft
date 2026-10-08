@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Betöltés..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Névtelen"
+zoom_reset = "Nagyítás visszaállítása"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Keresés..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Következő"
+previous = "Előző"
+
+[tech.woooo.woocraft.dock]
+close    = "Bezárás"
+collapse = "Összecsukás"
+expand   = "Kibontás"
+unnamed  = "Névtelen"
+zoom_in  = "Nagyítás"
+zoom_out = "Kicsinyítés"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Másolás"
+cut               = "Kivágás"
+go_to_definition  = "Ugrás a definícióra"
+paste             = "Beillesztés"
+select_all        = "Összes kijelölése"
+show_code_actions = "Kódműveletek megjelenítése"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Csere"
+replace_all = "Összes cseréje"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Másolás"
+cut        = "Kivágás"
+paste      = "Beillesztés"
+select_all = "Összes kijelölése"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Króma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Árnyalat"
+hue_unit        = "°"
+lightness       = "Világosság"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "P"
+monday    = "H"
+saturday  = "Sz"
+sunday    = "V"
+thursday  = "Cs"
+tuesday   = "K"
+wednesday = "Sze"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "április"
+august    = "augusztus"
+december  = "december"
+february  = "február"
+january   = "január"
+july      = "július"
+june      = "június"
+march     = "március"
+may       = "május"
+november  = "november"
+october   = "október"
+september = "szeptember"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Dátum kiválasztása"
+
+[tech.woooo.woocraft.i18n]
+name = "Magyar"
+
+[tech.woooo.woocraft.menu]
+about            = "Névjegy"
+close_file       = "Fájl bezárása"
+copy             = "Másolás"
+cut              = "Kivágás"
+edit             = "Szerkesztés"
+file             = "Fájl"
+find             = "Keresés"
+help             = "Súgó"
+new_file         = "Új fájl"
+open_folder      = "Mappa megnyitása…"
+paste            = "Beillesztés"
+quit             = "Kilépés"
+redo             = "Újra"
+save             = "Mentés"
+save_as          = "Mentés másként…"
+select_all       = "Összes kijelölése"
+toggle_inspector = "Ellenőrző megjelenítése/elrejtése"
+toggle_sidebar   = "Oldalsáv megjelenítése/elrejtése"
+undo             = "Visszavonás"
+view             = "Nézet"
+word_wrap        = "Szótörés"

@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Laster..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Uten navn"
+zoom_reset = "Tilbakestill zoom"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Søk..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Neste"
+previous = "Forrige"
+
+[tech.woooo.woocraft.dock]
+close    = "Lukk"
+collapse = "Fold sammen"
+expand   = "Utvid"
+unnamed  = "Uten navn"
+zoom_in  = "Zoom inn"
+zoom_out = "Zoom ut"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopier"
+cut               = "Klipp ut"
+go_to_definition  = "Gå til definisjon"
+paste             = "Lim inn"
+select_all        = "Merk alt"
+show_code_actions = "Vis kodehandlinger"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Erstatt"
+replace_all = "Erstatt alle"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopier"
+cut        = "Klipp ut"
+paste      = "Lim inn"
+select_all = "Merk alt"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Kroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Fargetone"
+hue_unit        = "°"
+lightness       = "Lyshet"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Fr"
+monday    = "Ma"
+saturday  = "Lø"
+sunday    = "Sø"
+thursday  = "To"
+tuesday   = "Ti"
+wednesday = "On"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "april"
+august    = "august"
+december  = "desember"
+february  = "februar"
+january   = "januar"
+july      = "juli"
+june      = "juni"
+march     = "mars"
+may       = "mai"
+november  = "november"
+october   = "oktober"
+september = "september"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Velg dato"
+
+[tech.woooo.woocraft.i18n]
+name = "Norsk bokmål"
+
+[tech.woooo.woocraft.menu]
+about            = "Om"
+close_file       = "Lukk fil"
+copy             = "Kopier"
+cut              = "Klipp ut"
+edit             = "Rediger"
+file             = "Fil"
+find             = "Finn"
+help             = "Hjelp"
+new_file         = "Ny fil"
+open_folder      = "Åpne mappe…"
+paste            = "Lim inn"
+quit             = "Avslutt"
+redo             = "Gjør om"
+save             = "Lagre"
+save_as          = "Lagre som…"
+select_all       = "Merk alt"
+toggle_inspector = "Vis/skjul inspektør"
+toggle_sidebar   = "Vis/skjul sidefelt"
+undo             = "Angre"
+view             = "Vis"
+word_wrap        = "Tekstbrytning"

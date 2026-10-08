@@ -7,7 +7,20 @@ use std::{
 
 use gpui::SharedString;
 
-pub const SUPPORTED_LOCALES: [&str; 4] = ["zh-hans", "zh-hant", "en-us", "ja-jp"];
+/// Locales woocraft ships translations for, in menu display order.
+///
+/// The list targets the mainstream UI-localization languages (roughly the
+/// CLDR "modern" locale set, ordered by global usage): East Asian, major
+/// European and major South-East Asian languages. Right-to-left languages
+/// (Arabic, Hebrew, Persian, Urdu) are intentionally absent until RTL layout
+/// support lands. Applications narrow this list down to their own subset via
+/// the title-bar language APIs; they can also register additional locales at
+/// runtime with [`load_locale`].
+pub const SUPPORTED_LOCALES: [&str; 28] = [
+  "en-us", "zh-hans", "zh-hant", "ja-jp", "ko-kr", "es-es", "fr-fr", "de-de", "pt-br", "it-it",
+  "ru-ru", "uk-ua", "pl-pl", "nl-nl", "tr-tr", "vi-vn", "th-th", "id-id", "ms-my", "hi-in",
+  "sv-se", "da-dk", "nb-no", "fi-fi", "el-gr", "cs-cz", "hu-hu", "ro-ro",
+];
 pub const WOOCRAFT_I18N_DOMAIN: &str = "tech.woooo.woocraft";
 
 type LocaleTranslations = HashMap<String, String>;
@@ -53,6 +66,9 @@ fn format_woocraft_key(key: &str) -> String {
   }
 }
 
+/// Maps a raw locale tag onto the canonical [`SUPPORTED_LOCALES`] entry that
+/// ships translations for it (language-only tags and regional variants of a
+/// single-variant language all collapse onto that variant).
 fn normalize_known_locale(locale: &str) -> Option<&'static str> {
   if locale == "zh"
     || locale.starts_with("zh-hans")
@@ -74,6 +90,61 @@ fn normalize_known_locale(locale: &str) -> Option<&'static str> {
     Some("ja-jp")
   } else if locale == "en" || locale.starts_with("en-us") {
     Some("en-us")
+  } else if locale == "ko" || locale.starts_with("ko-") {
+    Some("ko-kr")
+  } else if locale == "es" || locale.starts_with("es-") {
+    Some("es-es")
+  } else if locale == "fr" || locale.starts_with("fr-") {
+    Some("fr-fr")
+  } else if locale == "de" || locale.starts_with("de-") {
+    Some("de-de")
+  } else if locale == "pt" || locale.starts_with("pt-") {
+    Some("pt-br")
+  } else if locale == "it" || locale.starts_with("it-") {
+    Some("it-it")
+  } else if locale == "ru" || locale.starts_with("ru-") {
+    Some("ru-ru")
+  } else if locale == "uk" || locale.starts_with("uk-") {
+    Some("uk-ua")
+  } else if locale == "pl" || locale.starts_with("pl-") {
+    Some("pl-pl")
+  } else if locale == "nl" || locale.starts_with("nl-") {
+    Some("nl-nl")
+  } else if locale == "tr" || locale.starts_with("tr-") {
+    Some("tr-tr")
+  } else if locale == "vi" || locale.starts_with("vi-") {
+    Some("vi-vn")
+  } else if locale == "th" || locale.starts_with("th-") {
+    Some("th-th")
+  } else if locale == "id" || locale.starts_with("id-") {
+    Some("id-id")
+  } else if locale == "ms" || locale.starts_with("ms-") {
+    Some("ms-my")
+  } else if locale == "hi" || locale.starts_with("hi-") {
+    Some("hi-in")
+  } else if locale == "sv" || locale.starts_with("sv-") {
+    Some("sv-se")
+  } else if locale == "da" || locale.starts_with("da-") {
+    Some("da-dk")
+  } else if locale == "nb"
+    || locale == "nn"
+    || locale == "no"
+    || locale.starts_with("nb-")
+    || locale.starts_with("nn-")
+    || locale.starts_with("no-")
+  {
+    // Norwegian bokmål is the default variant of the macro language `no`.
+    Some("nb-no")
+  } else if locale == "fi" || locale.starts_with("fi-") {
+    Some("fi-fi")
+  } else if locale == "el" || locale.starts_with("el-") {
+    Some("el-gr")
+  } else if locale == "cs" || locale.starts_with("cs-") {
+    Some("cs-cz")
+  } else if locale == "hu" || locale.starts_with("hu-") {
+    Some("hu-hu")
+  } else if locale == "ro" || locale.starts_with("ro-") {
+    Some("ro-ro")
   } else {
     None
   }
@@ -491,6 +562,87 @@ mod tests {
 
     // Custom extended translation should be available
     assert_eq!(translate_in_locale("zh-hans", "extended_key"), "扩展翻译");
+  }
+
+  #[test]
+  fn test_normalize_locale_collapses_variants() {
+    // Legacy mappings keep working.
+    assert_eq!(normalize_locale("zh_CN.UTF-8"), "zh-hans");
+    assert_eq!(normalize_locale("zh-tw"), "zh-hant");
+    assert_eq!(normalize_locale("ja"), "ja-jp");
+    assert_eq!(normalize_locale("en"), "en-us");
+
+    // Language-only tags and regional variants collapse onto the single
+    // shipped variant of each supported language.
+    assert_eq!(normalize_locale("KO"), "ko-kr");
+    assert_eq!(normalize_locale("es-419"), "es-es");
+    assert_eq!(normalize_locale("pt"), "pt-br");
+    assert_eq!(normalize_locale("pt-PT"), "pt-br");
+    assert_eq!(normalize_locale("nb_NO"), "nb-no");
+    assert_eq!(normalize_locale("nn"), "nb-no");
+    assert_eq!(normalize_locale("no"), "nb-no");
+    assert_eq!(normalize_locale("sv"), "sv-se");
+
+    // Unknown locales pass through (lowercased) for custom registration.
+    assert_eq!(normalize_locale("xx-Latn"), "xx-latn");
+  }
+
+  #[test]
+  fn test_every_supported_locale_ships_a_native_display_name() {
+    for locale in SUPPORTED_LOCALES {
+      let name = try_translate_woocraft_in_locale(locale, "i18n.name")
+        .unwrap_or_else(|| panic!("locale {locale} is missing an i18n.name translation"));
+      assert!(
+        !name.is_empty(),
+        "locale {locale} has an empty display name"
+      );
+      // A missing translation falls back to the en-us value, so every locale
+      // except en-us itself must resolve to its own native name.
+      if locale != "en-us" {
+        assert_ne!(
+          name, "English (US)",
+          "locale {locale} falls back to the en-us display name"
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn test_every_supported_locale_translates_all_sections() {
+    // One key per translation section; a missing entry would surface as the
+    // en-us fallback value, so inequality proves real coverage. Every
+    // spot-check value must differ from its English value in all locales.
+    let spot_checks = [
+      ("common.loading", "Loading..."),
+      ("title_bar.zoom_reset", "Reset Zoom"),
+      ("list.search_placeholder", "Search..."),
+      ("pagination.next", "Next"),
+      ("dock.collapse", "Collapse"),
+      ("editor.context_menu.show_code_actions", "Show Code Actions"),
+      ("editor.search.replace_all", "Replace All"),
+      ("input.context_menu.select_all", "Select All"),
+      ("color_picker.lightness", "Lightness"),
+      ("calendar.week.wednesday", "We"),
+      ("calendar.month.december", "December"),
+      ("date_picker.placeholder", "Select date"),
+      ("menu.word_wrap", "Word Wrap"),
+    ];
+
+    for locale in SUPPORTED_LOCALES {
+      // A missing translation falls back to the en-us value, so inequality
+      // proves real coverage; en-us itself is the fallback source.
+      if locale == "en-us" {
+        continue;
+      }
+      for (key, en_value) in spot_checks {
+        let translated = try_translate_woocraft_in_locale(locale, key);
+        assert_ne!(
+          translated.as_deref(),
+          Some(en_value),
+          "locale {locale} is missing a translation for {key}"
+        );
+      }
+    }
   }
 
   #[test]

@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Memuatkan..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Tanpa tajuk"
+zoom_reset = "Set semula zum"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Cari..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Seterusnya"
+previous = "Sebelum"
+
+[tech.woooo.woocraft.dock]
+close    = "Tutup"
+collapse = "Runtuhkan"
+expand   = "Kembangkan"
+unnamed  = "Tanpa tajuk"
+zoom_in  = "Besarkan"
+zoom_out = "Kecilkan"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Salin"
+cut               = "Potong"
+go_to_definition  = "Pergi ke definisi"
+paste             = "Tampal"
+select_all        = "Pilih semua"
+show_code_actions = "Tunjuk tindakan kod"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Ganti"
+replace_all = "Ganti semua"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Salin"
+cut        = "Potong"
+paste      = "Tampal"
+select_all = "Pilih semua"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Kroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Rona"
+hue_unit        = "°"
+lightness       = "Kecerahan"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Jum"
+monday    = "Isn"
+saturday  = "Sab"
+sunday    = "Ahd"
+thursday  = "Kha"
+tuesday   = "Sel"
+wednesday = "Rab"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "April"
+august    = "Ogos"
+december  = "Disember"
+february  = "Februari"
+january   = "Januari"
+july      = "Julai"
+june      = "Jun"
+march     = "Mac"
+may       = "Mei"
+november  = "November"
+october   = "Oktober"
+september = "September"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Pilih tarikh"
+
+[tech.woooo.woocraft.i18n]
+name = "Bahasa Melayu"
+
+[tech.woooo.woocraft.menu]
+about            = "Perihal"
+close_file       = "Tutup fail"
+copy             = "Salin"
+cut              = "Potong"
+edit             = "Edit"
+file             = "Fail"
+find             = "Cari"
+help             = "Bantuan"
+new_file         = "Fail baharu"
+open_folder      = "Buka folder…"
+paste            = "Tampal"
+quit             = "Keluar"
+redo             = "Buat semula"
+save             = "Simpan"
+save_as          = "Simpan sebagai…"
+select_all       = "Pilih semua"
+toggle_inspector = "Tunjuk/sembunyi pemeriksa"
+toggle_sidebar   = "Tunjuk/sembunyi bar sisi"
+undo             = "Buat asal"
+view             = "Paparan"
+word_wrap        = "Balut perkataan"

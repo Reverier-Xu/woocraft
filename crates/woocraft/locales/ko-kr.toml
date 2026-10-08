@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "불러오는 중..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "제목 없음"
+zoom_reset = "확대/축소 초기화"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "검색..."
+
+[tech.woooo.woocraft.pagination]
+next     = "다음"
+previous = "이전"
+
+[tech.woooo.woocraft.dock]
+close    = "닫기"
+collapse = "접기"
+expand   = "펼치기"
+unnamed  = "제목 없음"
+zoom_in  = "확대"
+zoom_out = "축소"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "복사"
+cut               = "잘라내기"
+go_to_definition  = "정의로 이동"
+paste             = "붙여넣기"
+select_all        = "모두 선택"
+show_code_actions = "코드 액션 표시"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "바꾸기"
+replace_all = "모두 바꾸기"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "복사"
+cut        = "잘라내기"
+paste      = "붙여넣기"
+select_all = "모두 선택"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "불투명도"
+chroma          = "채도"
+hex_placeholder = "#RRGGBBAA"
+hue             = "색상"
+hue_unit        = "°"
+lightness       = "명도"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "금"
+monday    = "월"
+saturday  = "토"
+sunday    = "일"
+thursday  = "목"
+tuesday   = "화"
+wednesday = "수"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "4월"
+august    = "8월"
+december  = "12월"
+february  = "2월"
+january   = "1월"
+july      = "7월"
+june      = "6월"
+march     = "3월"
+may       = "5월"
+november  = "11월"
+october   = "10월"
+september = "9월"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "날짜 선택"
+
+[tech.woooo.woocraft.i18n]
+name = "한국어"
+
+[tech.woooo.woocraft.menu]
+about            = "정보"
+close_file       = "파일 닫기"
+copy             = "복사"
+cut              = "잘라내기"
+edit             = "편집"
+file             = "파일"
+find             = "찾기"
+help             = "도움말"
+new_file         = "새 파일"
+open_folder      = "폴더 열기…"
+paste            = "붙여넣기"
+quit             = "종료"
+redo             = "다시 실행"
+save             = "저장"
+save_as          = "다른 이름으로 저장…"
+select_all       = "모두 선택"
+toggle_inspector = "인스펙터 전환"
+toggle_sidebar   = "사이드바 전환"
+undo             = "실행 취소"
+view             = "보기"
+word_wrap        = "자동 줄 바꿈"

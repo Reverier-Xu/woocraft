@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Đang tải..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Không có tiêu đề"
+zoom_reset = "Đặt lại thu phóng"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Tìm kiếm..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Tiếp"
+previous = "Trước"
+
+[tech.woooo.woocraft.dock]
+close    = "Đóng"
+collapse = "Thu gọn"
+expand   = "Mở rộng"
+unnamed  = "Không có tiêu đề"
+zoom_in  = "Phóng to"
+zoom_out = "Thu nhỏ"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Sao chép"
+cut               = "Cắt"
+go_to_definition  = "Đi tới định nghĩa"
+paste             = "Dán"
+select_all        = "Chọn tất cả"
+show_code_actions = "Hiện thao tác mã"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Thay thế"
+replace_all = "Thay thế tất cả"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Sao chép"
+cut        = "Cắt"
+paste      = "Dán"
+select_all = "Chọn tất cả"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Độ mờ"
+chroma          = "Độ bão hòa"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Sắc độ"
+hue_unit        = "°"
+lightness       = "Độ sáng"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "T6"
+monday    = "T2"
+saturday  = "T7"
+sunday    = "CN"
+thursday  = "T5"
+tuesday   = "T3"
+wednesday = "T4"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "Tháng 4"
+august    = "Tháng 8"
+december  = "Tháng 12"
+february  = "Tháng 2"
+january   = "Tháng 1"
+july      = "Tháng 7"
+june      = "Tháng 6"
+march     = "Tháng 3"
+may       = "Tháng 5"
+november  = "Tháng 11"
+october   = "Tháng 10"
+september = "Tháng 9"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Chọn ngày"
+
+[tech.woooo.woocraft.i18n]
+name = "Tiếng Việt"
+
+[tech.woooo.woocraft.menu]
+about            = "Giới thiệu"
+close_file       = "Đóng tệp"
+copy             = "Sao chép"
+cut              = "Cắt"
+edit             = "Chỉnh sửa"
+file             = "Tệp"
+find             = "Tìm"
+help             = "Trợ giúp"
+new_file         = "Tệp mới"
+open_folder      = "Mở thư mục…"
+paste            = "Dán"
+quit             = "Thoát"
+redo             = "Làm lại"
+save             = "Lưu"
+save_as          = "Lưu thành…"
+select_all       = "Chọn tất cả"
+toggle_inspector = "Hiện/ẩn trình kiểm tra"
+toggle_sidebar   = "Hiện/ẩn thanh bên"
+undo             = "Hoàn tác"
+view             = "Xem"
+word_wrap        = "Xuống dòng tự động"

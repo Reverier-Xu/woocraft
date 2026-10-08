@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "กำลังโหลด..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "ไม่มีชื่อ"
+zoom_reset = "รีเซ็ตการซูม"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "ค้นหา..."
+
+[tech.woooo.woocraft.pagination]
+next     = "ถัดไป"
+previous = "ก่อนหน้า"
+
+[tech.woooo.woocraft.dock]
+close    = "ปิด"
+collapse = "ยุบ"
+expand   = "ขยาย"
+unnamed  = "ไม่มีชื่อ"
+zoom_in  = "ซูมเข้า"
+zoom_out = "ซูมออก"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "คัดลอก"
+cut               = "ตัด"
+go_to_definition  = "ไปยังคำนิยาม"
+paste             = "วาง"
+select_all        = "เลือกทั้งหมด"
+show_code_actions = "แสดงการกระทำของโค้ด"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "แทนที่"
+replace_all = "แทนที่ทั้งหมด"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "คัดลอก"
+cut        = "ตัด"
+paste      = "วาง"
+select_all = "เลือกทั้งหมด"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "ความทึบ"
+chroma          = "ความอิ่มสี"
+hex_placeholder = "#RRGGBBAA"
+hue             = "เฉดสี"
+hue_unit        = "°"
+lightness       = "ความสว่าง"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "ศ"
+monday    = "จ"
+saturday  = "ส"
+sunday    = "อา"
+thursday  = "พฤ"
+tuesday   = "อ"
+wednesday = "พ"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "เมษายน"
+august    = "สิงหาคม"
+december  = "ธันวาคม"
+february  = "กุมภาพันธ์"
+january   = "มกราคม"
+july      = "กรกฎาคม"
+june      = "มิถุนายน"
+march     = "มีนาคม"
+may       = "พฤษภาคม"
+november  = "พฤศจิกายน"
+october   = "ตุลาคม"
+september = "กันยายน"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "เลือกวันที่"
+
+[tech.woooo.woocraft.i18n]
+name = "ไทย"
+
+[tech.woooo.woocraft.menu]
+about            = "เกี่ยวกับ"
+close_file       = "ปิดไฟล์"
+copy             = "คัดลอก"
+cut              = "ตัด"
+edit             = "แก้ไข"
+file             = "ไฟล์"
+find             = "ค้นหา"
+help             = "ช่วยเหลือ"
+new_file         = "ไฟล์ใหม่"
+open_folder      = "เปิดโฟลเดอร์…"
+paste            = "วาง"
+quit             = "ออก"
+redo             = "ทำซ้ำ"
+save             = "บันทึก"
+save_as          = "บันทึกเป็น…"
+select_all       = "เลือกทั้งหมด"
+toggle_inspector = "แสดง/ซ่อนตัวตรวจสอบ"
+toggle_sidebar   = "แสดง/ซ่อนแถบข้าง"
+undo             = "เลิกทำ"
+view             = "มุมมอง"
+word_wrap        = "ตัดคำ"

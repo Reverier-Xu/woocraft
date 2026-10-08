@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Wczytywanie..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Bez tytułu"
+zoom_reset = "Resetuj powiększenie"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Szukaj..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Dalej"
+previous = "Wstecz"
+
+[tech.woooo.woocraft.dock]
+close    = "Zamknij"
+collapse = "Zwiń"
+expand   = "Rozwiń"
+unnamed  = "Bez tytułu"
+zoom_in  = "Powiększ"
+zoom_out = "Pomniejsz"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopiuj"
+cut               = "Wytnij"
+go_to_definition  = "Przejdź do definicji"
+paste             = "Wklej"
+select_all        = "Zaznacz wszystko"
+show_code_actions = "Pokaż akcje kodu"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Zamień"
+replace_all = "Zamień wszystko"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopiuj"
+cut        = "Wytnij"
+paste      = "Wklej"
+select_all = "Zaznacz wszystko"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Chroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Odcień"
+hue_unit        = "°"
+lightness       = "Jasność"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Pt"
+monday    = "Pn"
+saturday  = "So"
+sunday    = "Nd"
+thursday  = "Cz"
+tuesday   = "Wt"
+wednesday = "Śr"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "kwiecień"
+august    = "sierpień"
+december  = "grudzień"
+february  = "luty"
+january   = "styczeń"
+july      = "lipiec"
+june      = "czerwiec"
+march     = "marzec"
+may       = "maj"
+november  = "listopad"
+october   = "październik"
+september = "wrzesień"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Wybierz datę"
+
+[tech.woooo.woocraft.i18n]
+name = "Polski"
+
+[tech.woooo.woocraft.menu]
+about            = "O programie"
+close_file       = "Zamknij plik"
+copy             = "Kopiuj"
+cut              = "Wytnij"
+edit             = "Edycja"
+file             = "Plik"
+find             = "Znajdź"
+help             = "Pomoc"
+new_file         = "Nowy plik"
+open_folder      = "Otwórz folder…"
+paste            = "Wklej"
+quit             = "Zakończ"
+redo             = "Ponów"
+save             = "Zapisz"
+save_as          = "Zapisz jako…"
+select_all       = "Zaznacz wszystko"
+toggle_inspector = "Pokaż/ukryj inspektor"
+toggle_sidebar   = "Pokaż/ukryj panel boczny"
+undo             = "Cofnij"
+view             = "Widok"
+word_wrap        = "Zawijanie wierszy"

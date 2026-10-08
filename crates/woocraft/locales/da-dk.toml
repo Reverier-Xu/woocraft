@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Indlæser..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Unavngivet"
+zoom_reset = "Nulstil zoom"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Søg..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Næste"
+previous = "Forrige"
+
+[tech.woooo.woocraft.dock]
+close    = "Luk"
+collapse = "Fold sammen"
+expand   = "Fold ud"
+unnamed  = "Unavngivet"
+zoom_in  = "Zoom ind"
+zoom_out = "Zoom ud"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopiér"
+cut               = "Klip"
+go_to_definition  = "Gå til definition"
+paste             = "Sæt ind"
+select_all        = "Vælg alt"
+show_code_actions = "Vis kodehandlinger"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Erstat"
+replace_all = "Erstat alle"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopiér"
+cut        = "Klip"
+paste      = "Sæt ind"
+select_all = "Vælg alt"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Kroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Farvetone"
+hue_unit        = "°"
+lightness       = "Lyshed"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Fr"
+monday    = "Ma"
+saturday  = "Lø"
+sunday    = "Sø"
+thursday  = "To"
+tuesday   = "Ti"
+wednesday = "On"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "april"
+august    = "august"
+december  = "december"
+february  = "februar"
+january   = "januar"
+july      = "juli"
+june      = "juni"
+march     = "marts"
+may       = "maj"
+november  = "november"
+october   = "oktober"
+september = "september"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Vælg dato"
+
+[tech.woooo.woocraft.i18n]
+name = "Dansk"
+
+[tech.woooo.woocraft.menu]
+about            = "Om"
+close_file       = "Luk fil"
+copy             = "Kopiér"
+cut              = "Klip"
+edit             = "Rediger"
+file             = "Fil"
+find             = "Find"
+help             = "Hjælp"
+new_file         = "Ny fil"
+open_folder      = "Åbn mappe…"
+paste            = "Sæt ind"
+quit             = "Afslut"
+redo             = "Gendan"
+save             = "Gem"
+save_as          = "Gem som…"
+select_all       = "Vælg alt"
+toggle_inspector = "Vis/skjul inspektør"
+toggle_sidebar   = "Vis/skjul sidepanel"
+undo             = "Fortryd"
+view             = "Vis"
+word_wrap        = "Tekstombrydning"

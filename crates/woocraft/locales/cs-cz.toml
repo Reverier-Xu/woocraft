@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Načítání..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Bez názvu"
+zoom_reset = "Obnovit přiblížení"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Hledat..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Další"
+previous = "Předchozí"
+
+[tech.woooo.woocraft.dock]
+close    = "Zavřít"
+collapse = "Sbalit"
+expand   = "Rozbalit"
+unnamed  = "Bez názvu"
+zoom_in  = "Přiblížit"
+zoom_out = "Oddálit"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopírovat"
+cut               = "Vyjmout"
+go_to_definition  = "Přejít na definici"
+paste             = "Vložit"
+select_all        = "Vybrat vše"
+show_code_actions = "Zobrazit akce kódu"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Nahradit"
+replace_all = "Nahradit vše"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopírovat"
+cut        = "Vyjmout"
+paste      = "Vložit"
+select_all = "Vybrat vše"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Chroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Odstín"
+hue_unit        = "°"
+lightness       = "Světlost"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Pá"
+monday    = "Po"
+saturday  = "So"
+sunday    = "Ne"
+thursday  = "Čt"
+tuesday   = "Út"
+wednesday = "St"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "duben"
+august    = "srpen"
+december  = "prosinec"
+february  = "únor"
+january   = "leden"
+july      = "červenec"
+june      = "červen"
+march     = "březen"
+may       = "květen"
+november  = "listopad"
+october   = "říjen"
+september = "září"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Vyberte datum"
+
+[tech.woooo.woocraft.i18n]
+name = "Čeština"
+
+[tech.woooo.woocraft.menu]
+about            = "O aplikaci"
+close_file       = "Zavřít soubor"
+copy             = "Kopírovat"
+cut              = "Vyjmout"
+edit             = "Úpravy"
+file             = "Soubor"
+find             = "Najít"
+help             = "Nápověda"
+new_file         = "Nový soubor"
+open_folder      = "Otevřít složku…"
+paste            = "Vložit"
+quit             = "Ukončit"
+redo             = "Znovu"
+save             = "Uložit"
+save_as          = "Uložit jako…"
+select_all       = "Vybrat vše"
+toggle_inspector = "Zobrazit/skrýt inspektor"
+toggle_sidebar   = "Zobrazit/skrýt postranní panel"
+undo             = "Zpět"
+view             = "Zobrazit"
+word_wrap        = "Zalamování slov"

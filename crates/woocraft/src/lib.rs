@@ -24,9 +24,9 @@ pub use assets::*;
 pub use base::*;
 pub use i18n::{
   SUPPORTED_LOCALES, WOOCRAFT_I18N_DOMAIN, available_locales, extend_locale, load_locale, locale,
-  locale_display_name, set_locale, translate, translate_in_locale, translate_woocraft,
-  translate_woocraft_in_locale, try_translate, try_translate_in_locale, try_translate_woocraft,
-  try_translate_woocraft_in_locale, woocraft_key,
+  locale_display_name, normalize_locale, set_locale, translate, translate_in_locale,
+  translate_woocraft, translate_woocraft_in_locale, try_translate, try_translate_in_locale,
+  try_translate_woocraft, try_translate_woocraft_in_locale, woocraft_key,
 };
 pub use rust_i18n::{available_locales as available_locales_macro, t, tkv};
 pub use widgets::*;

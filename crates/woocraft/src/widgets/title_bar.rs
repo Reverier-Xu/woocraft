@@ -7,14 +7,14 @@ use gpui::{
   AnyElement, App, AppContext as _, ClickEvent, Context, Decorations, InteractiveElement as _,
   IntoElement, MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
-  WindowControlArea, div, point, prelude::FluentBuilder as _, px,
+  WindowControlArea, div, point, prelude::FluentBuilder as _, px, rems,
 };
 
 use crate::{
   ActiveTheme, Button, ButtonVariants, DropdownMenu as _, Icon, IconLabel, IconName, PopupMenu,
   PopupMenuItem, Sizable as _, Size, Slider, SliderEvent, SliderState, StyleSized, StyledExt,
-  Theme, ThemeMode, available_locales, h_flex, locale, locale_display_name, set_locale,
-  translate_woocraft,
+  Theme, ThemeMode, available_locales, h_flex, locale, locale_display_name, normalize_locale,
+  set_locale, translate_woocraft,
 };
 
 type CloseWindowHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -32,6 +32,10 @@ const ZOOM_SLIDER_STEP: f32 = 5.0;
 /// Step of [`TitleBar::zoom_in`] and [`TitleBar::zoom_out`], in percent.
 const ZOOM_STEP: f32 = 10.0;
 
+/// Max height of the language menu, so a growing language list stays a
+/// bounded, scrollable dropdown instead of covering the window.
+const LANGUAGE_MENU_MAX_HEIGHT_REMS: f32 = 20.0;
+
 /// App-wide interface zoom multiplier applied on top of the base rem size.
 ///
 /// `1.0` keeps the UI at its base scale; the title-bar zoom menu slider moves
@@ -48,6 +52,16 @@ static ZOOM_FACTOR: LazyLock<RwLock<f32>> = LazyLock::new(|| RwLock::new(1.0));
 /// [`TitleBar::default_rem_size`]).
 static REM_SIZE_OVERRIDE: LazyLock<RwLock<Option<Pixels>>> = LazyLock::new(|| RwLock::new(None));
 
+/// App-wide override of the locales offered by the title-bar language menu.
+///
+/// `None` (the default) lets each title bar fall back to its own
+/// [`TitleBar::languages`] argument, then to the full list of available
+/// locales (see [`available_locales`]). Apps use this to offer only the
+/// languages they actually ship — a subset of woocraft's coverage — across
+/// every window, without touching each [`TitleBar`] instance.
+static LANGUAGES_OVERRIDE: LazyLock<RwLock<Option<Vec<String>>>> =
+  LazyLock::new(|| RwLock::new(None));
+
 fn zoom_factor_locked() -> f32 {
   *ZOOM_FACTOR.read().expect("zoom factor lock poisoned")
 }
@@ -56,6 +70,29 @@ fn rem_size_override_locked() -> Option<Pixels> {
   *REM_SIZE_OVERRIDE
     .read()
     .expect("rem size override lock poisoned")
+}
+
+fn languages_override_locked() -> Option<Vec<String>> {
+  LANGUAGES_OVERRIDE
+    .read()
+    .expect("languages override lock poisoned")
+    .clone()
+}
+
+/// Normalizes a locale list for menu display: each entry passes through
+/// [`normalize_locale`], first occurrences kept in the given order.
+fn normalized_locale_list<I, L>(locales: I) -> Vec<String>
+where
+  I: IntoIterator<Item = L>,
+  L: AsRef<str>, {
+  let mut normalized = Vec::new();
+  for locale in locales {
+    let locale = normalize_locale(locale.as_ref());
+    if !normalized.contains(&locale) {
+      normalized.push(locale);
+    }
+  }
+  normalized
 }
 
 /// Returns the zoom factor stepped towards `up` by [`ZOOM_STEP`], clamped to
@@ -101,6 +138,9 @@ pub struct TitleBar {
   title_menu_builder: Option<TitleMenuBuilder>,
   theme_button_enabled: bool,
   language_button_enabled: bool,
+  /// Locales offered by the language menu; `None` defers to the app-wide
+  /// override, then to [`available_locales`].
+  languages: Option<Vec<String>>,
   zoom_button_enabled: bool,
   rem_size: Option<Pixels>,
   on_theme_button_click: Option<ToolbarButtonHandler>,
@@ -120,6 +160,7 @@ impl TitleBar {
       title_menu_builder: None,
       theme_button_enabled: false,
       language_button_enabled: false,
+      languages: None,
       zoom_button_enabled: false,
       rem_size: None,
       on_theme_button_click: None,
@@ -159,6 +200,26 @@ impl TitleBar {
 
   pub fn language_button(mut self, enabled: bool) -> Self {
     self.language_button_enabled = enabled;
+    self
+  }
+
+  /// Restricts the language menu of this title bar to the given locales,
+  /// shown in the given order (entries are normalized and de-duplicated).
+  ///
+  /// This is how an application narrows the menu down to the languages it
+  /// actually ships — a subset of woocraft's own coverage. Entries may be
+  /// any locale tag the application registered (see [`load_locale`]) or a
+  /// built-in [`SUPPORTED_LOCALES`] entry; display names come from each
+  /// locale's own `i18n.name` translation, rendered in that language.
+  ///
+  /// When unset, the app-wide override (see
+  /// [`TitleBar::set_languages_override`]) applies, then the full
+  /// [`available_locales`] list.
+  pub fn languages<I, L>(mut self, languages: I) -> Self
+  where
+    I: IntoIterator<Item = L>,
+    L: AsRef<str>, {
+    self.languages = Some(normalized_locale_list(languages));
     self
   }
 
@@ -235,6 +296,33 @@ impl TitleBar {
     *REM_SIZE_OVERRIDE
       .write()
       .expect("rem size override lock poisoned") = rem_size;
+  }
+
+  /// Returns the app-wide language-menu override, if set.
+  pub fn languages_override() -> Option<Vec<String>> {
+    languages_override_locked()
+  }
+
+  /// Replaces the app-wide language-menu override: the locale list every
+  /// title bar without an explicit [`TitleBar::languages`] argument shows.
+  ///
+  /// Use this at startup to restrict the language menu to the languages the
+  /// application ships; see [`TitleBar::languages`] for the semantics.
+  pub fn set_languages_override<I, L>(languages: I)
+  where
+    I: IntoIterator<Item = L>,
+    L: AsRef<str>, {
+    *LANGUAGES_OVERRIDE
+      .write()
+      .expect("languages override lock poisoned") = Some(normalized_locale_list(languages));
+  }
+
+  /// Clears the app-wide language-menu override, restoring the full
+  /// [`available_locales`] fallback.
+  pub fn clear_languages_override() {
+    *LANGUAGES_OVERRIDE
+      .write()
+      .expect("languages override lock poisoned") = None;
   }
 
   /// Stores the interface zoom multiplier without touching any window.
@@ -452,6 +540,7 @@ impl RenderOnce for TitleBar {
       title_menu_builder,
       theme_button_enabled,
       language_button_enabled,
+      languages,
       zoom_button_enabled,
       rem_size,
       on_theme_button_click,
@@ -612,15 +701,23 @@ impl RenderOnce for TitleBar {
             .flex_shrink_0()
             .when(language_button_enabled, |this| {
               let current_locale = locale().to_string();
-              let on_language_button_click = on_language_button_click.clone();
+              let languages = languages
+                .or_else(languages_override_locked)
+                .unwrap_or_else(available_locales);
               this.child(
                 Button::new("title-bar-language")
                   .flat()
                   .medium()
                   .icon(Icon::new(IconName::Translate))
-                  .dropdown_menu(move |menu, _, _| {
-                    let mut menu = menu;
-                    for locale_name in available_locales() {
+                  .dropdown_menu(move |menu, window, _| {
+                    // Language lists grow with woocraft's coverage (and may
+                    // exceed the languages an app ships): cap the dropdown
+                    // height and let it scroll instead of filling the window.
+                    let mut menu = menu
+                      .scrollable(true)
+                      .max_h(rems(LANGUAGE_MENU_MAX_HEIGHT_REMS).to_pixels(window.rem_size()));
+                    for locale_name in &languages {
+                      let locale_name = locale_name.clone();
                       let is_selected = current_locale == locale_name
                         || current_locale.starts_with(&(locale_name.clone() + "-"));
                       let label = locale_display_name(&locale_name);
@@ -774,5 +871,37 @@ mod tests {
     TitleBar::set_rem_size_override(None);
     assert_eq!(TitleBar::rem_size_override(), None);
     TitleBar::set_rem_size_override(saved);
+  }
+
+  #[test]
+  fn languages_builder_normalizes_and_dedupes() {
+    let languages = TitleBar::new()
+      .language_button(true)
+      .languages(["en", "EN-US", "ja_JP", "ko", "zh_CN", "en-us"])
+      .languages;
+    assert_eq!(
+      languages,
+      Some(vec![
+        "en-us".to_string(),
+        "ja-jp".to_string(),
+        "ko-kr".to_string(),
+        "zh-hans".to_string(),
+      ])
+    );
+  }
+
+  #[test]
+  fn languages_override_roundtrips_and_clears() {
+    let saved = TitleBar::languages_override();
+    TitleBar::set_languages_override(["de", "fr_FR", "de"]);
+    assert_eq!(
+      TitleBar::languages_override(),
+      Some(vec!["de-de".to_string(), "fr-fr".to_string()])
+    );
+    TitleBar::clear_languages_override();
+    assert_eq!(TitleBar::languages_override(), None);
+    if let Some(saved) = saved {
+      TitleBar::set_languages_override(saved);
+    }
   }
 }

@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Wird geladen..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Unbenannt"
+zoom_reset = "Zoom zurücksetzen"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Suchen..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Weiter"
+previous = "Zurück"
+
+[tech.woooo.woocraft.dock]
+close    = "Schließen"
+collapse = "Einklappen"
+expand   = "Ausklappen"
+unnamed  = "Unbenannt"
+zoom_in  = "Vergrößern"
+zoom_out = "Verkleinern"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopieren"
+cut               = "Ausschneiden"
+go_to_definition  = "Gehe zu Definition"
+paste             = "Einfügen"
+select_all        = "Alles auswählen"
+show_code_actions = "Codeaktionen anzeigen"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Ersetzen"
+replace_all = "Alle ersetzen"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopieren"
+cut        = "Ausschneiden"
+paste      = "Einfügen"
+select_all = "Alles auswählen"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alpha"
+chroma          = "Chroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Farbton"
+hue_unit        = "°"
+lightness       = "Helligkeit"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Fr"
+monday    = "Mo"
+saturday  = "Sa"
+sunday    = "So"
+thursday  = "Do"
+tuesday   = "Di"
+wednesday = "Mi"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "April"
+august    = "August"
+december  = "Dezember"
+february  = "Februar"
+january   = "Januar"
+july      = "Juli"
+june      = "Juni"
+march     = "März"
+may       = "Mai"
+november  = "November"
+october   = "Oktober"
+september = "September"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Datum auswählen"
+
+[tech.woooo.woocraft.i18n]
+name = "Deutsch"
+
+[tech.woooo.woocraft.menu]
+about            = "Über"
+close_file       = "Datei schließen"
+copy             = "Kopieren"
+cut              = "Ausschneiden"
+edit             = "Bearbeiten"
+file             = "Datei"
+find             = "Suchen"
+help             = "Hilfe"
+new_file         = "Neue Datei"
+open_folder      = "Ordner öffnen…"
+paste            = "Einfügen"
+quit             = "Beenden"
+redo             = "Wiederholen"
+save             = "Speichern"
+save_as          = "Speichern unter…"
+select_all       = "Alles auswählen"
+toggle_inspector = "Inspektor ein-/ausblenden"
+toggle_sidebar   = "Seitenleiste ein-/ausblenden"
+undo             = "Rückgängig"
+view             = "Ansicht"
+word_wrap        = "Zeilenumbruch"

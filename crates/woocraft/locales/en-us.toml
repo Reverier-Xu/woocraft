@@ -2,7 +2,7 @@
 loading = "Loading..."
 
 [tech.woooo.woocraft.title_bar]
-untitled = "Untitled"
+untitled   = "Untitled"
 zoom_reset = "Reset Zoom"
 
 [tech.woooo.woocraft.list]

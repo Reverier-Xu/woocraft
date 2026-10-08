@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Завантаження..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Без назви"
+zoom_reset = "Скинути масштаб"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Пошук..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Далі"
+previous = "Назад"
+
+[tech.woooo.woocraft.dock]
+close    = "Закрити"
+collapse = "Згорнути"
+expand   = "Розгорнути"
+unnamed  = "Без назви"
+zoom_in  = "Збільшити"
+zoom_out = "Зменшити"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Копіювати"
+cut               = "Вирізати"
+go_to_definition  = "Перейти до визначення"
+paste             = "Вставити"
+select_all        = "Виділити все"
+show_code_actions = "Показати дії з кодом"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Замінити"
+replace_all = "Замінити все"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Копіювати"
+cut        = "Вирізати"
+paste      = "Вставити"
+select_all = "Виділити все"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Альфа"
+chroma          = "Хрома"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Тон"
+hue_unit        = "°"
+lightness       = "Світлота"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Пт"
+monday    = "Пн"
+saturday  = "Сб"
+sunday    = "Нд"
+thursday  = "Чт"
+tuesday   = "Вт"
+wednesday = "Ср"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "Квітень"
+august    = "Серпень"
+december  = "Грудень"
+february  = "Лютий"
+january   = "Січень"
+july      = "Липень"
+june      = "Червень"
+march     = "Березень"
+may       = "Травень"
+november  = "Листопад"
+october   = "Жовтень"
+september = "Вересень"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Виберіть дату"
+
+[tech.woooo.woocraft.i18n]
+name = "Українська"
+
+[tech.woooo.woocraft.menu]
+about            = "Про програму"
+close_file       = "Закрити файл"
+copy             = "Копіювати"
+cut              = "Вирізати"
+edit             = "Правка"
+file             = "Файл"
+find             = "Знайти"
+help             = "Довідка"
+new_file         = "Новий файл"
+open_folder      = "Відкрити папку…"
+paste            = "Вставити"
+quit             = "Вихід"
+redo             = "Повторити"
+save             = "Зберегти"
+save_as          = "Зберегти як…"
+select_all       = "Виділити все"
+toggle_inspector = "Показати/сховати інспектор"
+toggle_sidebar   = "Показати/сховати бічну панель"
+undo             = "Скасувати"
+view             = "Вигляд"
+word_wrap        = "Перенесення за словами"

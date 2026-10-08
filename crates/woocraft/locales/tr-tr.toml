@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Yükleniyor..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Adsız"
+zoom_reset = "Yakınlaştırmayı sıfırla"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Ara..."
+
+[tech.woooo.woocraft.pagination]
+next     = "İleri"
+previous = "Geri"
+
+[tech.woooo.woocraft.dock]
+close    = "Kapat"
+collapse = "Daralt"
+expand   = "Genişlet"
+unnamed  = "Adsız"
+zoom_in  = "Büyüt"
+zoom_out = "Küçült"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopyala"
+cut               = "Kes"
+go_to_definition  = "Tanıma Git"
+paste             = "Yapıştır"
+select_all        = "Tümünü seç"
+show_code_actions = "Kod eylemlerini göster"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Değiştir"
+replace_all = "Tümünü değiştir"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopyala"
+cut        = "Kes"
+paste      = "Yapıştır"
+select_all = "Tümünü seç"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Kroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Ton"
+hue_unit        = "°"
+lightness       = "Aydınlık"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Cu"
+monday    = "Pt"
+saturday  = "Ct"
+sunday    = "Pa"
+thursday  = "Pe"
+tuesday   = "Sa"
+wednesday = "Ça"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "Nisan"
+august    = "Ağustos"
+december  = "Aralık"
+february  = "Şubat"
+january   = "Ocak"
+july      = "Temmuz"
+june      = "Haziran"
+march     = "Mart"
+may       = "Mayıs"
+november  = "Kasım"
+october   = "Ekim"
+september = "Eylül"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Tarih seç"
+
+[tech.woooo.woocraft.i18n]
+name = "Türkçe"
+
+[tech.woooo.woocraft.menu]
+about            = "Hakkında"
+close_file       = "Dosyayı kapat"
+copy             = "Kopyala"
+cut              = "Kes"
+edit             = "Düzen"
+file             = "Dosya"
+find             = "Bul"
+help             = "Yardım"
+new_file         = "Yeni dosya"
+open_folder      = "Klasör aç…"
+paste            = "Yapıştır"
+quit             = "Çıkış"
+redo             = "Yinele"
+save             = "Kaydet"
+save_as          = "Farklı kaydet…"
+select_all       = "Tümünü seç"
+toggle_inspector = "İnceleyiciyi göster/gizle"
+toggle_sidebar   = "Kenar çubuğunu göster/gizle"
+undo             = "Geri al"
+view             = "Görünüm"
+word_wrap        = "Sözcük kaydırma"

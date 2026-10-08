@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "लोड हो रहा है..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "शीर्षकहीन"
+zoom_reset = "ज़ूम रीसेट करें"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "खोजें..."
+
+[tech.woooo.woocraft.pagination]
+next     = "आगे"
+previous = "पीछे"
+
+[tech.woooo.woocraft.dock]
+close    = "बंद करें"
+collapse = "संकुचित करें"
+expand   = "विस्तारित करें"
+unnamed  = "शीर्षकहीन"
+zoom_in  = "बड़ा करें"
+zoom_out = "छोटा करें"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "कॉपी करें"
+cut               = "कट करें"
+go_to_definition  = "परिभाषा पर जाएँ"
+paste             = "पेस्ट करें"
+select_all        = "सभी चुनें"
+show_code_actions = "कोड क्रियाएँ दिखाएँ"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "बदलें"
+replace_all = "सभी बदलें"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "कॉपी करें"
+cut        = "कट करें"
+paste      = "पेस्ट करें"
+select_all = "सभी चुनें"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "अल्फा"
+chroma          = "क्रोमा"
+hex_placeholder = "#RRGGBBAA"
+hue             = "वर्ण"
+hue_unit        = "°"
+lightness       = "चमक"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "शुक्र"
+monday    = "सोम"
+saturday  = "शनि"
+sunday    = "रवि"
+thursday  = "गुरु"
+tuesday   = "मंगल"
+wednesday = "बुध"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "अप्रैल"
+august    = "अगस्त"
+december  = "दिसंबर"
+february  = "फ़रवरी"
+january   = "जनवरी"
+july      = "जुलाई"
+june      = "जून"
+march     = "मार्च"
+may       = "मई"
+november  = "नवंबर"
+october   = "अक्टूबर"
+september = "सितंबर"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "तारीख़ चुनें"
+
+[tech.woooo.woocraft.i18n]
+name = "हिन्दी"
+
+[tech.woooo.woocraft.menu]
+about            = "के बारे में"
+close_file       = "फ़ाइल बंद करें"
+copy             = "कॉपी करें"
+cut              = "कट करें"
+edit             = "संपादन"
+file             = "फ़ाइल"
+find             = "खोजें"
+help             = "सहायता"
+new_file         = "नई फ़ाइल"
+open_folder      = "फ़ोल्डर खोलें…"
+paste            = "पेस्ट करें"
+quit             = "बाहर निकलें"
+redo             = "फिर करें"
+save             = "सहेजें"
+save_as          = "इस रूप में सहेजें…"
+select_all       = "सभी चुनें"
+toggle_inspector = "इंस्पेक्टर दिखाएँ/छिपाएँ"
+toggle_sidebar   = "साइडबार दिखाएँ/छिपाएँ"
+undo             = "पूर्ववत करें"
+view             = "देखें"
+word_wrap        = "वर्ड रैप"

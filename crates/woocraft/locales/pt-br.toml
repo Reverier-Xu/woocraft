@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Carregando..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Sem título"
+zoom_reset = "Redefinir zoom"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Pesquisar..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Próximo"
+previous = "Anterior"
+
+[tech.woooo.woocraft.dock]
+close    = "Fechar"
+collapse = "Recolher"
+expand   = "Expandir"
+unnamed  = "Sem título"
+zoom_in  = "Ampliar"
+zoom_out = "Reduzir"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Copiar"
+cut               = "Recortar"
+go_to_definition  = "Ir para a definição"
+paste             = "Colar"
+select_all        = "Selecionar tudo"
+show_code_actions = "Mostrar ações de código"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Substituir"
+replace_all = "Substituir tudo"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Copiar"
+cut        = "Recortar"
+paste      = "Colar"
+select_all = "Selecionar tudo"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Croma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Matiz"
+hue_unit        = "°"
+lightness       = "Luminosidade"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Sex"
+monday    = "Seg"
+saturday  = "Sáb"
+sunday    = "Dom"
+thursday  = "Qui"
+tuesday   = "Ter"
+wednesday = "Qua"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "abril"
+august    = "agosto"
+december  = "dezembro"
+february  = "fevereiro"
+january   = "janeiro"
+july      = "julho"
+june      = "junho"
+march     = "março"
+may       = "maio"
+november  = "novembro"
+october   = "outubro"
+september = "setembro"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Selecionar data"
+
+[tech.woooo.woocraft.i18n]
+name = "Português (Brasil)"
+
+[tech.woooo.woocraft.menu]
+about            = "Sobre"
+close_file       = "Fechar arquivo"
+copy             = "Copiar"
+cut              = "Recortar"
+edit             = "Editar"
+file             = "Arquivo"
+find             = "Localizar"
+help             = "Ajuda"
+new_file         = "Novo arquivo"
+open_folder      = "Abrir pasta…"
+paste            = "Colar"
+quit             = "Sair"
+redo             = "Refazer"
+save             = "Salvar"
+save_as          = "Salvar como…"
+select_all       = "Selecionar tudo"
+toggle_inspector = "Mostrar/ocultar inspetor"
+toggle_sidebar   = "Mostrar/ocultar barra lateral"
+undo             = "Desfazer"
+view             = "Exibir"
+word_wrap        = "Quebra automática de linha"

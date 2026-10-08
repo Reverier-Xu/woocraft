@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Laden..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Naamloos"
+zoom_reset = "Zoom herstellen"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Zoeken..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Volgende"
+previous = "Vorige"
+
+[tech.woooo.woocraft.dock]
+close    = "Sluiten"
+collapse = "Inklappen"
+expand   = "Uitklappen"
+unnamed  = "Naamloos"
+zoom_in  = "Inzoomen"
+zoom_out = "Uitzoomen"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopiëren"
+cut               = "Knippen"
+go_to_definition  = "Ga naar definitie"
+paste             = "Plakken"
+select_all        = "Alles selecteren"
+show_code_actions = "Codeacties tonen"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Vervangen"
+replace_all = "Alles vervangen"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopiëren"
+cut        = "Knippen"
+paste      = "Plakken"
+select_all = "Alles selecteren"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Chroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Tint"
+hue_unit        = "°"
+lightness       = "Lichtheid"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Vr"
+monday    = "Ma"
+saturday  = "Za"
+sunday    = "Zo"
+thursday  = "Do"
+tuesday   = "Di"
+wednesday = "Wo"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "april"
+august    = "augustus"
+december  = "december"
+february  = "februari"
+january   = "januari"
+july      = "juli"
+june      = "juni"
+march     = "maart"
+may       = "mei"
+november  = "november"
+october   = "oktober"
+september = "september"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Datum kiezen"
+
+[tech.woooo.woocraft.i18n]
+name = "Nederlands"
+
+[tech.woooo.woocraft.menu]
+about            = "Over"
+close_file       = "Bestand sluiten"
+copy             = "Kopiëren"
+cut              = "Knippen"
+edit             = "Bewerken"
+file             = "Bestand"
+find             = "Zoeken"
+help             = "Help"
+new_file         = "Nieuw bestand"
+open_folder      = "Map openen…"
+paste            = "Plakken"
+quit             = "Afsluiten"
+redo             = "Opnieuw"
+save             = "Opslaan"
+save_as          = "Opslaan als…"
+select_all       = "Alles selecteren"
+toggle_inspector = "Inspector weergeven/verbergen"
+toggle_sidebar   = "Zijbalk weergeven/verbergen"
+undo             = "Ongedaan maken"
+view             = "Beeld"
+word_wrap        = "Terugloop"

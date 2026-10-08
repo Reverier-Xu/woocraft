@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Läser in..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Namnlös"
+zoom_reset = "Återställ zoom"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Sök..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Nästa"
+previous = "Föregående"
+
+[tech.woooo.woocraft.dock]
+close    = "Stäng"
+collapse = "Fäll ihop"
+expand   = "Fäll ut"
+unnamed  = "Namnlös"
+zoom_in  = "Zooma in"
+zoom_out = "Zooma ut"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopiera"
+cut               = "Klipp ut"
+go_to_definition  = "Gå till definition"
+paste             = "Klistra in"
+select_all        = "Markera allt"
+show_code_actions = "Visa kodåtgärder"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Ersätt"
+replace_all = "Ersätt alla"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopiera"
+cut        = "Klipp ut"
+paste      = "Klistra in"
+select_all = "Markera allt"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Kroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Nyans"
+hue_unit        = "°"
+lightness       = "Ljushet"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Fr"
+monday    = "Må"
+saturday  = "Lö"
+sunday    = "Sö"
+thursday  = "To"
+tuesday   = "Ti"
+wednesday = "On"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "april"
+august    = "augusti"
+december  = "december"
+february  = "februari"
+january   = "januari"
+july      = "juli"
+june      = "juni"
+march     = "mars"
+may       = "maj"
+november  = "november"
+october   = "oktober"
+september = "september"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Välj datum"
+
+[tech.woooo.woocraft.i18n]
+name = "Svenska"
+
+[tech.woooo.woocraft.menu]
+about            = "Om"
+close_file       = "Stäng fil"
+copy             = "Kopiera"
+cut              = "Klipp ut"
+edit             = "Redigera"
+file             = "Arkiv"
+find             = "Sök"
+help             = "Hjälp"
+new_file         = "Ny fil"
+open_folder      = "Öppna mapp…"
+paste            = "Klistra in"
+quit             = "Avsluta"
+redo             = "Gör om"
+save             = "Spara"
+save_as          = "Spara som…"
+select_all       = "Markera allt"
+toggle_inspector = "Visa/dölj inspektör"
+toggle_sidebar   = "Visa/dölj sidofält"
+undo             = "Ångra"
+view             = "Visa"
+word_wrap        = "Radbrytning"

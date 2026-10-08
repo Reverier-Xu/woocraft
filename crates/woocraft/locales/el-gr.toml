@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Φόρτωση..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Χωρίς τίτλο"
+zoom_reset = "Επαναφορά ζουμ"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Αναζήτηση..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Επόμενο"
+previous = "Προηγούμενο"
+
+[tech.woooo.woocraft.dock]
+close    = "Κλείσιμο"
+collapse = "Σύμπτυξη"
+expand   = "Ανάπτυξη"
+unnamed  = "Χωρίς τίτλο"
+zoom_in  = "Μεγέθυνση"
+zoom_out = "Σμίκρυνση"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Αντιγραφή"
+cut               = "Αποκοπή"
+go_to_definition  = "Μετάβαση στον ορισμό"
+paste             = "Επικόλληση"
+select_all        = "Επιλογή όλων"
+show_code_actions = "Εμφάνιση ενεργειών κώδικα"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Αντικατάσταση"
+replace_all = "Αντικατάσταση όλων"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Αντιγραφή"
+cut        = "Αποκοπή"
+paste      = "Επικόλληση"
+select_all = "Επιλογή όλων"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Άλφα"
+chroma          = "Χρωματικότητα"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Απόχρωση"
+hue_unit        = "°"
+lightness       = "Φωτεινότητα"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Πα"
+monday    = "Δε"
+saturday  = "Σα"
+sunday    = "Κυ"
+thursday  = "Πε"
+tuesday   = "Τρ"
+wednesday = "Τε"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "Απρίλιος"
+august    = "Αύγουστος"
+december  = "Δεκέμβριος"
+february  = "Φεβρουάριος"
+january   = "Ιανουάριος"
+july      = "Ιούλιος"
+june      = "Ιούνιος"
+march     = "Μάρτιος"
+may       = "Μάιος"
+november  = "Νοέμβριος"
+october   = "Οκτώβριος"
+september = "Σεπτέμβριος"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Επιλογή ημερομηνίας"
+
+[tech.woooo.woocraft.i18n]
+name = "Ελληνικά"
+
+[tech.woooo.woocraft.menu]
+about            = "Σχετικά"
+close_file       = "Κλείσιμο αρχείου"
+copy             = "Αντιγραφή"
+cut              = "Αποκοπή"
+edit             = "Επεξεργασία"
+file             = "Αρχείο"
+find             = "Εύρεση"
+help             = "Βοήθεια"
+new_file         = "Νέο αρχείο"
+open_folder      = "Άνοιγμα φακέλου…"
+paste            = "Επικόλληση"
+quit             = "Έξοδος"
+redo             = "Επανάληψη"
+save             = "Αποθήκευση"
+save_as          = "Αποθήκευση ως…"
+select_all       = "Επιλογή όλων"
+toggle_inspector = "Εμφάνιση/απόκρυψη επιθεωρητή"
+toggle_sidebar   = "Εμφάνιση/απόκρυψη πλευρικής στήλης"
+undo             = "Αναίρεση"
+view             = "Προβολή"
+word_wrap        = "Αναδίπλωση λέξεων"

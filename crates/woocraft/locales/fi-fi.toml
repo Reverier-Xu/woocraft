@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Ladataan..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Nimetön"
+zoom_reset = "Nollaa zoomaus"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Hae..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Seuraava"
+previous = "Edellinen"
+
+[tech.woooo.woocraft.dock]
+close    = "Sulje"
+collapse = "Tiivistä"
+expand   = "Laajenna"
+unnamed  = "Nimetön"
+zoom_in  = "Lähennä"
+zoom_out = "Loitonna"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Kopioi"
+cut               = "Leikkaa"
+go_to_definition  = "Siirry määritelmään"
+paste             = "Liitä"
+select_all        = "Valitse kaikki"
+show_code_actions = "Näytä kooditoiminnot"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Korvaa"
+replace_all = "Korvaa kaikki"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Kopioi"
+cut        = "Leikkaa"
+paste      = "Liitä"
+select_all = "Valitse kaikki"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Alfa"
+chroma          = "Kroma"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Värisävy"
+hue_unit        = "°"
+lightness       = "Valoisuus"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Pe"
+monday    = "Ma"
+saturday  = "La"
+sunday    = "Su"
+thursday  = "To"
+tuesday   = "Ti"
+wednesday = "Ke"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "huhtikuu"
+august    = "elokuu"
+december  = "joulukuu"
+february  = "helmikuu"
+january   = "tammikuu"
+july      = "heinäkuu"
+june      = "kesäkuu"
+march     = "maaliskuu"
+may       = "toukokuu"
+november  = "marraskuu"
+october   = "lokakuu"
+september = "syyskuu"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Valitse päivämäärä"
+
+[tech.woooo.woocraft.i18n]
+name = "Suomi"
+
+[tech.woooo.woocraft.menu]
+about            = "Tietoja"
+close_file       = "Sulje tiedosto"
+copy             = "Kopioi"
+cut              = "Leikkaa"
+edit             = "Muokkaa"
+file             = "Tiedosto"
+find             = "Etsi"
+help             = "Ohje"
+new_file         = "Uusi tiedosto"
+open_folder      = "Avaa kansio…"
+paste            = "Liitä"
+quit             = "Lopeta"
+redo             = "Tee uudelleen"
+save             = "Tallenna"
+save_as          = "Tallenna nimellä…"
+select_all       = "Valitse kaikki"
+toggle_inspector = "Näytä/piilota tarkistin"
+toggle_sidebar   = "Näytä/piilota sivupalkki"
+undo             = "Kumoa"
+view             = "Näytä"
+word_wrap        = "Sanojen kelaus"

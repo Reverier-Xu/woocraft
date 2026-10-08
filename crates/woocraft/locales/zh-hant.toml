@@ -2,7 +2,7 @@
 loading = "載入中..."
 
 [tech.woooo.woocraft.title_bar]
-untitled = "未命名"
+untitled   = "未命名"
 zoom_reset = "重置縮放"
 
 [tech.woooo.woocraft.list]

@@ -600,6 +600,10 @@ impl Render for ControlsWindow {
             })
             .theme_button(true)
             .language_button(true)
+            // Restrict the language menu to the languages this example ships
+            // (a subset of woocraft's full coverage); remove the call below
+            // to list every language woocraft supports instead.
+            .languages(["en-us", "zh-hans", "zh-hant", "ja-jp", "ko-kr", "de-de", "fr-fr", "es-es"])
             .zoom_button(true),
         )
         .child(

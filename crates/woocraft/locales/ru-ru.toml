@@ -1,0 +1,99 @@
+[tech.woooo.woocraft.common]
+loading = "Загрузка..."
+
+[tech.woooo.woocraft.title_bar]
+untitled   = "Без названия"
+zoom_reset = "Сбросить масштаб"
+
+[tech.woooo.woocraft.list]
+search_placeholder = "Поиск..."
+
+[tech.woooo.woocraft.pagination]
+next     = "Далее"
+previous = "Назад"
+
+[tech.woooo.woocraft.dock]
+close    = "Закрыть"
+collapse = "Свернуть"
+expand   = "Развернуть"
+unnamed  = "Без названия"
+zoom_in  = "Увеличить"
+zoom_out = "Уменьшить"
+
+[tech.woooo.woocraft.editor.context_menu]
+copy              = "Копировать"
+cut               = "Вырезать"
+go_to_definition  = "Перейти к определению"
+paste             = "Вставить"
+select_all        = "Выделить всё"
+show_code_actions = "Показать действия с кодом"
+
+[tech.woooo.woocraft.editor.search]
+replace     = "Заменить"
+replace_all = "Заменить всё"
+
+[tech.woooo.woocraft.input.context_menu]
+copy       = "Копировать"
+cut        = "Вырезать"
+paste      = "Вставить"
+select_all = "Выделить всё"
+
+[tech.woooo.woocraft.color_picker]
+alpha           = "Альфа"
+chroma          = "Хрома"
+hex_placeholder = "#RRGGBBAA"
+hue             = "Тон"
+hue_unit        = "°"
+lightness       = "Светлота"
+
+[tech.woooo.woocraft.calendar.week]
+friday    = "Пт"
+monday    = "Пн"
+saturday  = "Сб"
+sunday    = "Вс"
+thursday  = "Чт"
+tuesday   = "Вт"
+wednesday = "Ср"
+
+[tech.woooo.woocraft.calendar.month]
+april     = "Апрель"
+august    = "Август"
+december  = "Декабрь"
+february  = "Февраль"
+january   = "Январь"
+july      = "Июль"
+june      = "Июнь"
+march     = "Март"
+may       = "Май"
+november  = "Ноябрь"
+october   = "Октябрь"
+september = "Сентябрь"
+
+[tech.woooo.woocraft.date_picker]
+placeholder = "Выберите дату"
+
+[tech.woooo.woocraft.i18n]
+name = "Русский"
+
+[tech.woooo.woocraft.menu]
+about            = "О программе"
+close_file       = "Закрыть файл"
+copy             = "Копировать"
+cut              = "Вырезать"
+edit             = "Правка"
+file             = "Файл"
+find             = "Найти"
+help             = "Справка"
+new_file         = "Новый файл"
+open_folder      = "Открыть папку…"
+paste            = "Вставить"
+quit             = "Выход"
+redo             = "Повторить"
+save             = "Сохранить"
+save_as          = "Сохранить как…"
+select_all       = "Выделить всё"
+toggle_inspector = "Показать/скрыть инспектор"
+toggle_sidebar   = "Показать/скрыть боковую панель"
+undo             = "Отменить"
+view             = "Вид"
+word_wrap        = "Перенос по словам"
