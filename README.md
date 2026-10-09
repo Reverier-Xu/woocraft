@@ -4,14 +4,6 @@ Woocraft is a Rust component library built on top of [GPUI](https://github.com/z
 
 This repository is organized as a Cargo workspace, with the main maintained crate at `crates/woocraft`.
 
-> [!WARNING]
->
-> this crate is in early work-in-progress state.
->
-> most of components come from [longbridge/gpui-component](https://github.com/longbridge/gpui-component) and [components in zed editor](https://github.com/zed-industries/zed), with some visual fixes / improvements.
->
-> it may lacks of feature.
-
 ## Features
 
 - Composable UI components powered by GPUI
@@ -34,7 +26,7 @@ This repository is organized as a Cargo workspace, with the main maintained crat
 
 ## Requirements
 
-- Rust `1.93.0` or newer
+- Rust `1.98.0` or newer
 
 ## Installation
 
@@ -42,7 +34,7 @@ on crates.io:
 
 ```toml
 [dependencies]
-woocraft = "0.1"
+woocraft = "0.6"
 ```
 
 To use directly from this repository:
