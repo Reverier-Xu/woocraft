@@ -35,10 +35,10 @@ enum-iterator      = "2.3"
 # required: each 0.3.x snapshot may contain breaking API changes (see longbridge/
 # gpui-kit#3156). Migrate back to the zed git source once an official stable gpui
 # release catches up.
-gpui                          = { version = "=0.3.8", package = "gpui-pre" }
-gpui-macros                   = { version = "=0.3.8", package = "gpui-pre-macros" }
-gpui_platform                 = { version = "=0.3.8", package = "gpui-pre-platform" }
-gpui_sum_tree                 = { version = "=0.3.8", package = "gpui-pre-sum-tree" }
+gpui                          = { version = "=0.3.9", package = "gpui-pre" }
+gpui-macros                   = { version = "=0.3.9", package = "gpui-pre-macros" }
+gpui_platform                 = { version = "=0.3.9", package = "gpui-pre-platform" }
+gpui_sum_tree                 = { version = "=0.3.9", package = "gpui-pre-sum-tree" }
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
 palette                       = "0.7"
