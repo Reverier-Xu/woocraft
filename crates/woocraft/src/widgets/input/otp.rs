@@ -192,7 +192,7 @@ impl RenderOnce for OtpInput {
           h_flex()
             .border_1()
             .border_color(if focused_cell {
-              cx.theme().ring
+              cx.theme().info
             } else {
               cx.theme().input
             })

@@ -183,7 +183,7 @@ impl Render for PaletteWindow {
           ("secondary_foreground", colors.secondary_foreground),
           ("border", colors.border),
           ("input", colors.input),
-          ("ring", colors.ring),
+          ("info", colors.info),
           ("selection", colors.selection),
           ("caret", colors.caret),
         ],

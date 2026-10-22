@@ -228,7 +228,7 @@ impl WidgetGroup {
       ButtonVariant::Primary => theme.primary,
       ButtonVariant::Success => theme.success,
       ButtonVariant::Warning => theme.warning,
-      ButtonVariant::Info => theme.ring,
+      ButtonVariant::Info => theme.info,
       ButtonVariant::Default => theme.border,
       ButtonVariant::Link | ButtonVariant::Flat => transparent,
       ButtonVariant::Danger => theme.danger,
@@ -254,7 +254,7 @@ impl WidgetGroup {
   }
 
   fn input_active_border_color(disabled: bool, cx: &App) -> Hsla {
-    let mut color = cx.theme().ring;
+    let mut color = cx.theme().info;
     if disabled {
       color.a *= 0.6;
     }

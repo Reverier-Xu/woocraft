@@ -36,7 +36,7 @@ use crate::{ActiveTheme, Size, StyleSized, StyledExt};
 /// - Danger: Warning/error red color
 /// - Success: Positive/success green color
 /// - Warning: Caution/alert orange/yellow color
-/// - Info: Informational ring color
+/// - Info: Informational blue color
 /// - Custom: User-specified RGB(A) colors via custom_bg/custom_fg/custom_border
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TagVariant {
@@ -115,7 +115,7 @@ impl Tag {
     Self::new().with_variant(TagVariant::Warning)
   }
 
-  /// Creates a new Info variant tag (blue/info ring color).
+  /// Creates a new Info variant tag (blue/info color).
   pub fn info() -> Self {
     Self::new().with_variant(TagVariant::Info)
   }
@@ -218,9 +218,9 @@ impl RenderOnce for Tag {
         cx.theme().warning,
       ),
       TagVariant::Info => (
-        cx.theme().ring,
+        cx.theme().info,
         cx.theme().primary_foreground,
-        cx.theme().ring,
+        cx.theme().info,
       ),
       TagVariant::Custom => (
         self.custom_bg.unwrap_or(cx.theme().muted),

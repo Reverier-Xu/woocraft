@@ -1615,7 +1615,7 @@ impl RenderOnce for Input {
               .border_color(cx.theme().input)
               .border_1()
               .when(focused && self.focus_bordered, |this| {
-                this.border_color(cx.theme().ring)
+                this.border_color(cx.theme().info)
               })
           })
       })

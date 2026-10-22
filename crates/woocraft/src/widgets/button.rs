@@ -478,7 +478,7 @@ fn compute_button_colors(
     ButtonVariant::Primary => InteractionColors::solid(theme.primary, theme.primary_foreground),
     ButtonVariant::Success => InteractionColors::solid(theme.success, theme.primary_foreground),
     ButtonVariant::Warning => InteractionColors::solid(theme.warning, theme.primary_foreground),
-    ButtonVariant::Info => InteractionColors::solid(theme.ring, theme.primary_foreground),
+    ButtonVariant::Info => InteractionColors::solid(theme.info, theme.primary_foreground),
     ButtonVariant::Danger => InteractionColors::solid(theme.danger, theme.primary_foreground),
     ButtonVariant::Default => {
       InteractionColors::transparent(theme.foreground).with_border(theme.border)
