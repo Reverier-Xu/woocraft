@@ -328,7 +328,7 @@ mod tests {
     let notified = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let waker = Waker::from(Arc::new(Notify(notified.clone(), thread::current())));
     let mut cx = Context::from_waker(&waker);
-    let mut future = Box::pin(future);
+    let mut future = std::pin::pin!(future);
     loop {
       if let Poll::Ready(output) = future.as_mut().poll(&mut cx) {
         return output;
