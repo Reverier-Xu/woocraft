@@ -9,8 +9,8 @@ use gpui::{
   Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
   EventEmitter, FocusHandle, Focusable, Font, Half, Hsla, InteractiveElement as _, IntoElement,
   KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-  ParentElement as _, Pixels, Point, Render, ScrollWheelEvent, ShapedLine, SharedString,
-  Styled as _, Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
+  ParentElement as _, Pixels, Point, Render, ScrollEvent, ShapedLine, SharedString, Styled as _,
+  Subscription, Task, TextAlign, UTF16Selection, Window, actions, div, point,
   prelude::FluentBuilder as _, px,
 };
 use gpui_sum_tree::Bias;
@@ -2080,8 +2080,8 @@ impl InputState {
     }
   }
 
-  pub(super) fn on_scroll_wheel(
-    &mut self, event: &ScrollWheelEvent, window: &mut Window, cx: &mut Context<Self>,
+  pub(super) fn on_scroll(
+    &mut self, event: &ScrollEvent, window: &mut Window, cx: &mut Context<Self>,
   ) {
     const SCROLL_LINES: i64 = 3;
 

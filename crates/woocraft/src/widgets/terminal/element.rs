@@ -9,8 +9,8 @@ use gpui::{
   App, Bounds, ContentMask, CursorStyle, DispatchPhase, Element, ElementId, FontStyle, FontWeight,
   GlobalElementId, Hitbox, Hsla, InspectorElementId, InteractiveElement, Interactivity,
   IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-  ScrollWheelEvent, ShapedLine, SharedString, StatefulInteractiveElement, StrikethroughStyle,
-  TextAlign, TextRun, UnderlineStyle, Window, fill, px,
+  ScrollEvent, ShapedLine, SharedString, StatefulInteractiveElement, StrikethroughStyle, TextAlign,
+  TextRun, UnderlineStyle, Window, fill, px,
 };
 use woocraft_terminal::{
   Cell, CellColor, CellFlags, Content, CursorShape, NamedColor, SelectionRange, TerminalBounds,
@@ -819,9 +819,9 @@ impl TerminalElement {
       }
     });
 
-    self.interactivity.on_scroll_wheel({
+    self.interactivity.on_scroll({
       let view = view.clone();
-      move |event: &ScrollWheelEvent, _window, cx| {
+      move |event: &ScrollEvent, _window, cx| {
         view.update(cx, |view, cx| {
           view.scroll_wheel(
             event.position - origin,

@@ -458,7 +458,7 @@ where
             this.selected_index = Some(ix);
             this.on_action_confirm(
               &Confirm {
-                secondary: e.modifiers().secondary(),
+                secondary: e.modifiers().secondary(cx),
               },
               window,
               cx,

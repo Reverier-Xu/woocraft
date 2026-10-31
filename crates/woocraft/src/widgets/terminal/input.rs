@@ -254,7 +254,7 @@ fn modifier_code(keystroke: &Keystroke) -> u32 {
 
 #[cfg(test)]
 mod tests {
-  use gpui::Keystroke;
+  use gpui::{Keystroke, OperatingSystem};
 
   use super::*;
 
@@ -264,7 +264,7 @@ mod tests {
 
   fn esc_with(keystroke: &str, option_as_meta: bool) -> Option<String> {
     to_esc_str(
-      &Keystroke::parse(keystroke).unwrap(),
+      &Keystroke::parse_with_os(keystroke, OperatingSystem::Linux).unwrap(),
       Modes::NONE,
       option_as_meta,
     )

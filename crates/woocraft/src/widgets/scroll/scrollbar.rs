@@ -10,8 +10,8 @@ use gpui::{
   App, Axis, BorderStyle, Bounds, ContentMask, CursorStyle, DispatchPhase, Edges, Element,
   ElementId, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement,
   IsZero, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels,
-  Point, Position, Rems, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle,
-  Window, fill, point, px, relative, rems, size,
+  Point, Position, Rems, ScrollEvent, ScrollHandle, Size, Style, UniformListScrollHandle, Window,
+  fill, point, px, relative, rems, size,
 };
 
 use crate::{ActiveTheme, ScrollbarShow};
@@ -735,7 +735,7 @@ impl Element for Scrollbar {
           let scroll_handle = self.scroll_handle.clone();
           let axis_data = axis_data.clone();
 
-          move |event: &ScrollWheelEvent, phase, _, cx| {
+          move |event: &ScrollEvent, phase, _, cx| {
             if !(phase.capture() && hitbox_bounds.contains(&event.position)) {
               return;
             }

@@ -1360,8 +1360,8 @@ mod tests {
   use std::ops::Deref as _;
 
   use gpui::{
-    Modifiers, ScrollDelta, ScrollWheelEvent, Size, TestAppContext, TouchPhase, VisualTestContext,
-    WindowHandle, point, px, size,
+    Modifiers, ScrollDelta, ScrollEvent, ScrollSource, Size, TestAppContext, TouchPhase,
+    VisualTestContext, WindowHandle, point, px, size,
   };
 
   use super::*;
@@ -1450,11 +1450,12 @@ mod tests {
       (menu.bounds.origin, menu.item_bounds[0].origin.y)
     });
 
-    visual.simulate_event(ScrollWheelEvent {
+    visual.simulate_event(ScrollEvent {
       position: point(px(100.), px(150.)),
       delta: ScrollDelta::Lines(point(0., -3.)),
       modifiers: Modifiers::default(),
       touch_phase: TouchPhase::Moved,
+      source: ScrollSource::Pointer,
     });
 
     visual.update(|_, cx| {

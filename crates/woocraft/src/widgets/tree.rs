@@ -505,7 +505,7 @@ impl TreeState {
 
     // Multi-selection modifiers
     if self.multi_selectable {
-      if ev.modifiers().secondary() {
+      if ev.modifiers().secondary(cx) {
         // Ctrl/Cmd+Click: toggle individual item
         self.model.toggle_selected(ix);
         cx.emit(TreeEvent::ToggleSelect(ix));

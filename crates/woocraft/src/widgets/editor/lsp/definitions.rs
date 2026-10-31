@@ -135,7 +135,7 @@ impl InputState {
   pub(crate) fn handle_click_hover_definition(
     &mut self, event: &MouseDownEvent, offset: usize, _: &mut Window, cx: &mut Context<InputState>,
   ) -> bool {
-    if !event.modifiers.secondary() {
+    if !event.modifiers.secondary(cx) {
       return false;
     }
 

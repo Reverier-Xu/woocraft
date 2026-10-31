@@ -129,7 +129,7 @@ impl InputState {
   ) {
     let mut needs_notify = false;
 
-    if event.modifiers.secondary() {
+    if event.modifiers.secondary(cx) {
       needs_notify |= self.clear_hover_popover_if_needed();
       needs_notify |= self.handle_hover_definition(offset, window, cx);
     } else {
