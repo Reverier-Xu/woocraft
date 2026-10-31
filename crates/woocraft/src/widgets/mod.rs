@@ -20,6 +20,8 @@ mod kbd;
 mod label;
 mod link;
 mod list;
+#[cfg(feature = "media")]
+mod media;
 mod menu;
 mod notification;
 mod pagination;
@@ -75,6 +77,8 @@ pub use kbd::*;
 pub use label::*;
 pub use link::*;
 pub use list::*;
+#[cfg(feature = "media")]
+pub use media::*;
 pub use menu::*;
 pub use notification::*;
 pub use pagination::*;

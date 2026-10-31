@@ -1,0 +1,217 @@
+//! Software video output.
+//!
+//! mpv's render API is asked for RGBA frames instead of a GPU context, so video
+//! output works on every platform gpui runs on, without an OpenGL/EGL/WGL
+//! context of our own and without sharing textures across graphics APIs. Frames
+//! are produced on a dedicated thread and handed to the UI through a bounded
+//! channel: a slow or hidden window drops frames instead of growing memory.
+//!
+//! The GPU path (a producer-owned native surface through gpui's window
+//! composition, so video never round-trips through the CPU) replaces this
+//! module's transport later; [`VideoOutput`] is the seam it slots into.
+
+use std::{
+  ffi::{CString, c_char, c_void},
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc::{self, RecvTimeoutError},
+  },
+  thread,
+  time::Duration,
+};
+
+use anyhow::{Result, anyhow};
+use async_channel::{Receiver, Sender};
+use libmpv2::Mpv;
+use libmpv2_sys as sys;
+
+/// One decoded frame, top-down, 8-bit RGBA.
+#[derive(Clone)]
+pub struct VideoFrame {
+  /// Frame width in pixels.
+  pub width: u32,
+  /// Frame height in pixels.
+  pub height: u32,
+  /// `width * height * 4` bytes of RGBA.
+  pub rgba: Vec<u8>,
+}
+
+impl std::fmt::Debug for VideoFrame {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("VideoFrame")
+      .field("width", &self.width)
+      .field("height", &self.height)
+      .field("bytes", &self.rgba.len())
+      .finish()
+  }
+}
+
+/// A running software video output.
+///
+/// Dropping it stops the render thread; the frame channel closes with it.
+pub struct VideoOutput {
+  frames: Receiver<Arc<VideoFrame>>,
+  shutdown: Arc<AtomicBool>,
+  thread: Option<thread::JoinHandle<()>>,
+}
+
+impl VideoOutput {
+  /// Starts producing frames for `mpv`, scaled to `width` x `height`.
+  pub(crate) fn start(mpv: Arc<Mpv>, width: u32, height: u32) -> Result<Self> {
+    let width = width.clamp(2, 8192) as i32;
+    let height = height.clamp(2, 8192) as i32;
+    let (frame_tx, frame_rx) = async_channel::bounded::<Arc<VideoFrame>>(2);
+    let shutdown = Arc::new(AtomicBool::new(false));
+
+    let thread_shutdown = shutdown.clone();
+    let thread = thread::Builder::new()
+      .name("woocraft-mpv-video".into())
+      .spawn(move || {
+        if let Err(error) = render_loop(mpv, width, height, frame_tx, thread_shutdown) {
+          tracing::warn!(%error, "woocraft: mpv video output stopped");
+        }
+      })
+      .map_err(|error| anyhow!("failed to spawn the mpv video thread: {error}"))?;
+
+    Ok(Self {
+      frames: frame_rx,
+      shutdown,
+      thread: Some(thread),
+    })
+  }
+
+  /// The channel every rendered frame arrives on.
+  pub fn frames(&self) -> &Receiver<Arc<VideoFrame>> {
+    &self.frames
+  }
+}
+
+impl Drop for VideoOutput {
+  fn drop(&mut self) {
+    self.shutdown.store(true, Ordering::SeqCst);
+    if let Some(thread) = self.thread.take() {
+      let _ = thread.join();
+    }
+  }
+}
+
+struct RenderContext(*mut sys::mpv_render_context);
+
+impl Drop for RenderContext {
+  fn drop(&mut self) {
+    if !self.0.is_null() {
+      unsafe { sys::mpv_render_context_free(self.0) };
+    }
+  }
+}
+
+fn render_loop(
+  mpv: Arc<Mpv>, width: i32, height: i32, frames: Sender<Arc<VideoFrame>>,
+  shutdown: Arc<AtomicBool>,
+) -> Result<()> {
+  let api_type = CString::new("sw")?;
+  let format = CString::new("rgb0")?;
+  let stride_bytes = width as usize * 4;
+
+  let context = create_render_context(mpv.ctx.as_ptr(), &api_type)?;
+
+  // mpv calls this from its own thread whenever a new frame is ready, and the
+  // callback must not call back into mpv: it only nudges this thread awake.
+  let (wake_tx, wake_rx) = mpsc::channel::<()>();
+  let wake = Box::into_raw(Box::new(wake_tx));
+  unsafe {
+    sys::mpv_render_context_set_update_callback(
+      context.0,
+      Some(wake_callback),
+      wake as *mut c_void,
+    );
+  }
+
+  let mut buffer = vec![0u8; stride_bytes * height as usize];
+  while !shutdown.load(Ordering::SeqCst) {
+    match wake_rx.recv_timeout(Duration::from_millis(50)) {
+      Ok(()) | Err(RecvTimeoutError::Timeout) => {}
+      Err(RecvTimeoutError::Disconnected) => break,
+    }
+
+    let flags = unsafe { sys::mpv_render_context_update(context.0) };
+    if flags & sys::mpv_render_update_flag_MPV_RENDER_UPDATE_FRAME as u64 == 0 {
+      continue;
+    }
+
+    // mpv documents this parameter as `int[2]`, not int64.
+    let mut size: [i32; 2] = [width, height];
+    let mut stride = stride_bytes as i64;
+    let mut params = [
+      param(
+        sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_SIZE,
+        size.as_mut_ptr().cast(),
+      ),
+      param(
+        sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_FORMAT,
+        format.as_ptr() as *mut c_char as *mut c_void,
+      ),
+      param(
+        sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_STRIDE,
+        (&mut stride as *mut i64).cast(),
+      ),
+      param(
+        sys::mpv_render_param_type_MPV_RENDER_PARAM_SW_POINTER,
+        buffer.as_mut_ptr().cast(),
+      ),
+      param(0, std::ptr::null_mut()),
+    ];
+
+    let status = unsafe { sys::mpv_render_context_render(context.0, params.as_mut_ptr()) };
+    if status < 0 {
+      tracing::warn!(status, "woocraft: mpv_render_context_render failed");
+      continue;
+    }
+    // "rgb0" leaves the fourth byte of every pixel unused.
+    for pixel in buffer.as_chunks_mut::<4>().0 {
+      pixel[3] = 255;
+    }
+
+    // A window that is not drawing must not stall playback: drop the frame.
+    let _ = frames.try_send(Arc::new(VideoFrame {
+      width: width as u32,
+      height: height as u32,
+      rgba: buffer.clone(),
+    }));
+  }
+
+  drop(context);
+  // mpv holds no reference to the callback context once the render context is
+  // freed, so the allocation can be released here.
+  unsafe { drop(Box::from_raw(wake)) };
+  Ok(())
+}
+
+fn param(type_: sys::mpv_render_param_type, data: *mut c_void) -> sys::mpv_render_param {
+  sys::mpv_render_param { type_, data }
+}
+
+fn create_render_context(mpv: *mut sys::mpv_handle, api_type: &CString) -> Result<RenderContext> {
+  let mut params = [
+    param(
+      sys::mpv_render_param_type_MPV_RENDER_PARAM_API_TYPE,
+      api_type.as_ptr() as *mut c_char as *mut c_void,
+    ),
+    param(0, std::ptr::null_mut()),
+  ];
+  let mut context: *mut sys::mpv_render_context = std::ptr::null_mut();
+  let status = unsafe { sys::mpv_render_context_create(&mut context, mpv, params.as_mut_ptr()) };
+  if status < 0 {
+    return Err(anyhow!("mpv_render_context_create failed: {status}"));
+  }
+  Ok(RenderContext(context))
+}
+
+unsafe extern "C" fn wake_callback(ctx: *mut c_void) {
+  if ctx.is_null() {
+    return;
+  }
+  let sender = unsafe { &*(ctx as *const mpsc::Sender<()>) };
+  let _ = sender.send(());
+}

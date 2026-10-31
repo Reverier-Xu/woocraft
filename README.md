@@ -121,6 +121,12 @@ Translation interfaces from `rust-i18n` are re-exported (for example `woocraft::
   - Enables `rust-embed`
   - Exposes `woocraft::Assets`
   - Automatically registers embedded fonts (inside `woocraft::init`)
+- `terminal` (enabled by default): terminal widget and `woocraft-terminal`
+- `tray`: system tray support
+- `media` (disabled by default): [`Player`]/[`PlayerView`] on top of libmpv —
+  one player for audio and video, with audio filters/equalizer, subtitles and
+  hardware decoding. Enabling it links the system `libmpv`; see
+  [`docs/media.md`](docs/media.md)
 
 Disable default features:
 

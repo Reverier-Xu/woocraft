@@ -14,6 +14,14 @@ rust-version = { workspace = true }
 version      = { workspace = true }
 
 [dependencies]
+# Optional: system tray icons (linux/windows) and video frame conversion for the
+# `media` feature. Declared once so both features can use it on every platform.
+image = { version = "0.25", default-features = false, features = [
+  "png",
+  "jpeg",
+  "ico",
+  "webp",
+], optional = true }
 aho-corasick                  = { workspace = true }
 anyhow                        = { workspace = true }
 async-channel                 = { workspace = true }
@@ -23,6 +31,8 @@ enum-iterator                 = { workspace = true }
 gpui                          = { workspace = true }
 gpui-macros                   = { workspace = true }
 gpui_sum_tree                 = { workspace = true }
+libmpv2                       = { version = "7.0.0", optional = true, default-features = false }
+libmpv2-sys                   = { version = "4.0.1", optional = true }
 lsp-types                     = { workspace = true }
 num-traits                    = { workspace = true }
 palette                       = { workspace = true }
@@ -133,18 +143,16 @@ windows = { version = "0.62", features = [
   "Win32_System_LibraryLoader",
 ] }
 
-[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-image = { version = "0.25", default-features = false, features = [
-  "png",
-  "jpeg",
-  "ico",
-  "webp",
-], optional = true }
+
+[[example]]
+name = "player"
+required-features = ["media"]
 
 [features]
 default = ["resources", "tree-sitter-languages", "terminal"]
 resources = ["dep:rust-embed", "dep:zstd"]
 terminal = ["dep:woocraft-terminal"]
+media = ["dep:image", "dep:libmpv2", "dep:libmpv2-sys"]
 tray = [
   "dep:crossbeam-channel",
   "dep:image",
