@@ -163,7 +163,10 @@ pub(crate) fn init(cx: &mut App) {
     KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
     KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
     KeyBinding::new("shift-enter", Enter { secondary: false }, Some(CONTEXT)),
-    KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
+    #[cfg(target_os = "macos")]
+    KeyBinding::new("cmd-enter", Enter { secondary: true }, Some(CONTEXT)),
+    #[cfg(not(target_os = "macos"))]
+    KeyBinding::new("ctrl-enter", Enter { secondary: true }, Some(CONTEXT)),
     KeyBinding::new("escape", Escape, Some(CONTEXT)),
     KeyBinding::new("up", MoveUp, Some(CONTEXT)),
     KeyBinding::new("down", MoveDown, Some(CONTEXT)),
