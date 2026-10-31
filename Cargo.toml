@@ -30,14 +30,21 @@ async-channel      = "2"
 chrono             = "0.4"
 crossbeam-channel  = "0.5"
 enum-iterator      = "2.3"
-# NOTE: Temporary migration from git deps to the `gpui-pre-*` crates.io snapshots
-# published by Longbridge (huacnlee). Version 0.3.6 == zed@bcf6582. Exact pins are
-# required: each 0.3.x snapshot may contain breaking API changes (see longbridge/
-# gpui-kit#3156). Migrate back to the zed git source once an official stable gpui
-# release catches up.
-gpui                          = { version = "=0.3.10", package = "gpui-pre" }
-gpui-macros                   = { version = "=0.3.10", package = "gpui-pre-macros" }
-gpui_platform                 = { version = "=0.3.10", package = "gpui-pre-platform" }
+# GPUI comes from Longbridge's `gpui-fast` fork (crates.io), not from the plain
+# `gpui-pre-*` snapshots: v0.1.12 is built on zed@08cbb88, the same revision as
+# `gpui-pre` 0.3.10, and adds incremental (retained) rendering plus native window
+# composition (zed-industries/zed#62379) without changing upstream's public API.
+# The fork keeps its additions in `crates/gpui/src/fast/` behind one-line hooks
+# into upstream files and enforces that with a diff budget, which is what makes
+# syncing to newer zed revisions mechanical; see docs/gpui.md.
+#
+# Exact pins are required: every 0.1.x release moves the zed revision it tracks
+# and may contain breaking API changes. The helper crates (`collections`,
+# `sum-tree`, `util`, `scheduler`, `refineable`, `shared-string`, `http-client`)
+# stay on the `gpui-pre-*` 0.3.10 snapshots that gpui-fast itself depends on.
+gpui                          = { version = "=0.1.12", package = "gpui-fast" }
+gpui-macros                   = { version = "=0.1.12", package = "gpui-fast-macros" }
+gpui_platform                 = { version = "=0.1.12", package = "gpui-fast-platform" }
 gpui_sum_tree                 = { version = "=0.3.10", package = "gpui-pre-sum-tree" }
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"

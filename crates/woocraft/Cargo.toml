@@ -95,7 +95,7 @@ gpui = { workspace = true, features = ["test-support"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # The reduced-motion preference, read through the XDG desktop portal's
-# Settings interface. The same version and features `gpui-pre-linux` already
+# Settings interface. The same version and features `gpui-fast-linux` already
 # pulls in, so this adds no new code to the build.
 ashpd = { version = "0.13", default-features = false, features = [
   "async-io",
