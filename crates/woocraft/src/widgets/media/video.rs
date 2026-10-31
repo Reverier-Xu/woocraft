@@ -26,6 +26,15 @@ use async_channel::{Receiver, Sender};
 use libmpv2::Mpv;
 use libmpv2_sys as sys;
 
+/// Lower bound for one render axis: mpv's software renderer needs a span of at
+/// least two pixels per axis to produce a meaningful frame. The view checks
+/// against it too, so a collapsed stage sends no request at all instead of one
+/// that the output would clamp back up to this minimum.
+pub(crate) const MIN_RENDER_SIZE: u32 = 2;
+/// Upper bound for one render axis: an 8192 x 8192 RGBA buffer is already
+/// 256 MiB, which dwarfs any surface a design-system view is meant to fill.
+const MAX_RENDER_SIZE: u32 = 8192;
+
 /// One decoded frame, top-down, 8-bit RGBA.
 #[derive(Clone)]
 pub struct VideoFrame {
@@ -52,6 +61,7 @@ impl std::fmt::Debug for VideoFrame {
 /// Dropping it stops the render thread; the frame channel closes with it.
 pub struct VideoOutput {
   frames: Receiver<Arc<VideoFrame>>,
+  sizes: mpsc::Sender<(u32, u32)>,
   shutdown: Arc<AtomicBool>,
   thread: Option<thread::JoinHandle<()>>,
 }
@@ -59,16 +69,17 @@ pub struct VideoOutput {
 impl VideoOutput {
   /// Starts producing frames for `mpv`, scaled to `width` x `height`.
   pub(crate) fn start(mpv: Arc<Mpv>, width: u32, height: u32) -> Result<Self> {
-    let width = width.clamp(2, 8192) as i32;
-    let height = height.clamp(2, 8192) as i32;
+    let width = width.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE);
+    let height = height.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE);
     let (frame_tx, frame_rx) = async_channel::bounded::<Arc<VideoFrame>>(2);
+    let (size_tx, size_rx) = mpsc::channel::<(u32, u32)>();
     let shutdown = Arc::new(AtomicBool::new(false));
 
     let thread_shutdown = shutdown.clone();
     let thread = thread::Builder::new()
       .name("woocraft-mpv-video".into())
       .spawn(move || {
-        if let Err(error) = render_loop(mpv, width, height, frame_tx, thread_shutdown) {
+        if let Err(error) = render_loop(mpv, width, height, size_rx, frame_tx, thread_shutdown) {
           tracing::warn!(%error, "woocraft: mpv video output stopped");
         }
       })
@@ -76,6 +87,7 @@ impl VideoOutput {
 
     Ok(Self {
       frames: frame_rx,
+      sizes: size_tx,
       shutdown,
       thread: Some(thread),
     })
@@ -84,6 +96,19 @@ impl VideoOutput {
   /// The channel every rendered frame arrives on.
   pub fn frames(&self) -> &Receiver<Arc<VideoFrame>> {
     &self.frames
+  }
+
+  /// Requests a new render size, clamped per axis. Requests are coalesced on
+  /// the render thread, so a burst of them allocates at most one buffer.
+  ///
+  /// A failed send means the render thread has already stopped and there is
+  /// nobody left to resize for; the request is dropped rather than warned
+  /// about on every paint of a player that is being torn down.
+  pub(crate) fn request_size(&self, width: u32, height: u32) {
+    let _ = self.sizes.send((
+      width.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE),
+      height.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE),
+    ));
   }
 }
 
@@ -107,12 +132,12 @@ impl Drop for RenderContext {
 }
 
 fn render_loop(
-  mpv: Arc<Mpv>, width: i32, height: i32, frames: Sender<Arc<VideoFrame>>,
-  shutdown: Arc<AtomicBool>,
+  mpv: Arc<Mpv>, mut width: u32, mut height: u32, sizes: mpsc::Receiver<(u32, u32)>,
+  frames: Sender<Arc<VideoFrame>>, shutdown: Arc<AtomicBool>,
 ) -> Result<()> {
   let api_type = CString::new("sw")?;
   let format = CString::new("rgb0")?;
-  let stride_bytes = width as usize * 4;
+  let mut stride_bytes = width as usize * 4;
 
   let context = create_render_context(mpv.ctx.as_ptr(), &api_type)?;
 
@@ -128,20 +153,40 @@ fn render_loop(
     );
   }
 
+  // The pixel buffer belongs to this thread alone: size requests only ever
+  // change `width` and `height` here, between renders, so every render call
+  // sees a stride and a pointer that match the buffer it writes into.
   let mut buffer = vec![0u8; stride_bytes * height as usize];
+  // Set when the size changed: one render without a new decoded frame, so a
+  // resize is visible even while playback is paused.
+  let mut force_render = false;
   while !shutdown.load(Ordering::SeqCst) {
     match wake_rx.recv_timeout(Duration::from_millis(50)) {
       Ok(()) | Err(RecvTimeoutError::Timeout) => {}
       Err(RecvTimeoutError::Disconnected) => break,
     }
 
-    let flags = unsafe { sys::mpv_render_context_update(context.0) };
-    if flags & sys::mpv_render_update_flag_MPV_RENDER_UPDATE_FRAME as u64 == 0 {
-      continue;
+    // Keep only the newest queued size: a resize that overtakes an older
+    // request must not allocate a buffer it would immediately replace.
+    let mut requested = None;
+    while let Ok(size) = sizes.try_recv() {
+      requested = Some(size);
+    }
+    if let Some((new_width, new_height)) = requested.filter(|size| *size != (width, height)) {
+      (width, height) = (new_width, new_height);
+      stride_bytes = width as usize * 4;
+      buffer = vec![0u8; stride_bytes * height as usize];
+      force_render = true;
     }
 
+    let flags = unsafe { sys::mpv_render_context_update(context.0) };
+    if flags & sys::mpv_render_update_flag_MPV_RENDER_UPDATE_FRAME as u64 == 0 && !force_render {
+      continue;
+    }
+    force_render = false;
+
     // mpv documents this parameter as `int[2]`, not int64.
-    let mut size: [i32; 2] = [width, height];
+    let mut size: [i32; 2] = [width as i32, height as i32];
     let mut stride = stride_bytes as i64;
     let mut params = [
       param(
@@ -175,8 +220,8 @@ fn render_loop(
 
     // A window that is not drawing must not stall playback: drop the frame.
     let _ = frames.try_send(Arc::new(VideoFrame {
-      width: width as u32,
-      height: height as u32,
+      width,
+      height,
       rgba: buffer.clone(),
     }));
   }

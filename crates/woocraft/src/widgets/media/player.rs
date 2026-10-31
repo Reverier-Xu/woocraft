@@ -37,10 +37,6 @@ pub enum PlayerEvent {
   VideoReconfig,
   /// The audio track was (re)configured.
   AudioReconfig,
-  /// A seek finished.
-  Seek,
-  /// The player returned to a playable state after a stall.
-  PlaybackRestart,
   /// mpv logged an error.
   Error(String),
 }
@@ -296,6 +292,17 @@ impl Player {
     self.options.video
   }
 
+  /// Requests a new render resolution for the video output, in pixels,
+  /// clamped to a sane range per axis. The render thread reallocates its buffer
+  /// on its own thread, so an in-flight frame is never invalidated, and the
+  /// frame stream switches to the new size; while playback is paused the
+  /// current frame is re-rendered at it. A no-op for audio-only players.
+  pub fn set_video_size(&self, size: (u32, u32)) {
+    if let Some(video) = &self.video {
+      video.request_size(size.0, size.1);
+    }
+  }
+
   /// Loads `uri` (a path or URL) and starts playing it.
   pub fn load(&self, uri: &str) -> Result<()> {
     self.command("loadfile", &[uri, "replace"])
@@ -532,11 +539,16 @@ impl Player {
           let Some(event) = mpv.wait_event(0.05) else {
             continue;
           };
+          // A failed wait stays an error, but routine events translate to
+          // `None` and are dropped here rather than waking the UI thread just
+          // to ignore them.
           let event = match event {
             Ok(event) => translate_event(&event),
-            Err(error) => PlayerEvent::Error(error.to_string()),
+            Err(error) => Some(PlayerEvent::Error(error.to_string())),
           };
-          if tx.send_blocking(event).is_err() {
+          if let Some(event) = event
+            && tx.send_blocking(event).is_err()
+          {
             break;
           }
         }
@@ -896,32 +908,66 @@ fn create_mpv(options: &PlayerOptions) -> Result<Mpv> {
   Ok(mpv)
 }
 
-fn translate_event(event: &libmpv2::events::Event<'_>) -> PlayerEvent {
+/// Maps one observed property value, or `None` when mpv reported that the
+/// property currently has no value (`MPV_FORMAT_NONE`).
+///
+/// mpv sends the no-value form while a property is unavailable — `time-pos`
+/// before the first frame, `width`/`height` before a video track exists — and
+/// again once the current entry ends. It must not become
+/// [`PropertyValue::Flag(false)`] or any other invented value: the state would
+/// briefly claim "paused == false" or "width == 0" from data mpv never sent.
+fn property_value(change: &libmpv2::events::PropertyData<'_>) -> Option<PropertyValue> {
+  use libmpv2::events::PropertyData;
+
+  match change {
+    PropertyData::None => None,
+    PropertyData::Str(value) | PropertyData::OsdStr(value) => {
+      Some(PropertyValue::String((*value).into()))
+    }
+    PropertyData::Flag(value) => Some(PropertyValue::Flag(*value)),
+    PropertyData::Int64(value) => Some(PropertyValue::Int64(*value)),
+    PropertyData::Double(value) => Some(PropertyValue::Double(*value)),
+  }
+}
+
+/// Translates one mpv event into a player event, or `None` for a routine one.
+///
+/// Most of mpv's stream is bookkeeping: `Seek` and `PlaybackRestart` bracket
+/// every position change, deprecated events (`Tick` among them) arrive as
+/// [`Event::Deprecated`], and the reply events answer async requests this
+/// wrapper never makes. None of them is a failure, so none may surface as
+/// [`PlayerEvent::Error`] — which views render from [`PlayerState::error`] —
+/// and none carries state a view acts on, because the observed properties
+/// already deliver it. `Error` stays reserved for genuine failures.
+fn translate_event(event: &libmpv2::events::Event<'_>) -> Option<PlayerEvent> {
   use libmpv2::events::Event;
 
   match event {
-    Event::FileLoaded => PlayerEvent::FileLoaded,
-    Event::EndFile(reason) => PlayerEvent::EndFile {
+    Event::FileLoaded => Some(PlayerEvent::FileLoaded),
+    Event::EndFile(reason) => Some(PlayerEvent::EndFile {
       reason: format!("{reason:?}"),
-    },
-    Event::VideoReconfig => PlayerEvent::VideoReconfig,
-    Event::AudioReconfig => PlayerEvent::AudioReconfig,
-    Event::Seek => PlayerEvent::Seek,
-    Event::PlaybackRestart => PlayerEvent::PlaybackRestart,
-    Event::PropertyChange { name, change, .. } => PlayerEvent::PropertyChanged {
-      name: (*name).to_string(),
-      value: match change {
-        libmpv2::events::PropertyData::Str(value)
-        | libmpv2::events::PropertyData::OsdStr(value) => PropertyValue::String((*value).into()),
-        libmpv2::events::PropertyData::Flag(value) => PropertyValue::Flag(*value),
-        libmpv2::events::PropertyData::Int64(value) => PropertyValue::Int64(*value),
-        libmpv2::events::PropertyData::Double(value) => PropertyValue::Double(*value),
-        libmpv2::events::PropertyData::None => PropertyValue::Flag(false),
-      },
-    },
-    Event::Shutdown => PlayerEvent::Error("mpv shut down".into()),
-    Event::LogMessage { text, .. } => PlayerEvent::Error((*text).into()),
-    other => PlayerEvent::Error(format!("{other:?}")),
+    }),
+    Event::VideoReconfig => Some(PlayerEvent::VideoReconfig),
+    Event::AudioReconfig => Some(PlayerEvent::AudioReconfig),
+    Event::PropertyChange { name, change, .. } => {
+      property_value(change).map(|value| PlayerEvent::PropertyChanged {
+        name: (*name).to_string(),
+        value,
+      })
+    }
+    // A core that shut down can no longer play anything; that is a failure
+    // from this wrapper's point of view.
+    Event::Shutdown => Some(PlayerEvent::Error("mpv shut down".into())),
+    // Log messages only arrive when requested; of those, only error and
+    // fatal level are failures worth reporting — the rest is chatter.
+    Event::LogMessage {
+      text, log_level, ..
+    } => {
+      let failure = *log_level == libmpv2_sys::mpv_log_level_MPV_LOG_LEVEL_ERROR
+        || *log_level == libmpv2_sys::mpv_log_level_MPV_LOG_LEVEL_FATAL;
+      failure.then(|| PlayerEvent::Error((*text).into()))
+    }
+    _ => None,
   }
 }
 
@@ -1046,6 +1092,8 @@ impl PlayerOptions {
 
 #[cfg(test)]
 mod tests {
+  use libmpv2::events::{Event, PropertyData};
+
   use super::*;
 
   #[test]
@@ -1080,5 +1128,107 @@ mod tests {
     let style = SubtitleStyle::default();
     assert_eq!(style.font, crate::DEFAULT_FONT_FAMILY);
     assert!(style.color.starts_with('#') && style.color.len() == 9);
+  }
+
+  /// A deprecated event, which is how mpv's `Tick` and other removed events
+  /// reach the wrapper, with no payload attached.
+  fn deprecated_event() -> Event<'static> {
+    Event::Deprecated(libmpv2_sys::mpv_event {
+      event_id: 0,
+      error: 0,
+      reply_userdata: 0,
+      data: std::ptr::null_mut(),
+    })
+  }
+
+  #[test]
+  fn routine_mpv_events_are_dropped_not_reported_as_errors() {
+    let routine = [
+      Event::StartFile,
+      Event::Seek,
+      Event::PlaybackRestart,
+      Event::QueueOverflow,
+      Event::ClientMessage(vec!["key-binding"]),
+      Event::GetPropertyReply {
+        name: "time-pos",
+        result: PropertyData::Double(1.0),
+        reply_userdata: 0,
+      },
+      Event::SetPropertyReply(0),
+      Event::CommandReply(0),
+      deprecated_event(),
+    ];
+    for event in &routine {
+      assert_eq!(translate_event(event), None, "event: {event:?}");
+    }
+  }
+
+  #[test]
+  fn log_messages_are_errors_only_at_error_or_fatal_level() {
+    let message = |log_level| Event::LogMessage {
+      prefix: "cplayer",
+      level: "error",
+      text: "failed to initialize the audio output",
+      log_level,
+    };
+    let fatal = message(libmpv2_sys::mpv_log_level_MPV_LOG_LEVEL_FATAL);
+    let error = message(libmpv2_sys::mpv_log_level_MPV_LOG_LEVEL_ERROR);
+    let warn = message(libmpv2_sys::mpv_log_level_MPV_LOG_LEVEL_WARN);
+    let info = message(libmpv2_sys::mpv_log_level_MPV_LOG_LEVEL_INFO);
+    assert!(matches!(
+      translate_event(&fatal),
+      Some(PlayerEvent::Error(_))
+    ));
+    assert!(matches!(
+      translate_event(&error),
+      Some(PlayerEvent::Error(_))
+    ));
+    assert_eq!(translate_event(&warn), None);
+    assert_eq!(translate_event(&info), None);
+  }
+
+  #[test]
+  fn properties_without_a_value_produce_no_change() {
+    // mpv reports MPV_FORMAT_NONE for unavailable properties; the state must
+    // never take a value mpv did not send, not even a false flag.
+    assert_eq!(property_value(&PropertyData::None), None);
+    let event = Event::PropertyChange {
+      name: "time-pos",
+      change: PropertyData::None,
+      reply_userdata: 0,
+    };
+    assert_eq!(translate_event(&event), None);
+  }
+
+  #[test]
+  fn property_changes_carry_the_name_and_value() {
+    let event = Event::PropertyChange {
+      name: "time-pos",
+      change: PropertyData::Double(12.5),
+      reply_userdata: 0,
+    };
+    assert_eq!(
+      translate_event(&event),
+      Some(PlayerEvent::PropertyChanged {
+        name: "time-pos".into(),
+        value: PropertyValue::Double(12.5),
+      })
+    );
+    assert_eq!(
+      property_value(&PropertyData::Flag(true)),
+      Some(PropertyValue::Flag(true))
+    );
+    assert_eq!(
+      property_value(&PropertyData::Int64(1920)),
+      Some(PropertyValue::Int64(1920))
+    );
+    assert_eq!(
+      property_value(&PropertyData::Str("album")),
+      Some(PropertyValue::String("album".into()))
+    );
+    assert_eq!(
+      property_value(&PropertyData::OsdStr("0:12")),
+      Some(PropertyValue::String("0:12".into()))
+    );
   }
 }
