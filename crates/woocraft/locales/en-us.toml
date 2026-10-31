@@ -72,6 +72,12 @@ september = "September"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Select date"
 
+[tech.woooo.woocraft.media]
+audio     = "Audio"
+subtitles = "Subtitles"
+off       = "Off"
+track     = "Track"
+
 [tech.woooo.woocraft.i18n]
 name = "English (US)"
 

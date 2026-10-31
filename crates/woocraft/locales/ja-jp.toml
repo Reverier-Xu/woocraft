@@ -72,6 +72,12 @@ september = "9月"
 [tech.woooo.woocraft.date_picker]
 placeholder = "日付を選択"
 
+[tech.woooo.woocraft.media]
+audio     = "オーディオ"
+subtitles = "サブタイトル"
+off       = "オフ"
+track     = "トラック"
+
 [tech.woooo.woocraft.i18n]
 name = "日本語"
 

@@ -72,6 +72,12 @@ september = "九月"
 [tech.woooo.woocraft.date_picker]
 placeholder = "選擇日期"
 
+[tech.woooo.woocraft.media]
+audio     = "音訊"
+subtitles = "字幕"
+off       = "關閉"
+track     = "曲目"
+
 [tech.woooo.woocraft.i18n]
 name = "繁體中文"
 

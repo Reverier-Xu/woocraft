@@ -72,6 +72,12 @@ september = "9월"
 [tech.woooo.woocraft.date_picker]
 placeholder = "날짜 선택"
 
+[tech.woooo.woocraft.media]
+audio     = "오디오"
+subtitles = "자막"
+off       = "끄기"
+track     = "트랙"
+
 [tech.woooo.woocraft.i18n]
 name = "한국어"
 

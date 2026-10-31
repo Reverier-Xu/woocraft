@@ -1,119 +1,119 @@
-//! One player view for both audio and video.
+//! One player view for both audio and video: a container with slots.
+//!
+//! The view owns exactly two defaults — the stage (the player's video frames,
+//! or the track title/artist placeholder) and the standard transport bar
+//! ([`PlayerTransport`]) — and leaves everything else to the host through
+//! [`PlayerView::stage`], [`PlayerView::transport`] and
+//! [`PlayerView::controls`]. The standard controls ([`PlayerTransport`],
+//! [`PlayerTrackMenu`], [`PlayerPlaylist`]) render without this view at all.
 
 use std::sync::Arc;
 
 use gpui::{
-  App, AppContext as _, Bounds, Context, Corners, Element, ElementId, Entity, GlobalElementId,
-  InspectorElementId, IntoElement, LayoutId, ParentElement as _, Pixels, Render, RenderImage,
-  Style, Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px, relative,
+  AnyElement, App, AppContext as _, Bounds, Context, Corners, Element, ElementId, Entity,
+  GlobalElementId, InspectorElementId, IntoElement, LayoutId, ParentElement as _, Pixels, Render,
+  RenderImage, Style, Styled as _, Subscription, Window, div, prelude::FluentBuilder as _,
+  relative,
 };
 
 use super::{
-  player::{Player, PlayerEvent, format_time},
+  player::{Player, PlayerEvent},
+  snapshot::PlayerSnapshot,
+  transport::PlayerTransport,
   video::MIN_RENDER_SIZE,
 };
 use crate::{
-  ActiveTheme as _, Button, Icon, IconName, Label, Slider, SliderEvent, SliderState, h_flex, v_flex,
+  ActiveTheme as _, Icon, IconLabel, IconName, Sizable, Size, StyleSized, Theme, h_flex, v_flex,
 };
 
-const SPEEDS: [f64; 5] = [0.5, 1.0, 1.25, 1.5, 2.0];
+/// What a [`PlayerView`] slot builds: an element from a fresh
+/// [`PlayerSnapshot`]. The snapshot owns the player's render inputs, so slot
+/// closures never have to capture or borrow the player entity across `cx`.
+type PlayerSlot = Box<dyn Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement>;
 
-/// Seek-slider changes whose target is closer than this to the current
-/// position are ignored: a video frame lasts roughly 16-40 ms, so a seek below
-/// this bound cannot reach a perceivably different position and only disrupts
-/// decoding. This is also what stops a percentage rounded to the slider step
-/// from seeking playback backwards by a frame.
-const SEEK_EPSILON_SECS: f64 = 0.1;
-
-/// Rendering of a [`Player`].
+/// Rendering of a [`Player`]: the stage plus the transport bar, both
+/// replaceable.
 ///
 /// The same view serves an audio player and a video player: the stage shows the
 /// player's video frames when it produces them and falls back to the track's
 /// title and artist when it does not. `PlayerOptions::video(false)` therefore
 /// only changes what the player decodes, not which component renders it.
+///
+/// One [`Size`] tier threads through everything the view renders itself and
+/// into the default transport, so `.small()` yields a fully small player.
 pub struct PlayerView {
   player: Entity<Player>,
-  seek: Entity<SliderState>,
-  volume: Entity<SliderState>,
-  /// Seek-slider changes still to be swallowed as echoes of player-driven
-  /// writes; see [`Self::sync_seek`].
-  pending_seek_echoes: usize,
-  _subscriptions: Vec<Subscription>,
+  transport: Entity<PlayerTransport>,
+  stage_slot: Option<PlayerSlot>,
+  transport_slot: Option<PlayerSlot>,
+  controls_slots: Vec<PlayerSlot>,
   show_stage: bool,
+  size: Size,
+  _subscriptions: Vec<Subscription>,
 }
 
 impl PlayerView {
-  /// Builds a view bound to `player`.
+  /// Builds a view bound to `player`: the default stage and the standard
+  /// [`PlayerTransport`] bar, nothing else.
   pub fn new(player: &Entity<Player>, cx: &mut Context<Self>) -> Self {
-    let seek = cx.new(|_| SliderState::new().min(0.0).max(100.0).step(0.1));
-    let volume = cx.new(|_| SliderState::new().min(0.0).max(100.0).step(1.0));
-
-    let mut subscriptions = Vec::new();
-
-    subscriptions.push(
-      cx.subscribe(player, |this: &mut Self, _, event: &PlayerEvent, cx| {
-        let (position, duration) = {
-          let state = this.player.read(cx).state();
-          (state.position, state.duration)
-        };
-        if duration > 0.0 {
-          this.sync_seek((position / duration * 100.0) as f32, cx);
-        }
-        if let PlayerEvent::FileLoaded = event {
-          this.sync_seek(0.0, cx);
-        }
+    let transport = cx.new(|cx| PlayerTransport::new(player, cx));
+    // Any player report re-renders the view, so slot content (a custom stage,
+    // custom controls) follows position ticks and track changes without each
+    // host wiring its own subscription.
+    let subscriptions = vec![
+      cx.subscribe(player, |_: &mut Self, _, _: &PlayerEvent, cx| {
+        cx.notify();
       }),
-    );
+    ];
 
-    subscriptions.push(
-      cx.subscribe(&seek, |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
-        // A player-driven write echoes back through the same event a user
-        // drag uses; consume the echo instead of seeking on the player's own
-        // position report.
-        let player_driven = this.pending_seek_echoes > 0;
-        if player_driven {
-          this.pending_seek_echoes -= 1;
-        }
-        let (position, duration) = {
-          let state = this.player.read(cx).state();
-          (state.position, state.duration)
-        };
-        if should_seek(position, duration, value.start(), player_driven) {
-          let target = duration * f64::from(value.start()) / 100.0;
-          let _ = this.player.update(cx, |player, _| player.seek_to(target));
-        }
-      }),
-    );
-
-    subscriptions.push(
-      cx.subscribe(&volume, |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
-        let volume = value.start() as f64;
-        let player = this.player.clone();
-        let _ = player.update(cx, |player, _| player.set_volume(volume));
-      }),
-    );
-
-    let show_stage = player.read(cx).video_enabled();
-    let volume_now = player.read(cx).state().volume as f32;
-    let view = Self {
+    Self {
       player: player.clone(),
-      seek,
-      volume,
-      pending_seek_echoes: 0,
+      transport,
+      stage_slot: None,
+      transport_slot: None,
+      controls_slots: Vec::new(),
+      show_stage: player.read(cx).video_enabled(),
+      size: Size::default(),
       _subscriptions: subscriptions,
-      show_stage,
-    };
-    view.volume.update(cx, |slider, cx| {
-      slider.set_value(volume_now, cx);
-    });
-    view
+    }
   }
 
-  /// Hides the stage, for a compact transport-only bar.
+  /// Hides the stage — the default one or a custom one — for a compact
+  /// transport-only bar.
   pub fn compact(mut self) -> Self {
     self.show_stage = false;
+    self
+  }
+
+  /// Replaces the stage — the area above the transport that shows the video
+  /// frames, or the track placeholder when there are none — with a
+  /// caller-built element. The closure receives a fresh [`PlayerSnapshot`]
+  /// every render. [`Self::compact`] still hides the stage, custom or not.
+  pub fn stage(
+    mut self, f: impl Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement + 'static,
+  ) -> Self {
+    self.stage_slot = Some(Box::new(f));
+    self
+  }
+
+  /// Replaces the built-in transport bar entirely; none of the default bar
+  /// remains. Hosts composing their own bar usually start from a standalone
+  /// [`PlayerTransport`] plus their own controls.
+  pub fn transport(
+    mut self, f: impl Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement + 'static,
+  ) -> Self {
+    self.transport_slot = Some(Box::new(f));
+    self
+  }
+
+  /// Appends caller-provided controls below the transport, keeping the
+  /// transport itself. Repeated calls append in order. This is the slot the
+  /// standalone [`PlayerTrackMenu`] or [`PlayerPlaylist`] go into; the view
+  /// itself never renders those on its own.
+  pub fn controls(
+    mut self, f: impl Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement + 'static,
+  ) -> Self {
+    self.controls_slots.push(Box::new(f));
     self
   }
 
@@ -121,152 +121,114 @@ impl PlayerView {
   pub fn player(&self) -> &Entity<Player> {
     &self.player
   }
-
-  /// Mirrors a player-reported position into the seek slider.
-  ///
-  /// `SliderState::set_value` emits the very `SliderEvent::Change` a user drag
-  /// emits, so without a guard every position report would come back as user
-  /// input and order a seek to the position playback is already at. Each seek
-  /// triggers a new report, which is the feedback loop that froze the progress
-  /// bar. Every write is therefore paired with exactly one swallowed echo,
-  /// counted in [`Self::pending_seek_echoes`]. The pairing cannot drift: gpui
-  /// flushes the emitted change before any user input can be dispatched, so a
-  /// write's echo is always consumed before the next user-driven change.
-  fn sync_seek(&mut self, percentage: f32, cx: &mut Context<Self>) {
-    self.pending_seek_echoes += 1;
-    self
-      .seek
-      .update(cx, |slider, cx| slider.set_value(percentage, cx));
-  }
 }
 
+impl_sizable!(PlayerView);
+
 impl Render for PlayerView {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let (paused, muted, speed, position, duration, title, artist, has_video, image) = {
-      let player = self.player.read(cx);
-      let state = player.state();
-      (
-        state.paused,
-        state.muted,
-        state.speed,
-        state.position,
-        state.duration,
-        state.title.clone(),
-        state.artist.clone(),
-        state.has_video,
-        player.video_image(),
-      )
-    };
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    let snapshot = PlayerSnapshot::new(&self.player, cx);
     let theme = cx.theme().clone();
-    let wide = self.show_stage && image.is_some();
+    let size = self.size;
 
-    let stage = wide.then(|| {
-      div()
-        .w_full()
-        .flex_1()
-        .relative()
-        .overflow_hidden()
-        .bg(theme.muted)
-        .when_some(image.clone(), |this, image| {
-          this.child(VideoStage::new(
-            ("video-stage", self.player.entity_id().as_u64()),
-            self.player.clone(),
-            image,
-          ))
-        })
+    let stage = self.show_stage.then(|| {
+      if let Some(build) = self.stage_slot.as_ref() {
+        build(&snapshot, window, cx)
+      } else {
+        default_stage(&snapshot, &self.player, &theme, size)
+      }
     });
 
-    let placeholder = (!wide).then(|| {
-      h_flex()
-        .w_full()
-        .items_center()
-        .gap_3()
-        .px_4()
-        .py_3()
-        .child(Icon::new(if has_video {
-          IconName::Filmstrip
-        } else {
-          IconName::MusicNote2
-        }))
-        .child(
-          v_flex()
-            .flex_1()
-            .child(Label::new(
-              title.clone().unwrap_or_else(|| "Nothing playing".into()),
-            ))
-            .children(artist.clone().map(Label::new)),
-        )
-    });
-
-    let play_button = {
-      let player = self.player.clone();
-      Button::new("player-play")
-        .icon(Icon::new(if paused {
-          IconName::Play
-        } else {
-          IconName::Pause
-        }))
-        .on_click(move |_, _, cx| {
-          let _ = player.update(cx, |player, cx| player.toggle_pause(cx));
-        })
+    let transport = if let Some(build) = self.transport_slot.as_ref() {
+      build(&snapshot, window, cx)
+    } else {
+      // Thread the view's tier into the default bar every render, so a host
+      // resizing the view resizes the bar with it.
+      self
+        .transport
+        .update(cx, |transport, _| transport.set_size(size));
+      self.transport.clone().into_any_element()
     };
 
-    let mute_button = {
-      let player = self.player.clone();
-      Button::new("player-mute")
-        .icon(Icon::new(if muted {
-          IconName::SpeakerOff
-        } else {
-          IconName::Speaker2
-        }))
-        .on_click(move |_, _, cx| {
-          let _ = player.update(cx, |player, _| player.set_muted(!muted));
-        })
-    };
-
-    let next_speed = SPEEDS
+    let controls = self
+      .controls_slots
       .iter()
-      .copied()
-      .find(|candidate| *candidate > speed + f64::EPSILON)
-      .unwrap_or(SPEEDS[0]);
-    let speed_button = {
-      let player = self.player.clone();
-      Button::new("player-speed")
-        .label(format!("{}x", (speed * 100.0).round() / 100.0))
-        .on_click(move |_, _, cx| {
-          let _ = player.update(cx, |player, _| player.set_speed(next_speed));
-        })
-    };
-
-    let controls = h_flex()
-      .w_full()
-      .items_center()
-      .gap_2()
-      .px_3()
-      .py_2()
-      .bg(theme.card)
-      .child(play_button)
-      .child(Label::new(format_time(std::time::Duration::from_secs_f64(
-        position.max(0.0),
-      ))))
-      .child(div().flex_1().child(Slider::new("player-seek", &self.seek)))
-      .child(Label::new(format_time(std::time::Duration::from_secs_f64(
-        duration.max(0.0),
-      ))))
-      .child(mute_button)
-      .child(
-        div()
-          .w(px(96.0))
-          .child(Slider::new("player-volume", &self.volume)),
-      )
-      .child(speed_button);
+      .map(|build| build(&snapshot, window, cx))
+      .collect::<Vec<_>>();
 
     v_flex()
       .size_full()
       .bg(theme.background)
       .children(stage)
-      .children(placeholder)
-      .child(controls)
+      .child(transport)
+      .children(controls)
+  }
+}
+
+/// The default stage: the player's current video frame when it produces one,
+/// else the track's title and artist. [`PlayerView::stage`] replaces this.
+///
+/// The placeholder threads the view's tier through its container metrics,
+/// icon and labels; the video surface itself is unsized — it letterboxes
+/// whatever the player renders into the space it is given.
+fn default_stage(
+  snapshot: &PlayerSnapshot, player: &Entity<Player>, theme: &Theme, size: Size,
+) -> AnyElement {
+  if let Some(image) = snapshot.frame() {
+    div()
+      .w_full()
+      .flex_1()
+      .relative()
+      .overflow_hidden()
+      .bg(theme.muted)
+      .child(VideoStage::new(
+        ("video-stage", player.entity_id().as_u64()),
+        player.clone(),
+        image.clone(),
+      ))
+      .into_any_element()
+  } else {
+    let id = player.entity_id().as_u64();
+    h_flex()
+      .w_full()
+      .items_center()
+      .container_size(size)
+      .container_gap(size)
+      .child(
+        Icon::new(if snapshot.has_video {
+          IconName::Filmstrip
+        } else {
+          IconName::MusicNote2
+        })
+        .with_size(size),
+      )
+      .child(
+        v_flex()
+          .min_w_0()
+          .flex_1()
+          .container_gap_y(size)
+          .child(
+            IconLabel::new(("player-stage-title", id))
+              .with_size(size)
+              .label(
+                snapshot
+                  .title
+                  .clone()
+                  .unwrap_or_else(|| "Nothing playing".into()),
+              ),
+          )
+          // The artist reads as secondary information: muted colour at the
+          // same tier, never a smaller font.
+          .when_some(snapshot.artist.clone(), |this, artist| {
+            this.child(
+              IconLabel::new(("player-stage-artist", id))
+                .with_size(size)
+                .label(artist)
+                .text_color(theme.muted_foreground),
+            )
+          }),
+      )
+      .into_any_element()
   }
 }
 
@@ -428,24 +390,6 @@ fn render_size(size: (u32, u32)) -> Option<(u32, u32)> {
   (size.0 >= MIN_RENDER_SIZE && size.1 >= MIN_RENDER_SIZE).then_some(size)
 }
 
-/// Whether a seek-slider change should seek the player.
-///
-/// Extracted as a pure decision so the loop-prevention rules are testable
-/// without a window. Player-driven echoes never seek, or the player's own
-/// position reports would order seeks back to the position playback is
-/// already at. A user change only seeks when it moves the target more than
-/// [`SEEK_EPSILON_SECS`] away from the current position, so a rounded
-/// percentage cannot drag playback backwards by a frame.
-fn should_seek(position: f64, duration: f64, slider_percentage: f32, player_driven: bool) -> bool {
-  // A non-positive duration means nothing is loaded; a NaN one (never sent
-  // by mpv, but never turned into a seek either) is rejected the same way.
-  if player_driven || duration <= 0.0 || duration.is_nan() {
-    return false;
-  }
-  let target = duration * f64::from(slider_percentage) / 100.0;
-  (target - position).abs() >= SEEK_EPSILON_SECS
-}
-
 /// Largest rect with the image's aspect ratio that fits inside `bounds`.
 fn contain(bounds: Bounds<Pixels>, image_width: f32, image_height: f32) -> Bounds<Pixels> {
   let aspect = image_width / image_height.max(1.0);
@@ -469,6 +413,8 @@ fn contain(bounds: Bounds<Pixels>, image_width: f32, image_height: f32) -> Bound
 
 #[cfg(test)]
 mod tests {
+  use gpui::px;
+
   use super::*;
 
   #[test]
@@ -492,45 +438,5 @@ mod tests {
     assert_eq!(render_size((1, 720)), None);
     assert_eq!(render_size((2, 2)), Some((2, 2)));
     assert_eq!(render_size((1280, 720)), Some((1280, 720)));
-  }
-
-  #[test]
-  fn player_position_reports_never_seek() {
-    // The seek loop that froze the progress bar, replayed as the pure
-    // decision it reduces to: a 3-second clip reports a steadily advancing
-    // position, the view mirrors it into the slider, and the write echoes
-    // back as a change. Zero of those reports may seek, or `time-pos` would
-    // oscillate instead of advancing.
-    let duration = 3.0;
-    let mut pending_echoes = 0;
-    let mut seeks = 0;
-    let mut position = 0.0;
-    while position < duration {
-      pending_echoes += 1;
-      let percentage = (position / duration * 100.0) as f32;
-      if should_seek(position, duration, percentage, pending_echoes > 0) {
-        seeks += 1;
-      }
-      pending_echoes -= 1;
-      position += 0.04;
-    }
-    assert_eq!(seeks, 0);
-  }
-
-  #[test]
-  fn user_seek_requests_only_fire_beyond_the_epsilon() {
-    let duration = 3.0;
-    let position = 1.5;
-    // Parked at half of a 3-second clip: targets within the epsilon are
-    // no-ops, so a rounded percentage cannot seek playback back a frame.
-    assert!(!should_seek(position, duration, 50.0, false));
-    assert!(!should_seek(position, duration, 51.0, false));
-    assert!(!should_seek(position, duration, 49.0, false));
-    assert!(should_seek(position, duration, 60.0, false));
-    assert!(should_seek(position, duration, 40.0, false));
-    // Nothing loaded yet: an unknown duration must never seek.
-    assert!(!should_seek(position, 0.0, 50.0, false));
-    // An echo of a player-driven write never seeks, however far it reads.
-    assert!(!should_seek(0.0, duration, 99.0, true));
   }
 }

@@ -8,11 +8,22 @@
 //! [`Player::get_property`] and the playlist/track/chapter readers that sit on
 //! top of them.
 //!
+//! [`PlayerView`] is a container with two defaults — the stage and the
+//! [`PlayerTransport`] bar — plus slots ([`PlayerView::stage`],
+//! [`PlayerView::transport`], [`PlayerView::controls`]) for everything else.
+//! The standard controls also exist standalone and are never wired in unless
+//! the host asks for them: [`PlayerTransport`], [`PlayerTrackMenu`] and
+//! [`PlayerPlaylist`].
+//!
 //! The optional `media` feature is off by default because libmpv is a system
 //! library: enabling it links `libmpv` and requires it (and its development
 //! package) at build time.
 
 mod player;
+mod playlist;
+mod snapshot;
+mod track_menu;
+mod transport;
 mod video;
 mod view;
 
@@ -20,5 +31,9 @@ pub use player::{
   Chapter, Player, PlayerEvent, PlayerOptions, PlayerState, PlaylistEntry, PropertyValue, Track,
   TrackKind,
 };
+pub use playlist::PlayerPlaylist;
+pub use snapshot::PlayerSnapshot;
+pub use track_menu::PlayerTrackMenu;
+pub use transport::PlayerTransport;
 pub use video::{VideoFrame, VideoOutput};
 pub use view::PlayerView;
