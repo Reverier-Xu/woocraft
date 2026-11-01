@@ -36,8 +36,8 @@ mod video;
 mod view;
 
 pub use player::{
-  Chapter, Player, PlayerEvent, PlayerOptions, PlayerState, PlaylistEntry, PropertyValue, Track,
-  TrackKind, VideoTransport,
+  Chapter, HwDec, Player, PlayerEvent, PlayerOptions, PlayerState, PlaylistEntry, PropertyValue,
+  SubtitleStyle, Track, TrackKind, VideoTransport,
 };
 pub use playlist::PlayerPlaylist;
 pub use snapshot::PlayerSnapshot;
