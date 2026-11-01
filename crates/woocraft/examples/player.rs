@@ -655,6 +655,11 @@ impl PlayerApp {
     v_flex()
       .id("control-panel")
       .w_80()
+      // The panel is taller than the window at every tier: it must own a
+      // bounded height (`h_full` inside the row, `min_h_0` so flex may shrink
+      // it) before it can scroll, otherwise the content overflows the row.
+      .h_full()
+      .min_h_0()
       .flex_none()
       .border_l_1()
       .border_color(theme.border)
