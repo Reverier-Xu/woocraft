@@ -322,7 +322,11 @@ struct VideoStageState {
   requested_size: Option<(u32, u32)>,
   /// The last element bounds a composition surface was attached at, or
   /// `None` while the stage has never attached one.
-  attached_bounds: Option<Bounds<Pixels>>,
+  /// The stage rectangle the composition surface was last attached with,
+  /// paired with the scale factor then in force: a window moving between
+  /// monitors changes the scale without changing the logical bounds, and the
+  /// surface's device-pixel geometry must follow it.
+  attached_bounds: Option<(Bounds<Pixels>, f32)>,
 }
 
 impl IntoElement for VideoStage {
@@ -384,6 +388,7 @@ impl VideoStage {
     &mut self, global_id: Option<&GlobalElementId>, bounds: Bounds<Pixels>, window: &mut Window,
     cx: &mut App,
   ) {
+    let scale = window.scale_factor();
     let attach = match global_id {
       Some(global_id) => {
         window.with_element_state(global_id, |state: Option<VideoStageState>, _| {
@@ -393,9 +398,10 @@ impl VideoStage {
           // per axis still attaches — the player clamps the surface to a
           // nonzero drawable — because a collapsed stage re-expanding must find
           // the pipeline alive.
-          let changed = state.attached_bounds.as_ref() != Some(&bounds);
+          let geometry = (bounds, scale);
+          let changed = state.attached_bounds.as_ref() != Some(&geometry);
           if changed {
-            state.attached_bounds = Some(bounds);
+            state.attached_bounds = Some(geometry);
           }
           (changed, state)
         })
