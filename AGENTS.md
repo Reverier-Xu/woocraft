@@ -37,6 +37,10 @@
 - `tree-sitter-languages`（默认）：启用 code editor 的各语言语法高亮。
 - `terminal`（默认）：启用 `widgets/terminal` 组件并引入 `woocraft-terminal` 依赖。
 - `tray`：系统托盘（可选平台依赖较重）。
+- `media`（默认关闭）：基于 libmpv 的 `Player` / `PlayerView`，音频与视频共用一个
+  player；启用后链接系统 `libmpv`。视频在 Linux 上可走 GPU 合成面
+  （`VideoTransport::Composition`），其余平台或失败时回退软件输出，见
+  `docs/media.md` 与 `docs/media-gpu.md`。
 
 新增可选组件时遵循同样模式：`#[cfg(feature = "...")] mod ...` + optional dependency + feature 入口。
 

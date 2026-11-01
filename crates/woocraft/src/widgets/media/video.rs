@@ -29,6 +29,8 @@ use async_channel::Sender;
 use libmpv2::Mpv;
 use libmpv2_sys as sys;
 
+use super::player::PlayerEvent;
+
 /// Lower bound for one render axis: mpv's software renderer needs a span of at
 /// least two pixels per axis to produce a meaningful frame. The view checks
 /// against it too, so a collapsed stage sends no request at all instead of one
@@ -71,9 +73,13 @@ pub struct VideoOutput {
 
 impl VideoOutput {
   /// Starts producing frames for `mpv`, scaled to `width` x `height` and
-  /// published on `frames` — the player's stable frame channel.
+  /// published on `frames` — the player's stable frame channel. A fatal
+  /// failure on the render thread is reported once through `events`, the
+  /// player's own [`PlayerEvent`] channel, so a dead output does not leave
+  /// the stage silently empty.
   pub(crate) fn start(
     mpv: Arc<Mpv>, width: u32, height: u32, frames: Sender<Arc<VideoFrame>>,
+    events: Sender<PlayerEvent>,
   ) -> Result<Self> {
     let width = width.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE);
     let height = height.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE);
@@ -86,6 +92,13 @@ impl VideoOutput {
       .spawn(move || {
         if let Err(error) = render_loop(mpv, width, height, size_rx, frames, thread_shutdown) {
           tracing::warn!(%error, "woocraft: mpv video output stopped");
+          // The player keeps `video` pointing at this output and has no
+          // window-less way to learn the thread died, so the stage would
+          // stay on its placeholder forever with no report. Report once
+          // through the same channel every other player error flows through.
+          let _ = events.send_blocking(PlayerEvent::Error(format!(
+            "the software video output stopped: {error:#}"
+          )));
         }
       })
       .map_err(|error| anyhow!("failed to spawn the mpv video thread: {error}"))?;
@@ -142,7 +155,10 @@ fn render_loop(
 
   // mpv calls this from its own thread whenever a new frame is ready, and the
   // callback must not call back into mpv: it only nudges this thread awake.
-  let (wake_tx, wake_rx) = mpsc::channel::<()>();
+  // The channel is bounded (capacity 1) and sends use `try_send`: a render
+  // thread stuck in a blocking step must not let mpv queue nudges without
+  // bound, and one queued nudge is all it takes to wake it.
+  let (wake_tx, wake_rx) = mpsc::sync_channel::<()>(1);
   let wake = Box::into_raw(Box::new(wake_tx));
   unsafe {
     sys::mpv_render_context_set_update_callback(
@@ -159,6 +175,10 @@ fn render_loop(
   // Set when the size changed: one render without a new decoded frame, so a
   // resize is visible even while playback is paused.
   let mut force_render = false;
+  // Consecutive render failures since the last success (or since the
+  // first one): a persistent failure logs once, not per frame, and is
+  // summarised on recovery or when the output stops below.
+  let mut render_failures: u64 = 0;
   while !shutdown.load(Ordering::SeqCst) {
     match wake_rx.recv_timeout(Duration::from_millis(50)) {
       Ok(()) | Err(RecvTimeoutError::Timeout) => {}
@@ -209,8 +229,18 @@ fn render_loop(
 
     let status = unsafe { sys::mpv_render_context_render(context.0, params.as_mut_ptr()) };
     if status < 0 {
-      tracing::warn!(status, "woocraft: mpv_render_context_render failed");
+      if render_failures == 0 {
+        tracing::warn!(status, "woocraft: mpv_render_context_render failed");
+      }
+      render_failures += 1;
       continue;
+    }
+    if render_failures > 0 {
+      tracing::warn!(
+        render_failures,
+        "woocraft: software video rendering recovered after failed renders"
+      );
+      render_failures = 0;
     }
     // "rgb0" leaves the fourth byte of every pixel unused.
     for pixel in buffer.as_chunks_mut::<4>().0 {
@@ -225,6 +255,12 @@ fn render_loop(
     }));
   }
 
+  if render_failures > 0 {
+    tracing::warn!(
+      render_failures,
+      "woocraft: software video rendering was still failing when the output stopped"
+    );
+  }
   drop(context);
   // mpv holds no reference to the callback context once the render context is
   // freed, so the allocation can be released here.
@@ -256,6 +292,8 @@ unsafe extern "C" fn wake_callback(ctx: *mut c_void) {
   if ctx.is_null() {
     return;
   }
-  let sender = unsafe { &*(ctx as *const mpsc::Sender<()>) };
-  let _ = sender.send(());
+  let sender = unsafe { &*(ctx as *const mpsc::SyncSender<()>) };
+  // A disconnected channel means the render thread has exited; a full one
+  // means a nudge is already queued — dropping this one is correct.
+  let _ = sender.try_send(());
 }

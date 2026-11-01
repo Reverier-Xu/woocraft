@@ -312,6 +312,11 @@ pub struct Player {
   /// outlives any single [`VideoOutput`], so a transport fallback can start a
   /// new one without re-spawning the UI-side frame pump.
   frame_tx: Sender<Arc<VideoFrame>>,
+  /// The event channel the player reports through: mpv events flow to the
+  /// entity through it, and threads the player cannot reach synchronously —
+  /// the software render thread above all — report failures as
+  /// [`PlayerEvent::Error`] on it too.
+  event_tx: Sender<PlayerEvent>,
   /// The transport this player runs: what was negotiated at construction and,
   /// on Linux, confirmed or abandoned by the first surface attach.
   transport: VideoTransport,
@@ -330,10 +335,6 @@ pub struct Player {
   /// leave the VO uninitialised and the render thread waiting for frames that
   /// never come; these are replayed on the first successful attach.
   pending_loads: Vec<PendingLoad>,
-  /// The media most recently requested through [`Self::load`], so an attach
-  /// that happens after playback started can recreate the video output at the
-  /// current position.
-  current_uri: Option<String>,
   /// A surface detached without its window, waiting to be removed from the
   /// composition tree at the next window-having call — or by the window's own
   /// destruction, which frees it regardless. At most one entry; see
@@ -360,27 +361,45 @@ impl Player {
   pub fn new(cx: &mut Context<Self>, options: PlayerOptions) -> Self {
     let (transport, fallback) = negotiate(options.video_transport, options.video);
     let (frame_tx, frame_rx) = async_channel::bounded::<Arc<VideoFrame>>(2);
+    let (event_tx, event_rx) = async_channel::bounded::<PlayerEvent>(256);
+
+    // The mpv core first, so an mpv failure stays a report in
+    // [`PlayerState::error`] instead of a constructor panic. On success this
+    // is the one and only core; on failure an idle placeholder keeps the
+    // public `mpv()` non-nullable while nothing ever plays. The `expect` on
+    // the placeholder cannot fire in practice: a bare `Mpv::new()` — create
+    // and initialize, no options — fails only on OOM or a client-API version
+    // mismatch, and both would have failed `create_mpv` above; an options
+    // problem, the realistic failure, reaches the `Err` arm instead.
+    let (mpv, error) = match create_mpv(&options) {
+      Ok(mpv) => (Arc::new(mpv), None),
+      Err(error) => (
+        Arc::new(Mpv::new().expect("creating an idle mpv placeholder failed")),
+        Some(error.to_string()),
+      ),
+    };
+
     let mut player = Self {
-      // Replaced below; mpv handles are not nullable in the public type.
-      mpv: Arc::new(Mpv::new().expect("mpv_create")),
+      mpv,
       options: options.clone(),
       state: PlayerState {
         volume: options.volume,
         muted: options.muted,
         speed: options.speed,
+        error,
         ..Default::default()
       },
       metadata: BTreeMap::new(),
       video: None,
       video_image: None,
       frame_tx,
+      event_tx,
       transport,
       fallback_logged: false,
       negotiated_logged: false,
       #[cfg(target_os = "linux")]
       composition: None,
       pending_loads: Vec::new(),
-      current_uri: None,
       stale_surface: None,
       shutdown: Arc::new(AtomicBool::new(false)),
       event_thread: None,
@@ -388,25 +407,20 @@ impl Player {
       frame_task: None,
     };
 
-    match create_mpv(&options) {
-      Ok(mpv) => {
-        player.mpv = Arc::new(mpv);
-        player.observe_default_properties();
-        player.start_event_pump(cx);
-        if options.video {
-          player.start_frame_pump(cx, frame_rx);
-          if let Some(reason) = fallback {
-            player.log_transport_fallback(reason);
-          }
-          // The composition transport starts its output at the first surface
-          // attach instead; software starts here.
-          if player.transport == VideoTransport::Software {
-            player.start_video();
-          }
-        }
+    if player.state.error.is_some() {
+      return player;
+    }
+    player.observe_default_properties();
+    player.start_event_pump(cx, event_rx);
+    if options.video {
+      player.start_frame_pump(cx, frame_rx);
+      if let Some(reason) = fallback {
+        player.log_transport_fallback(reason);
       }
-      Err(error) => {
-        player.state.error = Some(error.to_string());
+      // The composition transport starts its output at the first surface
+      // attach instead; software starts here.
+      if player.transport == VideoTransport::Software {
+        player.start_video();
       }
     }
 
@@ -470,7 +484,6 @@ impl Player {
 
   /// Loads `uri` (a path or URL) and starts playing it.
   pub fn load(&mut self, uri: &str) -> Result<()> {
-    self.current_uri = Some(uri.to_string());
     if self.defer_until_attach() {
       self.pending_loads.push(PendingLoad {
         uri: uri.to_string(),
@@ -504,40 +517,34 @@ impl Player {
       && !self.composition_attached()
   }
 
-  /// Replays the loads that were deferred, then — if the host had already
-  /// started playback before the surface existed — recreates the video output
-  /// by re-loading the current media at the position playback reached.
-  ///
-  /// A re-load is the only reliable way back: mpv created (and tore down) a
-  /// `vo=libmpv` output at the first `loadfile`, and only a new load makes it
-  /// create one with our render context in place.
+  /// Replays the loads that were deferred while no output existed, and — if
+  /// mpv already holds an entry — re-loads that entry at the position
+  /// playback reached. A successful (re)attach and the fallback to software
+  /// both end here, because mpv creates a `vo=libmpv` output only on a load:
+  /// without a (re)load the fresh output would wait for frames that never
+  /// come. See [`restart_loads`] for the decision and its rules.
   fn resume_after_attach(&mut self) {
-    if !self.pending_loads.is_empty() {
-      for load in std::mem::take(&mut self.pending_loads) {
-        let mode = if load.append { "append" } else { "replace" };
-        if let Err(error) = self.command("loadfile", &[load.uri.as_str(), mode]) {
-          tracing::warn!(%error, "woocraft: deferred loadfile failed");
-        }
+    // mpv's live `path`, never a URI remembered when the host last loaded:
+    // a playlist can advance past that (an `enqueue` never updates a
+    // remembered URI, and `playlist-pos` moves on its own), and reloading a
+    // stale URI would jump the wrong file and destroy the playlist.
+    let path = self.get_property::<String>("path").ok();
+    let commands = restart_loads(
+      std::mem::take(&mut self.pending_loads),
+      path.as_deref(),
+      self.state.position,
+    );
+    for (uri, mode, option) in commands {
+      let result = match option.as_deref() {
+        Some(option) => self.command("loadfile", &[uri.as_str(), mode, option]),
+        None => self.command("loadfile", &[uri.as_str(), mode]),
+      };
+      if let Err(error) = result {
+        tracing::warn!(
+          %error, uri,
+          "woocraft: re-issuing a load after the video output changed failed"
+        );
       }
-      return;
-    }
-
-    let Some(uri) = self.current_uri.clone() else {
-      return;
-    };
-    let loaded = self
-      .get_property::<String>("path")
-      .map(|path| !path.is_empty())
-      .unwrap_or(false);
-    if !loaded {
-      return;
-    }
-    let position = self.state.position.max(0.0);
-    if let Err(error) = self.command(
-      "loadfile",
-      &[uri.as_str(), "replace", &format!("start={position:.3}")],
-    ) {
-      tracing::warn!(%error, "woocraft: recreating the video output after attach failed");
     }
   }
 
@@ -755,8 +762,10 @@ impl Player {
     }
   }
 
-  fn start_event_pump(&mut self, cx: &mut Context<Self>) {
-    let (tx, rx) = async_channel::bounded::<PlayerEvent>(256);
+  fn start_event_pump(
+    &mut self, cx: &mut Context<Self>, events: async_channel::Receiver<PlayerEvent>,
+  ) {
+    let tx = self.event_tx.clone();
     let mpv = self.mpv.clone();
     let shutdown = self.shutdown.clone();
 
@@ -790,7 +799,7 @@ impl Player {
     }
 
     let task = cx.spawn(async move |this, cx| {
-      while let Ok(event) = rx.recv().await {
+      while let Ok(event) = events.recv().await {
         let alive = this.update(cx, |player, cx| player.apply(event, cx));
         if alive.is_err() {
           break;
@@ -831,7 +840,13 @@ impl Player {
       return;
     }
     let (width, height) = self.options.video_size;
-    match VideoOutput::start(self.mpv.clone(), width, height, self.frame_tx.clone()) {
+    match VideoOutput::start(
+      self.mpv.clone(),
+      width,
+      height,
+      self.frame_tx.clone(),
+      self.event_tx.clone(),
+    ) {
       Ok(video) => self.video = Some(video),
       Err(error) => self.state.error = Some(error.to_string()),
     }
@@ -1143,14 +1158,12 @@ impl Player {
 
     #[cfg(not(target_os = "linux"))]
     {
-      // The GL path is Linux-only by design; see the platform matrix in
-      // `docs/media-gpu.md`. Negotiation already downgraded the transport at
-      // construction, so this arm only serves hosts that attach regardless.
-      let _ = window;
-      self.fall_back_to_software(
-        None,
-        "the composition transport is not implemented on this platform".into(),
-      );
+      // Unreachable in practice: negotiation already downgraded the
+      // transport to software at `Player::new` — logging once there — so the
+      // software return above fires first. The composition path is
+      // Linux-only by design (see the platform matrix in `docs/media-gpu.md`);
+      // this stub only keeps the parameters used.
+      let _ = (window, bounds);
       return Ok(());
     }
 
@@ -1255,8 +1268,9 @@ impl Player {
 
   /// The terminal switch to the software transport: tears down any attached
   /// composition pipeline, starts the software output if it is not running,
-  /// and logs `reason` once. Called from the attach path, where the platform
-  /// has just refused a step.
+  /// replays whatever load the switch interrupted (see
+  /// [`Self::resume_after_attach`]), and logs `reason` once. Called from the
+  /// attach path, where the platform has just refused a step.
   fn fall_back_to_software(&mut self, window: Option<&mut Window>, reason: String) {
     if !self.fallback_logged {
       tracing::warn!("woocraft: video transport fell back to software: {reason}");
@@ -1268,6 +1282,11 @@ impl Player {
     // is created.
     self.detach_surface(window);
     self.start_video();
+    // The new output starts as blank as a first attach: whatever was
+    // deferred while unattached, or already playing before the fallback,
+    // must be (re)loaded into it — without this, a machine whose first
+    // attach fails would never play anything at all.
+    self.resume_after_attach();
   }
 
   /// Logs why a requested composition transport was refused up front. The
@@ -1294,6 +1313,39 @@ impl Drop for Player {
       let _ = thread.join();
     }
     self.video = None;
+  }
+}
+
+/// The `loadfile` commands a video output owes mpv when it starts after
+/// playback may already have been requested: every deferred load, in order
+/// and exactly once — or, when nothing was deferred but mpv already holds an
+/// entry, a single reload of that entry at the position playback reached.
+///
+/// A pure decision, so the fallback behaviour is testable without a window.
+/// The reload target is mpv's live `path`, never a URI remembered when the
+/// host last loaded: a playlist can advance past such a URI, and reloading
+/// it would jump the wrong file and destroy the playlist. Deferred loads win
+/// over the reload — they carry the host's newest intent. Each command is
+/// `(uri, mode, option)` with at most one `start=` option.
+fn restart_loads(
+  pending: Vec<PendingLoad>, path: Option<&str>, position: f64,
+) -> Vec<(String, &'static str, Option<String>)> {
+  if !pending.is_empty() {
+    return pending
+      .into_iter()
+      .map(|load| {
+        let mode = if load.append { "append" } else { "replace" };
+        (load.uri, mode, None)
+      })
+      .collect();
+  }
+  match path.filter(|path| !path.is_empty()) {
+    Some(path) => vec![(
+      path.to_string(),
+      "replace",
+      Some(format!("start={:.3}", position.max(0.0))),
+    )],
+    None => Vec::new(),
   }
 }
 
@@ -1513,6 +1565,50 @@ mod tests {
   use libmpv2::events::{Event, PropertyData};
 
   use super::*;
+
+  #[test]
+  fn a_late_video_output_replays_deferred_loads_once_and_in_order() {
+    // The first-attach and fallback decision: deferred requests drain
+    // exactly once, in order, each with its own mode — and never stack the
+    // position reload on top, even when something is already playing.
+    let pending = vec![
+      PendingLoad {
+        uri: "a.mp4".into(),
+        append: false,
+      },
+      PendingLoad {
+        uri: "b.mp4".into(),
+        append: true,
+      },
+    ];
+    assert_eq!(
+      restart_loads(pending, Some("c.mp4"), 42.0),
+      vec![
+        ("a.mp4".into(), "replace", None),
+        ("b.mp4".into(), "append", None),
+      ]
+    );
+    // Drained: a second decision with nothing deferred reloads instead of
+    // replaying, and it reloads mpv's live `path`, never a remembered URI.
+    assert_eq!(
+      restart_loads(Vec::new(), Some("c.mp4"), 42.0),
+      vec![("c.mp4".into(), "replace", Some("start=42.000".into()))]
+    );
+  }
+
+  #[test]
+  fn a_late_video_output_reloads_the_live_path_only_when_loaded() {
+    // Nothing playing (a failed first attach, a stopped player): no reload
+    // at all — the fallback must not resurrect a file mpv never loaded.
+    assert!(restart_loads(Vec::new(), Some(""), 42.0).is_empty());
+    assert!(restart_loads(Vec::new(), None, 42.0).is_empty());
+    // A position mpv reports before the first frame must not leak a negative
+    // value into the loadfile options.
+    assert_eq!(
+      restart_loads(Vec::new(), Some("c.mp4"), -1.0),
+      vec![("c.mp4".into(), "replace", Some("start=0.000".into()))]
+    );
+  }
 
   #[test]
   fn formats_short_and_long_positions() {

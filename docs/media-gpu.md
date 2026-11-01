@@ -58,17 +58,20 @@ The sequence on attach (`Player::attach_video_surface`, first call):
    pair and the render context to a new thread.
 5. Render thread: `make_current`, then a blocking loop — mpv's update callback
    wakes it per frame, the UI thread nudges it on resize and shutdown; no
-   polling — `mpv_render_context_update` / `_render` / `_report_swap` /
-   `swap_buffers` per frame.
+   polling — `mpv_render_context_update` / `_render` / `swap_buffers` /
+   `_report_swap` per frame, in that order: the swap report follows the swap
+   it reports, as mpv documents it.
 6. On detach or drop: shutdown flag + nudge, join. Inside the thread, in
    order: `mpv_render_context_free`, reclaim the callback context,
    `make_not_current`. Then the UI thread removes the composition surface and
    drops the EGL display.
 
-Drop order is enforced by types, not comments: `RenderContextGuard` frees the
-mpv render context on every setup error path (while the GL context that
-created it is still current), and ownership passes to the render thread only
-via `into_raw`, which frees it after its last render. mpv aborts a process
+Drop order is enforced by types, not comments: `RenderContextGuard` owns the
+mpv render context and the callback's boxed wake sender on every setup error
+path — including a failed render-thread spawn, where the guard's drop frees
+the context and reclaims the box — and ownership passes to the render thread
+only once that thread exists, via the guard's hand-off after a successful
+spawn; the thread frees both after its last render. mpv aborts a process
 whose core is destroyed while a render context exists, so `Player::drop`
 detaches — joining the render thread — before the core's `Arc` can drop.
 
@@ -117,6 +120,40 @@ presented frame stays on screen and `Player::detach_video_surface` /
 re-attach remain available. It does not silently switch transports, because
 the failure belongs to a surface that the host may be about to discard.
 
+## Deferred loads, and the reload on (re)attach
+
+While the composition transport is negotiated but no surface is attached
+yet, `load`/`enqueue` cannot reach mpv: mpv creates a `vo=libmpv` output
+per load, and a load before the render context exists would leave that
+output uninitialised. Those requests are queued as *pending loads* and
+replayed — in order, exactly once — when an output finally exists: on the
+first successful attach, and on the fallback to software (which otherwise
+would leave nothing playing at all, since the fallback tears the GL pipeline
+down and starts a blank output).
+
+When the queue is empty but mpv is already playing — a re-attach after a
+detach, a mid-playback fallback — the current entry is re-loaded with
+`loadfile <path> replace start=<position>`, because the fresh output needs
+a load of its own before mpv creates a `vo` for it. The target is mpv's
+live `path` property, never a URI remembered when the host last loaded:
+a playlist may have advanced past that, and reloading a stale URI would
+jump the wrong file and destroy the playlist.
+
+That reload has a real, currently unavoidable cost: a brief audio gap,
+the cache re-filling from the seek position, and — because `replace`
+resets the playlist to the single reloaded entry — the loss of the rest of
+the playlist. Hosts that detach and re-attach frequently (compacting the
+view, tabbing the stage away) pay it per cycle.
+
+## One window per player
+
+The pipeline attaches to whichever window first paints the stage;
+`Player` keeps no window of its own. A second window rendering the same
+player therefore fights over the one surface: every attach moves the same
+platform child window (or subsurface) to its own bounds, and the last
+painter wins — the other window shows whatever the compositor left behind.
+One video-carrying window per player is the supported shape.
+
 ## Detach without a window, and leaks
 
 `Player::detach_video_surface(&mut self)` has no window, and gpui's
@@ -127,7 +164,12 @@ removes it from the tree, and a window's own destruction frees it regardless.
 At most one stale surface exists per player at any time, so repeated
 attach/detach cycles do not accumulate. The view detaches through the
 window-holding variant while it still has the window (a stage that disappears
-— a compacted view, a hidden stage — detaches on its next render).
+— a compacted view, a hidden stage — detaches on its next render), and a view
+the host *removes entirely* detaches window-lessly in its entity release hook
+(`Context::on_release`), which parks the surface as stale exactly the same
+way. The remaining host obligation: a `PlayerView` entity that is neither
+rendered nor released keeps its surface attached — release or keep rendering
+views you remove; do not park them unrendered next to a live player.
 
 How this was verified: repeated attach/detach cycling driven from the view
 layer (toggling the stage ~40 times over 30 s) on X11, counting the player
@@ -143,7 +185,7 @@ abort) and leaves at most the single hidden stale surface described above.
 | --- | --- | --- |
 | Linux / X11, XWayland | supported, default | child X11 window; EGL via `EGL_DEFAULT_DISPLAY`; vsync swap |
 | Linux / Wayland | supported, default | desynchronized subsurface; `wl_display` from gpui's connection; `SwapInterval::DontWait` required |
-| macOS | not implemented | negotiation downgrades to software at `Player::new`; `attach_video_surface` logs once and stays on software. No untested platform code is shipped. |
+| macOS | not implemented | negotiation downgrades to software at `Player::new`, which logs once; `attach_video_surface` never reaches a platform step (its software early-return fires first). No untested platform code is shipped. |
 | Windows | not implemented | as macOS |
 
 The GL path is deliberately Linux-only: no other backend's composition

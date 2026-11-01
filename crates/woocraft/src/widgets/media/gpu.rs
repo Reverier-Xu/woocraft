@@ -24,8 +24,8 @@
 //!   convention.
 //! * [`Player`](super::player::Player) joins the render thread on detach and on
 //!   drop, before the mpv core can be destroyed; [`RenderContextGuard`]
-//!   enforces the same rule on the setup error path, where no thread exists
-//!   yet.
+//!   enforces the same rule on the setup error paths — including a failed
+//!   render-thread spawn — where no thread exists yet.
 //!
 //! Platform handles: on X11 the composition surface hands out an `Xcb` handle
 //! for the child window, which carries no Xlib `Display*`, so the EGL display
@@ -66,35 +66,50 @@ use libmpv2::Mpv;
 use libmpv2_sys as sys;
 use raw_window_handle::{HasDisplayHandle as _, RawDisplayHandle, RawWindowHandle};
 
-/// Owns the mpv render context until it is handed to the render thread.
+/// Owns the mpv render context — and, once its update callback is
+/// registered, the callback's boxed wake sender — until both are handed to
+/// the render thread.
 ///
 /// mpv aborts the process if a core is destroyed while one of its render
-/// contexts still exists, and every error path between creation and the
-/// thread handoff must free the context while the GL context that created it
-/// is still current on this thread. This type makes the Rust drop order do
-/// that: setup failures drop it (freeing the context), and
-/// [`RenderContextGuard::into_raw`] transfers ownership to the render thread,
-/// which frees it after its last render.
-struct RenderContextGuard(*mut sys::mpv_render_context);
+/// contexts still exists, and the update callback must never run against a
+/// freed box, so every failure between creation and the thread handoff has
+/// to free the context first and reclaim the box second. This type makes
+/// the Rust drop order do that: any failure — including a failed
+/// render-thread spawn — drops the guard, and [`RenderContextGuard::hand_off`]
+/// transfers ownership to the render thread only after that thread exists.
+struct RenderContextGuard {
+  /// The render context; never null, because the guard is built only after
+  /// `mpv_render_context_create` succeeded.
+  rc: *mut sys::mpv_render_context,
+  /// The leaked `Wake` box, null until the update callback is registered —
+  /// before that, nothing can reach the box through mpv.
+  wake_box: *mut Wake,
+}
 
 impl RenderContextGuard {
-  /// Relinquishes ownership to the render thread, which frees the context
-  /// after its last render.
-  fn into_raw(self) -> *mut sys::mpv_render_context {
-    let raw = self.0;
+  /// Relinquishes ownership to the render thread, which frees the render
+  /// context and reclaims the wake box after its last render. Only call
+  /// this once that thread exists.
+  fn hand_off(self) {
     std::mem::forget(self);
-    raw
   }
 }
 
 impl Drop for RenderContextGuard {
   fn drop(&mut self) {
-    if !self.0.is_null() {
-      // SAFETY: the pointer came from `mpv_render_context_create` on this
-      // thread, is freed exactly once, and the GL context that created it is
-      // still current here — the guard lives only between creation and the
-      // `make_not_current` handoff, both on the UI thread.
-      unsafe { sys::mpv_render_context_free(self.0) };
+    // SAFETY: the pointer came from `mpv_render_context_create`, is freed
+    // exactly once, and no mpv core can be destroyed under it — the guard
+    // lives only inside `CompositionVideo::build`, on the UI thread, while
+    // the player still owns the core. Whether the GL context that created
+    // it is still current depends on which step failed: it is on every
+    // step up to the `make_not_current` handoff, and is not after it (a
+    // failed spawn). Freeing without a current context is the least-bad
+    // option there; `render_thread` explains why.
+    unsafe { sys::mpv_render_context_free(self.rc) };
+    // SAFETY: the free above permanently stops the update callback, so
+    // nothing can reach the box anymore.
+    if !self.wake_box.is_null() {
+      unsafe { drop(Box::from_raw(self.wake_box)) };
     }
   }
 }
@@ -110,9 +125,14 @@ unsafe impl Send for RenderContextPtr {}
 /// The update-callback context: a clone of the render thread's wake sender,
 /// boxed so mpv can hold it as a raw pointer. Leaked for as long as the
 /// render context exists (mpv calls the callback from its own threads) and
-/// reclaimed on the render thread after `mpv_render_context_free`, the point
-/// where mpv stops calling it.
-struct Wake(mpsc::Sender<()>);
+/// reclaimed once `mpv_render_context_free` has stopped the callback — by the
+/// render thread on a normal stop, or by [`RenderContextGuard`] on a setup
+/// failure.
+///
+/// The channel is bounded (capacity 1) and every send uses `try_send`: a
+/// render thread blocked in a swap must not let the callback queue nudges
+/// without bound, and one queued nudge is all it takes to wake it.
+struct Wake(mpsc::SyncSender<()>);
 
 /// A `*mut Wake` that may cross into the render thread with the handoff.
 struct WakePtr(*mut Wake);
@@ -154,8 +174,10 @@ unsafe extern "C" fn wake_callback(ctx: *mut c_void) {
   // thread reclaims it after freeing the render context.
   let wake = unsafe { &*(ctx as *const Wake) };
   // A send failure means the render thread has already exited; there is
-  // nobody left to wake.
-  let _ = wake.0.send(());
+  // nobody left to wake. A full channel drops the nudge the same way: one
+  // queued wake is enough, so extra ones are worthless by design (see
+  // [`Wake`]).
+  let _ = wake.0.try_send(());
 }
 
 /// One `mpv_render_param` entry, like the helper in [`super::video`].
@@ -203,9 +225,13 @@ fn render_thread(args: RenderThreadArgs) {
         %error,
         "woocraft: making the video GL context current on the render thread failed"
       );
-      // The GL context never became current here; free the render context
-      // anyway. mpv tolerates this (its GL calls become no-ops without a
-      // current context) and the EGL context is destroyed right after.
+      // The GL context never became current on this thread, so the free
+      // below runs without one. mpv does not document that case; its
+      // GL-side cleanup cannot happen and driver resources may leak, but
+      // the render context must still be freed — a live one at mpv core
+      // destruction aborts the process — and the EGL context is destroyed
+      // right after, taking the leaked objects with it. That trade is the
+      // least-bad option here.
       free_render_context(&args.rc, &args.wake_box);
       return;
     }
@@ -237,9 +263,11 @@ fn render_thread(args: RenderThreadArgs) {
       force_render = true;
     }
 
-    // SAFETY: the GL context is current on this thread; the render API
-    // requires every render call to happen on the thread whose context was
-    // current at `mpv_render_context_create`, which is this one.
+    // SAFETY: the GL context that created the render context is current on
+    // this thread — the render API requires exactly that same context to be
+    // current for every render call, on whatever thread makes it (the
+    // context was created on the UI thread and moved here with its GL
+    // context; the pre-0.30 same-thread restriction no longer applies).
     let flags = unsafe { sys::mpv_render_context_update(args.rc.0) };
     let frame_flag = sys::mpv_render_update_flag_MPV_RENDER_UPDATE_FRAME as u64;
     if flags & frame_flag == 0 && !force_render {
@@ -275,13 +303,14 @@ fn render_thread(args: RenderThreadArgs) {
       tracing::warn!(status, "woocraft: mpv_render_context_render failed");
       break;
     }
-    // SAFETY: as above — current context, render thread.
-    unsafe { sys::mpv_render_context_report_swap(args.rc.0) };
     // SAFETY: as above; `swap_buffers` only needs the current context.
     if let Err(error) = args.surface.swap_buffers(&context) {
       tracing::warn!(%error, "woocraft: presenting the video frame failed");
       break;
     }
+    // SAFETY: as above — current context, render thread. Reported after the
+    // swap succeeded: mpv documents this as "a frame was flipped".
+    unsafe { sys::mpv_render_context_report_swap(args.rc.0) };
     rendered += 1;
     tracing::trace!(rendered, "woocraft: presented a video frame through GL");
   }
@@ -324,7 +353,7 @@ pub(crate) struct CompositionVideo {
   /// — so this clone stays until [`Self::stop`] has joined that thread.
   _display: Rc<GlutinDisplay>,
   size: Arc<Mutex<(u32, u32)>>,
-  wake_tx: mpsc::Sender<()>,
+  wake_tx: mpsc::SyncSender<()>,
   shutdown: Arc<AtomicBool>,
   thread: Option<JoinHandle<()>>,
   /// The last bounds applied to the composition surface, in device pixels.
@@ -448,10 +477,12 @@ impl CompositionVideo {
 
     // --- EGL display / config / context / surface ----------------------------
     // SAFETY: on X11 the display handle is `EGL_DEFAULT_DISPLAY`, which EGL
-    // resolves itself. On Wayland both handles point into live gpui objects —
-    // the `wl_display` of gpui's still-open connection and the gpui-owned
-    // child `wl_surface` — and the objects below (display, contexts,
-    // surfaces) are dropped before the window can be.
+    // resolves itself. On Wayland both handles point into live gpui objects
+    // — the `wl_display` of gpui's still-open connection, which is
+    // connection-global and stays valid for any surface on it, and the
+    // gpui-owned child `wl_surface`, which the player keeps alive by
+    // holding the composition surface handle until after the render thread
+    // is joined (see [`CompositionVideo::stop`] and the drop order below).
     let display = Rc::new(
       unsafe { GlutinDisplay::new(display_handle, DisplayApiPreference::Egl) }
         .context("glutin EGL display creation failed")?,
@@ -497,7 +528,7 @@ impl CompositionVideo {
 
     // --- mpv render context
     // ---------------------------------------------------
-    let (wake_tx, wake_rx) = mpsc::channel::<()>();
+    let (wake_tx, wake_rx) = mpsc::sync_channel::<()>(1);
     let wake_box = Box::into_raw(Box::new(Wake(wake_tx.clone())));
 
     let api_type = CString::new("opengl").context("CString::new(\"opengl\")")?;
@@ -538,17 +569,24 @@ impl CompositionVideo {
       drop(unsafe { Box::from_raw(wake_box) });
       bail!("mpv_render_context_create failed: {create_status}");
     }
-    let render_context = RenderContextGuard(render_context);
+    let mut render_context = RenderContextGuard {
+      rc: render_context,
+      wake_box: std::ptr::null_mut(),
+    };
 
     // SAFETY: the render context was just created and is valid; the callback
     // only sends on the channel inside the leaked `Wake` box.
     unsafe {
       sys::mpv_render_context_set_update_callback(
-        render_context.0,
+        render_context.rc,
         Some(wake_callback),
         wake_box as *mut c_void,
       );
     };
+    // From here mpv can reach the box, so the guard owns it too: every
+    // failure below frees the render context first (stopping the callback)
+    // and reclaims the box second.
+    render_context.wake_box = wake_box;
 
     // --- hand the GL context to the render thread
     // ----------------------------- `make_not_current` releases the context on
@@ -563,7 +601,12 @@ impl CompositionVideo {
     let args = RenderThreadArgs {
       context,
       surface,
-      rc: RenderContextPtr(render_context.into_raw()),
+      // A copy of the pointer, not a transfer of ownership: until the spawn
+      // below succeeds the guard still owns the render context, so a failed
+      // spawn frees it and reclaims the wake box instead of leaking both —
+      // and the fallback can then safely create a second render context on
+      // the same core.
+      rc: RenderContextPtr(render_context.rc),
       size: size.clone(),
       wake: wake_rx,
       wake_box: WakePtr(wake_box),
@@ -573,10 +616,14 @@ impl CompositionVideo {
       .name("woocraft-mpv-video-gl".into())
       .spawn(move || render_thread(args))
       .context("failed to spawn the video render thread")?;
+    // The spawn succeeded: the render thread now owns the render context and
+    // the wake box and frees both on its exit. Forgetting the guard here —
+    // and only here — is the handoff; dropping it instead would double-free.
+    render_context.hand_off();
     // A frame may already be waiting: mpv renders the current frame as soon
     // as the render context exists, which can precede the thread's first
     // `recv`.
-    let _ = wake_tx.send(());
+    let _ = wake_tx.try_send(());
 
     Ok(Self {
       id: native.id(),
@@ -634,7 +681,7 @@ impl CompositionVideo {
       (bounds.size.width.0 as u32, bounds.size.height.0 as u32);
     // Wake the render thread so the EGL surface resize and the paused-frame
     // re-render happen promptly rather than at the next mpv callback.
-    let _ = self.wake_tx.send(());
+    let _ = self.wake_tx.try_send(());
     Ok(())
   }
 
@@ -643,8 +690,9 @@ impl CompositionVideo {
   /// EGL surface, context and display can be destroyed safely. Idempotent.
   pub(crate) fn stop(&mut self) {
     self.shutdown.store(true, Ordering::SeqCst);
-    // Release a `recv` blocked on the next mpv frame.
-    let _ = self.wake_tx.send(());
+    // Release a `recv` blocked on the next mpv frame. The channel holds at
+    // most one nudge, and any earlier one serves the same purpose.
+    let _ = self.wake_tx.try_send(());
     if let Some(thread) = self.thread.take()
       && thread.join().is_err()
     {

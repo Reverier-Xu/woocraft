@@ -65,6 +65,18 @@ impl PlayerView {
         cx.notify();
       }),
     ];
+    // A view the host removes must not leave its composition surface mapped
+    // over whatever replaces it: detach on this entity's release, which is
+    // the only guaranteed call after the last render. No window exists
+    // there, so the detach parks the surface as stale (see
+    // `docs/media-gpu.md`); the player is still alive at release — this
+    // view's own handle keeps it so.
+    cx.on_release(|this: &mut Self, cx: &mut App| {
+      this
+        .player
+        .update(cx, |player, _| player.detach_video_surface());
+    })
+    .detach();
 
     Self {
       player: player.clone(),
