@@ -102,6 +102,9 @@ zstd          = { workspace = true, optional = true }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
+# Native file chooser for the media example; the portal backend keeps it
+# consistent with the rest of the desktop integration on Linux.
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 # The player example wires the library's `tracing` lines (transport
 # negotiation and fallback among them) to stderr through RUST_LOG.
 tracing-subscriber = { version = "0.3", default-features = false, features = [

@@ -7,7 +7,7 @@ use gpui::{
   AnyElement, App, AppContext as _, ClickEvent, Context, Decorations, InteractiveElement as _,
   IntoElement, MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, SharedString,
   StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
-  WindowControlArea, div, point, prelude::FluentBuilder as _, px,
+  WindowControlArea, WindowDecorations, WindowOptions, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -362,6 +362,28 @@ impl TitleBar {
     *ZOOM_FACTOR.write().expect("zoom factor lock poisoned") = factor;
     window.set_rem_size(window.rem_size() * (factor / previous));
     cx.refresh_windows();
+  }
+
+  /// [`WindowOptions`] matching this title bar.
+  ///
+  /// A window that draws its own chrome must ask for client-side decorations:
+  /// on Linux the server-side title bar would otherwise sit above this widget,
+  /// giving the application two title bars. macOS and Windows use
+  /// [`TitlebarOptions::appears_transparent`] for the same effect, which
+  /// [`Self::title_bar_options`] already sets.
+  ///
+  /// ```ignore
+  /// let options = WindowOptions {
+  ///   window_bounds: Some(WindowBounds::Windowed(bounds)),
+  ///   ..TitleBar::window_options()
+  /// };
+  /// ```
+  pub fn window_options() -> WindowOptions {
+    WindowOptions {
+      titlebar: Some(Self::title_bar_options()),
+      window_decorations: Some(WindowDecorations::Client),
+      ..Default::default()
+    }
   }
 
   pub fn title_bar_options() -> TitlebarOptions {

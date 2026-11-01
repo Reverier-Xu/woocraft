@@ -115,3 +115,23 @@ software transport adds one frame-rendering thread and the composition
 transport one GL-presenting thread, each joined before the mpv core can be
 destroyed. Dropping the `Player` stops all of them and terminates the core;
 see `docs/media-gpu.md` for the full map.
+
+## App shell
+
+A window that draws woocraft chrome must ask for client-side decorations, or
+the server-side title bar sits above `TitleBar` and the application shows two
+of them. `TitleBar::window_options()` returns that preset:
+
+```rust
+let options = WindowOptions {
+  window_bounds: Some(WindowBounds::Windowed(bounds)),
+  ..TitleBar::window_options()
+};
+```
+
+Playback itself is one entity: `Player::new(cx, PlayerOptions::default())`,
+rendered with `PlayerView::new(&player, cx)`; `PlayerPlaylist` and
+`PlayerTrackMenu` are separate elements the host mounts wherever it wants one
+(`PlayerView::controls` is a slot, not a requirement). Video runs on the GPU
+composition transport by default on Linux and only falls back to software when
+the surface cannot be created; the fallback is logged once.

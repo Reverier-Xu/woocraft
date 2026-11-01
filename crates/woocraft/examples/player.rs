@@ -506,6 +506,34 @@ impl PlayerApp {
 
   /// Loads whatever the source field holds (`Player::load`), remembering it
   /// as the player's source so a transport switch can rebuild around it.
+  /// Opens the platform's file chooser and loads what it returns.
+  ///
+  /// The dialog is a blocking native call, so it runs on the background
+  /// executor and only the result comes back to the UI thread; the source
+  /// field stays editable for people who prefer pasting a path or URL.
+  fn browse_source(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    cx.spawn_in(window, async move |this, cx| {
+      let picked = cx
+        .background_executor()
+        .spawn(async move { rfd::FileDialog::new().pick_file() })
+        .await;
+      let Some(path) = picked else {
+        return;
+      };
+      let source = path.display().to_string();
+      let loaded = this.update_in(cx, |this, window, cx| {
+        this
+          .source_input
+          .update(cx, |input, cx| input.set_value(source.clone(), window, cx));
+        this.open_source(cx);
+      });
+      if loaded.is_err() {
+        tracing::debug!("woocraft: player window closed before the dialog returned");
+      }
+    })
+    .detach();
+  }
+
   fn open_source(&mut self, cx: &mut Context<Self>) {
     let source = self.source_input.read(cx).value().trim().to_string();
     if source.is_empty() {
@@ -625,7 +653,7 @@ impl PlayerApp {
             IconName::FolderOpen,
             t("media.open"),
             size,
-            cx.listener(|this, _, _, cx| this.open_source(cx)),
+            cx.listener(|this, _, window, cx| this.browse_source(window, cx)),
           ))
           .child(
             div().min_w_0().flex_1().child(
@@ -2001,8 +2029,7 @@ fn main() {
       cx.open_window(
         WindowOptions {
           window_bounds: Some(WindowBounds::Windowed(bounds)),
-          titlebar: Some(TitleBar::title_bar_options()),
-          ..Default::default()
+          ..TitleBar::window_options()
         },
         move |_window, cx| {
           let launch = launch.clone();
