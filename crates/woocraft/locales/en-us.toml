@@ -146,6 +146,16 @@ volume                   = "Volume"
 volume_max               = "Volume ceiling"
 yes                      = "yes"
 
+hdr                      = "HDR"
+output_format            = "Output format"
+pixel_format             = "Source pixel format"
+primaries                = "Primaries"
+colormatrix              = "Colour matrix"
+transfer                 = "Transfer"
+luminance                = "Luminance"
+sig_peak                 = "Signal peak"
+color_levels             = "Colour levels"
+gpu_api                  = "Video output API"
 [tech.woooo.woocraft.i18n]
 name = "English (US)"
 

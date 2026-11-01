@@ -146,6 +146,16 @@ volume                   = "음량"
 volume_max               = "최대 음량"
 yes                      = "예"
 
+hdr                      = "HDR"
+output_format            = "출력 형식"
+pixel_format             = "원본 픽셀 형식"
+primaries                = "프라이머리"
+colormatrix              = "색상 매트릭스"
+transfer                 = "전달 함수"
+luminance                = "휘도 범위"
+sig_peak                 = "신호 피크"
+color_levels             = "색상 레벨"
+gpu_api                  = "영상 출력 API"
 [tech.woooo.woocraft.i18n]
 name = "한국어"
 

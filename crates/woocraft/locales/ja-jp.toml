@@ -146,6 +146,16 @@ volume                   = "音量"
 volume_max               = "音量上限"
 yes                      = "はい"
 
+hdr                      = "HDR"
+output_format            = "出力フォーマット"
+pixel_format             = "入力ピクセル形式"
+primaries                = "プライマリ"
+colormatrix              = "色マトリクス"
+transfer                 = "伝達関数"
+luminance                = "輝度範囲"
+sig_peak                 = "信号ピーク"
+color_levels             = "カラーレベル"
+gpu_api                  = "映像出力 API"
 [tech.woooo.woocraft.i18n]
 name = "日本語"
 

@@ -180,6 +180,29 @@ unsafe extern "C" fn wake_callback(ctx: *mut c_void) {
   let _ = wake.0.try_send(());
 }
 
+// ## Colour and HDR (platform limitation, documented on purpose)
+//
+// The surface this module renders into is an **8-bit SDR** EGL window: glutin
+// offers no way to select an RGB10 config through its API, and neither EGL's
+// `EGL_EXT_gl_colorspace_bt2020_pq` nor Wayland's colour-management image
+// description reaches a `wl_subsurface` that gpui created for us. mpv still
+// reports the source correctly (`Using hardware decoding (nvdec-copy)`,
+// `VO: [libmpv] 3840x2160 p010` on a UHD BluRay remux — identical decoder to
+// a standalone `mpv` run), but the renderer tone maps into the 8-bit target,
+// so the picture on an HDR display stays SDR.
+//
+// This is deliberately not worked around: doing so needs a 10-bit config and
+// a colour-managed surface, which means either patching glutin/EGL directly
+// or teaching gpui's composition tree to carry colour metadata. Both are
+// outside a video component's remit, and neither is portable. The panel's
+// presentation row reports the outcome ("HDR → tone mapped to 8-bit SDR
+// surface") instead of implying HDR works because the source is HDR.
+//
+// The lower GPU load than standalone `mpv` follows from the same design: a
+// standalone run uses `gpu-next` (libplacebo) on a 4K 10-bit swapchain with
+// HDR tone mapping, while this module renders mpv's simpler GL output into a
+// surface the size of the stage, in 8-bit.
+
 /// One `mpv_render_param` entry, like the helper in [`super::video`].
 fn param(type_: sys::mpv_render_param_type, data: *mut c_void) -> sys::mpv_render_param {
   sys::mpv_render_param { type_, data }

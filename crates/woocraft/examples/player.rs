@@ -132,6 +132,30 @@ struct LiveInfo {
   demuxer_cache: Option<String>,
   /// `cache-speed`, formatted.
   cache_speed: Option<String>,
+  /// `format`: what the video output actually presents (the pixel format the
+  /// renderer negotiated, e.g. `rgb0` or `rgb10a2`).
+  output_format: Option<String>,
+  /// `video-params/pixelformat`: the decoded frame's own format.
+  pixel_format: Option<String>,
+  /// `video-params/primaries`.
+  primaries: Option<String>,
+  /// `video-params/colormatrix`.
+  colormatrix: Option<String>,
+  /// `video-params/gamma`: the transfer function.
+  transfer: Option<String>,
+  /// `video-params/sig-peak`: the signal peak, above 1.0 for HDR.
+  sig_peak: Option<f64>,
+  /// `video-params/min-luma` and `max-luma`, in cd/m².
+  min_luma: Option<f64>,
+  max_luma: Option<f64>,
+  /// `video-params/colorlevels`.
+  color_levels: Option<String>,
+  /// `hwdec-current`: the hardware decoder actually in use, empty for software.
+  hwdec_current: Option<String>,
+  /// `gpu-api` / `gpu-context`: what the video output renders through, when it
+  /// reports one.
+  gpu_api: Option<String>,
+  gpu_context: Option<String>,
 }
 
 /// A text field's Enter handler.
@@ -535,6 +559,24 @@ impl PlayerApp {
     live.replaygain = player.get_property::<String>("replaygain").ok();
     live.deinterlace = player.get_property::<String>("deinterlace").ok();
     live.rotation = player.get_property::<i64>("video-rotate").ok();
+    live.output_format = player.get_property::<String>("format").ok();
+    live.pixel_format = player
+      .get_property::<String>("video-params/pixelformat")
+      .ok();
+    live.primaries = player.get_property::<String>("video-params/primaries").ok();
+    live.colormatrix = player
+      .get_property::<String>("video-params/colormatrix")
+      .ok();
+    live.transfer = player.get_property::<String>("video-params/gamma").ok();
+    live.sig_peak = player.get_property::<f64>("video-params/sig-peak").ok();
+    live.min_luma = player.get_property::<f64>("video-params/min-luma").ok();
+    live.max_luma = player.get_property::<f64>("video-params/max-luma").ok();
+    live.color_levels = player
+      .get_property::<String>("video-params/colorlevels")
+      .ok();
+    live.hwdec_current = player.get_property::<String>("hwdec-current").ok();
+    live.gpu_api = player.get_property::<String>("gpu-api").ok();
+    live.gpu_context = player.get_property::<String>("gpu-context").ok();
     live.demuxer_cache = player
       .get_property::<f64>("demuxer-cache-duration")
       .ok()
@@ -1379,6 +1421,92 @@ impl PlayerApp {
         size,
         theme,
       ))
+      // Colour and HDR: the output format tells 8- from 10-bit presentation,
+      // and primaries/transfer/peak tell whether the source is HDR at all.
+      .child(info_row(
+        t("media.hdr"),
+        hdr_summary(&self.live),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.output_format"),
+        or_dash(&self.live.output_format),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.pixel_format"),
+        or_dash(&self.live.pixel_format),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.primaries"),
+        or_dash(&self.live.primaries),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.colormatrix"),
+        or_dash(&self.live.colormatrix),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.transfer"),
+        or_dash(&self.live.transfer),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.luminance"),
+        luma_summary(&self.live),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.sig_peak"),
+        self
+          .live
+          .sig_peak
+          .map(|peak| format!("{peak:.3}"))
+          .unwrap_or_else(|| "—".into()),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.color_levels"),
+        or_dash(&self.live.color_levels),
+        size,
+        theme,
+      ))
+      // The verdict row: an HDR source only reaches an HDR display when the
+      // render target carries 10-bit samples and colour-management metadata.
+      // This transport presents through an 8-bit SDR GL surface, so mpv tone
+      // maps — which is exactly what the panel should say.
+      .child(info_row(
+        t("media.presentation"),
+        presentation_summary(&self.live),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.decoder_active"),
+        or_dash(&self.live.hwdec_current),
+        size,
+        theme,
+      ))
+      .child(info_row(
+        t("media.gpu_api"),
+        format!(
+          "{} · {}",
+          or_dash(&self.live.gpu_api),
+          or_dash(&self.live.gpu_context)
+        ),
+        size,
+        theme,
+      ))
       .child(info_row(t("media.cache"), cache, size, theme))
       .child(sub_header(t("media.metadata"), size, theme));
     for (key, value) in player.metadata() {
@@ -2069,7 +2197,7 @@ fn main() {
     source: None,
     video: true,
     transport: VideoTransport::default(),
-    decoder: "no",
+    decoder: "auto",
     size: Size::default(),
   };
   for arg in std::env::args().skip(1) {
@@ -2121,4 +2249,170 @@ fn main() {
       )
       .expect("open player example window failed");
     });
+}
+
+/// Bit depth implied by an mpv pixel-format name (`rgb10a2`, `yuv420p10le`,
+/// `p010`, `rgb0`, …), or `None` when the name carries no depth.
+///
+/// mpv has no property for "the display is 10-bit"; the negotiated output
+/// format is the closest observable, and it is what decides whether an HDR
+/// source is actually presented with 10-bit precision.
+fn format_bit_depth(format: &str) -> Option<u32> {
+  let lowered = format.to_ascii_lowercase();
+  // `p010`/`p210` are 10-bit 4:2:0/4:2:2 planar formats without a digit run.
+  if lowered.starts_with("p010") || lowered.starts_with("p210") || lowered.starts_with("p410") {
+    return Some(10);
+  }
+  // `rgb10a2`, `x2rgb10`, `yuv420p10le`, `yuv444p12le`, `argb10` …
+  let digits: String = lowered
+    .chars()
+    .skip_while(|c| !c.is_ascii_digit())
+    .take_while(|c| c.is_ascii_digit())
+    .collect();
+  let depth = digits.parse::<u32>().ok()?;
+  // Channel counts and subsampling factors are not depths.
+  matches!(depth, 10 | 12 | 16).then_some(depth)
+}
+
+/// One line describing the colour pipeline, for a quick HDR check.
+///
+/// HDR is inferred the way players do it: a PQ or HLG transfer, wide-gamut
+/// primaries, or a signal peak above 1.0. Everything that is known is listed,
+/// so a missing piece is visible instead of guessed.
+fn hdr_summary(live: &LiveInfo) -> String {
+  let transfer = live.transfer.as_deref().unwrap_or("").to_ascii_lowercase();
+  let primaries = live.primaries.as_deref().unwrap_or("").to_ascii_lowercase();
+  let peak = live.sig_peak.unwrap_or(1.0);
+
+  let hdr_transfer = transfer.contains("pq") || transfer.contains("hlg");
+  let wide_gamut = primaries.contains("2020");
+  let hdr = hdr_transfer || wide_gamut || peak > 1.0;
+
+  let depth = live
+    .output_format
+    .as_deref()
+    .and_then(format_bit_depth)
+    .or_else(|| live.pixel_format.as_deref().and_then(format_bit_depth));
+
+  let mut parts = vec![if hdr { "HDR" } else { "SDR" }.to_string()];
+  if let Some(depth) = depth {
+    parts.push(format!("{depth}-bit output"));
+  }
+  if hdr_transfer {
+    parts.push(
+      if transfer.contains("hlg") {
+        "HLG"
+      } else {
+        "PQ"
+      }
+      .into(),
+    );
+  }
+  if wide_gamut {
+    parts.push("bt.2020".into());
+  }
+  if peak > 1.0 {
+    parts.push(format!("peak {peak:.2}"));
+  }
+  parts.join(" · ")
+}
+
+/// What the pipeline does with the source's colour, as one honest line.
+///
+/// mpv reports the *source* parameters through `video-params/*`; whether they
+/// survive to the display depends on the render target. The composition
+/// transport renders into an 8-bit GL surface without colour-management
+/// metadata, so an HDR source is tone mapped to SDR — the row says so instead
+/// of implying HDR works because the source is HDR.
+fn presentation_summary(live: &LiveInfo) -> String {
+  let source = hdr_summary(live);
+  let target_bits = live
+    .output_format
+    .as_deref()
+    .and_then(format_bit_depth)
+    .unwrap_or(8);
+  if source.starts_with("HDR") {
+    format!("{source} → tone mapped to {target_bits}-bit SDR surface")
+  } else {
+    format!("{source} → {target_bits}-bit SDR surface")
+  }
+}
+
+/// The luminance range the source declares, in cd/m².
+fn luma_summary(live: &LiveInfo) -> String {
+  match (live.min_luma, live.max_luma) {
+    (Some(min), Some(max)) => format!("{min:.3} – {max:.0} cd/m²"),
+    (None, Some(max)) => format!("≤ {max:.0} cd/m²"),
+    (Some(min), None) => format!("≥ {min:.3} cd/m²"),
+    (None, None) => "—".into(),
+  }
+}
+
+#[cfg(test)]
+mod colour_tests {
+  use super::*;
+
+  #[test]
+  fn reads_the_depth_out_of_output_formats() {
+    assert_eq!(format_bit_depth("rgb10a2"), Some(10));
+    assert_eq!(format_bit_depth("x2rgb10"), Some(10));
+    assert_eq!(format_bit_depth("yuv420p10le"), Some(10));
+    assert_eq!(format_bit_depth("yuv444p12le"), Some(12));
+    assert_eq!(format_bit_depth("p010"), Some(10));
+    // 8-bit names carry no depth marker: they must not read a channel count.
+    assert_eq!(format_bit_depth("rgb0"), None);
+    assert_eq!(format_bit_depth("yuv420p"), None);
+    assert_eq!(format_bit_depth("nv12"), None);
+  }
+
+  #[test]
+  fn an_hdr_source_is_reported_as_hdr_with_its_evidence() {
+    let live = LiveInfo {
+      transfer: Some("pq".into()),
+      primaries: Some("bt.2020".into()),
+      sig_peak: Some(4.0),
+      output_format: Some("rgb10a2".into()),
+      ..Default::default()
+    };
+    let summary = hdr_summary(&live);
+    assert!(summary.starts_with("HDR"), "{summary}");
+    assert!(summary.contains("10-bit output"), "{summary}");
+    assert!(summary.contains("PQ"), "{summary}");
+    assert!(summary.contains("bt.2020"), "{summary}");
+  }
+
+  #[test]
+  fn an_sdr_source_stays_sdr_even_on_a_10_bit_output() {
+    let live = LiveInfo {
+      transfer: Some("bt.1886".into()),
+      primaries: Some("bt.709".into()),
+      sig_peak: Some(1.0),
+      output_format: Some("rgb10a2".into()),
+      ..Default::default()
+    };
+    let summary = hdr_summary(&live);
+    assert!(summary.starts_with("SDR"), "{summary}");
+    assert!(summary.contains("10-bit output"), "{summary}");
+  }
+
+  #[test]
+  fn an_hdr_source_over_an_eight_bit_target_is_reported_as_tone_mapped() {
+    let live = LiveInfo {
+      transfer: Some("pq".into()),
+      primaries: Some("bt.2020".into()),
+      sig_peak: Some(4.0),
+      output_format: None,
+      ..Default::default()
+    };
+    let summary = presentation_summary(&live);
+    assert!(summary.contains("tone mapped"), "{summary}");
+    assert!(summary.contains("8-bit"), "{summary}");
+  }
+
+  #[test]
+  fn an_empty_player_reports_sdr_and_no_numbers() {
+    let live = LiveInfo::default();
+    assert_eq!(hdr_summary(&live), "SDR");
+    assert_eq!(luma_summary(&live), "—");
+  }
 }

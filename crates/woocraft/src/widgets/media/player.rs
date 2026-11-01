@@ -1358,7 +1358,15 @@ fn create_mpv(options: &PlayerOptions) -> Result<Mpv> {
     // chatter. Applications that want mpv's own configuration can pass
     // `PlayerOptions::option("config", "yes")`.
     init.set_option("idle", "yes")?;
-    init.set_option("terminal", "no")?;
+    // Diagnostics: `WOOCRAFT_MPV_LOG=1` lets mpv write its own log (decoder,
+    // VO, colour decisions) to the terminal, which is the only way to compare
+    // a player against a standalone mpv run on the same file.
+    if std::env::var_os("WOOCRAFT_MPV_LOG").is_some() {
+      init.set_option("terminal", "yes")?;
+      init.set_option("msg-level", "all=info")?;
+    } else {
+      init.set_option("terminal", "no")?;
+    }
     init.set_option("input-default-bindings", "no")?;
     init.set_option("input-vo-keyboard", "no")?;
     init.set_option("osc", "no")?;

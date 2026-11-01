@@ -191,3 +191,25 @@ abort) and leaves at most the single hidden stale surface described above.
 The GL path is deliberately Linux-only: no other backend's composition
 surface, EGL/WGL/CGL interop or mpv render-context path has been written or
 tested here, and the library does not claim support it cannot verify.
+
+## Colour and HDR
+
+Known limitation, not a bug in the transport: the composition surface is an
+**8-bit SDR** EGL window. glutin cannot select an RGB10 config through its API,
+and neither `EGL_EXT_gl_colorspace_bt2020_pq` nor a Wayland colour-management
+image description is available on the `wl_subsurface` gpui hands us. mpv
+therefore decodes exactly like a standalone run — on a UHD BluRay remux both
+report `Using hardware decoding (nvdec-copy)` and `VO: [...] 3840x2160 p010` —
+but tone maps into the 8-bit target, so an HDR source is displayed as SDR.
+
+Fixing it needs a 10-bit GL config plus a colour-managed surface, i.e. changes
+in glutin/EGL or in gpui's composition tree, and none of it is portable across
+X11, Wayland, Windows and macOS. The media panel reports what actually happens
+(`Presentation: HDR → tone mapped to 8-bit SDR surface`) rather than implying
+HDR support from the source parameters.
+
+The same reasoning explains why this player uses less GPU than a standalone
+`mpv`: `mpv` defaults to `gpu-next`/libplacebo on a 4K 10-bit swapchain with
+HDR tone mapping, while the composition transport renders mpv's GL output at
+the stage's size in 8 bits. Set `WOOCRAFT_MPV_LOG=1` to see mpv's own log
+(decoder, VO, colour decisions) for a side-by-side comparison.

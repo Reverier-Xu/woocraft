@@ -146,6 +146,16 @@ volume                   = "音量"
 volume_max               = "音量上限"
 yes                      = "是"
 
+hdr                      = "HDR"
+output_format            = "輸出格式"
+pixel_format             = "來源像素格式"
+primaries                = "色域原色"
+colormatrix              = "色彩矩陣"
+transfer                 = "傳輸函數"
+luminance                = "亮度範圍"
+sig_peak                 = "訊號峰值"
+color_levels             = "色彩範圍"
+gpu_api                  = "視訊輸出介面"
 [tech.woooo.woocraft.i18n]
 name = "繁體中文"
 
