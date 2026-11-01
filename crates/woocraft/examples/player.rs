@@ -1641,7 +1641,14 @@ impl Render for PlayerApp {
           .flex_1()
           .min_h_0()
           .w_full()
-          .child(div().flex_1().min_w_0().child(self.view.clone()))
+          .child(
+            div()
+              .flex_1()
+              .min_w_0()
+              .min_h_0()
+              .h_full()
+              .child(self.view.clone()),
+          )
           .child(self.control_panel(size, &theme, cx)),
       )
   }
