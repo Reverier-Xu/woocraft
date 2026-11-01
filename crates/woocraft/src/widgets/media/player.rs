@@ -1205,7 +1205,9 @@ impl Player {
           self.composition = Some(video);
           self.resume_after_attach();
           if !self.negotiated_logged {
-            tracing::warn!(
+            // The working path is not a warning: composition is the default
+            // everywhere it can run, and only the fallback below deserves one.
+            tracing::debug!(
               "woocraft: video transport: composition \
                (mpv renders into a gpui composition surface through GL, no CPU copy)"
             );
