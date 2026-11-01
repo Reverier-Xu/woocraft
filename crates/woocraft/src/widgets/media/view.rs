@@ -17,7 +17,7 @@ use gpui::{
 };
 
 use super::{
-  player::{Player, PlayerEvent},
+  player::{Player, PlayerEvent, VideoTransport},
   snapshot::PlayerSnapshot,
   transport::PlayerTransport,
   video::MIN_RENDER_SIZE,
@@ -130,14 +130,23 @@ impl Render for PlayerView {
     let snapshot = PlayerSnapshot::new(&self.player, cx);
     let theme = cx.theme().clone();
     let size = self.size;
+    let transport = self.player.read(cx).video_transport();
 
     let stage = self.show_stage.then(|| {
       if let Some(build) = self.stage_slot.as_ref() {
         build(&snapshot, window, cx)
       } else {
-        default_stage(&snapshot, &self.player, &theme, size)
+        default_stage(&snapshot, &self.player, &theme, size, transport)
       }
     });
+    // A stage that is not rendered must release its composition surface while
+    // the window is still at hand: `compact()` views and stages hidden behind
+    // a custom slot detach instead of leaving a surface pinned on screen.
+    if stage.is_none() && self.player.read(cx).composition_attached() {
+      self.player.update(cx, |player, _| {
+        player.detach_video_surface_in_window(window)
+      });
+    }
 
     let transport = if let Some(build) = self.transport_slot.as_ref() {
       build(&snapshot, window, cx)
@@ -173,66 +182,96 @@ impl Render for PlayerView {
 /// whatever the player renders into the space it is given.
 fn default_stage(
   snapshot: &PlayerSnapshot, player: &Entity<Player>, theme: &Theme, size: Size,
+  transport: VideoTransport,
 ) -> AnyElement {
-  if let Some(image) = snapshot.frame() {
-    div()
-      .w_full()
-      .flex_1()
-      .relative()
-      .overflow_hidden()
-      .bg(theme.muted)
+  match transport {
+    // Composition: the stage only hosts the surface; the composited child
+    // window carries the picture, so there is no frame to paint here — not
+    // even before the first attach, which `VideoStage` performs itself.
+    VideoTransport::Composition => video_stage_container(theme)
       .child(VideoStage::new(
         ("video-stage", player.entity_id().as_u64()),
         player.clone(),
-        image.clone(),
+        None,
       ))
-      .into_any_element()
-  } else {
-    let id = player.entity_id().as_u64();
-    h_flex()
-      .w_full()
-      .items_center()
-      .container_size(size)
-      .container_gap(size)
-      .child(
-        Icon::new(if snapshot.has_video {
-          IconName::Filmstrip
-        } else {
-          IconName::MusicNote2
-        })
-        .with_size(size),
-      )
-      .child(
-        v_flex()
-          .min_w_0()
-          .flex_1()
-          .container_gap_y(size)
-          .child(
-            IconLabel::new(("player-stage-title", id))
-              .with_size(size)
-              .label(
-                snapshot
-                  .title
-                  .clone()
-                  .unwrap_or_else(|| "Nothing playing".into()),
-              ),
-          )
-          // The artist reads as secondary information: muted colour at the
-          // same tier, never a smaller font.
-          .when_some(snapshot.artist.clone(), |this, artist| {
-            this.child(
-              IconLabel::new(("player-stage-artist", id))
-                .with_size(size)
-                .label(artist)
-                .text_color(theme.muted_foreground),
-            )
-          }),
-      )
-      .into_any_element()
+      .into_any_element(),
+    VideoTransport::Software => {
+      if let Some(image) = snapshot.frame() {
+        video_stage_container(theme)
+          .child(VideoStage::new(
+            ("video-stage", player.entity_id().as_u64()),
+            player.clone(),
+            Some(image.clone()),
+          ))
+          .into_any_element()
+      } else {
+        placeholder_stage(snapshot, player, theme, size)
+      }
+    }
   }
 }
 
-/// The video surface: the player's current frame, letterboxed into bounds.
+/// The box the video surface lives in, shared by both transports.
+fn video_stage_container(theme: &Theme) -> gpui::Div {
+  div()
+    .w_full()
+    .flex_1()
+    .relative()
+    .overflow_hidden()
+    .bg(theme.muted)
+}
+
+/// The track placeholder: icon plus title and artist, for players without a
+/// picture to show.
+fn placeholder_stage(
+  snapshot: &PlayerSnapshot, player: &Entity<Player>, theme: &Theme, size: Size,
+) -> AnyElement {
+  let id = player.entity_id().as_u64();
+  h_flex()
+    .w_full()
+    .items_center()
+    .container_size(size)
+    .container_gap(size)
+    .child(
+      Icon::new(if snapshot.has_video {
+        IconName::Filmstrip
+      } else {
+        IconName::MusicNote2
+      })
+      .with_size(size),
+    )
+    .child(
+      v_flex()
+        .min_w_0()
+        .flex_1()
+        .container_gap_y(size)
+        .child(
+          IconLabel::new(("player-stage-title", id))
+            .with_size(size)
+            .label(
+              snapshot
+                .title
+                .clone()
+                .unwrap_or_else(|| "Nothing playing".into()),
+            ),
+        )
+        // The artist reads as secondary information: muted colour at the
+        // same tier, never a smaller font.
+        .when_some(snapshot.artist.clone(), |this, artist| {
+          this.child(
+            IconLabel::new(("player-stage-artist", id))
+              .with_size(size)
+              .label(artist)
+              .text_color(theme.muted_foreground),
+          )
+        }),
+    )
+    .into_any_element()
+}
+
+/// The video surface: the player's current frame letterboxed into bounds, or
+/// — for the composition transport — the host that keeps a GL surface
+/// attached at this element's bounds and paints nothing.
 ///
 /// This is an element rather than a plain `canvas` because painting video
 /// needs bookkeeping that survives a frame: gpui keeps every painted image in
@@ -244,11 +283,15 @@ fn default_stage(
 struct VideoStage {
   id: ElementId,
   player: Entity<Player>,
-  image: Arc<RenderImage>,
+  /// The frame to paint on the software transport; `None` for the
+  /// composition host, which paints nothing.
+  image: Option<Arc<RenderImage>>,
 }
 
 impl VideoStage {
-  fn new(id: impl Into<ElementId>, player: Entity<Player>, image: Arc<RenderImage>) -> Self {
+  fn new(
+    id: impl Into<ElementId>, player: Entity<Player>, image: Option<Arc<RenderImage>>,
+  ) -> Self {
     Self {
       id: id.into(),
       player,
@@ -265,6 +308,9 @@ struct VideoStageState {
   /// The last render size requested from the player, in device pixels, or
   /// `None` while the stage has never been large enough to render at.
   requested_size: Option<(u32, u32)>,
+  /// The last element bounds a composition surface was attached at, or
+  /// `None` while the stage has never attached one.
+  attached_bounds: Option<Bounds<Pixels>>,
 }
 
 impl IntoElement for VideoStage {
@@ -307,6 +353,65 @@ impl Element for VideoStage {
     &mut self, global_id: Option<&GlobalElementId>, _: Option<&InspectorElementId>,
     bounds: Bounds<Pixels>, style: &mut Style, _: &mut (), window: &mut Window, cx: &mut App,
   ) {
+    // The transport decides what this stage is: a passive host for the GL
+    // surface, or the gpui-image painter of the software frames.
+    if self.player.read(cx).video_transport() == VideoTransport::Composition {
+      self.paint_surface_host(global_id, bounds, window, cx);
+      return;
+    }
+    self.paint_image(global_id, bounds, style, window, cx);
+  }
+}
+
+impl VideoStage {
+  /// The composition stage: keeps the player's video surface attached at this
+  /// element's bounds and paints nothing — the composition child surface
+  /// shows the video above gpui's scene, so anything painted here would be
+  /// hidden behind it.
+  fn paint_surface_host(
+    &mut self, global_id: Option<&GlobalElementId>, bounds: Bounds<Pixels>, window: &mut Window,
+    cx: &mut App,
+  ) {
+    let attach = match global_id {
+      Some(global_id) => {
+        window.with_element_state(global_id, |state: Option<VideoStageState>, _| {
+          let mut state = state.unwrap_or_default();
+          // Attach once, then only when the stage moved or resized; every other
+          // paint leaves the pipeline exactly as it is. A stage below one pixel
+          // per axis still attaches — the player clamps the surface to a
+          // nonzero drawable — because a collapsed stage re-expanding must find
+          // the pipeline alive.
+          let changed = state.attached_bounds.as_ref() != Some(&bounds);
+          if changed {
+            state.attached_bounds = Some(bounds);
+          }
+          (changed, state)
+        })
+      }
+      // Without an id there is no state slot to remember bounds by: attach
+      // every paint rather than track them. `VideoStage::new` always assigns
+      // an id, so this only guards foreign embedding.
+      None => true,
+    };
+    if attach {
+      self.player.update(cx, |player, _| {
+        // Every failure inside — including the fallback to the software
+        // transport — is logged once there and returns `Ok`; the only `Err`
+        // is programming misuse, which the view surfaces as a warning
+        // instead of a panic in paint.
+        if let Err(error) = player.attach_video_surface(window, bounds) {
+          tracing::warn!(%error, "woocraft: attaching the video surface failed");
+        }
+      });
+    }
+  }
+
+  /// The software stage: paints the player's current frame, letterboxed into
+  /// bounds, and keeps the atlas and render size in step with it.
+  fn paint_image(
+    &mut self, global_id: Option<&GlobalElementId>, bounds: Bounds<Pixels>, style: &mut Style,
+    window: &mut Window, cx: &mut App,
+  ) {
     let stage_size = device_size(bounds, window.scale_factor());
     // `None` while the stage is below the minimum render span: a collapsed
     // stage must not have its request clamped up to a 2x2 render.
@@ -318,10 +423,13 @@ impl Element for VideoStage {
           // `Arc::ptr_eq` leaves the painted image alone while the player has
           // not produced a newer frame, so repaints resize, hover or otherwise
           // free nothing.
-          let replaced = state
-            .painted
-            .take_if(|painted| !Arc::ptr_eq(painted, &self.image));
-          state.painted = Some(self.image.clone());
+          let replaced = state.painted.take_if(|painted| {
+            !self
+              .image
+              .as_ref()
+              .is_some_and(|image| Arc::ptr_eq(painted, image))
+          });
+          state.painted = self.image.clone();
           // Requests only exist for renderable sizes, and the last one is
           // kept otherwise, so a stage that collapses and re-expands to the
           // same size does not re-request it.
@@ -354,15 +462,20 @@ impl Element for VideoStage {
       self.player.read(cx).set_video_size(size);
     }
 
+    // No image to paint (the stage was built as a composition host and the
+    // transport fell back between render and paint): leave the stage empty;
+    // the next render builds it from the frames that follow.
+    let Some(image) = self.image.clone() else {
+      return;
+    };
     style.paint(bounds, window, cx, |window, _| {
-      let image_size = self.image.size(0);
+      let image_size = image.size(0);
       let fit = contain(
         bounds,
         i32::from(image_size.width) as f32,
         i32::from(image_size.height) as f32,
       );
-      if let Err(error) =
-        window.paint_image(fit, fit, Corners::default(), self.image.clone(), 0, false)
+      if let Err(error) = window.paint_image(fit, fit, Corners::default(), image.clone(), 0, false)
       {
         tracing::warn!(%error, "woocraft: failed to paint the video frame");
       }

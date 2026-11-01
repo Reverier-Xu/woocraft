@@ -1,17 +1,20 @@
 //! Audio/video player on top of the optional `media` feature.
 //!
 //! ```text
-//! cargo run -p woocraft --features media --example player -- <file-or-url>
-//! cargo run -p woocraft --features media --example player -- --audio <file-or-url>
+//! cargo run -p woocraft --features media --example player -- [--transport=gpu|software] [--audio] <file-or-url>
 //! ```
+//!
+//! `--transport` selects the requested video transport (`gpu` is the default
+//! on Linux, `software` elsewhere); negotiation and any fallback log at
+//! `RUST_LOG=woocraft=warn`.
 
 use gpui::{
   App, AppContext as _, Bounds, Context, Entity, IntoElement, ParentElement as _, Render,
   Styled as _, Window, WindowBounds, WindowOptions, div, prelude::FluentBuilder as _, px,
 };
 use woocraft::{
-  ActiveTheme as _, Player, PlayerOptions, PlayerView, Theme, ThemeMode, TitleBar, h_flex, init,
-  v_flex,
+  ActiveTheme as _, Player, PlayerOptions, PlayerView, Theme, ThemeMode, TitleBar, VideoTransport,
+  h_flex, init, v_flex,
 };
 
 struct PlayerExample {
@@ -21,9 +24,9 @@ struct PlayerExample {
 }
 
 impl PlayerExample {
-  fn new(source: String, video: bool, cx: &mut Context<Self>) -> Self {
+  fn new(source: String, video: bool, transport: VideoTransport, cx: &mut Context<Self>) -> Self {
     let options = if video {
-      PlayerOptions::default().hardware_decoding(Default::default())
+      PlayerOptions::default().video_transport(transport)
     } else {
       PlayerOptions::audio_only()
     };
@@ -64,20 +67,43 @@ impl Render for PlayerExample {
   }
 }
 
+fn usage() -> ! {
+  eprintln!("usage: player [--transport=gpu|software] [--audio] <file-or-url>");
+  std::process::exit(2);
+}
+
 fn main() {
+  // Make the library's `tracing` lines — transport negotiation and fallback
+  // among them — visible on stderr through RUST_LOG.
+  tracing_subscriber::fmt()
+    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    .with_target(false)
+    .init();
+
   let mut args = std::env::args().skip(1);
   let mut video = true;
+  let mut transport = VideoTransport::default();
   let mut source = None;
   for arg in args.by_ref() {
     match arg.as_str() {
       "--audio" => video = false,
-      other => source = Some(other.to_string()),
+      "--transport=gpu" => transport = VideoTransport::Composition,
+      "--transport=software" => transport = VideoTransport::Software,
+      other => {
+        if other.starts_with("--transport=") || other.starts_with("--") {
+          usage();
+        }
+        source = Some(other.to_string());
+      }
     }
   }
-  let source = source.unwrap_or_else(|| {
-    eprintln!("usage: player [--audio] <file-or-url>");
-    std::process::exit(2);
-  });
+  let source = match source {
+    Some(source) => source,
+    None => usage(),
+  };
+  eprintln!(
+    "player: requested video transport {transport:?}; negotiation and fallback log at RUST_LOG=woocraft=warn"
+  );
 
   gpui_platform::application()
     .with_assets(woocraft::Assets)
@@ -96,7 +122,7 @@ fn main() {
         },
         move |_window, cx| {
           let source = source.clone();
-          cx.new(|cx| PlayerExample::new(source, video, cx))
+          cx.new(|cx| PlayerExample::new(source, video, transport, cx))
         },
       )
       .expect("open player example window failed");

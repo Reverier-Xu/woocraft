@@ -102,8 +102,26 @@ zstd          = { workspace = true, optional = true }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
+# The player example wires the library's `tracing` lines (transport
+# negotiation and fallback among them) to stderr through RUST_LOG.
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+  "env-filter",
+  "fmt",
+] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# GPU video transport for the `media` feature: an OpenGL context owned by the
+# player renders mpv frames straight into a gpui composition surface. Linux
+# only; other platforms report the composition transport as unsupported and
+# stay on the software path.
+glutin            = { version = "0.32", optional = true, default-features = false, features = [
+  "egl",
+  "wayland",
+] }
+# Version-locked to the raw-window-handle gpui uses, so the handles handed over
+# by `PlatformSurfaceAttachment::platform_handle` downcast to the same types.
+raw-window-handle = { version = "0.6", optional = true }
+
 # The reduced-motion preference, read through the XDG desktop portal's
 # Settings interface. The same version and features `gpui-fast-linux` already
 # pulls in, so this adds no new code to the build.
@@ -152,7 +170,13 @@ required-features = ["media"]
 default = ["resources", "tree-sitter-languages", "terminal"]
 resources = ["dep:rust-embed", "dep:zstd"]
 terminal = ["dep:woocraft-terminal"]
-media = ["dep:image", "dep:libmpv2", "dep:libmpv2-sys"]
+media = [
+  "dep:image",
+  "dep:libmpv2",
+  "dep:libmpv2-sys",
+  "dep:glutin",
+  "dep:raw-window-handle",
+]
 tray = [
   "dep:crossbeam-channel",
   "dep:image",

@@ -4,11 +4,14 @@
 //! output works on every platform gpui runs on, without an OpenGL/EGL/WGL
 //! context of our own and without sharing textures across graphics APIs. Frames
 //! are produced on a dedicated thread and handed to the UI through a bounded
-//! channel: a slow or hidden window drops frames instead of growing memory.
+//! channel owned by the [`Player`](super::player::Player): a slow or hidden
+//! window drops frames instead of growing memory.
 //!
-//! The GPU path (a producer-owned native surface through gpui's window
-//! composition, so video never round-trips through the CPU) replaces this
-//! module's transport later; [`VideoOutput`] is the seam it slots into.
+//! This is one half of the player's two video transports. Its sibling
+//! `gpu.rs` (Linux) renders mpv straight into a gpui composition surface
+//! through GL, with no CPU copy; the player negotiates between the two and
+//! falls back to this one wherever the GL path cannot run. See
+//! `docs/media-gpu.md` for the full map.
 
 use std::{
   ffi::{CString, c_char, c_void},
@@ -22,7 +25,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use async_channel::{Receiver, Sender};
+use async_channel::Sender;
 use libmpv2::Mpv;
 use libmpv2_sys as sys;
 
@@ -58,20 +61,22 @@ impl std::fmt::Debug for VideoFrame {
 
 /// A running software video output.
 ///
-/// Dropping it stops the render thread; the frame channel closes with it.
+/// Dropping it stops the render thread; the frame channel lives on with the
+/// player, which owns it, so a later output can publish to the same pump.
 pub struct VideoOutput {
-  frames: Receiver<Arc<VideoFrame>>,
   sizes: mpsc::Sender<(u32, u32)>,
   shutdown: Arc<AtomicBool>,
   thread: Option<thread::JoinHandle<()>>,
 }
 
 impl VideoOutput {
-  /// Starts producing frames for `mpv`, scaled to `width` x `height`.
-  pub(crate) fn start(mpv: Arc<Mpv>, width: u32, height: u32) -> Result<Self> {
+  /// Starts producing frames for `mpv`, scaled to `width` x `height` and
+  /// published on `frames` — the player's stable frame channel.
+  pub(crate) fn start(
+    mpv: Arc<Mpv>, width: u32, height: u32, frames: Sender<Arc<VideoFrame>>,
+  ) -> Result<Self> {
     let width = width.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE);
     let height = height.clamp(MIN_RENDER_SIZE, MAX_RENDER_SIZE);
-    let (frame_tx, frame_rx) = async_channel::bounded::<Arc<VideoFrame>>(2);
     let (size_tx, size_rx) = mpsc::channel::<(u32, u32)>();
     let shutdown = Arc::new(AtomicBool::new(false));
 
@@ -79,23 +84,17 @@ impl VideoOutput {
     let thread = thread::Builder::new()
       .name("woocraft-mpv-video".into())
       .spawn(move || {
-        if let Err(error) = render_loop(mpv, width, height, size_rx, frame_tx, thread_shutdown) {
+        if let Err(error) = render_loop(mpv, width, height, size_rx, frames, thread_shutdown) {
           tracing::warn!(%error, "woocraft: mpv video output stopped");
         }
       })
       .map_err(|error| anyhow!("failed to spawn the mpv video thread: {error}"))?;
 
     Ok(Self {
-      frames: frame_rx,
       sizes: size_tx,
       shutdown,
       thread: Some(thread),
     })
-  }
-
-  /// The channel every rendered frame arrives on.
-  pub fn frames(&self) -> &Receiver<Arc<VideoFrame>> {
-    &self.frames
   }
 
   /// Requests a new render size, clamped per axis. Requests are coalesced on

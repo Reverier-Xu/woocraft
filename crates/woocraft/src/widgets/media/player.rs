@@ -11,7 +11,8 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
-use gpui::{Context, EventEmitter, RenderImage, Task};
+use async_channel::Sender;
+use gpui::{Bounds, Context, EventEmitter, Pixels, RenderImage, Task, Window};
 use libmpv2::{Format, Mpv};
 
 use super::video::{VideoFrame, VideoOutput};
@@ -54,6 +55,69 @@ pub enum PropertyValue {
   Double(f64),
 }
 
+/// How video frames reach the screen.
+///
+/// [`PlayerOptions::video_transport`] requests one; [`Player::video_transport`]
+/// reports what actually runs after the platform had its say.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VideoTransport {
+  /// mpv renders RGBA frames into system memory on a dedicated thread and the
+  /// view paints them as gpui images. Works everywhere gpui does; costs a
+  /// decode download and a texture upload per frame.
+  Software,
+  /// mpv renders through the player's own OpenGL context straight into a gpui
+  /// composition surface: no CPU copy, no texture upload, the compositor
+  /// shows the video. Implemented and verified on Linux (X11 and Wayland)
+  /// only; requests that cannot run fall back to [`Self::Software`] and log
+  /// the reason once. See `docs/media-gpu.md` for the frame path and thread
+  /// model.
+  Composition,
+}
+
+impl Default for VideoTransport {
+  /// [`Self::Composition`] on Linux, where the GL path is implemented;
+  /// [`Self::Software`] everywhere else.
+  fn default() -> Self {
+    if composition_supported() {
+      Self::Composition
+    } else {
+      Self::Software
+    }
+  }
+}
+
+/// Whether this build carries the GPU transport at all.
+pub(crate) const fn composition_supported() -> bool {
+  cfg!(target_os = "linux")
+}
+
+/// Why a requested [`VideoTransport::Composition`] was refused without a
+/// window. Attach-time failures carry their platform error in the log line
+/// instead; this type covers the decisions made up front.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TransportFallback {
+  /// The platform has no GPU transport implementation. Linux only, on
+  /// purpose: no other platform's path has been written or tested.
+  UnsupportedPlatform,
+}
+
+/// Decides which transport a player runs: what was requested, whether video
+/// exists at all, and what the platform can do — before any window is needed.
+pub(crate) fn negotiate(
+  requested: VideoTransport, video_enabled: bool,
+) -> (VideoTransport, Option<TransportFallback>) {
+  match (requested, video_enabled) {
+    // Nothing to transport without video, whatever was requested.
+    (_, false) => (VideoTransport::Software, None),
+    (VideoTransport::Software, _) => (VideoTransport::Software, None),
+    (VideoTransport::Composition, _) if !composition_supported() => (
+      VideoTransport::Software,
+      Some(TransportFallback::UnsupportedPlatform),
+    ),
+    (VideoTransport::Composition, _) => (VideoTransport::Composition, None),
+  }
+}
+
 /// Options a player is created with. They map onto mpv options one to one.
 #[derive(Clone, Debug)]
 pub struct PlayerOptions {
@@ -62,6 +126,10 @@ pub struct PlayerOptions {
   pub video: bool,
   /// Resolution the software video output renders at, in pixels.
   pub video_size: (u32, u32),
+  /// The video transport to request. See [`VideoTransport`]; the player
+  /// negotiates what actually runs against the platform and reports it
+  /// through [`Player::video_transport`].
+  pub video_transport: VideoTransport,
   /// Initial volume, 0..=100.
   pub volume: f64,
   /// Whether to start muted.
@@ -83,6 +151,7 @@ impl Default for PlayerOptions {
     Self {
       video: true,
       video_size: (1280, 720),
+      video_transport: VideoTransport::default(),
       volume: 100.0,
       muted: false,
       speed: 1.0,
@@ -110,6 +179,14 @@ impl PlayerOptions {
   /// Enables or disables video output.
   pub fn video(mut self, video: bool) -> Self {
     self.video = video;
+    self
+  }
+
+  /// Requests a video transport. This is what the player tries; what runs is
+  /// negotiated against the platform (and against the first surface attach)
+  /// and reported through [`Player::video_transport`].
+  pub fn video_transport(mut self, transport: VideoTransport) -> Self {
+    self.video_transport = transport;
     self
   }
 }
@@ -215,6 +292,15 @@ pub struct Chapter {
 /// The entity owns a control handle and a dedicated event thread; all methods
 /// take `&self` and can be called from anywhere on the UI thread. Dropping the
 /// entity terminates the core.
+/// One `loadfile` the host asked for before the composition surface existed.
+#[derive(Clone, Debug)]
+struct PendingLoad {
+  uri: String,
+  /// `append` when the host called [`Player::enqueue`], `replace` for
+  /// [`Player::load`].
+  append: bool,
+}
+
 pub struct Player {
   mpv: Arc<Mpv>,
   options: PlayerOptions,
@@ -222,6 +308,37 @@ pub struct Player {
   metadata: BTreeMap<String, String>,
   video: Option<VideoOutput>,
   video_image: Option<Arc<RenderImage>>,
+  /// The frame channel every software output of this player publishes to. It
+  /// outlives any single [`VideoOutput`], so a transport fallback can start a
+  /// new one without re-spawning the UI-side frame pump.
+  frame_tx: Sender<Arc<VideoFrame>>,
+  /// The transport this player runs: what was negotiated at construction and,
+  /// on Linux, confirmed or abandoned by the first surface attach.
+  transport: VideoTransport,
+  /// Whether the transport fallback has been logged; a player falls back at
+  /// most once (composition → software is terminal).
+  fallback_logged: bool,
+  /// Whether the successful composition negotiation has been logged.
+  negotiated_logged: bool,
+  /// The attached GL pipeline, on platforms that carry it (Linux). `None`
+  /// while unattached.
+  #[cfg(target_os = "linux")]
+  composition: Option<super::gpu::CompositionVideo>,
+  /// Media the host asked to load while the composition transport was
+  /// negotiated but had no surface yet. mpv requires the render context to
+  /// exist before a `vo=libmpv` output is created, so loading first would
+  /// leave the VO uninitialised and the render thread waiting for frames that
+  /// never come; these are replayed on the first successful attach.
+  pending_loads: Vec<PendingLoad>,
+  /// The media most recently requested through [`Self::load`], so an attach
+  /// that happens after playback started can recreate the video output at the
+  /// current position.
+  current_uri: Option<String>,
+  /// A surface detached without its window, waiting to be removed from the
+  /// composition tree at the next window-having call — or by the window's own
+  /// destruction, which frees it regardless. At most one entry; see
+  /// `docs/media-gpu.md`.
+  stale_surface: Option<(gpui::CompositionSurfaceId, gpui::WindowCompositionSurface)>,
   shutdown: Arc<AtomicBool>,
   event_thread: Option<JoinHandle<()>>,
   event_task: Option<Task<()>>,
@@ -234,7 +351,15 @@ impl Player {
   /// Creates a player. mpv is initialized on the calling thread; a failure is
   /// reported through [`PlayerState::error`] instead of failing construction,
   /// so views can be built unconditionally.
+  ///
+  /// The transport is negotiated here: a composition request that this
+  /// platform cannot run is downgraded to software and logged once. A
+  /// composition request that Linux *can* run stays pending until the first
+  /// [`Self::attach_video_surface`]; only that call proves the window's
+  /// compositor, EGL and the mpv render context can actually work together.
   pub fn new(cx: &mut Context<Self>, options: PlayerOptions) -> Self {
+    let (transport, fallback) = negotiate(options.video_transport, options.video);
+    let (frame_tx, frame_rx) = async_channel::bounded::<Arc<VideoFrame>>(2);
     let mut player = Self {
       // Replaced below; mpv handles are not nullable in the public type.
       mpv: Arc::new(Mpv::new().expect("mpv_create")),
@@ -248,6 +373,15 @@ impl Player {
       metadata: BTreeMap::new(),
       video: None,
       video_image: None,
+      frame_tx,
+      transport,
+      fallback_logged: false,
+      negotiated_logged: false,
+      #[cfg(target_os = "linux")]
+      composition: None,
+      pending_loads: Vec::new(),
+      current_uri: None,
+      stale_surface: None,
       shutdown: Arc::new(AtomicBool::new(false)),
       event_thread: None,
       event_task: None,
@@ -260,7 +394,15 @@ impl Player {
         player.observe_default_properties();
         player.start_event_pump(cx);
         if options.video {
-          player.start_video(cx);
+          player.start_frame_pump(cx, frame_rx);
+          if let Some(reason) = fallback {
+            player.log_transport_fallback(reason);
+          }
+          // The composition transport starts its output at the first surface
+          // attach instead; software starts here.
+          if player.transport == VideoTransport::Software {
+            player.start_video();
+          }
         }
       }
       Err(error) => {
@@ -292,6 +434,29 @@ impl Player {
     self.options.video
   }
 
+  /// The transport video actually runs. [`VideoTransport::Composition`]
+  /// means the player will render through GL into a gpui composition surface
+  /// once [`Self::attach_video_surface`] succeeds (before that attach it is
+  /// the pending plan); [`VideoTransport::Software`] means frames arrive as
+  /// gpui images. Every fallback from composition to software is logged once
+  /// through `tracing` at `warn` level, as is the successful negotiation.
+  pub fn video_transport(&self) -> VideoTransport {
+    self.transport
+  }
+
+  /// Whether a composition surface is currently attached. The view uses this
+  /// to detach when its video stage disappears.
+  pub(crate) fn composition_attached(&self) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+      self.composition.is_some()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+      false
+    }
+  }
+
   /// Requests a new render resolution for the video output, in pixels,
   /// clamped to a sane range per axis. The render thread reallocates its buffer
   /// on its own thread, so an in-flight frame is never invalidated, and the
@@ -304,13 +469,76 @@ impl Player {
   }
 
   /// Loads `uri` (a path or URL) and starts playing it.
-  pub fn load(&self, uri: &str) -> Result<()> {
+  pub fn load(&mut self, uri: &str) -> Result<()> {
+    self.current_uri = Some(uri.to_string());
+    if self.defer_until_attach() {
+      self.pending_loads.push(PendingLoad {
+        uri: uri.to_string(),
+        append: false,
+      });
+      return Ok(());
+    }
     self.command("loadfile", &[uri, "replace"])
   }
 
   /// Appends `uri` to the playlist.
-  pub fn enqueue(&self, uri: &str) -> Result<()> {
+  pub fn enqueue(&mut self, uri: &str) -> Result<()> {
+    if self.defer_until_attach() {
+      self.pending_loads.push(PendingLoad {
+        uri: uri.to_string(),
+        append: true,
+      });
+      return Ok(());
+    }
     self.command("loadfile", &[uri, "append"])
+  }
+
+  /// Whether a `loadfile` must wait for the composition surface.
+  ///
+  /// Only the composition transport needs this: the software output creates its
+  /// own render context as soon as it starts, while the GL context can only
+  /// exist once a window has handed the player a surface.
+  fn defer_until_attach(&self) -> bool {
+    self.options.video
+      && self.transport == VideoTransport::Composition
+      && !self.composition_attached()
+  }
+
+  /// Replays the loads that were deferred, then — if the host had already
+  /// started playback before the surface existed — recreates the video output
+  /// by re-loading the current media at the position playback reached.
+  ///
+  /// A re-load is the only reliable way back: mpv created (and tore down) a
+  /// `vo=libmpv` output at the first `loadfile`, and only a new load makes it
+  /// create one with our render context in place.
+  fn resume_after_attach(&mut self) {
+    if !self.pending_loads.is_empty() {
+      for load in std::mem::take(&mut self.pending_loads) {
+        let mode = if load.append { "append" } else { "replace" };
+        if let Err(error) = self.command("loadfile", &[load.uri.as_str(), mode]) {
+          tracing::warn!(%error, "woocraft: deferred loadfile failed");
+        }
+      }
+      return;
+    }
+
+    let Some(uri) = self.current_uri.clone() else {
+      return;
+    };
+    let loaded = self
+      .get_property::<String>("path")
+      .map(|path| !path.is_empty())
+      .unwrap_or(false);
+    if !loaded {
+      return;
+    }
+    let position = self.state.position.max(0.0);
+    if let Err(error) = self.command(
+      "loadfile",
+      &[uri.as_str(), "replace", &format!("start={position:.3}")],
+    ) {
+      tracing::warn!(%error, "woocraft: recreating the video output after attach failed");
+    }
   }
 
   /// Starts or resumes playback.
@@ -572,26 +800,39 @@ impl Player {
     self.event_task = Some(task);
   }
 
-  fn start_video(&mut self, cx: &mut Context<Self>) {
-    let (width, height) = self.options.video_size;
-    match VideoOutput::start(self.mpv.clone(), width, height) {
-      Ok(video) => {
-        let frames = video.frames().clone();
-        self.video = Some(video);
-        let task = cx.spawn(async move |this, cx| {
-          while let Ok(frame) = frames.recv().await {
-            let image = render_image(&frame);
-            let updated = this.update(cx, |player, cx| {
-              player.video_image = Some(image);
-              cx.notify();
-            });
-            if updated.is_err() {
-              break;
-            }
-          }
+  /// Spawns the one UI-side frame pump, which stays alive for the whole
+  /// player: every software output — the initial one and any started by a
+  /// transport fallback — publishes to the player's stable frame channel, so
+  /// switching transports never re-spawns UI tasks.
+  fn start_frame_pump(
+    &mut self, cx: &mut Context<Self>, frames: async_channel::Receiver<Arc<VideoFrame>>,
+  ) {
+    let task = cx.spawn(async move |this, cx| {
+      while let Ok(frame) = frames.recv().await {
+        let image = render_image(&frame);
+        let updated = this.update(cx, |player, cx| {
+          player.video_image = Some(image);
+          cx.notify();
         });
-        self.frame_task = Some(task);
+        if updated.is_err() {
+          break;
+        }
       }
+    });
+    self.frame_task = Some(task);
+  }
+
+  /// Starts the software video output, if the player wants one and does not
+  /// already run one. Deliberately context-free: the fallback from the
+  /// composition transport needs it from `attach_video_surface`, which has no
+  /// entity context.
+  fn start_video(&mut self) {
+    if self.video.is_some() || !self.options.video {
+      return;
+    }
+    let (width, height) = self.options.video_size;
+    match VideoOutput::start(self.mpv.clone(), width, height, self.frame_tx.clone()) {
+      Ok(video) => self.video = Some(video),
       Err(error) => self.state.error = Some(error.to_string()),
     }
   }
@@ -867,10 +1108,187 @@ impl Player {
   pub fn frame_back_step(&self) -> Result<()> {
     self.command("frame-back-step", &[])
   }
+
+  // ----- video surface (composition transport) ------------------------------
+
+  /// Attaches the player's video output to a composition surface of `window`,
+  /// placed and sized at `bounds` (window coordinates, converted to device
+  /// pixels with the window's scale factor).
+  ///
+  /// The first call performs the whole setup — window composition, the native
+  /// surface, the EGL context and the mpv render context — and starts the
+  /// render thread; later calls only move and resize. [`PlayerView`] drives
+  /// this from its stage's paint.
+  ///
+  /// A machine that cannot run the GL path is not an error for the host: any
+  /// failing step is logged once through `tracing` with the failed call and
+  /// the platform error, the player switches its negotiated transport to
+  /// [`VideoTransport::Software`] — starting that output if it was not
+  /// running — and this returns `Ok(())`, so playback simply continues. `Err`
+  /// is reserved for programming misuse, such as calling this on a player
+  /// built with [`PlayerOptions::video`](false).
+  ///
+  /// No-op for the software transport, on either side of a fallback.
+  pub fn attach_video_surface(
+    &mut self, window: &mut Window, bounds: Bounds<Pixels>,
+  ) -> Result<()> {
+    if !self.options.video {
+      return Err(anyhow!(
+        "attach_video_surface needs a player with video enabled"
+      ));
+    }
+    if self.transport == VideoTransport::Software {
+      return Ok(());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+      // The GL path is Linux-only by design; see the platform matrix in
+      // `docs/media-gpu.md`. Negotiation already downgraded the transport at
+      // construction, so this arm only serves hosts that attach regardless.
+      let _ = window;
+      self.fall_back_to_software(
+        None,
+        "the composition transport is not implemented on this platform".into(),
+      );
+      return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      let device = bounds.to_device_pixels(window.scale_factor());
+
+      // Attached already: this call only moves and resizes. A failure there
+      // (the surface's platform window refusing the new geometry) is a
+      // fallback like any other.
+      let update_failed = match self.composition.as_mut() {
+        Some(video) => video.update_bounds(device).err(),
+        None => None,
+      };
+      if let Some(error) = update_failed {
+        self.fall_back_to_software(Some(window), format!("{error:#}"));
+        return Ok(());
+      }
+      if self.composition.is_some() {
+        return Ok(());
+      }
+
+      // First attach: unregister any surface a window-less detach left
+      // behind, then build the pipeline. `enable_window_composition` is a
+      // capability check plus a controller and safe to take again.
+      if let Some((stale_id, stale_handle)) = self.stale_surface.take() {
+        if let Ok(composition) = window.enable_window_composition()
+          && let Err(error) = composition.remove_surface(stale_id)
+        {
+          tracing::warn!(%error, "woocraft: removing a detached video surface failed");
+        }
+        // Dropping the handle now that the tree no longer references it
+        // destroys the hidden platform surface for good.
+        drop(stale_handle);
+      }
+
+      match super::gpu::CompositionVideo::attach(&self.mpv, window, device) {
+        Ok(video) => {
+          self.composition = Some(video);
+          self.resume_after_attach();
+          if !self.negotiated_logged {
+            tracing::warn!(
+              "woocraft: video transport: composition \
+               (mpv renders into a gpui composition surface through GL, no CPU copy)"
+            );
+            self.negotiated_logged = true;
+          }
+        }
+        Err(error) => {
+          self.fall_back_to_software(Some(window), format!("{error:#}"));
+        }
+      }
+      Ok(())
+    }
+  }
+
+  /// Detaches the player's video surface: stops the render thread (which
+  /// frees the mpv render context and releases the GL context inside it) and
+  /// hides the composition surface. Idempotent, and a no-op for the software
+  /// transport or when nothing is attached.
+  ///
+  /// Without a window the surface's composition-tree entry cannot be removed
+  /// yet; it is kept hidden and unregistered at the next attach, or freed by
+  /// the window's own destruction — at most one such surface exists per
+  /// player (see `docs/media-gpu.md`). The view calls the window-having
+  /// [`Self::detach_video_surface_in_window`] variant while it still has one.
+  pub fn detach_video_surface(&mut self) {
+    self.detach_surface(None);
+  }
+
+  /// [`Self::detach_video_surface`], removing the composition surface from
+  /// `window`'s composition tree immediately. Used by the view when its video
+  /// stage disappears while the window is at hand.
+  pub(crate) fn detach_video_surface_in_window(&mut self, window: &mut Window) {
+    self.detach_surface(Some(window));
+  }
+
+  /// Tears down the composition pipeline, removing its surface when a window
+  /// is available and parking it as stale otherwise.
+  fn detach_surface(&mut self, window: Option<&mut Window>) {
+    #[cfg(target_os = "linux")]
+    if let Some(mut video) = self.composition.take() {
+      video.stop();
+      video.hide();
+      match window {
+        Some(window) => {
+          if let Ok(composition) = window.enable_window_composition()
+            && let Err(error) = composition.remove_surface(video.id())
+          {
+            tracing::warn!(
+              %error,
+              "woocraft: removing the video composition surface failed"
+            );
+          }
+        }
+        None => {
+          self.stale_surface = video.take_surface().map(|surface| (video.id(), surface));
+        }
+      }
+    }
+  }
+
+  /// The terminal switch to the software transport: tears down any attached
+  /// composition pipeline, starts the software output if it is not running,
+  /// and logs `reason` once. Called from the attach path, where the platform
+  /// has just refused a step.
+  fn fall_back_to_software(&mut self, window: Option<&mut Window>, reason: String) {
+    if !self.fallback_logged {
+      tracing::warn!("woocraft: video transport fell back to software: {reason}");
+      self.fallback_logged = true;
+    }
+    self.transport = VideoTransport::Software;
+    // Detach before starting the software output: mpv allows one render
+    // context per core, so the GL one must be freed before the software one
+    // is created.
+    self.detach_surface(window);
+    self.start_video();
+  }
+
+  /// Logs why a requested composition transport was refused up front. The
+  /// counterpart of the attach-time fallback log, and like it, once.
+  fn log_transport_fallback(&mut self, fallback: TransportFallback) {
+    let reason = match fallback {
+      TransportFallback::UnsupportedPlatform => {
+        "the composition transport is implemented on Linux (X11/Wayland) only"
+      }
+    };
+    tracing::warn!("woocraft: video transport fell back to software: {reason}");
+    self.fallback_logged = true;
+  }
 }
 
 impl Drop for Player {
   fn drop(&mut self) {
+    // The GL render thread first: joining it frees the mpv render context,
+    // and the core below must never see a render context at its own
+    // destruction.
+    self.detach_video_surface();
     self.shutdown.store(true, Ordering::SeqCst);
     if let Some(thread) = self.event_thread.take() {
       let _ = thread.join();
@@ -1121,6 +1539,68 @@ mod tests {
     assert_eq!(options.hwdec, HwDec::No);
     let options = PlayerOptions::default().hardware_decoding(HwDec::AutoSafe);
     assert_eq!(options.hwdec, HwDec::AutoSafe);
+  }
+
+  #[test]
+  fn transport_negotiation_maps_requested_to_negotiated_with_a_reason() {
+    // Software requested: nothing to negotiate, no fallback.
+    assert_eq!(
+      negotiate(VideoTransport::Software, true),
+      (VideoTransport::Software, None)
+    );
+    // Without video there is nothing to transport, whatever was requested.
+    assert_eq!(
+      negotiate(VideoTransport::Composition, false),
+      (VideoTransport::Software, None)
+    );
+    // Composition on a platform that carries the GL path stays composition;
+    // elsewhere it is refused with exactly one reason. Attach-time failures
+    // are decided by the window, not here, and log their platform error.
+    if composition_supported() {
+      assert_eq!(
+        negotiate(VideoTransport::Composition, true),
+        (VideoTransport::Composition, None)
+      );
+    } else {
+      assert_eq!(
+        negotiate(VideoTransport::Composition, true),
+        (
+          VideoTransport::Software,
+          Some(TransportFallback::UnsupportedPlatform)
+        )
+      );
+    }
+  }
+
+  #[test]
+  fn transport_default_and_builder_follow_the_platform() {
+    // The default request follows what this build can actually run.
+    if composition_supported() {
+      assert_eq!(VideoTransport::default(), VideoTransport::Composition);
+      assert_eq!(
+        PlayerOptions::default().video_transport,
+        VideoTransport::Composition
+      );
+    } else {
+      assert_eq!(VideoTransport::default(), VideoTransport::Software);
+      assert_eq!(
+        PlayerOptions::default().video_transport,
+        VideoTransport::Software
+      );
+    }
+    // And the builder overrides it.
+    assert_eq!(
+      PlayerOptions::default()
+        .video_transport(VideoTransport::Software)
+        .video_transport,
+      VideoTransport::Software
+    );
+    assert_eq!(
+      PlayerOptions::audio_only()
+        .video_transport(VideoTransport::Composition)
+        .video_transport,
+      VideoTransport::Composition
+    );
   }
 
   #[test]
