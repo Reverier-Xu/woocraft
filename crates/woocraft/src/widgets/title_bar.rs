@@ -779,7 +779,13 @@ impl RenderOnce for TitleBar {
                       .subscribe(&slider_state, cx, {
                         let on_zoom_change = on_zoom_change.clone();
                         move |_, event: &SliderEvent, window, cx| {
-                          let SliderEvent::Change(value) = event;
+                          let value = match event {
+                            SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+                            // A non-immediate drag preview is not applied by
+                            // the host; the value arrives again as `Commit`
+                            // when the pointer is released.
+                            SliderEvent::Preview(_) => return,
+                          };
                           let factor = value.end() / 100.;
                           TitleBar::apply_zoom_factor(factor, window, cx);
                           if let Some(handler) = on_zoom_change.as_ref() {

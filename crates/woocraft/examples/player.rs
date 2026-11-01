@@ -59,8 +59,8 @@ use woocraft::{
   ActiveTheme as _, Button, Disableable, Divider, DropdownMenu, Icon, IconLabel, IconName, Input,
   InputEvent, InputState, Player, PlayerEvent, PlayerOptions, PlayerPlaylist, PlayerTrackMenu,
   PlayerView, PopupMenuItem, PropertyValue, ScrollableElement, ScrollbarShow, Sizable, Size,
-  Slider, SliderEvent, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track,
-  TrackKind, VideoTransport, h_flex, init, translate_woocraft, v_flex,
+  Slider, SliderEvent, SliderOrigin, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar,
+  Tooltip, Track, TrackKind, VideoTransport, h_flex, init, translate_woocraft, v_flex,
 };
 
 /// The decoder menu entries, as mpv `hwdec` values: the four generic modes
@@ -83,9 +83,10 @@ const SPEEDS: [f64; 4] = [0.5, 1.0, 1.5, 2.0];
 
 /// `(frequency Hz, gain dB)` bands of the equalizer presets, applied through
 /// `Player::set_equalizer`.
-const EQ_BASS: [(f64, f64); 2] = [(60.0, 5.0), (200.0, 2.0)];
-const EQ_MID: [(f64, f64); 1] = [(1000.0, 4.0)];
-const EQ_TREBLE: [(f64, f64); 2] = [(4000.0, 4.0), (8000.0, 3.0)];
+/// Centre frequencies of the three equalizer bands, in Hz.
+const EQ_BASS_HZ: f64 = 80.0;
+const EQ_MID_HZ: f64 = 1_000.0;
+const EQ_TREBLE_HZ: f64 = 10_000.0;
 
 /// The opening state parsed from the CLI.
 #[derive(Clone)]
@@ -185,6 +186,9 @@ struct PlayerApp {
   subtitle_path: Entity<InputState>,
   volume: Entity<SliderState>,
   balance: Entity<SliderState>,
+  eq_bass: Entity<SliderState>,
+  eq_mid: Entity<SliderState>,
+  eq_treble: Entity<SliderState>,
   sub_scale: Entity<SliderState>,
   sub_pos: Entity<SliderState>,
   _player_subscription: Subscription,
@@ -233,6 +237,22 @@ impl PlayerApp {
         .step(0.05)
         .default_value(0.0)
     });
+    // Equalizer bands: a gain in dB around zero, so the fill grows from the
+    // middle, and ticks make the steps readable.
+    let mut eq_band = || {
+      cx.new(|_| {
+        SliderState::new()
+          .min(-12.0)
+          .max(12.0)
+          .step(1.0)
+          .default_value(0.0)
+          .with_origin(SliderOrigin::Middle)
+          .with_ticks(true)
+      })
+    };
+    let eq_bass = eq_band();
+    let eq_mid = eq_band();
+    let eq_treble = eq_band();
     let sub_scale = cx.new(|_| {
       SliderState::new()
         .min(0.5)
@@ -277,6 +297,9 @@ impl PlayerApp {
       subtitle_path,
       volume,
       balance,
+      eq_bass,
+      eq_mid,
+      eq_treble,
       sub_scale,
       sub_pos,
       _player_subscription: player_subscription,
@@ -325,10 +348,45 @@ impl PlayerApp {
       ));
     }
 
+    // Equalizer bands drive one filter chain: every band change re-applies the
+    // three gains together, so they compose instead of replacing each other.
+    for band in [
+      self.eq_bass.clone(),
+      self.eq_mid.clone(),
+      self.eq_treble.clone(),
+    ] {
+      subscriptions.push(
+        cx.subscribe(&band, |this: &mut Self, _, event: &SliderEvent, cx| {
+          let value = match event {
+            SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+            SliderEvent::Preview(_) => return,
+          };
+          // Range sliders are not used for the bands, so the committed single
+          // value is what the filter chain takes.
+          debug_assert!(!value.is_range());
+          let bands = [
+            (EQ_BASS_HZ, this.eq_bass.read(cx).value().start()),
+            (EQ_MID_HZ, this.eq_mid.read(cx).value().start()),
+            (EQ_TREBLE_HZ, this.eq_treble.read(cx).value().start()),
+          ];
+          let bands: Vec<(f64, f64)> = bands
+            .into_iter()
+            .map(|(hz, gain)| (hz, f64::from(gain)))
+            .collect();
+          this.call_player(cx, "equalizer", move |player| player.set_equalizer(&bands));
+        }),
+      );
+    }
+
     subscriptions.push(cx.subscribe(
       &self.volume,
       |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
+        let value = match event {
+          SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+          // A non-immediate drag preview is not applied by the host; the value
+          // arrives again as `Commit` when the pointer is released.
+          SliderEvent::Preview(_) => return,
+        };
         // A player-driven sync echoes back as a user drag would; only genuine
         // drags may write the volume.
         if this.pending_volume_echoes > 0 {
@@ -342,7 +400,12 @@ impl PlayerApp {
     subscriptions.push(cx.subscribe(
       &self.balance,
       |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
+        let value = match event {
+          SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+          // A non-immediate drag preview is not applied by the host; the value
+          // arrives again as `Commit` when the pointer is released.
+          SliderEvent::Preview(_) => return,
+        };
         let balance = f64::from(value.start()).clamp(-1.0, 1.0);
         this.call_player(cx, "balance", move |player| player.set_balance(balance));
       },
@@ -350,7 +413,12 @@ impl PlayerApp {
     subscriptions.push(cx.subscribe(
       &self.sub_scale,
       |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
+        let value = match event {
+          SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+          // A non-immediate drag preview is not applied by the host; the value
+          // arrives again as `Commit` when the pointer is released.
+          SliderEvent::Preview(_) => return,
+        };
         let scale = f64::from(value.start());
         this.call_player(cx, "sub-scale", move |player| {
           player.set_subtitle_scale(scale)
@@ -360,7 +428,12 @@ impl PlayerApp {
     subscriptions.push(cx.subscribe(
       &self.sub_pos,
       |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
+        let value = match event {
+          SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+          // A non-immediate drag preview is not applied by the host; the value
+          // arrives again as `Commit` when the pointer is released.
+          SliderEvent::Preview(_) => return,
+        };
         let position = f64::from(value.start());
         this.call_player(cx, "sub-pos", move |player| {
           player.set_subtitle_position(position)
@@ -1043,34 +1116,44 @@ impl PlayerApp {
         size,
         theme,
       ))
+      .child(slider_setting(
+        "eq-bass",
+        t("media.eq_bass"),
+        format!("{:+.0} dB", self.eq_bass.read(cx).value().start()),
+        &self.eq_bass,
+        size,
+        theme,
+      ))
+      .child(slider_setting(
+        "eq-mid",
+        t("media.eq_mid"),
+        format!("{:+.0} dB", self.eq_mid.read(cx).value().start()),
+        &self.eq_mid,
+        size,
+        theme,
+      ))
+      .child(slider_setting(
+        "eq-treble",
+        t("media.eq_treble"),
+        format!("{:+.0} dB", self.eq_treble.read(cx).value().start()),
+        &self.eq_treble,
+        size,
+        theme,
+      ))
       .child(setting_row(
         t("media.equalizer"),
-        h_flex()
-          .component_gap(size)
-          .child(
-            Button::new("eq-bass")
-              .with_size(size)
-              .label(t("media.eq_bass"))
-              .on_click(cx.listener(|this, _, _, cx| {
-                this.call_player(cx, "equalizer", |player| player.set_equalizer(&EQ_BASS))
-              })),
-          )
-          .child(
-            Button::new("eq-mid")
-              .with_size(size)
-              .label(t("media.eq_mid"))
-              .on_click(cx.listener(|this, _, _, cx| {
-                this.call_player(cx, "equalizer", |player| player.set_equalizer(&EQ_MID))
-              })),
-          )
-          .child(
-            Button::new("eq-treble")
-              .with_size(size)
-              .label(t("media.eq_treble"))
-              .on_click(cx.listener(|this, _, _, cx| {
-                this.call_player(cx, "equalizer", |player| player.set_equalizer(&EQ_TREBLE))
-              })),
-          ),
+        Button::new("eq-flat")
+          .with_size(size)
+          .label(t("media.clear"))
+          .on_click(cx.listener(|this, _, _, cx| {
+            for band in [
+              this.eq_bass.clone(),
+              this.eq_mid.clone(),
+              this.eq_treble.clone(),
+            ] {
+              band.update(cx, |band, cx| band.set_value(0.0, cx));
+            }
+          })),
         size,
         theme,
       ))

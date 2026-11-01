@@ -76,7 +76,16 @@ pub struct PlayerTransport {
 impl PlayerTransport {
   /// Builds a transport bar bound to `player`.
   pub fn new(player: &Entity<Player>, cx: &mut Context<Self>) -> Self {
-    let seek = cx.new(|_| SliderState::new().min(0.0).max(100.0).step(0.1));
+    // The progress bar is not immediate: dragging previews a target while
+    // playback keeps moving the real thumb, and the seek is issued once, on
+    // release. Applying every pointer move would fight the position reports.
+    let seek = cx.new(|_| {
+      SliderState::new()
+        .min(0.0)
+        .max(100.0)
+        .step(0.1)
+        .with_immediate(false)
+    });
     let volume = cx.new(|_| SliderState::new().min(0.0).max(100.0).step(1.0));
 
     let mut subscriptions = Vec::new();
@@ -98,7 +107,12 @@ impl PlayerTransport {
 
     subscriptions.push(
       cx.subscribe(&seek, |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
+        let value = match event {
+          SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+          // A non-immediate drag preview is not applied by the host; the value
+          // arrives again as `Commit` when the pointer is released.
+          SliderEvent::Preview(_) => return,
+        };
         // A player-driven write echoes back through the same event a user
         // drag uses; consume the echo instead of seeking on the player's own
         // position report.
@@ -119,7 +133,12 @@ impl PlayerTransport {
 
     subscriptions.push(
       cx.subscribe(&volume, |this: &mut Self, _, event: &SliderEvent, cx| {
-        let SliderEvent::Change(value) = event;
+        let value = match event {
+          SliderEvent::Change(value) | SliderEvent::Commit(value) => value,
+          // A non-immediate drag preview is not applied by the host; the value
+          // arrives again as `Commit` when the pointer is released.
+          SliderEvent::Preview(_) => return,
+        };
         let volume = value.start() as f64;
         let _ = this
           .player
