@@ -58,9 +58,9 @@ use gpui::{
 use woocraft::{
   ActiveTheme as _, Button, Disableable, Divider, DropdownMenu, Icon, IconLabel, IconName, Input,
   InputEvent, InputState, Player, PlayerEvent, PlayerOptions, PlayerPlaylist, PlayerTrackMenu,
-  PlayerView, PopupMenuItem, PropertyValue, ScrollableElement, Sizable, Size, Slider, SliderEvent,
-  SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track, TrackKind,
-  VideoTransport, h_flex, init, translate_woocraft, v_flex,
+  PlayerView, PopupMenuItem, PropertyValue, ScrollableElement, ScrollbarShow, Sizable, Size,
+  Slider, SliderEvent, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track,
+  TrackKind, VideoTransport, h_flex, init, translate_woocraft, v_flex,
 };
 
 /// The decoder menu entries, as mpv `hwdec` values: the four generic modes
@@ -101,6 +101,9 @@ struct Launch {
   /// The size tier the whole window starts at.
   size: Size,
 }
+
+/// Width of one panel slider, in ems of the panel's size tier.
+const SLIDER_WIDTH_EM: f32 = 16.;
 
 /// The mpv properties the info panel shows. Each is one `get_property` round
 /// trip: far too cheap to justify per-frame reads, and (unlike structure)
@@ -649,23 +652,17 @@ impl PlayerApp {
       })
   }
 
-  /// The control panel: one group per area of the `Player` API, scrollable
-  /// so a tier never clips it.
+  /// The control panel: one group per area of the `Player` API.
+  ///
+  /// The chrome (fixed width, border, background) sits on an outer box that
+  /// owns the row height; the scrolling content is a separate `Scrollable`
+  /// whose own styles — applied *after* `overflow_y_scrollbar()` wraps it — are
+  /// what give the scroll area a bounded height. Sizing the inner `v_flex`
+  /// instead leaves the wrapper auto-height and the panel cannot scroll.
   fn control_panel(&self, size: Size, theme: &Theme, cx: &Context<Self>) -> impl IntoElement {
-    v_flex()
-      .id("control-panel")
-      .w_80()
-      // The panel is taller than the window at every tier: it must own a
-      // bounded height (`h_full` inside the row, `min_h_0` so flex may shrink
-      // it) before it can scroll, otherwise the content overflows the row.
-      .h_full()
-      .min_h_0()
-      .flex_none()
-      .border_l_1()
-      .border_color(theme.border)
-      .bg(theme.card)
-      .text_color(theme.card_foreground)
-      .container_size(size)
+    let content = v_flex()
+      .id("control-panel-scroll")
+      .w_full()
       .container_gap_y(size)
       .child(self.playback_group(size, theme, cx))
       .child(Divider::horizontal())
@@ -675,8 +672,40 @@ impl PlayerApp {
       .child(Divider::horizontal())
       .child(self.video_group(size, theme, cx))
       .child(Divider::horizontal())
+      .child(
+        v_flex()
+          .w_full()
+          .container_gap_y(size)
+          .child(sub_header(t("media.tracks"), size, theme))
+          .child(PlayerTrackMenu::new(&self.player).with_size(size)),
+      )
+      .child(Divider::horizontal())
+      .child(
+        v_flex()
+          .w_full()
+          .container_gap_y(size)
+          .child(sub_header(t("media.playlist"), size, theme))
+          .child(PlayerPlaylist::new(&self.player).with_size(size)),
+      )
+      .child(Divider::horizontal())
       .child(self.info_group(size, theme, cx))
       .overflow_y_scrollbar()
+      // `Scrollable` renders its own wrapper and applies these to it, which is
+      // what bounds the scroll area inside the row.
+      .h_full()
+      .min_h_0()
+      .w_full();
+
+    div()
+      .w_80()
+      .h_full()
+      .min_h_0()
+      .flex_none()
+      .border_l_1()
+      .border_color(theme.border)
+      .bg(theme.card)
+      .text_color(theme.card_foreground)
+      .child(content)
   }
 
   /// Playback: the transport commands the bar does not carry — seek steps,
@@ -1706,7 +1735,13 @@ fn slider_setting(
         )
         .child(div().min_w_0().truncate().child(value)),
     )
-    .child(Slider::new(id, state).with_size(size))
+    // Bounded width: a full-bleed track reads as a stray coloured band rather
+    // than as a control, and leaves no room for the row's own padding.
+    .child(
+      div()
+        .w(size.em(SLIDER_WIDTH_EM))
+        .child(Slider::new(id, state).with_size(size)),
+    )
 }
 
 /// One text setting that needs the full row width: its name above, an input
@@ -1833,19 +1868,37 @@ fn options_for(video: bool, transport: VideoTransport, decoder: &str) -> PlayerO
 fn mount_player_view(
   player: &Entity<Player>, size: Size, cx: &mut Context<PlayerApp>,
 ) -> Entity<PlayerView> {
-  let tracks = player.clone();
-  let playlist = player.clone();
+  let slot_player = player.clone();
   cx.new(|cx| {
     PlayerView::new(player, cx)
       .with_size(size)
+      // The slot stays available for host chrome; the standard track menu and
+      // playlist live in the control panel instead, where they scroll with it.
       .controls(move |_, _, _| {
-        PlayerTrackMenu::new(&tracks)
-          .with_size(size)
-          .into_any_element()
-      })
-      .controls(move |_, _, _| {
-        PlayerPlaylist::new(&playlist)
-          .with_size(size)
+        // `controls` takes an `Fn`, so the entity handles are cloned per call.
+        let back = slot_player.clone();
+        let forward = slot_player.clone();
+        h_flex()
+          .w_full()
+          .container_gap(size)
+          .child(icon_button(
+            "slot-back",
+            IconName::ArrowCircleLeft,
+            t("media.seek_back"),
+            size,
+            move |_, _, cx| {
+              let _ = back.update(cx, |player, _| player.seek_by(-10.0));
+            },
+          ))
+          .child(icon_button(
+            "slot-forward",
+            IconName::ArrowCircleRight,
+            t("media.seek_forward"),
+            size,
+            move |_, _, cx| {
+              let _ = forward.update(cx, |player, _| player.seek_by(10.0));
+            },
+          ))
           .into_any_element()
       })
   })
@@ -1931,6 +1984,10 @@ fn main() {
       init(cx);
       cx.activate(true);
       Theme::set_mode(ThemeMode::Dark, cx);
+      // The control panel is always taller than the window, so keep its
+      // scrollbar visible instead of fading it out: without it the clipped
+      // bottom edge reads as broken layout rather than as scrollable content.
+      Theme::global_mut(cx).scrollbar_show = ScrollbarShow::Always;
 
       let bounds = Bounds::centered(None, gpui::Size::new(px(960.0), px(640.0)), cx);
       let launch = launch.clone();

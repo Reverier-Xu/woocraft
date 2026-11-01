@@ -3,6 +3,10 @@ use std::{collections::BTreeSet, env, fs, io::Write, path::PathBuf};
 const BUILTIN_ASSET_PREFIX: &str = "tech.woooo.woocraft/assets";
 
 fn main() {
+  // Translation files are embedded at compile time, so a changed locale must
+  // rebuild the crate; without this, edits to `locales/*.toml` need a clean.
+  println!("cargo::rerun-if-changed=locales");
+
   let icons_dir = PathBuf::from("src/assets/icons");
   println!("cargo::rerun-if-changed={}", icons_dir.display());
 

@@ -217,6 +217,8 @@ fn track_row(
     .id(element_id)
     .w_full()
     .list_size(size)
+    .list_px(size)
+    .flex()
     .items_center()
     .component_gap(size)
     .component_rounded(size)
