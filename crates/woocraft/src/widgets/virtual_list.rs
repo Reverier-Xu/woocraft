@@ -145,7 +145,8 @@ pub fn v_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render, {
+  V: Render,
+{
   virtual_list(view, id, Axis::Vertical, item_sizes, f)
 }
 
@@ -163,7 +164,8 @@ pub fn h_virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render, {
+  V: Render,
+{
   virtual_list(view, id, Axis::Horizontal, item_sizes, f)
 }
 
@@ -173,7 +175,8 @@ pub(crate) fn virtual_list<R, V>(
 ) -> VirtualList
 where
   R: IntoElement,
-  V: Render, {
+  V: Render,
+{
   let id: ElementId = id.into();
   let scroll_handle = VirtualListScrollHandle::new();
   let render_range = move |visible_range, window: &mut Window, cx: &mut App| {

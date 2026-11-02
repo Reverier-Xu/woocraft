@@ -273,7 +273,8 @@ impl DiagnosticSet {
   pub fn extend<D, I>(&mut self, diagnostics: D)
   where
     D: IntoIterator<Item = I>,
-    I: Into<Diagnostic>, {
+    I: Into<Diagnostic>,
+  {
     for diagnostic in diagnostics {
       self.push(diagnostic.into());
     }

@@ -315,7 +315,8 @@ pub fn transition<T>(
   id: impl Into<TransitionId>, target: T, policy: Transition, window: &mut Window, cx: &mut App,
 ) -> T
 where
-  T: Interpolate + PartialEq + 'static, {
+  T: Interpolate + PartialEq + 'static,
+{
   transition_with_status(id, target, policy, window, cx).value
 }
 
@@ -323,7 +324,8 @@ pub fn transition_with_status<T>(
   id: impl Into<TransitionId>, target: T, policy: Transition, window: &mut Window, cx: &mut App,
 ) -> MotionValue<T>
 where
-  T: Interpolate + PartialEq + 'static, {
+  T: Interpolate + PartialEq + 'static,
+{
   let id: ElementId = id.into().into();
   let now = cx.background_executor().now();
   let state = window.use_keyed_state(id, cx, |_, _| ValueTransition {
@@ -411,7 +413,8 @@ pub fn animate_keyframes<T>(
   cx: &mut App,
 ) -> MotionValue<T>
 where
-  T: Interpolate + 'static, {
+  T: Interpolate + 'static,
+{
   let id: TransitionId = id.into();
   let id = ElementId::NamedChild(ElementId::from(id).into(), "__keyframes".into());
   let now = cx.background_executor().now();
@@ -609,7 +612,8 @@ pub fn spring<T>(
   id: impl Into<TransitionId>, target: T, policy: Spring, window: &mut Window, cx: &mut App,
 ) -> T::Output
 where
-  T: SpringTarget, {
+  T: SpringTarget,
+{
   let id: ElementId = id.into().into();
   let now = cx.background_executor().now();
   let target_position = target.target();

@@ -47,7 +47,8 @@ impl<T: Clone> Stack<T> {
   /// Set the data to be stacked
   pub fn data<I>(mut self, data: I) -> Self
   where
-    I: IntoIterator<Item = T>, {
+    I: IntoIterator<Item = T>,
+  {
     self.data = data.into_iter().collect();
     self
   }
@@ -56,7 +57,8 @@ impl<T: Clone> Stack<T> {
   pub fn keys<I, S>(mut self, keys: I) -> Self
   where
     I: IntoIterator<Item = S>,
-    S: Into<String>, {
+    S: Into<String>,
+  {
     self.keys = keys.into_iter().map(|s| s.into()).collect();
     self
   }
@@ -64,7 +66,8 @@ impl<T: Clone> Stack<T> {
   /// Set the value accessor function
   pub fn value<F>(mut self, value: F) -> Self
   where
-    F: Fn(&T, &str) -> Option<f32> + 'static, {
+    F: Fn(&T, &str) -> Option<f32> + 'static,
+  {
     self.value = Box::new(value);
     self
   }

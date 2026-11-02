@@ -86,7 +86,8 @@ impl Popover {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement, {
+    E: IntoElement,
+  {
     Self {
       id: id.into(),
       editor,

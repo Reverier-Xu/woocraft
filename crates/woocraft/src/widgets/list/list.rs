@@ -750,7 +750,8 @@ where
   pub fn context_menu<F>(mut self, builder: F) -> Self
   where
     F: Fn(Option<IndexPath>, PopupMenu, &mut Window, &mut Context<ListState<D>>) -> PopupMenu
-      + 'static, {
+      + 'static,
+  {
     self.context_menu_builder = Some(Rc::new(builder));
     self
   }

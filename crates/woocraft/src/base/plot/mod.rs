@@ -26,13 +26,15 @@ pub enum StrokeStyle {
 
 pub fn origin_point<T>(x: T, y: T, origin: Point<T>) -> Point<T>
 where
-  T: Default + Clone + Debug + PartialEq + Add<Output = T>, {
+  T: Default + Clone + Debug + PartialEq + Add<Output = T>,
+{
   point(x, y) + origin
 }
 
 pub fn polygon<T>(points: &[Point<T>], bounds: &Bounds<Pixels>) -> Option<Path<Pixels>>
 where
-  T: Default + Clone + Copy + Debug + Into<f32> + PartialEq, {
+  T: Default + Clone + Copy + Debug + Into<f32> + PartialEq,
+{
   let mut path = PathBuilder::stroke(px(1.));
   let points = &points
     .iter()

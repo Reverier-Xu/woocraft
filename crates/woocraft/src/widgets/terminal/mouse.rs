@@ -32,16 +32,16 @@ impl MouseFormat {
 /// The xterm button codes for mouse reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MouseButtonCode {
-  Left       = 0,
-  Middle     = 1,
-  Right      = 2,
-  LeftMove   = 32,
+  Left = 0,
+  Middle = 1,
+  Right = 2,
+  LeftMove = 32,
   MiddleMove = 33,
-  RightMove  = 34,
-  NoneMove   = 35,
-  ScrollUp   = 64,
+  RightMove = 34,
+  NoneMove = 35,
+  ScrollUp = 64,
   ScrollDown = 65,
-  Other      = 99,
+  Other = 99,
 }
 
 impl MouseButtonCode {

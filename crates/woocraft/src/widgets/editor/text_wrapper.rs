@@ -252,7 +252,8 @@ impl TextWrapper {
   fn _update<F>(
     &mut self, changed_text: &Rope, range: &Range<usize>, new_text_len: usize, wrap_line: &mut F,
   ) where
-    F: FnMut(&str, Pixels) -> Vec<Range<usize>>, {
+    F: FnMut(&str, Pixels) -> Vec<Range<usize>>,
+  {
     // Remove the old changed lines.
     let start_row = self.text.offset_to_point(range.start).row;
     let start_row = start_row.min(self.lines.len().saturating_sub(1));
@@ -358,7 +359,8 @@ impl TextWrapper {
   /// inject a fake wrap function.
   fn rebuild_all<F>(&mut self, text: &Rope, wrap_line: &mut F)
   where
-    F: FnMut(&str, Pixels) -> Vec<Range<usize>>, {
+    F: FnMut(&str, Pixels) -> Vec<Range<usize>>,
+  {
     let wrap_width = self.wrap_width;
     let mut lines = Vec::new();
     let mut display_row_starts = Vec::new();

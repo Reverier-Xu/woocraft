@@ -46,7 +46,8 @@ impl<T> Line<T> {
   /// Set the data of the Line.
   pub fn data<I>(mut self, data: I) -> Self
   where
-    I: IntoIterator<Item = T>, {
+    I: IntoIterator<Item = T>,
+  {
     self.data = data.into_iter().collect();
     self
   }
@@ -54,7 +55,8 @@ impl<T> Line<T> {
   /// Set the x of the Line.
   pub fn x<F>(mut self, x: F) -> Self
   where
-    F: Fn(&T) -> Option<f32> + 'static, {
+    F: Fn(&T) -> Option<f32> + 'static,
+  {
     self.x = Box::new(x);
     self
   }
@@ -62,7 +64,8 @@ impl<T> Line<T> {
   /// Set the y of the Line.
   pub fn y<F>(mut self, y: F) -> Self
   where
-    F: Fn(&T) -> Option<f32> + 'static, {
+    F: Fn(&T) -> Option<f32> + 'static,
+  {
     self.y = Box::new(y);
     self
   }

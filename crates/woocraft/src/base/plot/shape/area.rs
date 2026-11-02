@@ -37,7 +37,8 @@ impl<T> Area<T> {
   /// Set the data of the Area.
   pub fn data<I>(mut self, data: I) -> Self
   where
-    I: IntoIterator<Item = T>, {
+    I: IntoIterator<Item = T>,
+  {
     self.data = data.into_iter().collect();
     self
   }
@@ -45,7 +46,8 @@ impl<T> Area<T> {
   /// Set the x of the Area.
   pub fn x<F>(mut self, x: F) -> Self
   where
-    F: Fn(&T) -> Option<f32> + 'static, {
+    F: Fn(&T) -> Option<f32> + 'static,
+  {
     self.x = Box::new(x);
     self
   }
@@ -59,7 +61,8 @@ impl<T> Area<T> {
   /// Set the y1 of the Area.
   pub fn y1<F>(mut self, y1: F) -> Self
   where
-    F: Fn(&T) -> Option<f32> + 'static, {
+    F: Fn(&T) -> Option<f32> + 'static,
+  {
     self.y1 = Box::new(y1);
     self
   }
