@@ -193,10 +193,12 @@ pub fn terminal_font_fallbacks() -> Option<FontFallbacks> {
       .get_or_init(|| fontconfig_families("monospace"))
       .clone()
   };
-  #[cfg(not(target_os = "linux"))]
-  let platform_families: Option<Vec<String>> = None;
 
+  #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
   let mut families = vec![crate::SYMBOLS_FONT_FAMILY.to_owned()];
+  // fontconfig's monospace families only exist on Linux; elsewhere the
+  // symbol font stands alone.
+  #[cfg(target_os = "linux")]
   families.extend(platform_families.unwrap_or_default());
   Some(FontFallbacks::from_fonts(families))
 }

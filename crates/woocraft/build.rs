@@ -7,6 +7,8 @@ fn main() {
   // rebuild the crate; without this, edits to `locales/*.toml` need a clean.
   println!("cargo::rerun-if-changed=locales");
 
+  emit_mpv_link_search();
+
   let icons_dir = PathBuf::from("src/assets/icons");
   println!("cargo::rerun-if-changed={}", icons_dir.display());
 
@@ -52,6 +54,31 @@ fn main() {
   let mut file = fs::File::create(&generated).expect("failed to create generated icon file");
 
   write_generated_file(&mut file, &entries).expect("failed to write generated icon file");
+}
+
+/// libmpv is linked with a bare `-lmpv` (libmpv2-sys emits no search path),
+/// which only resolves when the library sits in the linker's default search
+/// paths. Homebrew's prefix (`/opt/homebrew` on Apple Silicon, `/usr/local`
+/// on Intel) is not a default search path on macOS, so probe both and emit
+/// the one that actually contains libmpv. `LIBMPV_DIR` overrides the probe.
+fn emit_mpv_link_search() {
+  if !cfg!(target_os = "macos") {
+    return;
+  }
+
+  println!("cargo::rerun-if-env-changed=LIBMPV_DIR");
+  if let Ok(dir) = env::var("LIBMPV_DIR") {
+    println!("cargo::rustc-link-search=native={dir}");
+    return;
+  }
+
+  let candidates = ["/opt/homebrew/lib", "/usr/local/lib"];
+  if let Some(dir) = candidates
+    .iter()
+    .find(|dir| PathBuf::from(**dir).join("libmpv.dylib").is_file())
+  {
+    println!("cargo::rustc-link-search=native={dir}");
+  }
 }
 
 fn to_variant_name(stem: &str) -> String {

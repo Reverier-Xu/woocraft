@@ -293,6 +293,9 @@ pub struct Chapter {
 /// take `&self` and can be called from anywhere on the UI thread. Dropping the
 /// entity terminates the core.
 /// One `loadfile` the host asked for before the composition surface existed.
+/// Only the composition transport defers loads, so the type ships on Linux
+/// and in test builds (the deferral decision is unit-tested per platform).
+#[cfg(any(test, target_os = "linux"))]
 #[derive(Clone, Debug)]
 struct PendingLoad {
   uri: String,
@@ -323,7 +326,9 @@ pub struct Player {
   /// Whether the transport fallback has been logged; a player falls back at
   /// most once (composition → software is terminal).
   fallback_logged: bool,
-  /// Whether the successful composition negotiation has been logged.
+  /// Whether the successful composition negotiation has been logged. The
+  /// negotiation can only *succeed* on Linux, where the GL path exists.
+  #[cfg(target_os = "linux")]
   negotiated_logged: bool,
   /// The attached GL pipeline, on platforms that carry it (Linux). `None`
   /// while unattached.
@@ -333,12 +338,17 @@ pub struct Player {
   /// negotiated but had no surface yet. mpv requires the render context to
   /// exist before a `vo=libmpv` output is created, so loading first would
   /// leave the VO uninitialised and the render thread waiting for frames that
-  /// never come; these are replayed on the first successful attach.
+  /// never come; these are replayed on the first successful attach. Only the
+  /// composition transport defers loads, so this ships on Linux and in test
+  /// builds.
+  #[cfg(any(test, target_os = "linux"))]
   pending_loads: Vec<PendingLoad>,
   /// A surface detached without its window, waiting to be removed from the
   /// composition tree at the next window-having call — or by the window's own
   /// destruction, which frees it regardless. At most one entry; see
-  /// `docs/media-gpu.md`.
+  /// `docs/media-gpu.md`. Only the composition path detaches without a
+  /// window, so this state exists on Linux only.
+  #[cfg(target_os = "linux")]
   stale_surface: Option<(gpui::CompositionSurfaceId, gpui::WindowCompositionSurface)>,
   shutdown: Arc<AtomicBool>,
   event_thread: Option<JoinHandle<()>>,
@@ -396,10 +406,13 @@ impl Player {
       event_tx,
       transport,
       fallback_logged: false,
+      #[cfg(target_os = "linux")]
       negotiated_logged: false,
       #[cfg(target_os = "linux")]
       composition: None,
+      #[cfg(any(test, target_os = "linux"))]
       pending_loads: Vec::new(),
+      #[cfg(target_os = "linux")]
       stale_surface: None,
       shutdown: Arc::new(AtomicBool::new(false)),
       event_thread: None,
@@ -484,6 +497,10 @@ impl Player {
 
   /// Loads `uri` (a path or URL) and starts playing it.
   pub fn load(&mut self, uri: &str) -> Result<()> {
+    // Only the composition transport defers, so the deferral path ships on
+    // Linux and in test builds; elsewhere the software output can start on
+    // the load itself.
+    #[cfg(any(test, target_os = "linux"))]
     if self.defer_until_attach() {
       self.pending_loads.push(PendingLoad {
         uri: uri.to_string(),
@@ -496,6 +513,8 @@ impl Player {
 
   /// Appends `uri` to the playlist.
   pub fn enqueue(&mut self, uri: &str) -> Result<()> {
+    // See `load` for why the deferral path is Linux/test-only.
+    #[cfg(any(test, target_os = "linux"))]
     if self.defer_until_attach() {
       self.pending_loads.push(PendingLoad {
         uri: uri.to_string(),
@@ -510,7 +529,9 @@ impl Player {
   ///
   /// Only the composition transport needs this: the software output creates its
   /// own render context as soon as it starts, while the GL context can only
-  /// exist once a window has handed the player a surface.
+  /// exist once a window has handed the player a surface. Linux and test
+  /// builds only, like the deferral path it guards.
+  #[cfg(any(test, target_os = "linux"))]
   fn defer_until_attach(&self) -> bool {
     self.options.video
       && self.transport == VideoTransport::Composition
@@ -523,6 +544,8 @@ impl Player {
   /// both end here, because mpv creates a `vo=libmpv` output only on a load:
   /// without a (re)load the fresh output would wait for frames that never
   /// come. See [`restart_loads`] for the decision and its rules.
+  /// Linux only: the composition attach path is the sole caller.
+  #[cfg(target_os = "linux")]
   fn resume_after_attach(&mut self) {
     // mpv's live `path`, never a URI remembered when the host last loaded:
     // a playlist can advance past that (an `enqueue` never updates a
@@ -1164,7 +1187,7 @@ impl Player {
       // Linux-only by design (see the platform matrix in `docs/media-gpu.md`);
       // this stub only keeps the parameters used.
       let _ = (window, bounds);
-      return Ok(());
+      Ok(())
     }
 
     #[cfg(target_os = "linux")]
@@ -1244,7 +1267,9 @@ impl Player {
   }
 
   /// Tears down the composition pipeline, removing its surface when a window
-  /// is available and parking it as stale otherwise.
+  /// is available and parking it as stale otherwise. Linux only; elsewhere
+  /// there is no composition pipeline to tear down.
+  #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
   fn detach_surface(&mut self, window: Option<&mut Window>) {
     #[cfg(target_os = "linux")]
     if let Some(mut video) = self.composition.take() {
@@ -1272,7 +1297,9 @@ impl Player {
   /// composition pipeline, starts the software output if it is not running,
   /// replays whatever load the switch interrupted (see
   /// [`Self::resume_after_attach`]), and logs `reason` once. Called from the
-  /// attach path, where the platform has just refused a step.
+  /// attach path, where the platform has just refused a step. Linux only:
+  /// only that attach path can refuse a step.
+  #[cfg(target_os = "linux")]
   fn fall_back_to_software(&mut self, window: Option<&mut Window>, reason: String) {
     if !self.fallback_logged {
       tracing::warn!("woocraft: video transport fell back to software: {reason}");
@@ -1329,6 +1356,9 @@ impl Drop for Player {
 /// it would jump the wrong file and destroy the playlist. Deferred loads win
 /// over the reload — they carry the host's newest intent. Each command is
 /// `(uri, mode, option)` with at most one `start=` option.
+/// Linux-only in production (the composition path calls it); kept in test
+/// builds everywhere so the decision stays testable per platform.
+#[cfg(any(test, target_os = "linux"))]
 fn restart_loads(
   pending: Vec<PendingLoad>, path: Option<&str>, position: f64,
 ) -> Vec<(String, &'static str, Option<String>)> {
