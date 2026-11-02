@@ -136,6 +136,10 @@ ashpd = { version = "0.13", default-features = false, features = [
 ] }
 # Stream combinators for the portal change signal (already in the tree via gpui).
 futures = "0.3"
+# Stay on zbus 5: 6.0 removed the blocking API the tray service is built on, and
+# every other zbus consumer in the tree (`gpui-fast-linux` via accesskit/atspi/
+# notify-rust, `ashpd`, `oo7`) still requires ^5, so a v6 tray dependency would
+# put a second copy of zbus and zvariant into the build.
 zbus = { version = "5", features = ["blocking"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
