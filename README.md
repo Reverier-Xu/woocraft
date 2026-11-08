@@ -26,7 +26,7 @@ This repository is organized as a Cargo workspace, with the main maintained crat
 
 ## Requirements
 
-- Rust `1.98.0` or newer
+- Rust `1.99` or newer
 
 ## Installation
 
@@ -34,7 +34,7 @@ on crates.io:
 
 ```toml
 [dependencies]
-woocraft = "0.6"
+woocraft = "0.7"
 ```
 
 To use directly from this repository:
