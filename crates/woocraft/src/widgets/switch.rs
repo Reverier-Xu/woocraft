@@ -150,8 +150,7 @@ impl Switch {
   /// Called with `true` when switched on, `false` when switched off.
   pub fn on_click<F>(mut self, handler: F) -> Self
   where
-    F: Fn(&bool, &mut Window, &mut App) + 'static,
-  {
+    F: Fn(&bool, &mut Window, &mut App) + 'static, {
     self.on_click = Some(Rc::new(handler));
     self
   }

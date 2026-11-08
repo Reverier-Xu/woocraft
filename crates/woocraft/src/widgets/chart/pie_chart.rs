@@ -43,8 +43,7 @@ pub struct PieChart<T: 'static> {
 impl<T> PieChart<T> {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>,
-  {
+    I: IntoIterator<Item = T>, {
     Self {
       data: data.into_iter().collect(),
       inner_radius: 0.,
@@ -109,8 +108,7 @@ impl<T> PieChart<T> {
 
   pub fn color<H>(mut self, color: impl Fn(&T) -> H + 'static) -> Self
   where
-    H: Into<gpui::Hsla> + 'static,
-  {
+    H: Into<gpui::Hsla> + 'static, {
     self.color = Some(Rc::new(move |t| color(t).into()));
     self
   }

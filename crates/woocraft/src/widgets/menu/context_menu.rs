@@ -23,8 +23,7 @@ pub trait ContextMenuExt: ParentElement + Styled {
     self, f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
   ) -> ContextMenu<Self>
   where
-    Self: Sized,
-  {
+    Self: Sized, {
     let caller = Location::caller();
     ContextMenu::new(ElementId::CodeLocation(*caller), self).menu(f)
   }
@@ -58,8 +57,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
   #[must_use]
   fn menu<F>(mut self, builder: F) -> Self
   where
-    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-  {
+    F: Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static, {
     self.menu = Some(Rc::new(builder));
     self
   }

@@ -281,8 +281,7 @@ impl Dialog {
   /// `this.dialog_open = false; cx.notify();`.
   pub fn on_close<F>(mut self, callback: F) -> Self
   where
-    F: Fn(&mut Window, &mut App) + 'static,
-  {
+    F: Fn(&mut Window, &mut App) + 'static, {
     self.on_close = Some(Rc::new(callback));
     self
   }
@@ -291,8 +290,7 @@ impl Dialog {
   pub fn content<F, E>(mut self, content: F) -> Self
   where
     E: IntoElement,
-    F: Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> E + 'static,
-  {
+    F: Fn(&mut DialogState, &mut Window, &mut gpui::Context<DialogState>) -> E + 'static, {
     self.content = Some(Rc::new(move |state, window, cx| {
       content(state, window, cx).into_any_element()
     }));

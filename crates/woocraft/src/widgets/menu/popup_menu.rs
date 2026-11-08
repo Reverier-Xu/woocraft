@@ -105,8 +105,7 @@ impl PopupMenuItem {
   pub fn element<F, E>(builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     PopupMenuItem::ElementItem {
       icon: None,
       disabled: false,
@@ -227,8 +226,7 @@ impl PopupMenuItem {
   /// Only works for [`PopupMenuItem::Item`] and [`PopupMenuItem::ElementItem`].
   pub fn on_click<F>(mut self, handler: F) -> Self
   where
-    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-  {
+    F: Fn(&ClickEvent, &mut Window, &mut App) + 'static, {
     if let Some((_, _, slot)) = self.clickable_mut() {
       *slot = Some(Rc::new(handler));
     }
@@ -501,8 +499,7 @@ impl PopupMenu {
   pub fn menu_element<F, E>(self, action: Box<dyn Action>, builder: F) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.menu_element_with_check(false, action, builder)
   }
 
@@ -512,8 +509,7 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.menu_element_with_check_and_disabled(false, action, disabled, builder)
   }
 
@@ -523,8 +519,7 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.menu_element_with_icon_and_disabled(icon, action, false, builder)
   }
 
@@ -534,8 +529,7 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.menu_element_with_check_and_disabled(checked, action, false, builder)
   }
 
@@ -545,8 +539,7 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.menu_items.push(
       PopupMenuItem::element(builder)
         .action(action)
@@ -563,8 +556,7 @@ impl PopupMenu {
   ) -> Self
   where
     F: Fn(&mut Window, &mut App) -> E + 'static,
-    E: IntoElement,
-  {
+    E: IntoElement, {
     self.menu_items.push(
       PopupMenuItem::element(builder)
         .action(action)
@@ -648,8 +640,7 @@ impl PopupMenu {
     mut self, items: impl IntoIterator<Item = I>, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self
   where
-    I: Into<OwnedMenuItem>,
-  {
+    I: Into<OwnedMenuItem>, {
     for item in items {
       match item.into() {
         OwnedMenuItem::Action { name, action, .. } => {

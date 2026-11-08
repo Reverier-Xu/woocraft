@@ -35,8 +35,7 @@ pub struct AreaChart<T, X, Y>
 where
   T: 'static,
   X: Clone + PartialEq + Into<SharedString> + 'static,
-  Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
-{
+  Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static, {
   data: Vec<T>,
   x: Option<XAccessor<T, X>>,
   y: Vec<YAccessor<T, Y>>,
@@ -53,8 +52,7 @@ where
 {
   pub fn new<I>(data: I) -> Self
   where
-    I: IntoIterator<Item = T>,
-  {
+    I: IntoIterator<Item = T>, {
     Self {
       data: data.into_iter().collect(),
       stroke_styles: vec![],

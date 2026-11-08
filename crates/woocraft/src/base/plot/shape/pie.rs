@@ -31,8 +31,7 @@ impl<T> Pie<T> {
   /// Set the value of the Pie.
   pub fn value<F>(mut self, value: F) -> Self
   where
-    F: 'static + Fn(&T) -> Option<f32>,
-  {
+    F: 'static + Fn(&T) -> Option<f32>, {
     self.value = Box::new(value);
     self
   }

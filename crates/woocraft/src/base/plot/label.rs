@@ -23,8 +23,7 @@ pub struct Text {
 impl Text {
   pub fn new<T>(text: impl Into<SharedString>, origin: Point<T>, color: Hsla) -> Self
   where
-    T: Default + Clone + Copy + Debug + PartialEq + Into<Pixels>,
-  {
+    T: Default + Clone + Copy + Debug + PartialEq + Into<Pixels>, {
     let origin = point(origin.x.into(), origin.y.into());
 
     Self {

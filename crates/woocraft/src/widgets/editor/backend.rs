@@ -222,8 +222,7 @@ pub trait EditorContextMenuProvider {
 }
 
 pub trait EditorBackend:
-  EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider
-{
+  EditorActionSink + EditorContextMenuProvider + EditorHighlighterProvider {
   fn revision(&self) -> u64;
 
   fn capabilities(&self) -> EditorBackendCapabilities {

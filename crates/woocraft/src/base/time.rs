@@ -196,8 +196,7 @@ impl Matcher {
 
   pub fn custom<F>(f: F) -> Self
   where
-    F: Fn(&NaiveDate) -> bool + Send + Sync + 'static,
-  {
+    F: Fn(&NaiveDate) -> bool + Send + Sync + 'static, {
     Self::Custom(Box::new(f))
   }
 

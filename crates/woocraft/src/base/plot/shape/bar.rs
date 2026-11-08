@@ -38,8 +38,7 @@ impl<T> Bar<T> {
   /// Set the data of the Bar.
   pub fn data<I>(mut self, data: I) -> Self
   where
-    I: IntoIterator<Item = T>,
-  {
+    I: IntoIterator<Item = T>, {
     self.data = data.into_iter().collect();
     self
   }
@@ -47,8 +46,7 @@ impl<T> Bar<T> {
   /// Set the x of the Bar.
   pub fn x<F>(mut self, x: F) -> Self
   where
-    F: Fn(&T) -> Option<f32> + 'static,
-  {
+    F: Fn(&T) -> Option<f32> + 'static, {
     self.x = Box::new(x);
     self
   }
@@ -62,8 +60,7 @@ impl<T> Bar<T> {
   /// Set the y0 of the Bar.
   pub fn y0<F>(mut self, y: F) -> Self
   where
-    F: Fn(&T) -> f32 + 'static,
-  {
+    F: Fn(&T) -> f32 + 'static, {
     self.y0 = Box::new(y);
     self
   }
@@ -71,8 +68,7 @@ impl<T> Bar<T> {
   /// Set the y1 of the Bar.
   pub fn y1<F>(mut self, y: F) -> Self
   where
-    F: Fn(&T) -> Option<f32> + 'static,
-  {
+    F: Fn(&T) -> Option<f32> + 'static, {
     self.y1 = Box::new(y);
     self
   }
@@ -81,8 +77,7 @@ impl<T> Bar<T> {
   pub fn fill<F, C>(mut self, fill: F) -> Self
   where
     F: Fn(&T) -> C + 'static,
-    C: Into<Hsla>,
-  {
+    C: Into<Hsla>, {
     self.fill = Box::new(move |v| fill(v).into());
     self
   }
@@ -90,8 +85,7 @@ impl<T> Bar<T> {
   /// Set the label of the Bar.
   pub fn label<F>(mut self, label: F) -> Self
   where
-    F: Fn(&T, Point<Pixels>) -> Vec<Text> + 'static,
-  {
+    F: Fn(&T, Point<Pixels>) -> Vec<Text> + 'static, {
     self.label = Some(Box::new(label));
     self
   }

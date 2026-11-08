@@ -80,8 +80,7 @@ fn languages_override_locked() -> Option<Vec<String>> {
 fn normalized_locale_list<I, L>(locales: I) -> Vec<String>
 where
   I: IntoIterator<Item = L>,
-  L: AsRef<str>,
-{
+  L: AsRef<str>, {
   let mut normalized = Vec::new();
   for locale in locales {
     let locale = normalize_locale(locale.as_ref());
@@ -215,8 +214,7 @@ impl TitleBar {
   pub fn languages<I, L>(mut self, languages: I) -> Self
   where
     I: IntoIterator<Item = L>,
-    L: AsRef<str>,
-  {
+    L: AsRef<str>, {
     self.languages = Some(normalized_locale_list(languages));
     self
   }
@@ -309,8 +307,7 @@ impl TitleBar {
   pub fn set_languages_override<I, L>(languages: I)
   where
     I: IntoIterator<Item = L>,
-    L: AsRef<str>,
-  {
+    L: AsRef<str>, {
     *LANGUAGES_OVERRIDE
       .write()
       .expect("languages override lock poisoned") = Some(normalized_locale_list(languages));
