@@ -103,10 +103,10 @@ zstd                          = "0.14"
 # and may contain breaking API changes. The helper crates (`collections`,
 # `sum-tree`, `util`, `scheduler`, `refineable`, `shared-string`, `http-client`)
 # stay on the `gpui-pre-*` 0.3.10 snapshots that gpui-fast itself depends on.
-gpui          = { version = "=0.1.12", package = "gpui-fast" }
-gpui-macros   = { version = "=0.1.12", package = "gpui-fast-macros" }
-gpui_platform = { version = "=0.1.12", package = "gpui-fast-platform" }
-gpui_sum_tree = { version = "=0.3.10", package = "gpui-pre-sum-tree" }
+gpui          = { version = "=0.1.13", package = "gpui-fast" }
+gpui-macros   = { version = "=0.1.13", package = "gpui-fast-macros" }
+gpui_platform = { version = "=0.1.13", package = "gpui-fast-platform" }
+gpui_sum_tree = { version = "=0.3.11", package = "gpui-pre-sum-tree" }
 
 rust-embed = { version = "8.12", features = [
   "interpolate-folder-path",
