@@ -32,7 +32,7 @@ enum-iterator                 = { workspace = true }
 gpui                          = { workspace = true }
 gpui-macros                   = { workspace = true }
 gpui_sum_tree                 = { workspace = true }
-libmpv2                       = { version = "7.0.0", optional = true, default-features = false }
+libmpv2                       = { version = "7.0.1", optional = true, default-features = false }
 libmpv2-sys                   = { version = "4.0.1", optional = true }
 lsp-types                     = { workspace = true }
 num-traits                    = { workspace = true }
@@ -106,7 +106,7 @@ zstd          = { workspace = true, optional = true }
 gpui = { workspace = true, features = ["test-support"] }
 # Native file chooser for the media example; the portal backend keeps it
 # consistent with the rest of the desktop integration on Linux.
-rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+rfd = { version = "0.18", default-features = false, features = ["xdg-portal"] }
 # The player example wires the library's `tracing` lines (transport
 # negotiation and fallback among them) to stderr through RUST_LOG.
 tracing-subscriber = { version = "0.3", default-features = false, features = [
@@ -128,8 +128,11 @@ glutin = { version = "0.32", optional = true, default-features = false, features
 raw-window-handle = { version = "0.6", optional = true }
 
 # The reduced-motion preference, read through the XDG desktop portal's
-# Settings interface. The same version and features `gpui-fast-linux` already
-# pulls in, so this adds no new code to the build.
+# Settings interface. The same version and features `gpui-fast-linux` (and
+# `oo7`) already pull in, so this adds no new code to the build. Stay on the
+# 0.13 series until gpui-fast moves: 0.14 switched to the zbus 6 stack, which
+# would put a second copy of zbus/zvariant into the build (see the zbus note
+# below).
 ashpd = { version = "0.13", default-features = false, features = [
   "async-io",
   "settings",
