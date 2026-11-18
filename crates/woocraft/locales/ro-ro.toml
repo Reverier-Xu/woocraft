@@ -72,6 +72,14 @@ september = "septembrie"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Selectează data"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Copiază codul"
+image     = "Imagine"
+copy       = "Copiază"
+select_all = "Selectează tot"
+copy_link  = "Copiază linkul"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Română"
 

@@ -72,6 +72,14 @@ september = "Tháng 9"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Chọn ngày"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Sao chép mã"
+image     = "Hình ảnh"
+copy       = "Sao chép"
+select_all = "Chọn tất cả"
+copy_link  = "Sao chép liên kết"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Tiếng Việt"
 

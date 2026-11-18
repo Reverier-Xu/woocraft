@@ -72,6 +72,14 @@ september = "wrzesień"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Wybierz datę"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Kopiuj kod"
+image     = "Obraz"
+copy       = "Kopiuj"
+select_all = "Zaznacz wszystko"
+copy_link  = "Kopiuj link"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Polski"
 

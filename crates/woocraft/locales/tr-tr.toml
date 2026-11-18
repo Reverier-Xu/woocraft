@@ -72,6 +72,14 @@ september = "Eylül"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Tarih seç"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Kodu kopyala"
+image     = "Görsel"
+copy       = "Kopyala"
+select_all = "Tümünü seç"
+copy_link  = "Bağlantıyı kopyala"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Türkçe"
 

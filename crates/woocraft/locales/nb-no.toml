@@ -72,6 +72,14 @@ september = "september"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Velg dato"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Kopier kode"
+image     = "Bilde"
+copy       = "Kopier"
+select_all = "Velg alle"
+copy_link  = "Kopier lenke"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Norsk bokmål"
 

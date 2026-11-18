@@ -47,7 +47,10 @@ impl NodeId {
   }
 
   /// The raw identity value, e.g. for serialization.
-  #[allow(dead_code)]
+  ///
+  /// Part of the public API surface even though the crate itself does not
+  /// call it yet: applications persisting dock layouts need a stable value.
+  #[allow(dead_code, reason = "public API for applications persisting layouts")]
   pub fn as_u64(self) -> u64 {
     self.0
   }
@@ -60,7 +63,10 @@ pub struct PanelId(u64);
 
 impl PanelId {
   /// The raw identity value, e.g. for serialization.
-  #[allow(dead_code)]
+  ///
+  /// Part of the public API surface even though the crate itself does not
+  /// call it yet: applications persisting dock layouts need a stable value.
+  #[allow(dead_code, reason = "public API for applications persisting layouts")]
   pub fn as_u64(self) -> u64 {
     self.0
   }
@@ -179,9 +185,7 @@ pub struct PaneTree {
 }
 
 impl PaneTree {
-  /// Standalone construction is exercised by tests; region trees are built
-  /// via [`PaneTree::from_layout`] or adopted in `DockArea::new`.
-  #[allow(dead_code)]
+  /// Creates an empty tree with a single root node of `root_kind`.
   pub fn new(root_kind: RootKind) -> Self {
     let root = match root_kind {
       RootKind::Split => PaneNode::new(NodeKind::Split {
@@ -211,11 +215,6 @@ impl PaneTree {
     &self.root
   }
 
-  #[allow(dead_code)]
-  pub fn root_kind(&self) -> RootKind {
-    self.root_kind
-  }
-
   /// Path from the root to the node with `id`, if present.
   pub fn path_of_node(&self, id: NodeId) -> Option<NodePath> {
     self.root.path_of_node(id)
@@ -234,7 +233,7 @@ impl PaneTree {
   }
 
   /// The tab group holding `panel`, if any.
-  #[allow(dead_code)]
+  #[cfg(test)]
   pub fn tab_group_of(&self, panel: PanelId) -> Option<NodeId> {
     fn search(node: &PaneNode, panel: PanelId) -> Option<NodeId> {
       match &node.kind {
@@ -253,7 +252,6 @@ impl PaneTree {
   }
 
   /// The panels and active index of the tab group `node`, if it is one.
-  #[allow(dead_code)]
   pub fn tabs_of(&self, node: NodeId) -> Option<(&[PanelId], usize)> {
     let path = self.path_of_node(node)?;
     match self.root.node_at(&path).kind() {
@@ -294,7 +292,7 @@ impl PaneTree {
   }
 
   /// Inserts `panel` beside `at`, in a fresh tab group placed by `placement`.
-  #[allow(dead_code)]
+  #[cfg(test)]
   pub fn split(
     &mut self, at: NodeId, panel: PanelId, placement: Placement, size: Option<Pixels>,
   ) -> EditResult {
@@ -332,7 +330,7 @@ impl PaneTree {
   /// normalization repairs a length mismatch, so applying it would otherwise
   /// leave `children.len() != sizes.len()` and trip the normalization
   /// `debug_assert!`.
-  #[allow(dead_code)]
+  #[cfg(test)]
   pub fn set_sizes(&mut self, node: NodeId, new_sizes: Vec<Option<Pixels>>) -> EditResult {
     self.edit(|root| {
       let Some(path) = root.path_of_node(node) else {
@@ -410,7 +408,7 @@ impl EditResult {
   }
 
   /// Panics when an edit unexpectedly did nothing (tests and examples).
-  #[allow(dead_code)]
+  #[cfg(test)]
   pub fn expect_changed(&self) {
     assert!(self.changed, "expected the edit to change the tree");
   }
@@ -738,7 +736,9 @@ impl DockLayout {
   }
 
   /// Adds a panel view to this tab group.
-  #[allow(dead_code)]
+  ///
+  /// Part of the builder API; `panel` below covers the common case.
+  #[allow(dead_code, reason = "public builder API for application layouts")]
   pub fn panel_view(mut self, panel: Arc<dyn PanelView>, cx: &App) -> Self {
     debug_assert!(
       matches!(self.kind, LayoutSeed::Tabs { .. }),
@@ -751,7 +751,9 @@ impl DockLayout {
   }
 
   /// Adds a panel entity to this tab group.
-  #[allow(dead_code)]
+  ///
+  /// Part of the builder API used by applications assembling layouts.
+  #[allow(dead_code, reason = "public builder API for application layouts")]
   pub fn panel<P: Panel>(self, panel: Entity<P>, cx: &App) -> Self {
     let view: Arc<dyn PanelView> = Arc::new(panel);
     self.panel_view(view, cx)

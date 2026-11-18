@@ -273,10 +273,10 @@ fn setup_inspector_renderer(cx: &mut App) {
       .child(div().min_w_0().truncate().text_xs().child(active_element))
       .child(
         div()
-          .flex_1()
-          .min_h_0()
           .min_w_0()
           .overflow_y_scrollbar()
+          .flex_1()
+          .min_h_0()
           .child(state_view),
       )
       .into_any_element()

@@ -72,6 +72,14 @@ september = "September"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Pilih tarikh"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Salin kod"
+image     = "Imej"
+copy       = "Salin"
+select_all = "Pilih semua"
+copy_link  = "Salin pautan"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Bahasa Melayu"
 

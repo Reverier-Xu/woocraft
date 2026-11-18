@@ -36,11 +36,11 @@ impl Render for ButtonWindow {
         )
         .child(
           v_flex()
-            .flex_1()
-            .min_h_0()
-            .overflow_y_scrollbar()
             .p_6()
             .gap_4()
+            .overflow_y_scrollbar()
+            .flex_1()
+            .min_h_0()
             .child(
               div()
                 .text_xl()

@@ -156,6 +156,14 @@ luminance                = "輝度範囲"
 sig_peak                 = "信号ピーク"
 color_levels             = "カラーレベル"
 gpu_api                  = "映像出力 API"
+[tech.woooo.woocraft.markdown]
+copy_code = "コードをコピー"
+image     = "画像"
+copy       = "コピー"
+select_all = "すべて選択"
+copy_link  = "リンクをコピー"
+
+
 [tech.woooo.woocraft.i18n]
 name = "日本語"
 

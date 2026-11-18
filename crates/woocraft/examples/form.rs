@@ -65,6 +65,8 @@ impl Render for FormWindow {
             .p_6()
             .gap_5()
             .overflow_y_scrollbar()
+            .flex_1()
+            .min_h_0()
             .child(
               div()
                 .text_xl()

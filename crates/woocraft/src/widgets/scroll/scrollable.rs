@@ -9,6 +9,34 @@ use gpui::{
 use super::{ScrollableMask, Scrollbar, ScrollbarAxis, ScrollbarHandle};
 use crate::StyledExt;
 
+/// Adds a themed scrollbar to an element.
+///
+/// # Sizing the scroll area
+///
+/// `overflow_y_scrollbar()` (and the other `overflow_*_scrollbar` methods)
+/// replaces the element with a [`Scrollable`], which renders its own wrapper
+/// around the content. Builder calls therefore split into two groups:
+///
+/// - calls **before** `overflow_y_scrollbar()` style the *content*, which keeps
+///   its natural height and scrolls;
+/// - calls **after** it style the *Scrollable wrapper*, which is what bounds
+///   the scroll area.
+///
+/// So a scroll region that should fill the remaining space of a column must
+/// put `flex_1()`/`min_h_0()` **after** the call:
+///
+/// ```rust,ignore
+/// v_flex()
+///   .p_6()
+///   .overflow_y_scrollbar()
+///   .flex_1()   // bounds the scroll area
+///   .min_h_0()
+///   .child(long_content());
+/// ```
+///
+/// Applying `flex_1()` *before* the call puts it on the content, whose
+/// flex-basis 0 collapses it to the viewport height: the content then has
+/// nothing to scroll and the scrollbar never appears.
 pub trait ScrollableElement: InteractiveElement + Styled + ParentElement + Element {
   #[track_caller]
   fn scrollbar<H: ScrollbarHandle + Clone>(

@@ -156,6 +156,14 @@ luminance                = "휘도 범위"
 sig_peak                 = "신호 피크"
 color_levels             = "색상 레벨"
 gpu_api                  = "영상 출력 API"
+[tech.woooo.woocraft.markdown]
+copy_code = "코드 복사"
+image     = "이미지"
+copy       = "복사"
+select_all = "모두 선택"
+copy_link  = "링크 복사"
+
+
 [tech.woooo.woocraft.i18n]
 name = "한국어"
 

@@ -72,6 +72,14 @@ september = "szeptember"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Dátum kiválasztása"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Kód másolása"
+image     = "Kép"
+copy       = "Másolás"
+select_all = "Összes kijelölése"
+copy_link  = "Hivatkozás másolása"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Magyar"
 

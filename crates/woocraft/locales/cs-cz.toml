@@ -72,6 +72,14 @@ september = "září"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Vyberte datum"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Kopírovat kód"
+image     = "Obrázek"
+copy       = "Kopírovat"
+select_all = "Vybrat vše"
+copy_link  = "Kopírovat odkaz"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Čeština"
 

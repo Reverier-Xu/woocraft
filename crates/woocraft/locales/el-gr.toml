@@ -72,6 +72,14 @@ september = "Σεπτέμβριος"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Επιλογή ημερομηνίας"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Αντιγραφή κώδικα"
+image     = "Εικόνα"
+copy       = "Αντιγραφή"
+select_all = "Επιλογή όλων"
+copy_link  = "Αντιγραφή συνδέσμου"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Ελληνικά"
 

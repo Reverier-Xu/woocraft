@@ -72,6 +72,14 @@ september = "सितंबर"
 [tech.woooo.woocraft.date_picker]
 placeholder = "तारीख़ चुनें"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "कोड कॉपी करें"
+image     = "छवि"
+copy       = "कॉपी करें"
+select_all = "सभी चुनें"
+copy_link  = "लिंक कॉपी करें"
+
+
 [tech.woooo.woocraft.i18n]
 name = "हिन्दी"
 

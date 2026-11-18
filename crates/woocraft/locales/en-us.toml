@@ -156,6 +156,14 @@ luminance                = "Luminance"
 sig_peak                 = "Signal peak"
 color_levels             = "Colour levels"
 gpu_api                  = "Video output API"
+[tech.woooo.woocraft.markdown]
+copy_code = "Copy code"
+image     = "Image"
+copy       = "Copy"
+select_all = "Select All"
+copy_link  = "Copy Link"
+
+
 [tech.woooo.woocraft.i18n]
 name = "English (US)"
 

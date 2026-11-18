@@ -72,6 +72,14 @@ september = "september"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Välj datum"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Kopiera kod"
+image     = "Bild"
+copy       = "Kopiera"
+select_all = "Markera allt"
+copy_link  = "Kopiera länk"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Svenska"
 

@@ -33,6 +33,9 @@ enum-iterator                 = "2.3"
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
 palette                       = "0.7"
+# Markdown parsing for the `markdown` component. Default features are off: the
+# HTML renderer is not needed, the component builds gpui elements instead.
+pulldown-cmark                = { version = "0.13", default-features = false }
 regex                         = "1.13"
 schemars                      = "1.2"
 serde                         = { version = "1.0", features = ["derive"] }

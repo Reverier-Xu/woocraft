@@ -625,6 +625,7 @@ mod tests {
       ("calendar.week.wednesday", "We"),
       ("calendar.month.december", "December"),
       ("date_picker.placeholder", "Select date"),
+      ("markdown.copy_code", "Copy code"),
       ("menu.word_wrap", "Word Wrap"),
     ];
 

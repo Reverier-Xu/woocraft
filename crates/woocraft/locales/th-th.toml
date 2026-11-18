@@ -72,6 +72,14 @@ september = "กันยายน"
 [tech.woooo.woocraft.date_picker]
 placeholder = "เลือกวันที่"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "คัดลอกโค้ด"
+image     = "รูปภาพ"
+copy       = "คัดลอก"
+select_all = "เลือกทั้งหมด"
+copy_link  = "คัดลอกลิงก์"
+
+
 [tech.woooo.woocraft.i18n]
 name = "ไทย"
 

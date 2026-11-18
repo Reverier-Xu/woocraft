@@ -20,6 +20,8 @@ This repository is organized as a Cargo workspace, with the main maintained crat
 - Common widgets: Button, Input, Checkbox, Switch, Slider, Spinner, Tag
 - Navigation/info: Breadcrumb, Pagination, Tooltip, Popover, Notification
 - Layout/structure: Divider, TitleBar, WindowBorder, WidgetGroup
+- Content: Markdown (CommonMark + GFM, highlighted code blocks, clickable
+  links)
 - Advanced widgets: List, VirtualList, Menu, Progress
 
 > For exact exports, see `crates/woocraft/src/widgets/mod.rs` and `crates/woocraft/src/base/mod.rs`.
@@ -76,6 +78,7 @@ cargo run -p woocraft --example button
 cargo run -p woocraft --example controls
 cargo run -p woocraft --example menu
 cargo run -p woocraft --example pagination
+cargo run -p woocraft --example markdown
 ```
 
 Example sources are located in `crates/woocraft/examples/`.
@@ -122,6 +125,8 @@ Translation interfaces from `rust-i18n` are re-exported (for example `woocraft::
   - Exposes `woocraft::Assets`
   - Automatically registers embedded fonts (inside `woocraft::init`)
 - `terminal` (enabled by default): terminal widget and `woocraft-terminal`
+- `markdown` (enabled by default): `Markdown` renderer on top of
+  `pulldown-cmark`; see [`docs/markdown.md`](docs/markdown.md)
 - `tray`: system tray support
 - `media` (disabled by default): [`Player`]/[`PlayerView`] on top of libmpv —
   one player for audio and video, with audio filters/equalizer, subtitles and

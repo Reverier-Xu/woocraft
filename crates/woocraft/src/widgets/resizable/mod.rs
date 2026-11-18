@@ -236,23 +236,6 @@ impl ResizableState {
     self.adjust_to_container_size(cx);
   }
 
-  #[allow(dead_code)]
-  pub(crate) fn replace_panel(
-    &mut self, panel_ix: usize, panel: ResizablePanelState, cx: &mut Context<Self>,
-  ) {
-    let old_size = self.sizes[panel_ix];
-
-    self.panels[panel_ix] = panel;
-    self.sizes[panel_ix] = old_size;
-    self.adjust_to_container_size(cx);
-  }
-
-  #[allow(dead_code)]
-  pub(crate) fn clear(&mut self) {
-    self.panels.clear();
-    self.sizes.clear();
-  }
-
   #[inline]
   pub(crate) fn container_size(&self) -> Pixels {
     self.bounds.size.along(self.axis)

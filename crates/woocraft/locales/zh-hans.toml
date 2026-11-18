@@ -156,6 +156,14 @@ luminance                = "亮度范围"
 sig_peak                 = "信号峰值"
 color_levels             = "色彩范围"
 gpu_api                  = "视频输出接口"
+[tech.woooo.woocraft.markdown]
+copy_code = "复制代码"
+image     = "图片"
+copy       = "复制"
+select_all = "全选"
+copy_link  = "复制链接"
+
+
 [tech.woooo.woocraft.i18n]
 name = "简体中文"
 

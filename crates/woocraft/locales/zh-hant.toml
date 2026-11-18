@@ -156,6 +156,14 @@ luminance                = "亮度範圍"
 sig_peak                 = "訊號峰值"
 color_levels             = "色彩範圍"
 gpu_api                  = "視訊輸出介面"
+[tech.woooo.woocraft.markdown]
+copy_code = "複製程式碼"
+image     = "圖片"
+copy       = "複製"
+select_all = "全選"
+copy_link  = "複製連結"
+
+
 [tech.woooo.woocraft.i18n]
 name = "繁體中文"
 

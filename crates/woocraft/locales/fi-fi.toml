@@ -72,6 +72,14 @@ september = "syyskuu"
 [tech.woooo.woocraft.date_picker]
 placeholder = "Valitse päivämäärä"
 
+[tech.woooo.woocraft.markdown]
+copy_code = "Kopioi koodi"
+image     = "Kuva"
+copy       = "Kopioi"
+select_all = "Valitse kaikki"
+copy_link  = "Kopioi linkki"
+
+
 [tech.woooo.woocraft.i18n]
 name = "Suomi"
 
