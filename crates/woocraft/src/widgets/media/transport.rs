@@ -4,31 +4,53 @@
 //! creates one standalone — it is usable without the view:
 //!
 //! ```rust,ignore
-//! let transport = cx.new(|cx| PlayerTransport::new(&player, cx).small());
+//! let transport = cx.new(|cx| {
+//!   PlayerTransport::new(&player, cx)
+//!     .hide_control(TransportControl::Settings)
+//!     .on_control(TransportControl::Fullscreen, |_, _, cx| { /* ... */ })
+//! });
 //! ```
 //!
+//! # Layout
+//!
+//! Two rows: the timeline — position, seek slider, duration — above the
+//! controls. The second row is split into a leading group (previous,
+//! play/pause, next) and a trailing group (mute, volume, fullscreen,
+//! settings). Both groups are replaceable wholesale through
+//! [`PlayerTransport::leading`] and [`PlayerTransport::trailing`], and each
+//! built-in control can be hidden ([`PlayerTransport::control`]) or rewired
+//! to a host action ([`PlayerTransport::on_control`]).
+//!
 //! Sizing: a single [`Size`] tier threads through every part — the container
-//! metrics, the buttons, the sliders, the icons and the labels — so `.small()`
-//! yields an entirely small bar. Text scale rides on the sized controls
-//! (`Button`, `IconLabel`); the bar itself never sets a font size. Secondary
-//! information (the ticking times) reads as secondary through
+//! metrics, the buttons, the sliders, the icons and the labels — so
+//! `.small()` yields an entirely small bar. Text scale rides on the sized
+//! controls (`Button`, the time labels); the bar itself never sets a font
+//! size. Secondary information (the ticking times) reads as secondary through
 //! `theme.muted_foreground` at the same tier, never a smaller font.
+//!
+//! Every built-in button is flat ([`crate::ButtonVariant::Flat`]): the bar is
+//! chrome over content, so the controls carry no resting surface of their own
+//! and only show one on hover, active or focus.
 
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  AppContext as _, Context, ElementId, Entity, IntoElement, ParentElement as _, Render,
+  AnyElement, App, AppContext as _, ClickEvent, Context, Div, ElementId, Entity,
+  InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, Stateful,
   Styled as _, Subscription, Window, div,
 };
 
-use super::player::{Player, PlayerEvent, format_time};
+use super::{
+  player::{Player, PlayerEvent, format_time},
+  snapshot::PlayerSnapshot,
+};
 use crate::{
-  ActiveTheme as _, Button, Icon, IconLabel, IconName, Sizable, Size, Slider, SliderEvent,
-  SliderState, StyleSized, Theme, h_flex,
+  ActiveTheme as _, Anchor, Button, ButtonVariants as _, DropdownMenu as _, Icon, IconName,
+  PopupMenu, PopupMenuItem, Sizable, Size, Slider, SliderEvent, SliderState, StyleSized, Theme,
+  Tooltip, h_flex, translate_woocraft, v_flex,
 };
 
-/// Playback speeds the speed button cycles through, ascending: the first one
-/// above the current speed is next, wrapping around.
+/// Playback speeds the default settings menu offers, ascending.
 const SPEEDS: [f64; 5] = [0.5, 1.0, 1.25, 1.5, 2.0];
 
 /// Seek-slider changes whose target is closer than this to the current
@@ -45,23 +67,91 @@ const SEEK_EPSILON_SECS: f64 = 0.1;
 /// other metric here.
 const VOLUME_SLIDER_WIDTH_EM: f32 = 6.;
 
-/// Reserved minimum width of the position and duration labels, in ems of the
-/// bar's size tier.
+/// The built-in controls of the bar's second row, in bar order.
 ///
-/// Both labels tick at least once a second; if their boxes followed the text,
-/// the whole bar would re-layout on every tick. `4.5em` holds the widest time
-/// `format_time` renders for sane inputs (`H:MM:SS` — seven cells in the
-/// monospaced UI family, where one cell is exactly half an em) plus the
-/// label's own horizontal insets, so the digits change inside a stable box.
-const TIME_LABEL_MIN_EM: f32 = 4.5;
+/// Every control is shown by default; [`PlayerTransport::control`] hides or
+/// re-shows one, and [`PlayerTransport::on_control`] replaces what clicking it
+/// does. The two groups the controls are laid out in — leading (`Previous`,
+/// `PlayPause`, `Next`) and trailing (`Mute`, `Volume`, `Fullscreen`,
+/// `Settings`) — can each be replaced wholesale by a host element through
+/// [`PlayerTransport::leading`] and [`PlayerTransport::trailing`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TransportControl {
+  /// Previous playlist entry (`playlist-prev`).
+  Previous,
+  /// Play/pause toggle, with the icon following the player's state.
+  PlayPause,
+  /// Next playlist entry (`playlist-next`).
+  Next,
+  /// Mute/unmute, with the icon following the player's state.
+  Mute,
+  /// The volume slider.
+  Volume,
+  /// Window fullscreen toggle, with the icon following the window's state.
+  Fullscreen,
+  /// Settings; by default it opens a playback-speed menu.
+  Settings,
+}
 
-/// The transport bar: play/pause, position, seek, duration, mute, volume and
-/// speed, bound to one [`Player`].
+impl TransportControl {
+  /// Every control, in bar order.
+  pub const ALL: [TransportControl; 7] = [
+    TransportControl::Previous,
+    TransportControl::PlayPause,
+    TransportControl::Next,
+    TransportControl::Mute,
+    TransportControl::Volume,
+    TransportControl::Fullscreen,
+    TransportControl::Settings,
+  ];
+
+  /// The controls of the second row's leading group.
+  const LEADING: [TransportControl; 3] = [
+    TransportControl::Previous,
+    TransportControl::PlayPause,
+    TransportControl::Next,
+  ];
+
+  /// The controls of the second row's trailing group.
+  const TRAILING: [TransportControl; 4] = [
+    TransportControl::Mute,
+    TransportControl::Volume,
+    TransportControl::Fullscreen,
+    TransportControl::Settings,
+  ];
+
+  /// This control's bit in [`PlayerTransport`]'s shown/hidden set.
+  const fn index(self) -> usize {
+    self as usize
+  }
+}
+
+/// A host action attached to one built-in control.
+type TransportHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+
+/// A host-built replacement for one side of the second row.
+type TransportSlot = Rc<dyn Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement>;
+
+/// A host-built settings menu, opened by the settings button.
+type SettingsMenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+
+/// The player and window state one render pass draws its controls from.
+#[derive(Clone, Copy)]
+struct ControlState {
+  paused: bool,
+  muted: bool,
+  fullscreen: bool,
+}
+
+/// The transport bar: a timeline row above a control row, bound to one
+/// [`Player`].
 ///
 /// The bar owns the seek/volume slider states and the loop guard that keeps
 /// the seek slider in sync with the player's position reports (see
-/// [`PlayerTransport::sync_seek`]). Element ids are scoped to the player, so
+/// `PlayerTransport::sync_seek`). Element ids are scoped to the player, so
 /// several transports can live in one window.
+///
+/// [`PlayerView`]: super::PlayerView
 pub struct PlayerTransport {
   player: Entity<Player>,
   seek: Entity<SliderState>,
@@ -70,6 +160,16 @@ pub struct PlayerTransport {
   /// writes; see [`Self::sync_seek`].
   pending_seek_echoes: usize,
   size: Size,
+  /// One bit per hidden [`TransportControl`]; zero shows everything.
+  hidden: u8,
+  /// Host actions overriding the built-in behavior, per control.
+  handlers: [Option<TransportHandler>; TransportControl::ALL.len()],
+  /// Host-built settings menu; `None` uses the default speed menu.
+  settings_menu: Option<SettingsMenuBuilder>,
+  /// Host-built replacement for the second row's leading group.
+  leading: Option<TransportSlot>,
+  /// Host-built replacement for the second row's trailing group.
+  trailing: Option<TransportSlot>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -153,6 +253,11 @@ impl PlayerTransport {
       volume,
       pending_seek_echoes: 0,
       size: Size::default(),
+      hidden: 0,
+      handlers: std::array::from_fn(|_| None),
+      settings_menu: None,
+      leading: None,
+      trailing: None,
       _subscriptions: subscriptions,
     };
     transport.volume.update(cx, |slider, cx| {
@@ -166,11 +271,277 @@ impl PlayerTransport {
     &self.player
   }
 
+  /// Shows or hides one built-in control. Every control is shown by default.
+  ///
+  /// Hiding a control removes it from its group; the group itself stays, so
+  /// the remaining controls keep their alignment. A group whose controls are
+  /// all hidden disappears (and takes the second row with it when both are).
+  pub fn control(mut self, control: TransportControl, shown: bool) -> Self {
+    self.set_control(control, shown);
+    self
+  }
+
+  /// Shows one built-in control; see [`Self::control`].
+  pub fn show_control(self, control: TransportControl) -> Self {
+    self.control(control, true)
+  }
+
+  /// Hides one built-in control; see [`Self::control`].
+  pub fn hide_control(self, control: TransportControl) -> Self {
+    self.control(control, false)
+  }
+
+  /// Runtime form of [`Self::control`], for a bar that already exists.
+  pub fn set_control(&mut self, control: TransportControl, shown: bool) {
+    let bit = 1u8 << control.index();
+    if shown {
+      self.hidden &= !bit;
+    } else {
+      self.hidden |= bit;
+    }
+  }
+
+  /// Whether one built-in control is currently shown.
+  pub fn is_control_shown(&self, control: TransportControl) -> bool {
+    self.hidden & (1u8 << control.index()) == 0
+  }
+
+  /// Replaces what clicking one built-in control does, keeping its icon,
+  /// tooltip and position.
+  ///
+  /// The icons still follow the player and window state (play/pause, mute,
+  /// fullscreen), so a host action reads as the same control with different
+  /// behavior. Overriding `Settings` also takes precedence over
+  /// [`Self::settings_menu`]: the button stops opening a menu and runs the
+  /// action instead.
+  pub fn on_control(
+    mut self, control: TransportControl,
+    handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+  ) -> Self {
+    self.set_control_action(control, handler);
+    self
+  }
+
+  /// Runtime form of [`Self::on_control`].
+  pub fn set_control_action(
+    &mut self, control: TransportControl,
+    handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+  ) {
+    self.handlers[control.index()] = Some(Rc::new(handler));
+  }
+
+  /// Drops a host action and restores the built-in behavior of one control.
+  pub fn clear_control_action(&mut self, control: TransportControl) {
+    self.handlers[control.index()] = None;
+  }
+
+  /// Replaces the menu the settings button opens.
+  ///
+  /// Without it, settings opens the playback-speed menu. With
+  /// [`Self::on_control`]`(TransportControl::Settings, ..)` the action wins
+  /// and no menu opens.
+  pub fn settings_menu(
+    mut self,
+    builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+  ) -> Self {
+    self.settings_menu = Some(Rc::new(builder));
+    self
+  }
+
+  /// Replaces the second row's leading group (previous, play/pause, next)
+  /// with a host-built element.
+  ///
+  /// The closure receives a fresh [`PlayerSnapshot`] every render, like the
+  /// [`PlayerView`](super::PlayerView) slots. When set, none of the built-in
+  /// leading controls render — hide or re-mount them through the usual element
+  /// builders, or keep them and skip this slot.
+  pub fn leading(
+    mut self, build: impl Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement + 'static,
+  ) -> Self {
+    self.leading = Some(Rc::new(build));
+    self
+  }
+
+  /// Replaces the second row's trailing group (mute, volume, fullscreen,
+  /// settings) with a host-built element; see [`Self::leading`].
+  pub fn trailing(
+    mut self, build: impl Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement + 'static,
+  ) -> Self {
+    self.trailing = Some(Rc::new(build));
+    self
+  }
+
   /// Sets the size tier without a rebuild. `PlayerView` threads its own tier
   /// into its default transport through this on every render, so resizing the
   /// view resizes the bar with it.
   pub(crate) fn set_size(&mut self, size: Size) {
     self.size = size;
+  }
+
+  /// The action a control runs: the host override when there is one, else the
+  /// built-in behavior.
+  fn handler(
+    &self, control: TransportControl,
+    built_in: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+  ) -> TransportHandler {
+    self.handlers[control.index()]
+      .clone()
+      .unwrap_or_else(|| Rc::new(built_in))
+  }
+
+  /// Builds one built-in control, or `None` when the host hid it.
+  ///
+  /// Controls are built lazily per render (rather than cached) because every
+  /// one of them reads live state — the play/pause icon follows `paused`, the
+  /// mute icon `muted`, the fullscreen icon the window.
+  fn built_in(
+    &self, control: TransportControl, state: ControlState, size: Size,
+  ) -> Option<AnyElement> {
+    if !self.is_control_shown(control) {
+      return None;
+    }
+    let id = self.player.entity_id().as_u64();
+
+    Some(match control {
+      TransportControl::Previous => {
+        let player = self.player.clone();
+        let handler = self.handler(control, move |_, _, cx| {
+          let _ = player.read(cx).playlist_prev();
+        });
+        control_button(
+          ("player-previous", id),
+          IconName::Previous,
+          tooltip("media.previous"),
+          size,
+        )
+        .on_click(move |event, window, cx| handler(event, window, cx))
+        .into_any_element()
+      }
+      TransportControl::PlayPause => {
+        let player = self.player.clone();
+        let handler = self.handler(control, move |_, _, cx| {
+          let _ = player.update(cx, |player, cx| player.toggle_pause(cx));
+        });
+        control_button(
+          ("player-play", id),
+          if state.paused {
+            IconName::Play
+          } else {
+            IconName::Pause
+          },
+          tooltip(if state.paused {
+            "media.play"
+          } else {
+            "media.pause"
+          }),
+          size,
+        )
+        .on_click(move |event, window, cx| handler(event, window, cx))
+        .into_any_element()
+      }
+      TransportControl::Next => {
+        let player = self.player.clone();
+        let handler = self.handler(control, move |_, _, cx| {
+          let _ = player.read(cx).playlist_next();
+        });
+        control_button(
+          ("player-next", id),
+          IconName::Next,
+          tooltip("media.next"),
+          size,
+        )
+        .on_click(move |event, window, cx| handler(event, window, cx))
+        .into_any_element()
+      }
+      TransportControl::Mute => {
+        let player = self.player.clone();
+        let handler = self.handler(control, move |_, _, cx| {
+          let _ = player.update(cx, |player, _| {
+            let muted = player.state().muted;
+            player.set_muted(!muted)
+          });
+        });
+        control_button(
+          ("player-mute", id),
+          if state.muted {
+            IconName::SpeakerOff
+          } else {
+            IconName::Speaker2
+          },
+          tooltip(if state.muted {
+            "media.unmute"
+          } else {
+            "media.mute"
+          }),
+          size,
+        )
+        .on_click(move |event, window, cx| handler(event, window, cx))
+        .into_any_element()
+      }
+      TransportControl::Volume => div()
+        .flex_none()
+        .w(size.em(VOLUME_SLIDER_WIDTH_EM))
+        .child(Slider::new(format!("player-volume-{id}"), &self.volume).with_size(size))
+        .into_any_element(),
+      TransportControl::Fullscreen => {
+        let handler = self.handler(control, move |_, window, _| window.toggle_fullscreen());
+        control_button(
+          ("player-fullscreen", id),
+          if state.fullscreen {
+            IconName::FullScreenMinimize
+          } else {
+            IconName::FullScreenMaximize
+          },
+          tooltip(if state.fullscreen {
+            "media.exit_fullscreen"
+          } else {
+            "media.fullscreen"
+          }),
+          size,
+        )
+        .on_click(move |event, window, cx| handler(event, window, cx))
+        .into_any_element()
+      }
+      TransportControl::Settings => {
+        let button = control_button(
+          ("player-settings", id),
+          IconName::Settings,
+          tooltip("media.settings"),
+          size,
+        );
+        match self.handlers[control.index()].clone() {
+          // An action replaces the menu outright: a button that both ran an
+          // action and opened a menu would do two things on one click.
+          Some(handler) => button
+            .on_click(move |event, window, cx| handler(event, window, cx))
+            .into_any_element(),
+          None => {
+            let player = self.player.clone();
+            let builder = self.settings_menu.clone();
+            button
+              // Above the trigger: the bar sits at the bottom of the player,
+              // so a menu opening downwards would leave the window.
+              .dropdown_menu_with_anchor(Anchor::BottomLeft, move |menu, window, cx| match builder
+                .as_ref()
+              {
+                Some(build) => build(menu, window, cx),
+                None => speed_menu(menu, &player, cx),
+              })
+              .into_any_element()
+          }
+        }
+      }
+    })
+  }
+
+  /// The built-in controls of one group, skipping hidden ones.
+  fn group(
+    &self, controls: &[TransportControl], state: ControlState, size: Size,
+  ) -> Vec<AnyElement> {
+    controls
+      .iter()
+      .filter_map(|control| self.built_in(*control, state, size))
+      .collect()
   }
 
   /// Mirrors a player-reported position into the seek slider.
@@ -194,106 +565,156 @@ impl PlayerTransport {
 impl_sizable!(PlayerTransport);
 
 impl Render for PlayerTransport {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let size = self.size;
     let theme = cx.theme().clone();
     let id = self.player.entity_id().as_u64();
-    let (paused, muted, speed, position, duration) = {
+    let (paused, muted, position, duration) = {
       let state = self.player.read(cx).state();
-      (
-        state.paused,
-        state.muted,
-        state.speed,
-        state.position,
-        state.duration,
-      )
+      (state.paused, state.muted, state.position, state.duration)
+    };
+    let state = ControlState {
+      paused,
+      muted,
+      fullscreen: window.is_fullscreen(),
     };
 
-    let play_button = {
-      let player = self.player.clone();
-      Button::new(("player-play", id))
-        .with_size(size)
-        .icon(Icon::new(if paused {
-          IconName::Play
-        } else {
-          IconName::Pause
-        }))
-        .on_click(move |_, _, cx| {
-          let _ = player.update(cx, |player, cx| player.toggle_pause(cx));
-        })
-    };
-
-    let mute_button = {
-      let player = self.player.clone();
-      Button::new(("player-mute", id))
-        .with_size(size)
-        .icon(Icon::new(if muted {
-          IconName::SpeakerOff
-        } else {
-          IconName::Speaker2
-        }))
-        .on_click(move |_, _, cx| {
-          let _ = player.update(cx, |player, _| player.set_muted(!muted));
-        })
-    };
-
-    let next_speed = SPEEDS
-      .iter()
-      .copied()
-      .find(|candidate| *candidate > speed + f64::EPSILON)
-      .unwrap_or(SPEEDS[0]);
-    let speed_button = {
-      let player = self.player.clone();
-      Button::new(("player-speed", id))
-        .with_size(size)
-        .label(format!("{}x", (speed * 100.0).round() / 100.0))
-        .on_click(move |_, _, cx| {
-          let _ = player.update(cx, |player, _| player.set_speed(next_speed));
-        })
-    };
-
-    h_flex()
+    // Row one: the timeline. The slider takes whatever the two ticking
+    // labels leave, so the bar fills its container at any width.
+    let timeline = h_flex()
       .w_full()
       .items_center()
-      // A container row, aligned with the `Slider` it hosts: same height
-      // tier (container around component), same horizontal padding, same
-      // gap, same radius step. The `Slider` itself is never restyled.
-      .container_size(size)
       .container_gap(size)
-      .container_rounded(size)
-      .bg(theme.card)
-      .text_color(theme.card_foreground)
-      .child(play_button)
       .child(time_label(("player-position", id), size, &theme, position))
       .child(
         div()
+          .min_w_0()
           .flex_1()
           .child(Slider::new(format!("player-seek-{id}"), &self.seek).with_size(size)),
       )
-      .child(time_label(("player-duration", id), size, &theme, duration))
-      .child(mute_button)
-      .child(
-        div()
-          .flex_none()
-          .w(size.em(VOLUME_SLIDER_WIDTH_EM))
-          .child(Slider::new(format!("player-volume-{id}"), &self.volume).with_size(size)),
-      )
-      .child(speed_button)
+      .child(time_label(("player-duration", id), size, &theme, duration));
+
+    let mut rows = vec![timeline.into_any_element()];
+
+    // Row two: the control groups. A custom slot replaces its group entirely;
+    // a group with nothing left to show is dropped, and when both are gone
+    // the row goes with them instead of leaving a gap under the timeline.
+    let snapshot = (self.leading.is_some() || self.trailing.is_some())
+      .then(|| PlayerSnapshot::new(&self.player, cx));
+
+    let leading = if let Some(build) = self.leading.as_ref() {
+      snapshot
+        .as_ref()
+        .map(|snapshot| build(snapshot, window, cx))
+    } else {
+      let controls = self.group(&TransportControl::LEADING, state, size);
+      (!controls.is_empty()).then(|| {
+        h_flex()
+          .items_center()
+          .container_gap(size)
+          .children(controls)
+          .into_any_element()
+      })
+    };
+
+    let trailing = if let Some(build) = self.trailing.as_ref() {
+      snapshot
+        .as_ref()
+        .map(|snapshot| build(snapshot, window, cx))
+    } else {
+      let controls = self.group(&TransportControl::TRAILING, state, size);
+      (!controls.is_empty()).then(|| {
+        h_flex()
+          .items_center()
+          .container_gap(size)
+          .children(controls)
+          .into_any_element()
+      })
+    };
+
+    if leading.is_some() || trailing.is_some() {
+      rows.push(
+        h_flex()
+          .w_full()
+          .items_center()
+          .container_gap(size)
+          // The leading side grows so a host slot can stretch (a title, a
+          // badge row); the trailing side keeps its natural width.
+          .child(div().min_w_0().flex_1().children(leading))
+          .children(trailing)
+          .into_any_element(),
+      );
+    }
+
+    v_flex()
+      .w_full()
+      .container_px(size)
+      .container_py(size)
+      .container_gap_y(size)
+      .container_rounded(size)
+      .bg(theme.card)
+      .text_color(theme.card_foreground)
+      .children(rows)
   }
 }
 
+/// A built-in control button: flat, tier-sized, icon-only, with a tooltip.
+fn control_button(
+  id: impl Into<ElementId>, icon: IconName, tooltip: SharedString, size: Size,
+) -> Button {
+  Button::new(id)
+    .with_size(size)
+    .flat()
+    .icon(Icon::new(icon))
+    .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
+}
+
+/// A translated tooltip label.
+fn tooltip(key: &str) -> SharedString {
+  translate_woocraft(key).into()
+}
+
+/// The default settings menu: playback speed, checked against the live
+/// `speed` property so a menu opened after a speed change shows the truth.
+fn speed_menu(mut menu: PopupMenu, player: &Entity<Player>, cx: &mut App) -> PopupMenu {
+  let current = player.read(cx).state().speed;
+  for speed in SPEEDS {
+    let player = player.clone();
+    menu = menu.item(
+      PopupMenuItem::new(format!("{speed}x"))
+        .checked((current - speed).abs() < f64::EPSILON)
+        .on_click(move |_, _, cx| {
+          let _ = player.update(cx, |player, _| player.set_speed(speed));
+        }),
+    );
+  }
+  menu
+}
+
 /// One ticking time label (position or duration): secondary information, so
-/// muted colour at the bar's own tier — never a smaller font — inside a
-/// reserved minimum width (see [`TIME_LABEL_MIN_EM`]) so the digits tick
-/// without resizing the bar.
+/// muted colour at the bar's own tier — never a smaller font.
+///
+/// The label is sized by its text. `format_time` switches from `M:SS` to
+/// `H:MM:SS` only once the value passes an hour, and every glyph of the UI
+/// family is a single cell wide, so the box changes width at minute and hour
+/// boundaries — not on every tick. A reserved width would leave slack that
+/// reads as a gap between the time and the slider; the seek slider's `flex_1`
+/// absorbs the shift instead.
+///
+/// This is a bare `div` rather than an `IconLabel`: the latter brings the
+/// component insets (0.5em each side) and truncation of an interactive control,
+/// which around a four-cell time reads as padding between the time and the
+/// track.
 fn time_label(
   element_id: impl Into<ElementId>, size: Size, theme: &Theme, seconds: f64,
-) -> IconLabel {
-  IconLabel::new(element_id)
-    .with_size(size)
-    .label(format_time(Duration::from_secs_f64(seconds.max(0.0))))
+) -> Stateful<Div> {
+  div()
+    .id(element_id)
+    .flex_none()
+    .text_size(size.text_size())
+    .line_height(size.text_size())
     .text_color(theme.muted_foreground)
-    .min_w(size.em(TIME_LABEL_MIN_EM))
+    .child(format_time(Duration::from_secs_f64(seconds.max(0.0))))
 }
 
 /// Whether a seek-slider change should seek the player.
@@ -356,5 +777,47 @@ mod tests {
     assert!(!should_seek(position, 0.0, 50.0, false));
     // An echo of a player-driven write never seeks, however far it reads.
     assert!(!should_seek(0.0, duration, 99.0, true));
+  }
+
+  #[test]
+  fn every_control_owns_one_bit_and_one_group_slot() {
+    // The shown/hidden set is a bit per control, so the indices must be
+    // distinct; and every control must be reachable from one of the two
+    // groups, or hiding it could never hide anything.
+    let mut seen = 0u32;
+    for control in TransportControl::ALL {
+      let bit = 1u32 << control.index();
+      assert_eq!(seen & bit, 0, "{control:?} reuses another control's bit");
+      seen |= bit;
+    }
+    // `index()` is the discriminant, so `ALL` has to stay in declaration order
+    // or a control's bit would drift away from its position.
+    for (position, control) in TransportControl::ALL.into_iter().enumerate() {
+      assert_eq!(control.index(), position, "{control:?} is out of order");
+    }
+    let mut grouped = Vec::new();
+    grouped.extend(TransportControl::LEADING);
+    grouped.extend(TransportControl::TRAILING);
+    for control in TransportControl::ALL {
+      assert!(grouped.contains(&control), "{control:?} is in no group");
+    }
+  }
+
+  #[test]
+  fn hiding_controls_is_a_per_control_switch() {
+    // The bit set is a plain per-control flag: hiding one leaves every other
+    // control alone, and showing it again restores exactly that one.
+    let mut hidden = 0u8;
+    let hide = |hidden: &mut u8, control: TransportControl| *hidden |= 1 << control.index();
+    let show = |hidden: &mut u8, control: TransportControl| *hidden &= !(1 << control.index());
+    hide(&mut hidden, TransportControl::Settings);
+    assert_eq!(hidden, 1 << TransportControl::Settings.index());
+    hide(&mut hidden, TransportControl::Volume);
+    assert_eq!(
+      hidden,
+      (1 << TransportControl::Settings.index()) | (1 << TransportControl::Volume.index())
+    );
+    show(&mut hidden, TransportControl::Settings);
+    assert_eq!(hidden, 1 << TransportControl::Volume.index());
   }
 }

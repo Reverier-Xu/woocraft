@@ -736,6 +736,21 @@ impl Player {
     self.set_property("playlist-pos", index as i64)
   }
 
+  /// Advances to the next playlist entry (`playlist-next`).
+  ///
+  /// mpv owns the wrap-around behavior: it stops at the last entry unless
+  /// `loop-playlist` is set, so the transport bar's next button never loops on
+  /// its own.
+  pub fn playlist_next(&self) -> Result<()> {
+    self.command("playlist-next", &["weak"])
+  }
+
+  /// Goes back to the previous playlist entry (`playlist-prev`); see
+  /// [`Self::playlist_next`] for the boundary behavior.
+  pub fn playlist_prev(&self) -> Result<()> {
+    self.command("playlist-prev", &["weak"])
+  }
+
   /// The chapters of the current entry.
   pub fn chapters(&self) -> Vec<Chapter> {
     let count = self.get_property::<i64>("chapter-list/count").unwrap_or(0);

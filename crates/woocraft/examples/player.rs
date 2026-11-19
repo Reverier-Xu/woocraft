@@ -60,7 +60,8 @@ use woocraft::{
   InputEvent, InputState, Player, PlayerEvent, PlayerOptions, PlayerPlaylist, PlayerTrackMenu,
   PlayerView, PopupMenuItem, PropertyValue, ScrollableElement, ScrollbarShow, Sizable, Size,
   Slider, SliderEvent, SliderOrigin, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar,
-  Tooltip, Track, TrackKind, VideoTransport, h_flex, init, translate_woocraft, v_flex,
+  Tooltip, Track, TrackKind, TransportControl, VideoTransport, h_flex, init, translate_woocraft,
+  v_flex,
 };
 
 /// The decoder menu entries, as mpv `hwdec` values: the four generic modes
@@ -2116,37 +2117,43 @@ fn mount_player_view(
 ) -> Entity<PlayerView> {
   let slot_player = player.clone();
   cx.new(|cx| {
-    PlayerView::new(player, cx)
-      .with_size(size)
-      // The slot stays available for host chrome; the standard track menu and
-      // playlist live in the control panel instead, where they scroll with it.
-      .controls(move |_, _, _| {
-        // `controls` takes an `Fn`, so the entity handles are cloned per call.
-        let back = slot_player.clone();
-        let forward = slot_player.clone();
-        h_flex()
-          .w_full()
-          .container_gap(size)
-          .child(icon_button(
-            "slot-back",
-            IconName::ArrowCircleLeft,
-            t("media.seek_back"),
-            size,
-            move |_, _, cx| {
-              let _ = back.update(cx, |player, _| player.seek_by(-10.0));
-            },
-          ))
-          .child(icon_button(
-            "slot-forward",
-            IconName::ArrowCircleRight,
-            t("media.seek_forward"),
-            size,
-            move |_, _, cx| {
-              let _ = forward.update(cx, |player, _| player.seek_by(10.0));
-            },
-          ))
-          .into_any_element()
-      })
+    // The bar's own settings button would duplicate the control panel this
+    // example already mounts on the right, so it is switched off — the same
+    // per-control switch hides or re-shows any built-in button, and
+    // `PlayerTransport::on_control` rewires one to a host action.
+    PlayerView::with_transport(player, cx, |transport| {
+      transport.hide_control(TransportControl::Settings)
+    })
+    .with_size(size)
+    // The slot stays available for host chrome; the standard track menu and
+    // playlist live in the control panel instead, where they scroll with it.
+    .controls(move |_, _, _| {
+      // `controls` takes an `Fn`, so the entity handles are cloned per call.
+      let back = slot_player.clone();
+      let forward = slot_player.clone();
+      h_flex()
+        .w_full()
+        .container_gap(size)
+        .child(icon_button(
+          "slot-back",
+          IconName::ArrowCircleLeft,
+          t("media.seek_back"),
+          size,
+          move |_, _, cx| {
+            let _ = back.update(cx, |player, _| player.seek_by(-10.0));
+          },
+        ))
+        .child(icon_button(
+          "slot-forward",
+          IconName::ArrowCircleRight,
+          t("media.seek_forward"),
+          size,
+          move |_, _, cx| {
+            let _ = forward.update(cx, |player, _| player.seek_by(10.0));
+          },
+        ))
+        .into_any_element()
+    })
   })
 }
 

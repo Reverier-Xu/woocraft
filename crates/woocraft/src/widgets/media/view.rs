@@ -56,7 +56,33 @@ impl PlayerView {
   /// Builds a view bound to `player`: the default stage and the standard
   /// [`PlayerTransport`] bar, nothing else.
   pub fn new(player: &Entity<Player>, cx: &mut Context<Self>) -> Self {
-    let transport = cx.new(|cx| PlayerTransport::new(player, cx));
+    Self::with_transport(player, cx, |transport| transport)
+  }
+
+  /// Builds a view like [`Self::new`], but lets `config` adjust the default
+  /// transport bar before it is created — hiding controls
+  /// ([`PlayerTransport::control`]), rewiring their actions
+  /// ([`PlayerTransport::on_control`]), replacing the settings menu
+  /// ([`PlayerTransport::settings_menu`]) or either side of the second row
+  /// ([`PlayerTransport::leading`], [`PlayerTransport::trailing`]):
+  ///
+  /// ```rust,ignore
+  /// let view = cx.new(|cx| {
+  ///   PlayerView::with_transport(&player, cx, |transport| {
+  ///     transport
+  ///       .hide_control(TransportControl::Fullscreen)
+  ///       .on_control(TransportControl::Settings, |_, _, cx| { /* ... */ })
+  ///   })
+  /// });
+  /// ```
+  ///
+  /// [`Self::transport`] replaces the bar outright instead, keeping no
+  /// built-in control.
+  pub fn with_transport(
+    player: &Entity<Player>, cx: &mut Context<Self>,
+    config: impl FnOnce(PlayerTransport) -> PlayerTransport + 'static,
+  ) -> Self {
+    let transport = cx.new(|cx| config(PlayerTransport::new(player, cx)));
     // Any player report re-renders the view, so slot content (a custom stage,
     // custom controls) follows position ticks and track changes without each
     // host wiring its own subscription.
@@ -132,6 +158,12 @@ impl PlayerView {
   /// The player this view renders.
   pub fn player(&self) -> &Entity<Player> {
     &self.player
+  }
+
+  /// The default transport bar this view renders. [`Self::with_transport`]
+  /// configures it up front; this handle reaches the same entity afterwards.
+  pub fn transport_bar(&self) -> &Entity<PlayerTransport> {
+    &self.transport
   }
 }
 

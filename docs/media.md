@@ -37,7 +37,7 @@ what keeps "mpv native features" complete instead of best-effort.
 
 | Area | Covered by | mpv mechanism |
 | --- | --- | --- |
-| Load, enqueue, playlist navigation | `load`, `enqueue`, `playlist`, `set_playlist_position` | `loadfile`, `playlist-*` |
+| Load, enqueue, playlist navigation | `load`, `enqueue`, `playlist`, `set_playlist_position`, `playlist_next`, `playlist_prev` | `loadfile`, `playlist-*` |
 | Transport | `play`, `pause`, `toggle_pause`, `stop`, `seek_to`, `seek_by`, `frame_step`, `frame_back_step`, `set_ab_loop` | `seek`, `frame-step`, `ab-loop-*` |
 | Volume / mute / speed | `set_volume`, `set_muted`, `set_speed`, `set_volume_max`, `set_pitch_correction` | `volume`, `mute`, `speed`, `volume-max`, `audio-pitch-correction` |
 | Audio output | `set_audio_device`, `set_balance`, `set_audio_delay`, `set_replaygain`, `set_audio_track` | `audio-device`, `balance`, `audio-delay`, `replaygain`, `aid` |
@@ -66,6 +66,40 @@ without a separate text renderer in `woocraft`.
   terminal, grab keys or draw its own UI; input and chrome belong to the host.
 - Any remaining option is reachable through `PlayerOptions::option` before the
   core initializes, and through `set_property` afterwards.
+
+## Transport bar
+
+`PlayerView` renders a `PlayerTransport` by default. It is two rows: the
+timeline (position, seek slider, duration) above the controls — previous,
+play/pause and next on the leading side, mute, volume, fullscreen and settings
+on the trailing side. Every built-in button is flat and icon-only at the bar's
+`Size` tier, with a tooltip; the play/pause, mute and fullscreen icons follow
+the player and window state.
+
+Each control can be hidden or rewired, and either side of the control row can
+be replaced with host content. `PlayerView::with_transport` configures the
+view's own bar before it is created:
+
+```rust
+let view = cx.new(|cx| {
+  PlayerView::with_transport(&player, cx, |bar| {
+    bar
+      // Keep the bar, drop the settings button: the host has its own panel.
+      .hide_control(TransportControl::Settings)
+      // Fullscreen for the whole window instead of the player's window.
+      .on_control(TransportControl::Fullscreen, |_, _, cx| { /* ... */ })
+      // Or replace a whole side (a title, a playlist toggle, a timer).
+      .leading(|snapshot, _, _| {
+        div().child(snapshot.title.clone().unwrap_or_default()).into_any_element()
+      })
+  })
+});
+```
+
+A standalone bar works the same way without the view
+(`PlayerTransport::new(&player, cx)` then mount it wherever), and
+`PlayerView::transport_bar()` reaches the view's bar afterwards. Replacing the
+bar outright is still `PlayerView::transport`.
 
 ## Video transports: software and composition
 
