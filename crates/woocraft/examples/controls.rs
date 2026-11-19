@@ -546,8 +546,610 @@ impl ControlsWindow {
 
 impl Render for ControlsWindow {
   fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-    let slider_value = self.slider_state.read(cx).value().end();
+    window_border()
+      .child(
+        v_flex()
+          .size_full()
+          .min_h_0()
+          .child(self.render_title_bar())
+          .child(
+            v_flex()
+              .p_6()
+              .gap_4()
+              .overflow_y_scrollbar()
+              .flex_1()
+              .min_h_0()
+              .child(self.render_overview(cx))
+              .child(self.render_inputs(cx))
+              .child(Divider::horizontal_dashed().label("newly added capabilities"))
+              .child(self.render_avatars())
+              .child(self.render_buttons(cx))
+              .child(Divider::horizontal_dashed().label("time components"))
+              .child(self.render_time_components(cx))
+              .child(self.render_summary(cx)),
+          ),
+      )
+      .child(
+        NotificationCenter::new(&self.notification_state)
+          .placement(NotificationPlacement::BottomRight),
+      )
+  }
+}
+
+/// Renders one section per helper below so each section keeps its own stack
+/// frame; a single `render` body would hold every widget temporary at once and
+/// trip `clippy::large_unopt_stack_frames` in debug builds.
+impl ControlsWindow {
+  fn render_title_bar(&self) -> impl IntoElement {
+    TitleBar::new()
+      .title("Woocraft Controls Example")
+      .app_menu_bar(self.app_menu_bar.clone())
+      .title_menu(|menu, _, _| {
+        menu
+          .item(PopupMenuItem::new("New Workspace"))
+          .item(PopupMenuItem::new("Open Project"))
+          .separator()
+          .item(PopupMenuItem::new("Settings"))
+      })
+      .theme_button(true)
+      .language_button(true)
+      // Restrict the language menu to the languages this example ships
+      // (a subset of woocraft's full coverage); remove the call below
+      // to list every language woocraft supports instead.
+      .languages([
+        "en-us", "zh-hans", "zh-hant", "ja-jp", "ko-kr", "de-de", "fr-fr", "es-es",
+      ])
+      .zoom_button(true)
+  }
+
+  fn render_overview(&self, cx: &mut Context<Self>) -> impl IntoElement {
     let is_dark = cx.theme().mode.is_dark();
+
+    v_flex().gap_4()
+    .child(
+      div()
+        .text_xl()
+        .font_semibold()
+        .child("Woocraft Controls Preview"),
+    )
+    .child(div().text_sm().child("Theme"))
+    .child(
+      h_flex()
+        .gap_3()
+        .child(
+          Button::new("btn-theme-light")
+            .label("Light")
+            .selected(!is_dark)
+            .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
+        )
+        .child(
+          Button::new("btn-theme-dark")
+            .label("Dark")
+            .selected(is_dark)
+            .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
+        ),
+    )
+    .child(
+      v_flex()
+        .gap_2()
+        .child(div().text_sm().child("Breadcrumb"))
+        .child(
+          Breadcrumb::new()
+            .child(BreadcrumbItem::new("Home").on_click(cx.listener(
+              |this, _, _, cx| {
+                this.breadcrumb_last = "Home";
+                cx.notify();
+              },
+            )))
+            .child(BreadcrumbItem::new("Library").on_click(cx.listener(
+              |this, _, _, cx| {
+                this.breadcrumb_last = "Library";
+                cx.notify();
+              },
+            )))
+            .child(BreadcrumbItem::new("Components").on_click(cx.listener(
+              |this, _, _, cx| {
+                this.breadcrumb_last = "Components";
+                cx.notify();
+              },
+            )))
+            .child(BreadcrumbItem::new("Breadcrumb").disabled(true)),
+        )
+        .child(Label::new(format!("breadcrumb_last = {}", self.breadcrumb_last))),
+    )
+    .child(
+      v_flex()
+        .gap_2()
+        .child(div().text_sm().child("Popover"))
+        .child(
+          h_flex().items_center().gap_3().child(
+            Popover::new("demo-popover")
+              .on_open_change(cx.listener(|this, open, _, cx| {
+                this.popover_open = *open;
+                cx.notify();
+              }))
+              .trigger(
+                Button::new("popover-trigger")
+                  .label("Open Popover")
+                  .default(),
+              )
+              .content(|_, _, _| {
+                v_flex()
+                  .gap_2()
+                  .child(div().font_semibold().child("Popover Content"))
+                  .child(
+                    div()
+                      .text_sm()
+                      .child("Migrated from deprecated/ui and styled by new theme tokens."),
+                  )
+              }),
+          )
+          .child(Label::new(format!("popover_open = {}", self.popover_open))),
+        ),
+    )
+    .child(
+      v_flex()
+        .gap_2()
+        .child(div().text_sm().child("Tooltip"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              Button::new("tooltip-trigger")
+                .label("Hover me")
+                .tooltip(|window, cx| {
+                  Tooltip::new("Tooltip from woocraft::Tooltip")
+                    .key_binding(Some(
+                      Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")),
+                    ))
+                    .build(window, cx)
+                }),
+            )
+            .child(
+              Button::new("tooltip-action-trigger")
+                .label("Hover for action")
+                .tooltip(|window, cx| {
+                  Tooltip::new("Shortcut resolved from action binding")
+                    .action(
+                      &woocraft::actions::Cancel,
+                      Some(woocraft::actions::POPOVER_CONTEXT),
+                    )
+                    .build(window, cx)
+                }),
+            )
+            .child(div().text_sm().text_color(cx.theme().muted_foreground).child(
+              "Move cursor over the button to preview tooltip",
+            )),
+        ),
+    )
+    .child(
+      v_flex()
+        .gap_2()
+        .child(div().text_sm().child("Kbd"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_2()
+            .child(div().text_sm().child("Shortcut:"))
+            .child(Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")))
+            .child(
+              Kbd::new(gpui::Keystroke::parse("shift-enter").expect("valid keystroke"))
+                .outline(),
+            ),
+        ),
+    )
+    .child(
+      v_flex()
+        .gap_2()
+        .child(div().text_sm().child("Scroll System"))
+        .child(
+          div()
+            .overflow_y_scrollbar()
+            .h(px(140.))
+            .w(px(360.))
+            .border_1()
+            .border_color(cx.theme().border)
+            .rounded(cx.theme().radius_container)
+            .children((1..=24).map(|i| {
+              div()
+                .px_3()
+                .py_2()
+                .border_b_1()
+                .border_color(cx.theme().border.opacity(0.5))
+                .child(format!("Scrollable row #{i}"))
+                .into_any_element()
+            })),
+        ),
+    )
+    .child(
+      div()
+        .text_sm()
+        .text_color(cx.theme().muted_foreground)
+        .child("Component and value are bound: the Label below will reflect state in real-time after interaction"),
+    )
+  }
+
+  fn render_inputs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    let slider_value = self.slider_state.read(cx).value().end();
+
+    v_flex().gap_4().child(
+      v_flex()
+        .gap_3()
+        .child(div().text_sm().child("Inputs (single / number / otp)"))
+        .child(
+          h_flex().items_center().gap_3().child(
+            div()
+              .w(px(280.))
+              .child(Input::new(&self.input_state1).cleanable(true)),
+          ),
+        )
+        .child(
+          h_flex().items_center().gap_3().child(
+            div().w(px(220.)).child(
+              NumberInput::new(&self.number_input_state)
+                .step(0.5)
+                .min(0.0)
+                .max(99.0),
+            ),
+          ),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(OtpInput::new(&self.otp_state).groups(3)),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              Checkbox::new("demo-checkbox")
+                .checked(self.checked)
+                .tab_stop(true)
+                .tab_index(1)
+                .label("Enable")
+                .on_click(cx.listener(|this, checked, _, cx| {
+                  this.checked = *checked;
+                  cx.notify();
+                })),
+            )
+            .child(Label::new(format!("checked = {}", self.checked))),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              Checkbox::new("demo-checkbox-indeterminate")
+                .indeterminate(true)
+                .label("Indeterminate"),
+            )
+            .child(Label::new("standalone indeterminate state")),
+        )
+        .child(div().text_sm().child("Checkbox Group"))
+        .child(
+          CheckboxGroup::new("demo-checkbox-group")
+            .horizontal()
+            .options([
+              CheckboxOption::new("notification", "Notification"),
+              CheckboxOption::new("email", "Email"),
+              CheckboxOption::new("sms", "SMS"),
+              CheckboxOption::new("push", "Push").disabled(true),
+            ])
+            .selected(self.checkbox_group_selected.clone())
+            .on_change(cx.listener(|this, selected: &Vec<SharedString>, _, cx| {
+              this.checkbox_group_selected = selected.clone();
+              cx.notify();
+            })),
+        )
+        .child(Label::new(format!(
+          "checkbox_group = {:?}",
+          self.checkbox_group_selected
+        )))
+        .child(div().text_sm().child("Checkbox Group (tree)"))
+        .child(
+          div().w(px(360.)).child(
+            CheckboxGroup::new("demo-checkbox-tree")
+              .option(
+                CheckboxOption::new("frontend", "Frontend")
+                  .child(CheckboxOption::new("react", "React"))
+                  .child(CheckboxOption::new("vue", "Vue")),
+              )
+              .option(
+                CheckboxOption::new("backend", "Backend")
+                  .child(CheckboxOption::new("rust", "Rust"))
+                  .child(CheckboxOption::new("node", "Node")),
+              )
+              .selected(self.checkbox_tree_selected.clone())
+              .on_change(cx.listener(|this, selected: &Vec<SharedString>, _, cx| {
+                this.checkbox_tree_selected = selected.clone();
+                cx.notify();
+              })),
+          ),
+        )
+        .child(Label::new(format!(
+          "checkbox_tree = {:?}",
+          self.checkbox_tree_selected
+        )))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              Radio::new("demo-radio-selected")
+                .checked(true)
+                .label("Selected"),
+            )
+            .child(
+              Radio::new("demo-radio-unselected")
+                .checked(false)
+                .label("Unselected"),
+            )
+            .child(
+              Radio::new("demo-radio-disabled")
+                .checked(true)
+                .disabled(true)
+                .label("Disabled"),
+            ),
+        )
+        .child(div().text_sm().child("Radio Group"))
+        .child(
+          RadioGroup::new("demo-radio-group")
+            .horizontal()
+            .options([
+              RadioOption::new("notification", "Notification"),
+              RadioOption::new("email", "Email"),
+              RadioOption::new("sms", "SMS"),
+              RadioOption::new("push", "Push").disabled(true),
+            ])
+            .selected(self.radio_group_selected.clone())
+            .on_change(cx.listener(|this, selected: &SharedString, _, cx| {
+              this.radio_group_selected = Some(selected.clone());
+              cx.notify();
+            })),
+        )
+        .child(Label::new(format!(
+          "radio_group = {:?}",
+          self.radio_group_selected
+        )))
+        .child(div().text_sm().child("Radio Group (tree)"))
+        .child(
+          div().w(px(360.)).child(
+            RadioGroup::new("demo-radio-tree")
+              .option(
+                RadioOption::new("frontend", "Frontend")
+                  .child(RadioOption::new("react", "React"))
+                  .child(RadioOption::new("vue", "Vue")),
+              )
+              .option(
+                RadioOption::new("backend", "Backend")
+                  .child(RadioOption::new("rust", "Rust"))
+                  .child(RadioOption::new("node", "Node")),
+              )
+              .selected(self.radio_tree_selected.clone())
+              .on_change(cx.listener(|this, selected: &SharedString, _, cx| {
+                this.radio_tree_selected = Some(selected.clone());
+                cx.notify();
+              })),
+          ),
+        )
+        .child(Label::new(format!(
+          "radio_tree = {:?}",
+          self.radio_tree_selected
+        )))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(Slider::new("demo-slider", &self.slider_state))
+            .child(Label::new(format!("slider = {:.1}", slider_value))),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              Button::new("notify-info")
+                .label("Info")
+                .on_click(cx.listener(|this, _, window, cx| {
+                  this.notification_state.update(cx, |state, cx| {
+                    state.push(
+                      Notification::new()
+                        .with_type(NotificationType::Info)
+                        .key("save-draft")
+                        .title("Info")
+                        .message("Saved draft successfully.")
+                        .action("Undo", |_, _| {}),
+                      window,
+                      cx,
+                    );
+                  });
+                })),
+            )
+            .child(
+              Button::new("notify-success")
+                .success()
+                .label("Success")
+                .on_click(cx.listener(|this, _, window, cx| {
+                  this.notification_state.update(cx, |state, cx| {
+                    state.push(
+                      Notification::success("Build completed").title("Success"),
+                      window,
+                      cx,
+                    );
+                  });
+                })),
+            )
+            .child(
+              Button::new("notify-warning")
+                .label("Warning")
+                .on_click(cx.listener(|this, _, window, cx| {
+                  this.notification_state.update(cx, |state, cx| {
+                    state.push(
+                      Notification::warning("Low disk space").title("Warning"),
+                      window,
+                      cx,
+                    );
+                  });
+                })),
+            )
+            .child(
+              Button::new("notify-error")
+                .danger()
+                .label("Error")
+                .on_click(cx.listener(|this, _, window, cx| {
+                  this.notification_state.update(cx, |state, cx| {
+                    state.push(
+                      Notification::error("Upload failed")
+                        .title("Error")
+                        .autohide(false),
+                      window,
+                      cx,
+                    );
+                  });
+                })),
+            )
+            .child(
+              Link::new("demo-link")
+                .on_click(cx.listener(|this, _, _, cx| {
+                  this.link_clicks += 1;
+                  cx.notify();
+                }))
+                .child("Click me"),
+            )
+            .child(Label::new(format!("link_clicks = {}", self.link_clicks))),
+        )
+        .child(Divider::horizontal_dashed().label("basic migrated"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_4()
+            .child(
+              Badge::new()
+                .count(12)
+                .child(div().px_2().py_1().child("Inbox")),
+            )
+            .child(
+              Badge::new()
+                .dot()
+                .child(div().px_2().py_1().child("Status")),
+            )
+            .child(
+              Badge::new()
+                .icon(woocraft::IconName::Checkmark)
+                .child(div().px_2().py_1().child("Done")),
+            )
+            .child(Spinner::new())
+            .child(Label::new("Loading...")),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_4()
+            .child(
+              Switch::new("demo-switch")
+                .checked(self.switched)
+                .label("Airplane mode")
+                .on_click(cx.listener(|this, checked, _, cx| {
+                  this.switched = *checked;
+                  cx.notify();
+                })),
+            )
+            .child(Tag::primary().child("Primary"))
+            .child(Tag::success().outline().child("Success"))
+            .child(Tag::info().child("Info"))
+            .child(Tag::warning().rounded_full().child("Rounded Full"))
+            .child(
+              div().w(px(360.)).child(
+                Progress::new()
+                  .label("[registry] 欢迎使用进制回溯！")
+                  .color(cx.theme().primary)
+                  .track_color(cx.theme().muted)
+                  .text_color(cx.theme().muted_foreground)
+                  .value(slider_value),
+              ),
+            )
+            .child(
+              ProgressCircle::new()
+                .value(slider_value)
+                .color(cx.theme().primary)
+                .track_color(cx.theme().muted)
+                .text_color(cx.theme().muted_foreground),
+            ),
+        ),
+    )
+  }
+
+  fn render_avatars(&self) -> impl IntoElement {
+    v_flex().gap_4().child(
+      v_flex()
+        .gap_3()
+        .child(div().text_sm().child("Avatar"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_4()
+            .child(Avatar::new().name("John Doe").small())
+            .child(Avatar::new().name("Jane Smith").medium())
+            .child(Avatar::new().name("Bob Wilson").large()),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_4()
+            .child(Avatar::new().name("Alice").small())
+            .child(Avatar::new().name("Charlie").medium())
+            .child(Avatar::new().name("Eve").large()),
+        )
+        .child(div().text_sm().child("AvatarGroup"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_4()
+            .child(
+              AvatarGroup::new()
+                .child(Avatar::new().name("Alice"))
+                .child(Avatar::new().name("Bob"))
+                .child(Avatar::new())
+                .child(Avatar::new().name("David"))
+                .small(),
+            )
+            .child(
+              AvatarGroup::new()
+                .child(Avatar::new().name("Alice"))
+                .child(Avatar::new().name("Bob"))
+                .child(Avatar::new())
+                .child(Avatar::new().name("David"))
+                .medium(),
+            )
+            .child(
+              AvatarGroup::new()
+                .child(Avatar::new().name("Alice"))
+                .child(Avatar::new().name("Bob"))
+                .child(Avatar::new())
+                .child(Avatar::new().name("David"))
+                .large(),
+            ),
+        )
+        .child(
+          h_flex().items_center().gap_4().child(
+            AvatarGroup::new()
+              .child(Avatar::new().name("Alice"))
+              .child(Avatar::new().name("Bob"))
+              .child(Avatar::new().name("Charlie"))
+              .child(Avatar::new().name("David"))
+              .child(Avatar::new().name("Eve"))
+              .limit(3)
+              .ellipsis()
+              .medium(),
+          ),
+        ),
+    )
+  }
+
+  fn render_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
     let (
       list_selected,
       list_right_clicked,
@@ -567,6 +1169,201 @@ impl Render for ControlsWindow {
         delegate.total_pages(),
       )
     };
+
+    v_flex().gap_4()
+    .child(
+      v_flex()
+        .gap_3()
+        .child(div().text_sm().child("Button Variants + Features"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              Button::new("btn-info")
+                .info()
+                .label("Info"),
+            )
+            .child(Button::new("btn-link").link().label("Link"))
+        )
+        .child(div().text_sm().child("WidgetGroup (buttons)"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              WidgetGroup::new("demo-widget-group")
+                .multiple(true)
+                .default()
+                .child(Button::new("bg-0").label("One").selected(self.button_group_selected.contains(&0)))
+                .child(Button::new("bg-1").label("Two").selected(self.button_group_selected.contains(&1)))
+                .child(Button::new("bg-2").label("Three").selected(self.button_group_selected.contains(&2)))
+                .on_click(cx.listener(|this, selected: &Vec<usize>, _, cx| {
+                  this.button_group_selected = selected.clone();
+                  cx.notify();
+                })),
+            )
+            .child(Label::new(format!(
+              "selected = {:?}",
+              self.button_group_selected
+            ))),
+        )
+        .child(div().text_sm().child("WidgetGroup (mixed components)"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              div().w(px(560.)).child(
+                WidgetGroup::new("demo-widget-group-mixed")
+                  .child(
+                      Icon::new(woocraft::IconName::Search)
+                  )
+                  .child(Input::new(&self.input_state2).cleanable(true))
+                  .child(
+                    Button::new("wg-run")
+                      .icon(Icon::new(woocraft::IconName::Play)))
+                  .child(
+                    IconLabel::new("wg-status")
+                      .icon(Icon::new(woocraft::IconName::Checkmark))
+                      .label("Ready"),
+                  ),
+              ),
+            ),
+        )
+        .child(div().text_sm().child("List (comprehensive)"))
+        .child(
+          h_flex()
+            .items_center()
+            .gap_2()
+            .child(
+              Button::new("list-toggle-search")
+                .label(if self.list_searchable {
+                  "Search: On"
+                } else {
+                  "Search: Off"
+                })
+                .on_click(cx.listener(|this, _, _, cx| {
+                  let next = !this.list_searchable;
+                  this.list_searchable = next;
+                  this.list_state.update(cx, |state, cx| {
+                    state.set_searchable(next, cx);
+                  });
+                })),
+            )
+            .child(
+              Button::new("list-toggle-select")
+                .label(if self.list_selectable {
+                  "Selectable: On"
+                } else {
+                  "Selectable: Off"
+                })
+                .on_click(cx.listener(|this, _, _, cx| {
+                  let next = !this.list_selectable;
+                  this.list_selectable = next;
+                  this.list_state.update(cx, |state, cx| {
+                    state.set_selectable(next, cx);
+                  });
+                })),
+            )
+            .child(
+              Button::new("list-scroll-first")
+                .label("Scroll To First")
+                .on_click(cx.listener(|this, _, window, cx| {
+                  let list_state = this.list_state.clone();
+                  cx
+                    .spawn_in(window, async move |_, cx| {
+                      _ = list_state.update_in(cx, |state, window, cx| {
+                        state.scroll_to_item(
+                          IndexPath::default(),
+                          ScrollStrategy::Top,
+                          window,
+                          cx,
+                        );
+                      });
+                    })
+                    .detach();
+                })),
+            )
+            .child(
+              Button::new("list-toggle-loading")
+                .label(if list_loading {
+                  "Loading: On"
+                } else {
+                  "Loading: Off"
+                })
+                .on_click(cx.listener(|this, _, window, cx| {
+                  let list_state = this.list_state.clone();
+                  cx
+                    .spawn_in(window, async move |_, cx| {
+                      _ = list_state.update_in(cx, |state, _, cx| {
+                        let next = !state.delegate().is_loading();
+                        state.delegate_mut().set_loading(next);
+                        cx.notify();
+                      });
+                    })
+                    .detach();
+                })),
+            )
+            .child(
+              Button::new("list-reset-page")
+                .label("Back To Page 1")
+                .on_click(cx.listener(|this, _, window, cx| {
+                  let list_state = this.list_state.clone();
+                  cx
+                    .spawn_in(window, async move |_, cx| {
+                      _ = list_state.update_in(cx, |state, window, cx| {
+                        state.delegate_mut().set_current_page(1);
+                        state.scroll_to_item(IndexPath::default(), ScrollStrategy::Top, window, cx);
+                        cx.notify();
+                      });
+                    })
+                    .detach();
+                })),
+            ),
+        )
+        .child(
+          div()
+            .h(px(320.))
+            .w(px(640.))
+            .border_1()
+            .border_color(cx.theme().border)
+            .rounded(cx.theme().radius_container)
+            .child(
+              List::new(&self.list_state)
+                .search_placeholder("Search title, subtitle, or tag")
+                .scrollbar_visible(true),
+            ),
+        )
+        .child(
+          Pagination::new("controls-list-pagination")
+            .current_page(list_page)
+            .total_pages(list_total_pages)
+            .visible_pages(7)
+            .on_click(cx.listener(|this, page, _, cx| {
+              this.list_state.update(cx, |state, cx| {
+                state.delegate_mut().set_current_page(*page);
+                cx.notify();
+              });
+            })),
+        )
+        .child(
+          Label::new("List state").secondary(format!(
+            "selected={}, right_clicked={}, confirmed={}, loading={}, searchable={}, selectable={}, page={}/{}",
+            list_selected,
+            list_right_clicked,
+            list_confirmed,
+            list_loading,
+            self.list_searchable,
+            self.list_selectable,
+            list_page,
+            list_total_pages
+          )),
+        )
+    )
+  }
+
+  fn render_time_components(&self, cx: &mut Context<Self>) -> impl IntoElement {
     let calendar_single_value = self.calendar_single_state.read(cx).date();
     let calendar_range_value = self.calendar_range_state.read(cx).date();
     let calendar_limited_value = self.calendar_limited_state.read(cx).date();
@@ -583,909 +1380,125 @@ impl Render for ControlsWindow {
       DateRangePreset::range("This Month", month_start, month_end(today)),
     ];
 
-    window_border().child(
+    v_flex().gap_4().child(
       v_flex()
-        .size_full()
-        .min_h_0()
+        .gap_3()
         .child(
-          TitleBar::new()
-            .title("Woocraft Controls Example")
-            .app_menu_bar(self.app_menu_bar.clone())
-            .title_menu(|menu, _, _| {
-              menu
-                .item(PopupMenuItem::new("New Workspace"))
-                .item(PopupMenuItem::new("Open Project"))
-                .separator()
-                .item(PopupMenuItem::new("Settings"))
-            })
-            .theme_button(true)
-            .language_button(true)
-            // Restrict the language menu to the languages this example ships
-            // (a subset of woocraft's full coverage); remove the call below
-            // to list every language woocraft supports instead.
-            .languages(["en-us", "zh-hans", "zh-hant", "ja-jp", "ko-kr", "de-de", "fr-fr", "es-es"])
-            .zoom_button(true),
+          div()
+            .text_sm()
+            .font_semibold()
+            .child("Calendar (single, range, multi-month, matcher constraints)"),
         )
         .child(
-            v_flex()
-            .p_6()
+          h_flex()
+            .items_start()
             .gap_4()
-            .overflow_y_scrollbar()
-            .flex_1()
-            .min_h_0()
             .child(
-              div()
-                .text_xl()
-                .font_semibold()
-                .child("Woocraft Controls Preview"),
-            )
-            .child(div().text_sm().child("Theme"))
-            .child(
-              h_flex()
-                .gap_3()
-                .child(
-                  Button::new("btn-theme-light")
-                    .label("Light")
-                    .selected(!is_dark)
-                    .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Light, cx)),
-                )
-                .child(
-                  Button::new("btn-theme-dark")
-                    .label("Dark")
-                    .selected(is_dark)
-                    .on_click(|_, _, cx| Theme::set_mode(ThemeMode::Dark, cx)),
-                ),
+              v_flex()
+                .gap_2()
+                .child(div().text_sm().child("Single Date"))
+                .child(Calendar::new(&self.calendar_single_state))
+                .child(Label::new("selected").secondary(calendar_single_value.to_string())),
             )
             .child(
               v_flex()
                 .gap_2()
-                .child(div().text_sm().child("Breadcrumb"))
-                .child(
-                  Breadcrumb::new()
-                    .child(BreadcrumbItem::new("Home").on_click(cx.listener(
-                      |this, _, _, cx| {
-                        this.breadcrumb_last = "Home";
-                        cx.notify();
-                      },
-                    )))
-                    .child(BreadcrumbItem::new("Library").on_click(cx.listener(
-                      |this, _, _, cx| {
-                        this.breadcrumb_last = "Library";
-                        cx.notify();
-                      },
-                    )))
-                    .child(BreadcrumbItem::new("Components").on_click(cx.listener(
-                      |this, _, _, cx| {
-                        this.breadcrumb_last = "Components";
-                        cx.notify();
-                      },
-                    )))
-                    .child(BreadcrumbItem::new("Breadcrumb").disabled(true)),
-                )
-                .child(Label::new(format!("breadcrumb_last = {}", self.breadcrumb_last))),
-            )
-            .child(
-              v_flex()
-                .gap_2()
-                .child(div().text_sm().child("Popover"))
-                .child(
-                  h_flex().items_center().gap_3().child(
-                    Popover::new("demo-popover")
-                      .on_open_change(cx.listener(|this, open, _, cx| {
-                        this.popover_open = *open;
-                        cx.notify();
-                      }))
-                      .trigger(
-                        Button::new("popover-trigger")
-                          .label("Open Popover")
-                          .default(),
-                      )
-                      .content(|_, _, _| {
-                        v_flex()
-                          .gap_2()
-                          .child(div().font_semibold().child("Popover Content"))
-                          .child(
-                            div()
-                              .text_sm()
-                              .child("Migrated from deprecated/ui and styled by new theme tokens."),
-                          )
-                      }),
-                  )
-                  .child(Label::new(format!("popover_open = {}", self.popover_open))),
-                ),
-            )
-            .child(
-              v_flex()
-                .gap_2()
-                .child(div().text_sm().child("Tooltip"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      Button::new("tooltip-trigger")
-                        .label("Hover me")
-                        .tooltip(|window, cx| {
-                          Tooltip::new("Tooltip from woocraft::Tooltip")
-                            .key_binding(Some(
-                              Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")),
-                            ))
-                            .build(window, cx)
-                        }),
-                    )
-                    .child(
-                      Button::new("tooltip-action-trigger")
-                        .label("Hover for action")
-                        .tooltip(|window, cx| {
-                          Tooltip::new("Shortcut resolved from action binding")
-                            .action(
-                              &woocraft::actions::Cancel,
-                              Some(woocraft::actions::POPOVER_CONTEXT),
-                            )
-                            .build(window, cx)
-                        }),
-                    )
-                    .child(div().text_sm().text_color(cx.theme().muted_foreground).child(
-                      "Move cursor over the button to preview tooltip",
-                    )),
-                ),
-            )
-            .child(
-              v_flex()
-                .gap_2()
-                .child(div().text_sm().child("Kbd"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().text_sm().child("Shortcut:"))
-                    .child(Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")))
-                    .child(
-                      Kbd::new(gpui::Keystroke::parse("shift-enter").expect("valid keystroke"))
-                        .outline(),
-                    ),
-                ),
-            )
-            .child(
-              v_flex()
-                .gap_2()
-                .child(div().text_sm().child("Scroll System"))
-                .child(
-                  div()
-                    .overflow_y_scrollbar()
-                    .h(px(140.))
-                    .w(px(360.))
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius_container)
-                    .children((1..=24).map(|i| {
-                      div()
-                        .px_3()
-                        .py_2()
-                        .border_b_1()
-                        .border_color(cx.theme().border.opacity(0.5))
-                        .child(format!("Scrollable row #{i}"))
-                        .into_any_element()
-                    })),
-                ),
-            )
+                .child(div().text_sm().child("Range + 2 Months"))
+                .child(Calendar::new(&self.calendar_range_state).number_of_months(2))
+                .child(Label::new("selected").secondary(calendar_range_value.to_string())),
+            ),
+        )
+        .child(
+          v_flex()
+            .gap_2()
+            .items_start()
             .child(
               div()
                 .text_sm()
-                .text_color(cx.theme().muted_foreground)
-                .child("Component and value are bound: the Label below will reflect state in real-time after interaction"),
+                .child("Disabled Weekend + Day 13 + Out of 120-Day Window"),
+            )
+            .child(Calendar::new(&self.calendar_limited_state).number_of_months(2))
+            .child(Label::new("selected").secondary(calendar_limited_value.to_string())),
+        )
+        .child(
+          div()
+            .text_sm()
+            .font_semibold()
+            .child("DatePicker (cleanable, range presets, appearance, disabled)"),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
+            .child(
+              div().w(px(230.)).child(
+                DatePicker::new(&self.date_picker_single_state)
+                  .small()
+                  .cleanable(true)
+                  .placeholder("Pick a weekday"),
+              ),
             )
             .child(
-              v_flex()
-                .gap_3()
-                .child(div().text_sm().child("Inputs (single / number / otp)"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      div().w(px(280.)).child(
-                        Input::new(&self.input_state1)
-                          .cleanable(true),
-                      ),
-                    ),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      div().w(px(220.)).child(
-                        NumberInput::new(&self.number_input_state)
-                          .step(0.5)
-                          .min(0.0)
-                          .max(99.0),
-                      ),
-                    ),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(OtpInput::new(&self.otp_state).groups(3)),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      Checkbox::new("demo-checkbox")
-                        .checked(self.checked)
-                        .tab_stop(true)
-                        .tab_index(1)
-                        .label("Enable")
-                        .on_click(cx.listener(|this, checked, _, cx| {
-                          this.checked = *checked;
-                          cx.notify();
-                        })),
-                    )
-                    .child(Label::new(format!("checked = {}", self.checked))),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      Checkbox::new("demo-checkbox-indeterminate")
-                        .indeterminate(true)
-                        .label("Indeterminate"),
-                    )
-                    .child(Label::new("standalone indeterminate state")),
-                )
-                .child(div().text_sm().child("Checkbox Group"))
-                .child(
-                  CheckboxGroup::new("demo-checkbox-group")
-                    .horizontal()
-                    .options([
-                      CheckboxOption::new("notification", "Notification"),
-                      CheckboxOption::new("email", "Email"),
-                      CheckboxOption::new("sms", "SMS"),
-                      CheckboxOption::new("push", "Push").disabled(true),
-                    ])
-                    .selected(self.checkbox_group_selected.clone())
-                    .on_change(cx.listener(
-                      |this, selected: &Vec<SharedString>, _, cx| {
-                        this.checkbox_group_selected = selected.clone();
-                        cx.notify();
-                      },
-                    )),
-                )
-                .child(Label::new(format!(
-                  "checkbox_group = {:?}",
-                  self.checkbox_group_selected
-                )))
-                .child(div().text_sm().child("Checkbox Group (tree)"))
-                .child(
-                  div().w(px(360.)).child(
-                    CheckboxGroup::new("demo-checkbox-tree")
-                      .option(
-                        CheckboxOption::new("frontend", "Frontend")
-                          .child(CheckboxOption::new("react", "React"))
-                          .child(CheckboxOption::new("vue", "Vue")),
-                      )
-                      .option(
-                        CheckboxOption::new("backend", "Backend")
-                          .child(CheckboxOption::new("rust", "Rust"))
-                          .child(CheckboxOption::new("node", "Node")),
-                      )
-                      .selected(self.checkbox_tree_selected.clone())
-                      .on_change(cx.listener(
-                        |this, selected: &Vec<SharedString>, _, cx| {
-                          this.checkbox_tree_selected = selected.clone();
-                          cx.notify();
-                        },
-                      )),
-                  ),
-                )
-                .child(Label::new(format!(
-                  "checkbox_tree = {:?}",
-                  self.checkbox_tree_selected
-                )))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      Radio::new("demo-radio-selected")
-                        .checked(true)
-                        .label("Selected"),
-                    )
-                    .child(
-                      Radio::new("demo-radio-unselected")
-                        .checked(false)
-                        .label("Unselected"),
-                    )
-                    .child(
-                      Radio::new("demo-radio-disabled")
-                        .checked(true)
-                        .disabled(true)
-                        .label("Disabled"),
-                    ),
-                )
-                .child(div().text_sm().child("Radio Group"))
-                .child(
-                  RadioGroup::new("demo-radio-group")
-                    .horizontal()
-                    .options([
-                      RadioOption::new("notification", "Notification"),
-                      RadioOption::new("email", "Email"),
-                      RadioOption::new("sms", "SMS"),
-                      RadioOption::new("push", "Push").disabled(true),
-                    ])
-                    .selected(self.radio_group_selected.clone())
-                    .on_change(cx.listener(
-                      |this, selected: &SharedString, _, cx| {
-                        this.radio_group_selected = Some(selected.clone());
-                        cx.notify();
-                      },
-                    )),
-                )
-                .child(Label::new(format!(
-                  "radio_group = {:?}",
-                  self.radio_group_selected
-                )))
-                .child(div().text_sm().child("Radio Group (tree)"))
-                .child(
-                  div().w(px(360.)).child(
-                    RadioGroup::new("demo-radio-tree")
-                      .option(
-                        RadioOption::new("frontend", "Frontend")
-                          .child(RadioOption::new("react", "React"))
-                          .child(RadioOption::new("vue", "Vue")),
-                      )
-                      .option(
-                        RadioOption::new("backend", "Backend")
-                          .child(RadioOption::new("rust", "Rust"))
-                          .child(RadioOption::new("node", "Node")),
-                      )
-                      .selected(self.radio_tree_selected.clone())
-                      .on_change(cx.listener(
-                        |this, selected: &SharedString, _, cx| {
-                          this.radio_tree_selected = Some(selected.clone());
-                          cx.notify();
-                        },
-                      )),
-                  ),
-                )
-                .child(Label::new(format!(
-                  "radio_tree = {:?}",
-                  self.radio_tree_selected
-                )))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(Slider::new("demo-slider", &self.slider_state))
-                    .child(Label::new(format!("slider = {:.1}", slider_value))),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      Button::new("notify-info")
-                        .label("Info")
-                        .on_click(cx.listener(|this, _, window, cx| {
-                          this.notification_state.update(cx, |state, cx| {
-                            state.push(
-                              Notification::new()
-                                .with_type(NotificationType::Info)
-                                .key("save-draft")
-                                .title("Info")
-                                .message("Saved draft successfully.")
-                                .action("Undo", |_, _| {}),
-                              window,
-                              cx,
-                            );
-                          });
-                        })),
-                    )
-                    .child(
-                      Button::new("notify-success")
-                        .success()
-                        .label("Success")
-                        .on_click(cx.listener(|this, _, window, cx| {
-                          this.notification_state.update(cx, |state, cx| {
-                            state.push(
-                              Notification::success("Build completed").title("Success"),
-                              window,
-                              cx,
-                            );
-                          });
-                        })),
-                    )
-                    .child(
-                      Button::new("notify-warning")
-                        .label("Warning")
-                        .on_click(cx.listener(|this, _, window, cx| {
-                          this.notification_state.update(cx, |state, cx| {
-                            state.push(
-                              Notification::warning("Low disk space").title("Warning"),
-                              window,
-                              cx,
-                            );
-                          });
-                        })),
-                    )
-                    .child(
-                      Button::new("notify-error")
-                        .danger()
-                        .label("Error")
-                        .on_click(cx.listener(|this, _, window, cx| {
-                          this.notification_state.update(cx, |state, cx| {
-                            state.push(
-                              Notification::error("Upload failed")
-                                .title("Error")
-                                .autohide(false),
-                              window,
-                              cx,
-                            );
-                          });
-                        })),
-                    )
-                    .child(
-                      Link::new("demo-link")
-                        .on_click(cx.listener(|this, _, _, cx| {
-                          this.link_clicks += 1;
-                          cx.notify();
-                        }))
-                        .child("Click me"),
-                    )
-                    .child(Label::new(format!("link_clicks = {}", self.link_clicks))),
-                )
-                .child(Divider::horizontal_dashed().label("basic migrated"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_4()
-                    .child(
-                      Badge::new()
-                        .count(12)
-                        .child(div().px_2().py_1().child("Inbox")),
-                    )
-                    .child(
-                      Badge::new()
-                        .dot()
-                        .child(div().px_2().py_1().child("Status")),
-                    )
-                    .child(
-                      Badge::new()
-                        .icon(woocraft::IconName::Checkmark)
-                        .child(div().px_2().py_1().child("Done")),
-                    )
-                    .child(Spinner::new())
-                    .child(Label::new("Loading...")),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_4()
-                    .child(
-                      Switch::new("demo-switch")
-                        .checked(self.switched)
-                        .label("Airplane mode")
-                        .on_click(cx.listener(|this, checked, _, cx| {
-                          this.switched = *checked;
-                          cx.notify();
-                        })),
-                    )
-                    .child(Tag::primary().child("Primary"))
-                    .child(Tag::success().outline().child("Success"))
-                    .child(Tag::info().child("Info"))
-                    .child(Tag::warning().rounded_full().child("Rounded Full"))
-                    .child(
-                      div().w(px(360.)).child(
-                        Progress::new()
-                          .label("[registry] 欢迎使用进制回溯！")
-                          .color(cx.theme().primary)
-                          .track_color(cx.theme().muted)
-                          .text_color(cx.theme().muted_foreground)
-                          .value(slider_value),
-                      ),
-                    )
-                    .child(
-                      ProgressCircle::new()
-                        .value(slider_value)
-                        .color(cx.theme().primary)
-                        .track_color(cx.theme().muted)
-                        .text_color(cx.theme().muted_foreground),
-                    ),
-                ),
-            )
-            .child(Divider::horizontal_dashed().label("newly added capabilities"))
+              div().w(px(380.)).child(
+                DatePicker::new(&self.date_picker_range_state)
+                  .cleanable(true)
+                  .number_of_months(2)
+                  .presets(range_presets.clone()),
+              ),
+            ),
+        )
+        .child(
+          h_flex()
+            .items_center()
+            .gap_3()
             .child(
-              v_flex()
-                .gap_3()
-                .child(div().text_sm().child("Avatar"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_4()
-                    .child(Avatar::new().name("John Doe").small())
-                    .child(Avatar::new().name("Jane Smith").medium())
-                    .child(Avatar::new().name("Bob Wilson").large())
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_4()
-                    .child(Avatar::new().name("Alice").small())
-                    .child(Avatar::new().name("Charlie").medium())
-                    .child(Avatar::new().name("Eve").large())
-                )
-                .child(div().text_sm().child("AvatarGroup"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_4()
-                    .child(
-                      AvatarGroup::new()
-                        .child(Avatar::new().name("Alice"))
-                        .child(Avatar::new().name("Bob"))
-                        .child(Avatar::new())
-                        .child(Avatar::new().name("David"))
-                        .small(),
-                    )
-                    .child(
-                      AvatarGroup::new()
-                        .child(Avatar::new().name("Alice"))
-                        .child(Avatar::new().name("Bob"))
-                        .child(Avatar::new())
-                        .child(Avatar::new().name("David"))
-                        .medium(),
-                    )
-                    .child(
-                      AvatarGroup::new()
-                        .child(Avatar::new().name("Alice"))
-                        .child(Avatar::new().name("Bob"))
-                        .child(Avatar::new())
-                        .child(Avatar::new().name("David"))
-                        .large(),
-                    ),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_4()
-                    .child(
-                      AvatarGroup::new()
-                        .child(Avatar::new().name("Alice"))
-                        .child(Avatar::new().name("Bob"))
-                        .child(Avatar::new().name("Charlie"))
-                        .child(Avatar::new().name("David"))
-                        .child(Avatar::new().name("Eve"))
-                        .limit(3)
-                        .ellipsis()
-                        .medium(),
-                    ),
-                )
+              div().w(px(260.)).child(
+                DatePicker::new(&self.date_picker_minimal_state)
+                  .appearance(false)
+                  .cleanable(true)
+                  .placeholder("Minimal picker"),
+              ),
             )
             .child(
-              v_flex()
-                .gap_3()
-                .child(div().text_sm().child("Button Variants + Features"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      Button::new("btn-info")
-                        .info()
-                        .label("Info"),
-                    )
-                    .child(Button::new("btn-link").link().label("Link"))
-                )
-                .child(div().text_sm().child("WidgetGroup (buttons)"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      WidgetGroup::new("demo-widget-group")
-                        .multiple(true)
-                        .default()
-                        .child(Button::new("bg-0").label("One").selected(self.button_group_selected.contains(&0)))
-                        .child(Button::new("bg-1").label("Two").selected(self.button_group_selected.contains(&1)))
-                        .child(Button::new("bg-2").label("Three").selected(self.button_group_selected.contains(&2)))
-                        .on_click(cx.listener(|this, selected: &Vec<usize>, _, cx| {
-                          this.button_group_selected = selected.clone();
-                          cx.notify();
-                        })),
-                    )
-                    .child(Label::new(format!(
-                      "selected = {:?}",
-                      self.button_group_selected
-                    ))),
-                )
-                .child(div().text_sm().child("WidgetGroup (mixed components)"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      div().w(px(560.)).child(
-                        WidgetGroup::new("demo-widget-group-mixed")
-                          .child(
-                              Icon::new(woocraft::IconName::Search)
-                          )
-                          .child(Input::new(&self.input_state2).cleanable(true))
-                          .child(
-                            Button::new("wg-run")
-                              .icon(Icon::new(woocraft::IconName::Play)))
-                          .child(
-                            IconLabel::new("wg-status")
-                              .icon(Icon::new(woocraft::IconName::Checkmark))
-                              .label("Ready"),
-                          ),
-                      ),
-                    ),
-                )
-                .child(div().text_sm().child("List (comprehensive)"))
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                      Button::new("list-toggle-search")
-                        .label(if self.list_searchable {
-                          "Search: On"
-                        } else {
-                          "Search: Off"
-                        })
-                        .on_click(cx.listener(|this, _, _, cx| {
-                          let next = !this.list_searchable;
-                          this.list_searchable = next;
-                          this.list_state.update(cx, |state, cx| {
-                            state.set_searchable(next, cx);
-                          });
-                        })),
-                    )
-                    .child(
-                      Button::new("list-toggle-select")
-                        .label(if self.list_selectable {
-                          "Selectable: On"
-                        } else {
-                          "Selectable: Off"
-                        })
-                        .on_click(cx.listener(|this, _, _, cx| {
-                          let next = !this.list_selectable;
-                          this.list_selectable = next;
-                          this.list_state.update(cx, |state, cx| {
-                            state.set_selectable(next, cx);
-                          });
-                        })),
-                    )
-                    .child(
-                      Button::new("list-scroll-first")
-                        .label("Scroll To First")
-                        .on_click(cx.listener(|this, _, window, cx| {
-                          let list_state = this.list_state.clone();
-                          cx
-                            .spawn_in(window, async move |_, cx| {
-                              _ = list_state.update_in(cx, |state, window, cx| {
-                                state.scroll_to_item(
-                                  IndexPath::default(),
-                                  ScrollStrategy::Top,
-                                  window,
-                                  cx,
-                                );
-                              });
-                            })
-                            .detach();
-                        })),
-                    )
-                    .child(
-                      Button::new("list-toggle-loading")
-                        .label(if list_loading {
-                          "Loading: On"
-                        } else {
-                          "Loading: Off"
-                        })
-                        .on_click(cx.listener(|this, _, window, cx| {
-                          let list_state = this.list_state.clone();
-                          cx
-                            .spawn_in(window, async move |_, cx| {
-                              _ = list_state.update_in(cx, |state, _, cx| {
-                                let next = !state.delegate().is_loading();
-                                state.delegate_mut().set_loading(next);
-                                cx.notify();
-                              });
-                            })
-                            .detach();
-                        })),
-                    )
-                    .child(
-                      Button::new("list-reset-page")
-                        .label("Back To Page 1")
-                        .on_click(cx.listener(|this, _, window, cx| {
-                          let list_state = this.list_state.clone();
-                          cx
-                            .spawn_in(window, async move |_, cx| {
-                              _ = list_state.update_in(cx, |state, window, cx| {
-                                state.delegate_mut().set_current_page(1);
-                                state.scroll_to_item(IndexPath::default(), ScrollStrategy::Top, window, cx);
-                                cx.notify();
-                              });
-                            })
-                            .detach();
-                        })),
-                    ),
-                )
-                .child(
-                  div()
-                    .h(px(320.))
-                    .w(px(640.))
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius_container)
-                    .child(
-                      List::new(&self.list_state)
-                        .search_placeholder("Search title, subtitle, or tag")
-                        .scrollbar_visible(true),
-                    ),
-                )
-                .child(
-                  Pagination::new("controls-list-pagination")
-                    .current_page(list_page)
-                    .total_pages(list_total_pages)
-                    .visible_pages(7)
-                    .on_click(cx.listener(|this, page, _, cx| {
-                      this.list_state.update(cx, |state, cx| {
-                        state.delegate_mut().set_current_page(*page);
-                        cx.notify();
-                      });
-                    })),
-                )
-                .child(
-                  Label::new("List state").secondary(format!(
-                    "selected={}, right_clicked={}, confirmed={}, loading={}, searchable={}, selectable={}, page={}/{}",
-                    list_selected,
-                    list_right_clicked,
-                    list_confirmed,
-                    list_loading,
-                    self.list_searchable,
-                    self.list_selectable,
-                    list_page,
-                    list_total_pages
-                  )),
-                )
-            )
-            .child(Divider::horizontal_dashed().label("time components"))
-            .child(
-              v_flex()
-                .gap_3()
-                .child(
-                  div()
-                    .text_sm()
-                    .font_semibold()
-                    .child("Calendar (single, range, multi-month, matcher constraints)"),
-                )
-                .child(
-                  h_flex()
-                    .items_start()
-                    .gap_4()
-                    .child(
-                      v_flex()
-                        .gap_2()
-                        .child(div().text_sm().child("Single Date"))
-                        .child(Calendar::new(&self.calendar_single_state))
-                        .child(
-                          Label::new("selected").secondary(calendar_single_value.to_string()),
-                        ),
-                    )
-                    .child(
-                      v_flex()
-                        .gap_2()
-                        .child(div().text_sm().child("Range + 2 Months"))
-                        .child(
-                          Calendar::new(&self.calendar_range_state)
-                            .number_of_months(2),
-                        )
-                        .child(
-                          Label::new("selected").secondary(calendar_range_value.to_string()),
-                        ),
-                    ),
-                )
-                .child(
-                  v_flex()
-                    .gap_2().items_start()
-                    .child(div().text_sm().child("Disabled Weekend + Day 13 + Out of 120-Day Window"))
-                    .child(
-                      Calendar::new(&self.calendar_limited_state)
-                        .number_of_months(2),
-                    )
-                    .child(
-                      Label::new("selected").secondary(calendar_limited_value.to_string()),
-                    ),
-                )
-                .child(
-                  div()
-                    .text_sm()
-                    .font_semibold()
-                    .child("DatePicker (cleanable, range presets, appearance, disabled)"),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      div().w(px(230.)).child(
-                        DatePicker::new(&self.date_picker_single_state)
-                          .small()
-                          .cleanable(true)
-                          .placeholder("Pick a weekday"),
-                      ),
-                    )
-                    .child(
-                      div()
-                        .w(px(380.))
-                        .child(
-                          DatePicker::new(&self.date_picker_range_state)
-                            .cleanable(true)
-                            .number_of_months(2)
-                            .presets(range_presets.clone()),
-                        ),
-                    ),
-                )
-                .child(
-                  h_flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                      div().w(px(260.)).child(
-                        DatePicker::new(&self.date_picker_minimal_state)
-                          .appearance(false)
-                          .cleanable(true)
-                          .placeholder("Minimal picker"),
-                      ),
-                    )
-                    .child(
-                      div().w(px(260.)).child(
-                        DatePicker::new(&self.date_picker_disabled_state)
-                          .disabled(true)
-                          .placeholder("Disabled picker"),
-                      ),
-                    ),
-                )
-                .child(
-                  Label::new("DatePicker state").secondary(format!(
-                    "single={}, range={}, minimal={}, disabled={}",
-                    date_picker_single_value,
-                    date_picker_range_value,
-                    date_picker_minimal_value,
-                    date_picker_disabled_value
-                  )),
-                ),
-            )
-            .child(
-              div()
-                .border_t_1()
-                .border_color(cx.theme().border)
-                .pt_3()
-                .child(Label::new("Summary").secondary(format!(
-                  "checked={}, switched={}, slider={:.1}, link_clicks={}, breadcrumb_last={}, popover_open={}, button_group={:?}, toggle={}, toggle_group={:?}",
-                  self.checked,
-                  self.switched,
-                  slider_value,
-                  self.link_clicks,
-                  self.breadcrumb_last,
-                  self.popover_open,
-                  self.button_group_selected,
-                  self.toggle_checked,
-                  self.toggle_group_checks
-                ))),
-            )
-            ,
-        ),
-    ).child(
-              NotificationCenter::new(&self.notification_state)
-                .placement(NotificationPlacement::BottomRight),
-            )
+              div().w(px(260.)).child(
+                DatePicker::new(&self.date_picker_disabled_state)
+                  .disabled(true)
+                  .placeholder("Disabled picker"),
+              ),
+            ),
+        )
+        .child(Label::new("DatePicker state").secondary(format!(
+          "single={}, range={}, minimal={}, disabled={}",
+          date_picker_single_value,
+          date_picker_range_value,
+          date_picker_minimal_value,
+          date_picker_disabled_value
+        ))),
+    )
+  }
+
+  fn render_summary(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    let slider_value = self.slider_state.read(cx).value().end();
+
+    v_flex()
+    .child(
+      div()
+        .border_t_1()
+        .border_color(cx.theme().border)
+        .pt_3()
+        .child(Label::new("Summary").secondary(format!(
+          "checked={}, switched={}, slider={:.1}, link_clicks={}, breadcrumb_last={}, popover_open={}, button_group={:?}, toggle={}, toggle_group={:?}",
+          self.checked,
+          self.switched,
+          slider_value,
+          self.link_clicks,
+          self.breadcrumb_last,
+          self.popover_open,
+          self.button_group_selected,
+          self.toggle_checked,
+          self.toggle_group_checks
+        ))),
+    )
   }
 }
 

@@ -153,8 +153,8 @@ fn text_and_lines_helpers_reflect_output() {
   wait_for_text_blocking(&events, &session, "second", TIMEOUT).expect("output");
 
   let lines = session.last_n_non_empty_lines(10);
-  assert!(lines.contains(&"first".to_string()));
-  assert!(lines.contains(&"second".to_string()));
+  assert!(lines.iter().any(|line| line == "first"));
+  assert!(lines.iter().any(|line| line == "second"));
 
   let text = session.text();
   assert!(text.contains("first"));
