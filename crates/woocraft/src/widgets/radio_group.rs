@@ -32,7 +32,10 @@ use gpui::{
   Styled, Window, prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme, Disableable, Radio, Sizable, Size, StyledExt, h_flex, v_flex};
+use super::selection_tree::{
+  NodeIds, OptionNode, SubtreeSelection, first_leaf, layout_option_node,
+};
+use crate::{Disableable, Radio, Sizable, Size, StyledExt, h_flex, v_flex};
 
 type RadioGroupChangeHandler = Rc<dyn Fn(&SharedString, &mut Window, &mut App) + 'static>;
 
@@ -80,26 +83,13 @@ impl RadioOption {
   }
 }
 
-/// The leaf a click on this option selects: the first leaf of the subtree in
-/// tree order (for a leaf option, its own value).
-fn selection_target(option: &RadioOption) -> SharedString {
-  match option.children.first() {
-    Some(first) => selection_target(first),
-    None => option.value.clone(),
+impl OptionNode for RadioOption {
+  fn value(&self) -> &SharedString {
+    &self.value
   }
-}
 
-/// Whether the selected value lies within this option's subtree.
-fn subtree_contains(option: &RadioOption, selected: &Option<SharedString>) -> bool {
-  if option.children.is_empty() {
-    selected
-      .as_ref()
-      .is_some_and(|value| *value == option.value)
-  } else {
-    option
-      .children
-      .iter()
-      .any(|child| subtree_contains(child, selected))
+  fn child_options(&self) -> &[Self] {
+    &self.children
   }
 }
 
@@ -179,12 +169,10 @@ impl RadioGroup {
     self
   }
 
-  fn render_option(&self, index: &mut usize, option: &RadioOption, cx: &App) -> AnyElement {
-    let id = (self.name.clone(), *index);
-    *index += 1;
-
-    let checked = subtree_contains(option, &self.selected);
-    let target = selection_target(option);
+  fn render_option(&self, ids: &mut NodeIds, option: &RadioOption, cx: &App) -> AnyElement {
+    let id = ids.next();
+    let checked = SubtreeSelection::of(option, self.selected.as_slice()).any_selected();
+    let target = first_leaf(option);
     let disabled = self.disabled || option.disabled;
 
     let radio = Radio::new(id)
@@ -199,28 +187,13 @@ impl RadioGroup {
         },
       );
 
-    if option.children.is_empty() {
-      radio.into_any_element()
-    } else {
-      v_flex()
-        .gap(self.size.component_gap())
-        .child(radio)
-        .child(
-          v_flex()
-            .gap(self.size.component_gap())
-            .pl(self.size.em(1.))
-            .ml(self.size.em(0.25))
-            .border_l(self.size.em(0.125))
-            .border_color(cx.theme().border)
-            .children(
-              option
-                .children
-                .iter()
-                .map(|child| self.render_option(index, child, cx)),
-            ),
-        )
-        .into_any_element()
-    }
+    let children = option
+      .children
+      .iter()
+      .map(|child| self.render_option(ids, child, cx))
+      .collect();
+
+    layout_option_node(self.size, cx, radio.into_any_element(), children)
   }
 }
 
@@ -230,7 +203,7 @@ impl_styled!(RadioGroup);
 
 impl RenderOnce for RadioGroup {
   fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let mut index = 0;
+    let mut ids = NodeIds::new(self.name.clone());
     match self.layout {
       Axis::Vertical => v_flex(),
       Axis::Horizontal => h_flex().flex_wrap(),
@@ -240,7 +213,7 @@ impl RenderOnce for RadioGroup {
       self
         .options
         .iter()
-        .map(|option| self.render_option(&mut index, option, cx)),
+        .map(|option| self.render_option(&mut ids, option, cx)),
     )
     .refine_style(&self.style)
   }
@@ -259,33 +232,58 @@ mod tests {
     ]
   }
 
-  fn value(name: &str) -> Option<SharedString> {
-    Some(name.into())
+  fn sel(values: &[&str]) -> Vec<SharedString> {
+    values.iter().map(|v| (*v).into()).collect()
+  }
+
+  /// A three-level tree so that parents can be nested deeper than one level.
+  fn deep_tree() -> Vec<RadioOption> {
+    vec![RadioOption::new("root", "Root").children([
+      RadioOption::new("branch-a", "A").children([
+        RadioOption::new("leaf-a1", "A1"),
+        RadioOption::new("leaf-a2", "A2"),
+      ]),
+      RadioOption::new("branch-b", "B").child(RadioOption::new("leaf-b1", "B1")),
+    ])]
   }
 
   #[test]
   fn leaf_state_is_direct() {
     let options = tree();
-    assert!(subtree_contains(&options[1], &value("leaf-c")));
-    assert!(!subtree_contains(&options[1], &value("leaf-a")));
+    assert!(SubtreeSelection::of(&options[1], &sel(&["leaf-c"])).any_selected());
+    assert!(!SubtreeSelection::of(&options[1], &sel(&["leaf-a"])).any_selected());
   }
 
   #[test]
   fn node_state_is_derived_from_subtree() {
     let options = tree();
-    assert!(subtree_contains(&options[0], &value("leaf-a")));
-    assert!(subtree_contains(&options[0], &value("leaf-b")));
-    assert!(!subtree_contains(&options[0], &value("leaf-c")));
+    assert!(SubtreeSelection::of(&options[0], &sel(&["leaf-a"])).any_selected());
+    assert!(SubtreeSelection::of(&options[0], &sel(&["leaf-b"])).any_selected());
+    assert!(!SubtreeSelection::of(&options[0], &sel(&["leaf-c"])).any_selected());
   }
 
   #[test]
   fn clicking_an_option_targets_its_first_leaf() {
     let options = tree();
-    assert_eq!(selection_target(&options[0]), SharedString::from("leaf-a"));
+    assert_eq!(first_leaf(&options[0]), SharedString::from("leaf-a"));
     assert_eq!(
-      selection_target(&options[0].children[1]),
+      first_leaf(&options[0].children[1]),
       SharedString::from("leaf-b")
     );
-    assert_eq!(selection_target(&options[1]), SharedString::from("leaf-c"));
+    assert_eq!(first_leaf(&options[1]), SharedString::from("leaf-c"));
+  }
+
+  #[test]
+  fn clicking_a_nested_parent_targets_the_first_leaf_of_the_subtree() {
+    let options = deep_tree();
+    assert_eq!(first_leaf(&options[0]), SharedString::from("leaf-a1"));
+    assert_eq!(
+      first_leaf(&options[0].children[0]),
+      SharedString::from("leaf-a1")
+    );
+    assert_eq!(
+      first_leaf(&options[0].children[1]),
+      SharedString::from("leaf-b1")
+    );
   }
 }

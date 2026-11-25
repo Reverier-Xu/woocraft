@@ -26,19 +26,12 @@
 //!   })
 //! ```
 
-use std::{rc::Rc, time::Duration};
+use std::rc::Rc;
 
-use gpui::{
-  AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, MouseButton,
-  ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _,
-};
+use gpui::{AnyElement, App, ElementId, IntoElement, RenderOnce, StyleRefinement, Window};
 
-use crate::{
-  ActiveTheme, Easing, Size, StyleSized, StyledExt, Transition, duration, h_flex, transition,
-};
-
-type RadioClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
+use super::selection_indicator::{SelectionClickHandler, SelectionIndicator};
+use crate::{Size, duration};
 
 #[derive(IntoElement)]
 /// Radio input for single-choice selection.
@@ -59,7 +52,7 @@ pub struct Radio {
   size: Size,
   tab_stop: bool,
   tab_index: isize,
-  on_click: Option<RadioClickHandler>,
+  on_click: Option<SelectionClickHandler>,
 }
 
 impl Radio {
@@ -132,94 +125,21 @@ impl_styled!(Radio);
 impl_parent_element!(Radio);
 
 impl RenderOnce for Radio {
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let checked = self.checked;
-    let focus_handle = window
-      .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-      .read(cx)
-      .clone();
-
-    // Selection transitions: the indicator's fill and border cross-fade to
-    // the primary color, interruptible and reduced motion aware. Disabled
-    // radios resolve without animation.
-    let policy = Transition::new(if self.disabled {
-      Duration::ZERO
-    } else {
-      duration::RADIO_TOGGLE
-    })
-    .easing(Easing::EaseOut);
-    let indicator_color = transition(
-      (self.id.clone(), "fill"),
-      if checked {
-        cx.theme().primary
-      } else {
-        cx.theme().background
-      },
-      policy.clone(),
-      window,
-      cx,
-    );
-    let border_color = transition(
-      (self.id.clone(), "border"),
-      if checked {
-        cx.theme().primary
-      } else {
-        cx.theme().input
-      },
-      policy,
-      window,
-      cx,
-    );
-
-    h_flex()
-      .id(self.id)
-      .items_center()
-      .component_gap(self.size)
-      .text_color(if self.disabled {
-        cx.theme().muted_foreground
-      } else {
-        cx.theme().foreground
-      })
-      .child(
-        div()
-          .flex_none()
-          .size(self.size.component_height() * 0.5)
-          .rounded(self.size.component_radius())
-          .border_1()
-          .border_color(border_color)
-          .bg(indicator_color)
-          .child(
-            div()
-              .size_full()
-              .border(self.size.em(0.125))
-              .rounded(self.size.component_radius())
-              .border_color(cx.theme().background),
-          ),
-      )
-      .when_some(self.label, |this, label| this.child(label))
-      .children(self.children)
-      .when(!self.disabled, |this| {
-        this.track_focus(
-          &focus_handle
-            .tab_stop(self.tab_stop)
-            .tab_index(self.tab_index),
-        )
-      })
-      .when(!self.disabled, |this| {
-        this
-          .cursor_pointer()
-          .hover(|this| this.opacity(0.9))
-          .active(|this| this.opacity(0.8))
-      })
-      .on_mouse_down(MouseButton::Left, |_, window, _| {
-        window.prevent_default();
-      })
-      .when_some(
-        self.on_click.filter(|_| !self.disabled),
-        |this, on_click| {
-          this.on_click(move |_event: &ClickEvent, window, cx| on_click(&true, window, cx))
-        },
-      )
-      .refine_style(&self.style)
+  fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+    SelectionIndicator {
+      id: self.id,
+      style: self.style,
+      label: self.label,
+      children: self.children,
+      marked: self.checked,
+      mark: None,
+      disabled: self.disabled,
+      size: self.size,
+      tab_stop: self.tab_stop,
+      tab_index: self.tab_index,
+      toggle_duration: duration::RADIO_TOGGLE,
+      activation_value: true,
+      on_click: self.on_click,
+    }
   }
 }

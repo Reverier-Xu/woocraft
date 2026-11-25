@@ -33,6 +33,8 @@ mod radio;
 mod radio_group;
 mod resizable;
 mod scroll;
+mod selection_indicator;
+mod selection_tree;
 mod slider;
 mod spinner;
 mod switch;

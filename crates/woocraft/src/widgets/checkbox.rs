@@ -27,20 +27,12 @@
 //!   })
 //! ```
 
-use std::{rc::Rc, time::Duration};
+use std::rc::Rc;
 
-use gpui::{
-  AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, MouseButton,
-  ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _,
-};
+use gpui::{AnyElement, App, ElementId, IntoElement, RenderOnce, StyleRefinement, Window};
 
-use crate::{
-  ActiveTheme, Easing, Icon, IconName, Sizable, Size, StyleSized, StyledExt, Transition, duration,
-  h_flex, transition,
-};
-
-type CheckboxClickHandler = Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>;
+use super::selection_indicator::{SelectionClickHandler, SelectionIndicator};
+use crate::{IconName, Size, duration};
 
 #[derive(IntoElement)]
 /// Checkbox input for boolean/toggled selection.
@@ -60,7 +52,7 @@ pub struct Checkbox {
   size: Size,
   tab_stop: bool,
   tab_index: isize,
-  on_click: Option<CheckboxClickHandler>,
+  on_click: Option<SelectionClickHandler>,
 }
 
 impl Checkbox {
@@ -144,116 +136,25 @@ impl_styled!(Checkbox);
 impl_parent_element!(Checkbox);
 
 impl RenderOnce for Checkbox {
-  fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let checked = self.checked;
-    let indeterminate = self.indeterminate;
-    let marked = checked || indeterminate;
-    let focus_handle = window
-      .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-      .read(cx)
-      .clone();
-
-    // Check transitions: the checkmark fades in and the indicator's fill and
-    // border cross-fade to the primary color, all interruptible and reduced
-    // motion aware. Disabled checkboxes resolve without animation.
-    let policy = Transition::new(if self.disabled {
-      Duration::ZERO
-    } else {
-      duration::CHECKBOX_TOGGLE
-    })
-    .easing(Easing::EaseOut);
-    let check_opacity = transition(
-      (self.id.clone(), "check"),
-      if marked { 1.0 } else { 0.0 },
-      policy.clone(),
-      window,
-      cx,
-    );
-    let indicator_color = transition(
-      (self.id.clone(), "fill"),
-      if marked {
-        cx.theme().primary
+  fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+    SelectionIndicator {
+      id: self.id,
+      style: self.style,
+      label: self.label,
+      children: self.children,
+      marked: self.checked || self.indeterminate,
+      mark: Some(if self.indeterminate {
+        IconName::SubtractFilled
       } else {
-        cx.theme().background
-      },
-      policy.clone(),
-      window,
-      cx,
-    );
-    let border_color = transition(
-      (self.id.clone(), "border"),
-      if marked {
-        cx.theme().primary
-      } else {
-        cx.theme().input
-      },
-      policy,
-      window,
-      cx,
-    );
-    let mark_icon = if indeterminate {
-      IconName::SubtractFilled
-    } else {
-      IconName::CheckmarkFilled
-    };
-
-    h_flex()
-      .id(self.id)
-      .items_center()
-      .component_gap(self.size)
-      .text_color(if self.disabled {
-        cx.theme().muted_foreground
-      } else {
-        cx.theme().foreground
-      })
-      .child(
-        div()
-          .flex_none()
-          .size(self.size.component_height() * 0.5)
-          .rounded(self.size.component_radius())
-          .border_1()
-          .border_color(border_color)
-          .bg(indicator_color)
-          .child(
-            h_flex()
-              .size_full()
-              .items_center()
-              .justify_center()
-              .border(self.size.em(0.125))
-              .rounded(self.size.component_radius())
-              .border_color(cx.theme().background)
-              .child(
-                Icon::new(mark_icon)
-                  .with_size(self.size.smaller())
-                  .text_color(cx.theme().background)
-                  .opacity(check_opacity),
-              ),
-          ),
-      )
-      .when_some(self.label, |this, label| this.child(label))
-      .children(self.children)
-      .when(!self.disabled, |this| {
-        this.track_focus(
-          &focus_handle
-            .tab_stop(self.tab_stop)
-            .tab_index(self.tab_index),
-        )
-      })
-      .when(!self.disabled, |this| {
-        this
-          .cursor_pointer()
-          .hover(|this| this.opacity(0.9))
-          .active(|this| this.opacity(0.8))
-      })
-      .on_mouse_down(MouseButton::Left, |_, window, _| {
-        window.prevent_default();
-      })
-      .when_some(
-        self.on_click.filter(|_| !self.disabled),
-        |this, on_click| {
-          this.on_click(move |_event: &ClickEvent, window, cx| on_click(&!checked, window, cx))
-        },
-      )
-      .refine_style(&self.style)
+        IconName::CheckmarkFilled
+      }),
+      disabled: self.disabled,
+      size: self.size,
+      tab_stop: self.tab_stop,
+      tab_index: self.tab_index,
+      toggle_duration: duration::CHECKBOX_TOGGLE,
+      activation_value: !self.checked,
+      on_click: self.on_click,
+    }
   }
 }

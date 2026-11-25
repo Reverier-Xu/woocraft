@@ -34,7 +34,10 @@ use gpui::{
   Styled, Window, prelude::FluentBuilder as _,
 };
 
-use crate::{ActiveTheme, Checkbox, Disableable, Sizable, Size, StyledExt, h_flex, v_flex};
+use super::selection_tree::{
+  NodeIds, OptionNode, SubtreeSelection, layout_option_node, option_leaves, tree_leaves,
+};
+use crate::{Checkbox, Disableable, Sizable, Size, StyledExt, h_flex, v_flex};
 
 type CheckboxGroupChangeHandler = Rc<dyn Fn(&Vec<SharedString>, &mut Window, &mut App) + 'static>;
 
@@ -82,30 +85,14 @@ impl CheckboxOption {
   }
 }
 
-/// Collect all leaf values of an option subtree, in tree order.
-fn option_leaves(option: &CheckboxOption) -> Vec<SharedString> {
-  if option.children.is_empty() {
-    vec![option.value.clone()]
-  } else {
-    option.children.iter().flat_map(option_leaves).collect()
+impl OptionNode for CheckboxOption {
+  fn value(&self) -> &SharedString {
+    &self.value
   }
-}
 
-/// Collect all leaf values of a whole option tree, in tree order.
-fn tree_leaves(options: &[CheckboxOption]) -> Vec<SharedString> {
-  options.iter().flat_map(option_leaves).collect()
-}
-
-/// Derive the (checked, indeterminate) presentation state of an option.
-fn option_state(option: &CheckboxOption, selected: &[SharedString]) -> (bool, bool) {
-  let leaves = option_leaves(option);
-  let checked_count = leaves
-    .iter()
-    .filter(|value| selected.contains(value))
-    .count();
-  let checked = checked_count == leaves.len() && !leaves.is_empty();
-  let indeterminate = !checked && checked_count > 0;
-  (checked, indeterminate)
+  fn child_options(&self) -> &[Self] {
+    &self.children
+  }
 }
 
 /// Apply a toggle of `leaves` to `selected` and return the new selection in
@@ -210,17 +197,15 @@ impl CheckboxGroup {
     self
   }
 
-  fn render_option(&self, index: &mut usize, option: &CheckboxOption, cx: &App) -> AnyElement {
-    let id = (self.name.clone(), *index);
-    *index += 1;
-
-    let (checked, indeterminate) = option_state(option, &self.selected);
+  fn render_option(&self, ids: &mut NodeIds, option: &CheckboxOption, cx: &App) -> AnyElement {
+    let id = ids.next();
+    let selection = SubtreeSelection::of(option, &self.selected);
     let leaves = option_leaves(option);
     let disabled = self.disabled || option.disabled;
 
     let checkbox = Checkbox::new(id)
-      .checked(checked)
-      .indeterminate(indeterminate)
+      .checked(selection.all_selected())
+      .indeterminate(selection.some_selected())
       .disabled(disabled)
       .with_size(self.size)
       .label(option.label.clone())
@@ -236,28 +221,13 @@ impl CheckboxGroup {
         },
       );
 
-    if option.children.is_empty() {
-      checkbox.into_any_element()
-    } else {
-      v_flex()
-        .gap(self.size.component_gap())
-        .child(checkbox)
-        .child(
-          v_flex()
-            .gap(self.size.component_gap())
-            .pl(self.size.em(1.))
-            .ml(self.size.em(0.25))
-            .border_l(self.size.em(0.125))
-            .border_color(cx.theme().border)
-            .children(
-              option
-                .children
-                .iter()
-                .map(|child| self.render_option(index, child, cx)),
-            ),
-        )
-        .into_any_element()
-    }
+    let children = option
+      .children
+      .iter()
+      .map(|child| self.render_option(ids, child, cx))
+      .collect();
+
+    layout_option_node(self.size, cx, checkbox.into_any_element(), children)
   }
 }
 
@@ -267,7 +237,7 @@ impl_styled!(CheckboxGroup);
 
 impl RenderOnce for CheckboxGroup {
   fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let mut index = 0;
+    let mut ids = NodeIds::new(self.name.clone());
     match self.layout {
       Axis::Vertical => v_flex(),
       Axis::Horizontal => h_flex().flex_wrap(),
@@ -277,7 +247,7 @@ impl RenderOnce for CheckboxGroup {
       self
         .options
         .iter()
-        .map(|option| self.render_option(&mut index, option, cx)),
+        .map(|option| self.render_option(&mut ids, option, cx)),
     )
     .refine_style(&self.style)
   }
@@ -300,23 +270,51 @@ mod tests {
     values.iter().map(|v| (*v).into()).collect()
   }
 
+  /// A three-level tree so that state can be derived through an inner branch.
+  fn deep_tree() -> Vec<CheckboxOption> {
+    vec![CheckboxOption::new("root", "Root").children([
+      CheckboxOption::new("branch-a", "A").children([
+        CheckboxOption::new("leaf-a1", "A1"),
+        CheckboxOption::new("leaf-a2", "A2"),
+      ]),
+      CheckboxOption::new("branch-b", "B").child(CheckboxOption::new("leaf-b1", "B1")),
+    ])]
+  }
+
   #[test]
   fn leaf_state_is_direct() {
     let options = tree();
-    let (checked, indeterminate) = option_state(&options[1], &sel(&["leaf-c"]));
-    assert!(checked);
-    assert!(!indeterminate);
+    let selection = SubtreeSelection::of(&options[1], &sel(&["leaf-c"]));
+    assert!(selection.all_selected());
+    assert!(!selection.some_selected());
   }
 
   #[test]
   fn node_state_is_derived() {
     let options = tree();
-    let (checked, indeterminate) = option_state(&options[0], &sel(&["leaf-a"]));
-    assert!(!checked);
-    assert!(indeterminate);
+    let selection = SubtreeSelection::of(&options[0], &sel(&["leaf-a"]));
+    assert!(!selection.all_selected());
+    assert!(selection.some_selected());
 
-    let (checked, _) = option_state(&options[0], &sel(&["leaf-a", "leaf-b"]));
-    assert!(checked);
+    let selection = SubtreeSelection::of(&options[0], &sel(&["leaf-a", "leaf-b"]));
+    assert!(selection.all_selected());
+  }
+
+  #[test]
+  fn partially_checked_subtree_bubbles_indeterminate_to_every_ancestor() {
+    let options = deep_tree();
+    let selected = sel(&["leaf-a2"]);
+
+    let root = SubtreeSelection::of(&options[0], &selected);
+    assert!(!root.all_selected());
+    assert!(root.some_selected());
+
+    let branch = SubtreeSelection::of(&options[0].children[0], &selected);
+    assert!(!branch.all_selected());
+    assert!(branch.some_selected());
+
+    let sibling = SubtreeSelection::of(&options[0].children[1], &selected);
+    assert_eq!(sibling, SubtreeSelection::None);
   }
 
   #[test]
@@ -332,6 +330,37 @@ mod tests {
       false,
     );
     assert_eq!(next, sel(&[]));
+  }
+
+  #[test]
+  fn toggling_nested_node_leaves_siblings_untouched() {
+    let options = deep_tree();
+    let current = sel(&["leaf-b1"]);
+
+    let next = apply_toggle(
+      &options,
+      &current,
+      &option_leaves(&options[0].children[0]),
+      true,
+    );
+    assert_eq!(next, sel(&["leaf-a1", "leaf-a2", "leaf-b1"]));
+
+    let next = apply_toggle(
+      &options,
+      &next,
+      &option_leaves(&options[0].children[0]),
+      false,
+    );
+    assert_eq!(next, sel(&["leaf-b1"]));
+  }
+
+  #[test]
+  fn toggling_orders_the_selection_by_tree_not_by_input_order() {
+    let options = tree();
+    // The caller's selection may arrive in any order; the reported selection
+    // always follows tree order.
+    let next = apply_toggle(&options, &sel(&["leaf-b", "leaf-a"]), &[], false);
+    assert_eq!(next, sel(&["leaf-a", "leaf-b"]));
   }
 
   #[test]
