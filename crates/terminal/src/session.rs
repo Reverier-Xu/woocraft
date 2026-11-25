@@ -4,7 +4,7 @@ use std::{
   borrow::Cow,
   sync::{
     Arc, Mutex,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicU64, Ordering},
   },
 };
 
@@ -12,7 +12,7 @@ use anyhow::Result;
 use vte::ansi::Processor;
 
 use crate::{
-  backend::{self, BackendListener, PtySender, TermLock},
+  backend::{self, BackendListener, Lifecycle, PtySender, TermLock},
   event::{ChildStatus, TerminalEvent},
   options::SpawnOptions,
   types::{Point, ScrollKind, SelectionKind, TerminalBounds},
@@ -32,11 +32,11 @@ struct SessionInner {
   kind: SessionKind,
   term: Arc<TermLock>,
   bounds: Mutex<TerminalBounds>,
-  events_tx: async_channel::Sender<TerminalEvent>,
+  /// The event channel and the child lifecycle state, shared with the backend
+  /// listener.
+  lifecycle: Lifecycle,
   /// Keeps the event channel open even if the host drops its receiver.
   events_rx: async_channel::Receiver<TerminalEvent>,
-  exited: Arc<AtomicBool>,
-  exit_status: Arc<Mutex<Option<ChildStatus>>>,
   display_processor: Mutex<Processor<vte::ansi::StdSyncHandler>>,
   /// Monotonic content revision, shared with the backend listener (which
   /// bumps it for PTY-driven changes); the session bumps it for direct
@@ -56,44 +56,63 @@ enum SessionKind {
   DisplayOnly,
 }
 
-impl TerminalSession {
-  /// Spawns a new PTY session.
-  pub fn spawn(options: SpawnOptions, bounds: TerminalBounds) -> Result<Self> {
+/// The state every session kind is built from: the event channel, the child
+/// lifecycle state, the emulator and its backend listener.
+struct SessionBase {
+  events_rx: async_channel::Receiver<TerminalEvent>,
+  lifecycle: Lifecycle,
+  bounds: TerminalBounds,
+  listener: BackendListener,
+  term: Arc<TermLock>,
+  revision: Arc<AtomicU64>,
+}
+
+impl SessionBase {
+  fn new(options: &SpawnOptions, bounds: TerminalBounds) -> Self {
     let bounds = backend::normalize_terminal_bounds(bounds);
-    let (events_tx, events_rx) = async_channel::unbounded();
-    let exited = Arc::new(AtomicBool::new(false));
-    let exit_status = Arc::new(Mutex::new(None));
+    let (lifecycle, events_rx) = Lifecycle::new();
     let bounds_shared = Arc::new(Mutex::new(bounds));
     let revision = Arc::new(AtomicU64::new(1));
 
-    let listener = BackendListener::new(
-      events_tx.clone(),
-      bounds_shared.clone(),
-      exited.clone(),
-      exit_status.clone(),
-      revision.clone(),
-    );
+    let listener = BackendListener::new(lifecycle.clone(), bounds_shared, revision.clone());
     let term = backend::new_term(
-      backend::term_config(&options),
+      backend::term_config(options),
       bounds,
       listener.clone(),
       !options.alternate_scroll,
     );
 
-    let (pty_tx, child_pid) = backend::open_pty(&options, bounds, &listener, term.clone())?;
+    Self {
+      events_rx,
+      lifecycle,
+      bounds,
+      listener,
+      term,
+      revision,
+    }
+  }
 
+  fn into_inner(self, kind: SessionKind) -> SessionInner {
+    SessionInner {
+      kind,
+      term: self.term,
+      bounds: Mutex::new(self.bounds),
+      lifecycle: self.lifecycle,
+      events_rx: self.events_rx,
+      display_processor: Mutex::new(Processor::new()),
+      revision: self.revision,
+    }
+  }
+}
+
+impl TerminalSession {
+  /// Spawns a new PTY session.
+  pub fn spawn(options: SpawnOptions, bounds: TerminalBounds) -> Result<Self> {
+    let base = SessionBase::new(&options, bounds);
+    let (pty_tx, child_pid) =
+      backend::open_pty(&options, base.bounds, &base.listener, base.term.clone())?;
     Ok(Self {
-      inner: Arc::new(SessionInner {
-        kind: SessionKind::Pty { pty_tx, child_pid },
-        term,
-        bounds: Mutex::new(bounds),
-        events_tx,
-        events_rx,
-        exited,
-        exit_status,
-        display_processor: Mutex::new(Processor::new()),
-        revision,
-      }),
+      inner: Arc::new(base.into_inner(SessionKind::Pty { pty_tx, child_pid })),
     })
   }
 
@@ -102,39 +121,9 @@ impl TerminalSession {
   /// Terminal state changes are driven by [`TerminalSession::feed_display`],
   /// which is mostly useful for rendering tests and previews.
   pub fn spawn_display_only(options: SpawnOptions, bounds: TerminalBounds) -> Self {
-    let bounds = backend::normalize_terminal_bounds(bounds);
-    let (events_tx, events_rx) = async_channel::unbounded();
-    let exited = Arc::new(AtomicBool::new(false));
-    let exit_status = Arc::new(Mutex::new(None));
-    let bounds_shared = Arc::new(Mutex::new(bounds));
-    let revision = Arc::new(AtomicU64::new(1));
-
-    let listener = BackendListener::new(
-      events_tx.clone(),
-      bounds_shared.clone(),
-      exited.clone(),
-      exit_status.clone(),
-      revision.clone(),
-    );
-    let term = backend::new_term(
-      backend::term_config(&options),
-      bounds,
-      listener.clone(),
-      !options.alternate_scroll,
-    );
-
+    let base = SessionBase::new(&options, bounds);
     Self {
-      inner: Arc::new(SessionInner {
-        kind: SessionKind::DisplayOnly,
-        term,
-        bounds: Mutex::new(bounds),
-        events_tx,
-        events_rx,
-        exited,
-        exit_status,
-        display_processor: Mutex::new(Processor::new()),
-        revision,
-      }),
+      inner: Arc::new(base.into_inner(SessionKind::DisplayOnly)),
     }
   }
 
@@ -143,19 +132,28 @@ impl TerminalSession {
     self.inner.events_rx.clone()
   }
 
-  /// Writes raw bytes into the PTY, as if typed by the user.
+  /// Writes raw bytes into the PTY.
+  ///
+  /// This is the single write path: [`Self::write_pty`], [`Self::input`] and
+  /// [`Self::input_str`] are aliases of each other and differ only in how
+  /// callers spell the intent (keyboard input vs. a protocol reply). The PTY
+  /// cannot tell them apart.
   pub fn input(&self, bytes: impl Into<Cow<'static, [u8]>>) {
     self.write_pty(bytes);
   }
 
-  /// Writes a string into the PTY, as if typed by the user.
+  /// Writes a string into the PTY.
+  ///
+  /// Alias of [`Self::write_pty`] for string callers.
   pub fn input_str(&self, text: &str) {
     self.write_pty(Cow::Owned(text.as_bytes().to_vec()));
   }
 
-  /// Writes raw bytes into the PTY without marking them as user keyboard
-  /// input. This is the escape hatch hosts use to answer
-  /// [`TerminalEvent::ClipboardLoad`] and [`TerminalEvent::ColorRequest`].
+  /// Writes raw bytes into the PTY.
+  ///
+  /// Hosts use this to answer [`TerminalEvent::ClipboardLoad`] and
+  /// [`TerminalEvent::ColorRequest`]; it is byte-for-byte the same operation
+  /// as [`Self::input`].
   pub fn write_pty(&self, bytes: impl Into<Cow<'static, [u8]>>) {
     if let SessionKind::Pty { pty_tx, .. } = &self.inner.kind {
       pty_tx.notify(bytes);
@@ -184,7 +182,7 @@ impl TerminalSession {
     if let SessionKind::Pty { pty_tx, .. } = &self.inner.kind {
       pty_tx.resize(bounds);
     }
-    backend::resize(&mut self.inner.term.lock(), bounds);
+    self.inner.term.lock().resize(bounds);
     self.bump_revision();
     self.wake();
   }
@@ -265,7 +263,7 @@ impl TerminalSession {
 
   /// Clears the current selection, if any.
   pub fn clear_selection(&self) {
-    backend::clear_selection(&mut self.inner.term.lock());
+    self.inner.term.lock().selection = None;
     self.bump_revision();
     self.wake();
   }
@@ -293,12 +291,12 @@ impl TerminalSession {
   /// Whether the child process is still running. Display-only sessions
   /// have no child and always report `false`.
   pub fn is_alive(&self) -> bool {
-    matches!(self.inner.kind, SessionKind::Pty { .. }) && !self.inner.exited.load(Ordering::SeqCst)
+    matches!(self.inner.kind, SessionKind::Pty { .. }) && !self.inner.lifecycle.has_exited()
   }
 
   /// The exit status of the child process, once it has exited.
   pub fn child_exit_status(&self) -> Option<ChildStatus> {
-    *self.inner.exit_status.lock().unwrap()
+    self.inner.lifecycle.status()
   }
 
   /// Feeds raw output bytes directly into the emulator state, bypassing the
@@ -317,32 +315,21 @@ impl TerminalSession {
   /// and thereby terminates the child process.
   ///
   /// Idempotent. The first call reports the session as terminated (exit code
-  /// unavailable) and emits [`TerminalEvent::ChildExit`] plus
-  /// [`TerminalEvent::Exit`], since the PTY event loop will not report them
-  /// after a shutdown request.
+  /// unavailable unless the child already reported one) and emits
+  /// [`TerminalEvent::ChildExit`] plus [`TerminalEvent::Exit`], since the PTY
+  /// event loop stops without reporting them after a shutdown request. A
+  /// concurrent real exit and a shutdown therefore still yield exactly one
+  /// pair of lifecycle events, and a waiter never hangs.
   pub fn kill(&self) {
-    if let SessionKind::Pty { pty_tx, .. } = &self.inner.kind {
-      pty_tx.shutdown();
-      if !self.inner.exited.swap(true, Ordering::SeqCst) {
-        #[cfg(unix)]
-        let status = ChildStatus {
-          code: None,
-          signal: None,
-        };
-        #[cfg(windows)]
-        let status = ChildStatus { code: None };
-        *self.inner.exit_status.lock().unwrap() = Some(status);
-        let _ = self
-          .inner
-          .events_tx
-          .send_blocking(TerminalEvent::ChildExit(status));
-        let _ = self.inner.events_tx.send_blocking(TerminalEvent::Exit);
-      }
-    }
+    let SessionKind::Pty { pty_tx, .. } = &self.inner.kind else {
+      return;
+    };
+    pty_tx.shutdown();
+    self.inner.lifecycle.finish_exit(None);
   }
 
   fn wake(&self) {
-    let _ = self.inner.events_tx.send_blocking(TerminalEvent::Wakeup);
+    self.inner.lifecycle.send(TerminalEvent::Wakeup);
   }
 }
 

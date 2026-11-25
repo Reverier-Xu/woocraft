@@ -97,6 +97,94 @@ impl PtySender {
 }
 
 // ---------------------------------------------------------------------------
+// Session lifecycle
+// ---------------------------------------------------------------------------
+
+/// The host event channel plus the child lifecycle state, shared by the
+/// session handle and the PTY backend listener.
+///
+/// The `exited` flag is the single source of truth for "the child is gone":
+/// the PTY event loop and [`crate::TerminalSession::kill`] both report the
+/// exit through [`Lifecycle::finish_exit`], which emits the lifecycle events
+/// exactly once even when a real exit races a shutdown.
+#[derive(Clone)]
+pub(crate) struct Lifecycle {
+  events_tx: async_channel::Sender<TerminalEvent>,
+  exited: Arc<AtomicBool>,
+  exit_status: Arc<Mutex<Option<ChildStatus>>>,
+}
+
+impl Lifecycle {
+  /// Creates the lifecycle state and the matching event receiver.
+  pub(crate) fn new() -> (Self, async_channel::Receiver<TerminalEvent>) {
+    let (events_tx, events_rx) = async_channel::unbounded();
+    let lifecycle = Self {
+      events_tx,
+      exited: Arc::new(AtomicBool::new(false)),
+      exit_status: Arc::new(Mutex::new(None)),
+    };
+    (lifecycle, events_rx)
+  }
+
+  /// Sends an event to the host.
+  pub(crate) fn send(&self, event: TerminalEvent) {
+    // Unbounded channel: `try_send` only fails once the host has dropped every
+    // receiver, which means nobody is listening anymore.
+    let _ = self.events_tx.try_send(event);
+  }
+
+  /// Whether the child was already reported as exited.
+  pub(crate) fn has_exited(&self) -> bool {
+    self.exited.load(Ordering::SeqCst)
+  }
+
+  /// The exit status recorded by [`Lifecycle::finish_exit`], once it ran.
+  pub(crate) fn status(&self) -> Option<ChildStatus> {
+    *self.exit_status.lock().unwrap()
+  }
+
+  /// Records the status reported while the PTY event loop is still draining
+  /// its last output.
+  ///
+  /// The lifecycle events are emitted later, by [`Lifecycle::finish_exit`], so
+  /// that [`TerminalEvent::Exit`] keeps meaning "every output byte has been
+  /// applied". Ignored once the exit is final, so the status a host observed
+  /// with the lifecycle events cannot change behind its back.
+  pub(crate) fn record_status(&self, status: ChildStatus) {
+    if self.exited.load(Ordering::SeqCst) {
+      return;
+    }
+    self.store_status(status);
+  }
+
+  fn store_status(&self, status: ChildStatus) {
+    *self.exit_status.lock().unwrap() = Some(status);
+  }
+
+  /// The single child-exit transition: marks the session as exited and emits
+  /// one [`TerminalEvent::ChildExit`] followed by one [`TerminalEvent::Exit`].
+  ///
+  /// `status` is the status the caller observed; when it is `None` the status
+  /// recorded by [`Lifecycle::record_status`] is used, falling back to
+  /// [`ChildStatus::unavailable`] so a waiter never hangs on a session that
+  /// was shut down before the child reported anything.
+  ///
+  /// Idempotent: the first caller wins, later ones emit nothing and leave the
+  /// recorded status alone.
+  pub(crate) fn finish_exit(&self, status: Option<ChildStatus>) {
+    if self.exited.swap(true, Ordering::SeqCst) {
+      return;
+    }
+    let status = status
+      .or_else(|| self.status())
+      .unwrap_or_else(ChildStatus::unavailable);
+    self.store_status(status);
+    self.send(TerminalEvent::ChildExit(status));
+    self.send(TerminalEvent::Exit);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Event listener
 // ---------------------------------------------------------------------------
 
@@ -113,29 +201,23 @@ impl PtySender {
 /// anything that needs emulator state is deferred to the host thread instead.
 #[derive(Clone)]
 pub(crate) struct BackendListener {
-  events_tx: async_channel::Sender<TerminalEvent>,
+  lifecycle: Lifecycle,
   bounds: Arc<Mutex<TerminalBounds>>,
   /// Filled in right after the event loop is created, before its thread is
   /// spawned, so no event can observe an empty slot.
   pty_sender: Arc<OnceLock<PtySender>>,
-  exited: Arc<AtomicBool>,
-  exit_status: Arc<Mutex<Option<ChildStatus>>>,
   /// Shared with the session; bumped on every content mutation.
   revision: Arc<AtomicU64>,
 }
 
 impl BackendListener {
   pub(crate) fn new(
-    events_tx: async_channel::Sender<TerminalEvent>, bounds: Arc<Mutex<TerminalBounds>>,
-    exited: Arc<AtomicBool>, exit_status: Arc<Mutex<Option<ChildStatus>>>,
-    revision: Arc<AtomicU64>,
+    lifecycle: Lifecycle, bounds: Arc<Mutex<TerminalBounds>>, revision: Arc<AtomicU64>,
   ) -> Self {
     Self {
-      events_tx,
+      lifecycle,
       bounds,
       pty_sender: Arc::new(OnceLock::new()),
-      exited,
-      exit_status,
       revision,
     }
   }
@@ -145,13 +227,7 @@ impl BackendListener {
   }
 
   fn send(&self, event: TerminalEvent) {
-    // Unbounded channel: this never blocks and only fails once the host has
-    // dropped every receiver, which means nobody is listening anymore.
-    let _ = self.events_tx.send_blocking(event);
-  }
-
-  fn mark_exit(&self) {
-    self.exited.store(true, Ordering::SeqCst);
+    self.lifecycle.send(event);
   }
 
   fn write_to_pty(&self, bytes: Vec<u8>) {
@@ -191,14 +267,13 @@ impl EventListener for BackendListener {
       }
       AlacEvent::Bell => self.send(TerminalEvent::Bell),
       AlacEvent::ChildExit(status) => {
-        let status = ChildStatus::from(&status);
-        *self.exit_status.lock().unwrap() = Some(status);
-        self.mark_exit();
-        self.send(TerminalEvent::ChildExit(status));
+        // Reported before the event loop drains the remaining output, so only
+        // the status is kept here; the lifecycle events are emitted on `Exit`.
+        self.lifecycle.record_status(ChildStatus::from(&status));
       }
+      // Sent by the emulator once the event loop applied its last output.
       AlacEvent::Exit => {
-        self.mark_exit();
-        self.send(TerminalEvent::Exit);
+        self.lifecycle.finish_exit(None);
       }
     }
   }
@@ -264,7 +339,7 @@ pub(crate) fn open_pty(
     .shell
     .clone()
     .unwrap_or_else(crate::options::default_shell);
-  #[cfg(not(windows))]
+  #[cfg(unix)]
   let child_signal_mask = tty::SignalMask::current().ok();
 
   let tty_options = tty::Options {
@@ -272,7 +347,7 @@ pub(crate) fn open_pty(
     working_directory: options.working_directory.clone(),
     drain_on_exit: true,
     env: options.env.iter().cloned().collect(),
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     child_signal_mask,
     #[cfg(windows)]
     escape_args: true,
@@ -327,10 +402,6 @@ fn alacritty_cursor_shape_of(shape: AlacCursorShape) -> CursorShape {
 // Emulator operations (all short-lived lock critical sections)
 // ---------------------------------------------------------------------------
 
-pub(crate) fn resize(term: &mut Term<BackendListener>, bounds: TerminalBounds) {
-  term.resize(bounds);
-}
-
 pub(crate) fn scroll_display(term: &mut Term<BackendListener>, scroll: ScrollKind) {
   term.scroll_display(scroll.to_alacritty());
 }
@@ -347,10 +418,6 @@ pub(crate) fn set_selection(
   let mut selection = AlacSelection::new(selection_type, start.to_alacritty(), AlacSide::Left);
   selection.update(end.to_alacritty(), AlacSide::Right);
   term.selection = Some(selection);
-}
-
-pub(crate) fn clear_selection(term: &mut Term<BackendListener>) {
-  term.selection = None;
 }
 
 pub(crate) fn clear_saved_screen(term: &mut Term<BackendListener>) {
@@ -596,11 +663,10 @@ mod tests {
   #[test]
   fn selection_roundtrip_and_clear() {
     let bounds = TerminalBounds::new(24.0, 8.0, 80, 24);
+    let (lifecycle, _events) = Lifecycle::new();
     let listener = BackendListener::new(
-      async_channel::unbounded().0,
+      lifecycle,
       Arc::new(std::sync::Mutex::new(bounds)),
-      Arc::new(AtomicBool::new(false)),
-      Arc::new(std::sync::Mutex::new(None)),
       Arc::new(AtomicU64::new(1)),
     );
     let mut term = Term::new(AlacConfig::default(), &bounds, listener);
@@ -610,7 +676,7 @@ mod tests {
     set_selection(&mut term, start, end, SelectionKind::Characters);
     assert!(term.selection.is_some());
 
-    clear_selection(&mut term);
+    term.selection = None;
     assert!(term.selection.is_none());
   }
 }

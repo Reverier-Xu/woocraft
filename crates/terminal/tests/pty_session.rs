@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use woocraft_terminal::{
-  SpawnOptions, TerminalBounds,
+  SpawnOptions, TerminalBounds, TerminalEvent,
   control::{spawn_with_events, wait_for_exit_blocking, wait_for_text_blocking},
 };
 
@@ -18,6 +18,20 @@ fn shell_options(program: &str, args: &[&str]) -> SpawnOptions {
     program.to_string(),
     args.iter().map(|arg| arg.to_string()).collect(),
   ))
+}
+
+/// Drains the queued events and returns the number of `ChildExit` and `Exit`
+/// events seen, so tests can assert the lifecycle is reported exactly once.
+fn lifecycle_event_counts(events: &async_channel::Receiver<TerminalEvent>) -> (usize, usize) {
+  let (mut child_exits, mut exits) = (0, 0);
+  while let Ok(event) = events.try_recv() {
+    match event {
+      TerminalEvent::ChildExit(_) => child_exits += 1,
+      TerminalEvent::Exit => exits += 1,
+      _ => {}
+    }
+  }
+  (child_exits, exits)
 }
 
 #[cfg(unix)]
@@ -134,11 +148,35 @@ fn kill_is_idempotent_and_terminates_child() {
 
   session.kill();
   session.kill();
+  session.kill();
 
   // The child is terminated through the closed PTY; the exact status depends
   // on the platform (signal vs code), so only require it to be reported.
   wait_for_exit_blocking(&events, &session, TIMEOUT).expect("exit after kill");
   assert!(!session.is_alive());
+
+  // A shutdown request stops the PTY event loop without lifecycle events, so
+  // the synthesized ones must be the only pair the host ever sees.
+  std::thread::sleep(Duration::from_millis(200));
+  assert_eq!(lifecycle_event_counts(&events), (1, 1));
+}
+
+#[cfg(unix)]
+#[test]
+fn kill_after_exit_does_not_duplicate_lifecycle_events() {
+  let (session, events) = spawn_with_events(
+    shell_options("sh", &["-c", "echo woocraft-marker-42"]),
+    DEFAULT_BOUNDS,
+  )
+  .expect("failed to spawn session");
+
+  wait_for_exit_blocking(&events, &session, TIMEOUT).expect("exit");
+  session.kill();
+  session.kill();
+
+  // Give an in-flight real exit a chance to duplicate the lifecycle events.
+  std::thread::sleep(Duration::from_millis(200));
+  assert_eq!(lifecycle_event_counts(&events), (1, 1));
 }
 
 #[cfg(unix)]

@@ -27,6 +27,16 @@ pub struct ChildStatus {
 }
 
 impl ChildStatus {
+  /// A status for a child that never reported one, for example after the
+  /// session was shut down by [`crate::TerminalSession::kill`].
+  pub fn unavailable() -> Self {
+    Self {
+      code: None,
+      #[cfg(unix)]
+      signal: None,
+    }
+  }
+
   /// A single exit-code view: the raw code, or `-1` when unavailable.
   pub fn code(&self) -> i32 {
     self.code.unwrap_or(-1)
@@ -113,15 +123,16 @@ mod tests {
   use super::*;
 
   #[test]
-  fn child_status_conversion() {
-    #[cfg(unix)]
-    let status = ChildStatus {
-      code: Some(0),
-      signal: None,
-    };
-    #[cfg(windows)]
-    let status = ChildStatus { code: Some(0) };
-    assert_eq!(status.code(), 0);
+  fn unavailable_status_reports_no_code() {
+    assert_eq!(ChildStatus::unavailable().code(), -1);
+    assert_eq!(
+      ChildStatus {
+        code: Some(0),
+        ..ChildStatus::unavailable()
+      }
+      .code(),
+      0
+    );
   }
 
   #[test]
