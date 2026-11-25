@@ -8099,7 +8099,6 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "smallvec",
- "smol",
  "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
  "tracing",

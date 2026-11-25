@@ -207,7 +207,7 @@ impl InputState {
     self.inline_completion.task = cx.spawn_in(window, async move |editor, cx| {
       // Debounce: wait before fetching to avoid unnecessary requests while
       // typing
-      smol::Timer::after(debounce).await;
+      cx.background_executor().timer(debounce).await;
 
       // Now fetch the inline completion after the debounce period
       let task = editor.update_in(cx, |editor, window, cx| {

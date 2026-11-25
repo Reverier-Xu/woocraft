@@ -291,7 +291,7 @@ impl LoadingWindow {
                 // Step 2: simulate async load — after 2s add new files
                 let entity = cx.entity().clone();
                 cx.spawn_in(window, async move |_, cx| {
-                  smol::Timer::after(Duration::from_secs(2)).await;
+                  cx.background_executor().timer(Duration::from_secs(2)).await;
                   _ = entity.update_in(cx, |this: &mut LoadingWindow, _, cx| {
                     this.loading_item_id = None;
                     this.extra_children = vec![
