@@ -36,7 +36,7 @@ on crates.io:
 
 ```toml
 [dependencies]
-woocraft = "0.7"
+woocraft = "0.8"
 ```
 
 To use directly from this repository:

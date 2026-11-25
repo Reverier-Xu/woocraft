@@ -657,8 +657,8 @@ fn normalize(node: PaneNode, is_root: bool, root_kind: RootKind) -> Option<PaneN
 ///
 /// ```ignore
 /// DockLayout::v_split()
-///   .child(DockLayout::tabs().panel_view(left, cx), Some(px(200.)))
-///   .child(DockLayout::tabs().panel_view(center, cx), None)
+///   .child(DockLayout::tabs().panel_id(left), Some(px(200.)))
+///   .child(DockLayout::tabs().panel_id(center), None)
 /// ```
 #[derive(Clone, Debug)]
 pub struct DockLayout {

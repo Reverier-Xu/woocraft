@@ -94,7 +94,7 @@ tree-sitter-yaml              = { workspace = true, optional = true }
 tree-sitter-zig               = { workspace = true, optional = true }
 unicode-segmentation          = { workspace = true }
 
-woocraft-terminal = { path = "../terminal", version = "0.7.0", optional = true }
+woocraft-terminal = { path = "../terminal", version = "0.8.0", optional = true }
 
 # For assets embedding, optional and workspace to avoid unnecessary dependency for users who don't need it.
 gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }

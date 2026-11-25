@@ -19,8 +19,9 @@
   - `crates/woocraft`：组件库本体。`src/widgets/` 下按组件分模块（`button`、`editor`、`dock`、`terminal` 等），`src/base/` 为主题（`theme`）与样式工具（`style`、`layout` 等），`src/actions.rs` 定义跨组件 action 与键位；`examples/` 提供各组件的可运行示例。
   - `crates/terminal`（包名 `woocraft-terminal`）：终端核心层——跨平台 PTY 会话（Linux/macOS openpty、Windows ConPTY）、基于 alacritty_terminal 的终端模拟与 headless 外部控制 API，不依赖 gpui、不依赖任何 async 运行时；视图组件在 `crates/woocraft/src/widgets/terminal/`。
 - 文档：
-  - `docs/terminal-design.md`：terminal 组件的架构设计与阶段验收标准。
-  - `docs/terminal.md`：terminal 组件的使用文档（视图 + 外部控制）。
+  - `crates/terminal/README.md`：terminal 核心层的使用文档（headless 外部控制与示例）。
+  - `crates/terminal/src/lib.rs`、`crates/terminal/src/backend.rs`：terminal 核心层的模块级架构说明（会话、PTY 事件循环、生命周期事件）。
+  - `docs/media.md`、`docs/media-gpu.md`：media 组件的使用与 GPU 传输说明。
 - 构建输出位于 `target/`，不要提交。
 
 ## 关键技术约束

@@ -8063,7 +8063,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "woocraft"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -8156,7 +8156,7 @@ dependencies = [
 
 [[package]]
 name = "woocraft-terminal"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "async-channel",

@@ -20,7 +20,7 @@ The GPUI view components built on top of this crate live in the [`woocraft`](htt
 
 ```toml
 [dependencies]
-woocraft-terminal = "0.7"
+woocraft-terminal = "0.8"
 ```
 
 ## Quick Start
