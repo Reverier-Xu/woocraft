@@ -20,15 +20,11 @@
 //! Architecture reference: gpui-kit's `PaneTree`
 //! (`crates/base/src/dock/layout`).
 
-use std::sync::{
-  Arc,
-  atomic::{AtomicU64, Ordering},
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use gpui::{App, Axis, Entity, EntityId, Pixels};
+use gpui::{Axis, EntityId, Pixels};
 use smallvec::SmallVec;
 
-use super::panel::{Panel, PanelView};
 use crate::Placement;
 
 /// Stable container identity. Survives structural edits and normalization so
@@ -45,32 +41,12 @@ impl NodeId {
     static NEXT_NODE_ID: AtomicU64 = AtomicU64::new(0);
     Self(NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed))
   }
-
-  /// The raw identity value, e.g. for serialization.
-  ///
-  /// Part of the public API surface even though the crate itself does not
-  /// call it yet: applications persisting dock layouts need a stable value.
-  #[allow(dead_code, reason = "public API for applications persisting layouts")]
-  pub fn as_u64(self) -> u64 {
-    self.0
-  }
 }
 
 /// Stable panel identity, wrapping the panel entity's [`EntityId`] so the
 /// layout algebra can be exercised without an `App`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct PanelId(u64);
-
-impl PanelId {
-  /// The raw identity value, e.g. for serialization.
-  ///
-  /// Part of the public API surface even though the crate itself does not
-  /// call it yet: applications persisting dock layouts need a stable value.
-  #[allow(dead_code, reason = "public API for applications persisting layouts")]
-  pub fn as_u64(self) -> u64 {
-    self.0
-  }
-}
 
 impl From<EntityId> for PanelId {
   fn from(id: EntityId) -> Self {
@@ -185,7 +161,9 @@ pub struct PaneTree {
 }
 
 impl PaneTree {
-  /// Creates an empty tree with a single root node of `root_kind`.
+  /// An empty tree with the given root shape. Region trees start from this and
+  /// are replaced by [`PaneTree::from_layout`] when the region has a saved
+  /// layout.
   pub fn new(root_kind: RootKind) -> Self {
     let root = match root_kind {
       RootKind::Split => PaneNode::new(NodeKind::Split {
@@ -407,7 +385,7 @@ impl EditResult {
     self.changed
   }
 
-  /// Panics when an edit unexpectedly did nothing (tests and examples).
+  /// Panics when an edit unexpectedly did nothing.
   #[cfg(test)]
   pub fn expect_changed(&self) {
     assert!(self.changed, "expected the edit to change the tree");
@@ -735,30 +713,6 @@ impl DockLayout {
     self
   }
 
-  /// Adds a panel view to this tab group.
-  ///
-  /// Part of the builder API; `panel` below covers the common case.
-  #[allow(dead_code, reason = "public builder API for application layouts")]
-  pub fn panel_view(mut self, panel: Arc<dyn PanelView>, cx: &App) -> Self {
-    debug_assert!(
-      matches!(self.kind, LayoutSeed::Tabs { .. }),
-      "panels can only be added to a tab group"
-    );
-    if let LayoutSeed::Tabs { panels } = &mut self.kind {
-      panels.push(PanelId::from(panel.entity_id(cx)));
-    }
-    self
-  }
-
-  /// Adds a panel entity to this tab group.
-  ///
-  /// Part of the builder API used by applications assembling layouts.
-  #[allow(dead_code, reason = "public builder API for application layouts")]
-  pub fn panel<P: Panel>(self, panel: Entity<P>, cx: &App) -> Self {
-    let view: Arc<dyn PanelView> = Arc::new(panel);
-    self.panel_view(view, cx)
-  }
-
   /// Adds an already-addressed panel to this tab group (crate-internal:
   /// tests and the registry wiring).
   pub(crate) fn panel_id(mut self, panel: PanelId) -> Self {
@@ -821,14 +775,6 @@ mod tests {
 
   fn tabs_panel_count(tree: &PaneTree, node: NodeId) -> usize {
     tree.tabs_of(node).unwrap().0.len()
-  }
-
-  impl DockLayout {
-    /// Test-side alias for [`DockLayout::panel_id`], keeping test bodies
-    /// focused on the shape they describe.
-    fn panel_view_raw(self, panel: PanelId) -> Self {
-      self.panel_id(panel)
-    }
   }
 
   #[test]
@@ -960,7 +906,7 @@ mod tests {
   fn split_same_axis_inserts_sibling() {
     let mut tree = PaneTree::from_layout(
       RootKind::Split,
-      DockLayout::h_split().child(DockLayout::tabs().panel_view_raw(panel(1)), None),
+      DockLayout::h_split().child(DockLayout::tabs().panel_id(panel(1)), None),
     );
     let tabs = tabs_ids(&tree)[0];
 
@@ -977,7 +923,7 @@ mod tests {
   fn split_different_axis_wraps_target() {
     let mut tree = PaneTree::from_layout(
       RootKind::Split,
-      DockLayout::h_split().child(DockLayout::tabs().panel_view_raw(panel(1)), None),
+      DockLayout::h_split().child(DockLayout::tabs().panel_id(panel(1)), None),
     );
     let tabs = tabs_ids(&tree)[0];
 
@@ -1001,7 +947,7 @@ mod tests {
   fn split_places_the_new_group_on_the_placed_side() {
     let mut tree = PaneTree::from_layout(
       RootKind::Split,
-      DockLayout::h_split().child(DockLayout::tabs().panel_view_raw(panel(1)), None),
+      DockLayout::h_split().child(DockLayout::tabs().panel_id(panel(1)), None),
     );
     let tabs = tabs_ids(&tree)[0];
 
@@ -1055,9 +1001,9 @@ mod tests {
     let mut tree = PaneTree::from_layout(
       RootKind::Any,
       DockLayout::tabs()
-        .panel_view_raw(panel(1))
-        .panel_view_raw(panel(2))
-        .panel_view_raw(panel(3))
+        .panel_id(panel(1))
+        .panel_id(panel(2))
+        .panel_id(panel(3))
         .active_index(2),
     );
     let root = tree.root().id();
@@ -1073,8 +1019,8 @@ mod tests {
     let mut tree = PaneTree::from_layout(
       RootKind::Split,
       DockLayout::h_split()
-        .child(DockLayout::tabs().panel_view_raw(panel(1)), Some(px(200.)))
-        .child(DockLayout::tabs().panel_view_raw(panel(2)), None),
+        .child(DockLayout::tabs().panel_id(panel(1)), Some(px(200.)))
+        .child(DockLayout::tabs().panel_id(panel(2)), None),
     );
     assert_eq!(tabs_ids(&tree).len(), 2);
 
@@ -1089,8 +1035,8 @@ mod tests {
     let mut tree = PaneTree::from_layout(
       RootKind::Split,
       DockLayout::h_split()
-        .child(DockLayout::tabs().panel_view_raw(panel(1)), None)
-        .child(DockLayout::tabs().panel_view_raw(panel(2)), None),
+        .child(DockLayout::tabs().panel_id(panel(1)), None)
+        .child(DockLayout::tabs().panel_id(panel(2)), None),
     );
     let tabs = tabs_ids(&tree);
     let [_, target_b] = tabs[..] else {
@@ -1137,8 +1083,8 @@ mod tests {
     let mut tree = PaneTree::from_layout(
       RootKind::Split,
       DockLayout::h_split()
-        .child(DockLayout::tabs().panel_view_raw(panel(1)), None)
-        .child(DockLayout::tabs().panel_view_raw(panel(2)), None),
+        .child(DockLayout::tabs().panel_id(panel(1)), None)
+        .child(DockLayout::tabs().panel_id(panel(2)), None),
     );
     let root = split_node(&tree);
 
@@ -1156,7 +1102,7 @@ mod tests {
       RootKind::Split,
       DockLayout::h_split()
         .child(DockLayout::tabs(), Some(px(200.)))
-        .child(DockLayout::tabs().panel_view_raw(panel(1)), None),
+        .child(DockLayout::tabs().panel_id(panel(1)), None),
     );
     assert_eq!(tabs_ids(&tree).len(), 1);
     assert!(tree.contains_panel(panel(1)));

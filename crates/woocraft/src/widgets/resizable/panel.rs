@@ -117,7 +117,7 @@ impl RenderOnce for ResizablePanelGroup {
     let rem_size = window.rem_size();
     state.update(cx, |state, cx| {
       state.set_rem_size(rem_size);
-      state.sync_panels_count(self.axis, panels_count, cx);
+      state.sync_layout(self.axis, panels_count, None, cx);
       state.apply_pending_resize(cx);
     });
     let resizing_panel_ix = state.read(cx).resizing_panel_ix;

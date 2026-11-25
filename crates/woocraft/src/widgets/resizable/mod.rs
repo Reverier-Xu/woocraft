@@ -82,59 +82,44 @@ impl ResizableState {
       .or_else(|| self.sizes.get(ix).copied())
   }
 
-  #[allow(dead_code)]
-  pub(crate) fn insert_panel(
-    &mut self, size: Option<Pixels>, ix: Option<usize>, cx: &mut Context<Self>,
-  ) {
-    let panel_state = ResizablePanelState {
-      size,
-      ..Default::default()
-    };
-
-    let size = size.unwrap_or_else(|| self.min_panel_size());
-    let container_size = self.container_size().max(px(1.));
-    let total_leftover_size = (container_size - size).max(px(1.));
-
-    for (i, panel) in self.panels.iter_mut().enumerate() {
-      let ratio = self.sizes[i] / container_size;
-      self.sizes[i] = total_leftover_size * ratio;
-      panel.size = Some(self.sizes[i]);
-    }
-
-    if let Some(ix) = ix {
-      self.panels.insert(ix, panel_state);
-      self.sizes.insert(ix, size);
-    } else {
-      self.panels.push(panel_state);
-      self.sizes.push(size);
-    }
-
-    cx.notify();
-  }
-
-  pub(crate) fn sync_panels_count(
-    &mut self, axis: Axis, panels_count: usize, cx: &mut Context<Self>,
+  /// Aligns the resizable slots with a structural sync: the panel count first
+  /// (newcomers placeholder-sized, no premature redistribution), then the
+  /// divider sizes.
+  ///
+  /// `sizes` are the layout tree's persisted divider positions when the sync
+  /// comes from the tree, resolved by [`Self::sync_sizes`]. `None` is the
+  /// render-time count sync, where the panel list itself is the source of
+  /// truth: newcomers keep the `PANEL_MIN_SIZE` placeholder and the existing
+  /// sizes are only re-normalized proportionally when the axis or the count
+  /// changed.
+  pub(crate) fn sync_layout(
+    &mut self, axis: Axis, panels_count: usize, sizes: Option<Vec<Option<Pixels>>>,
+    cx: &mut Context<Self>,
   ) {
     let mut changed = self.axis != axis;
     self.axis = axis;
 
-    if panels_count > self.panels.len() {
-      let diff = panels_count - self.panels.len();
-      self
-        .panels
-        .extend(vec![ResizablePanelState::default(); diff]);
-      self.sizes.extend(vec![self.min_panel_size(); diff]);
-      changed = true;
+    match panels_count.cmp(&self.panels.len()) {
+      std::cmp::Ordering::Greater => {
+        let diff = panels_count - self.panels.len();
+        self
+          .panels
+          .extend(vec![ResizablePanelState::default(); diff]);
+        self.sizes.extend(vec![self.min_panel_size(); diff]);
+        changed = true;
+      }
+      std::cmp::Ordering::Less => {
+        self.panels.truncate(panels_count);
+        self.sizes.truncate(panels_count);
+        changed = true;
+      }
+      std::cmp::Ordering::Equal => {}
     }
 
-    if panels_count < self.panels.len() {
-      self.panels.truncate(panels_count);
-      self.sizes.truncate(panels_count);
-      changed = true;
-    }
-
-    if changed {
-      self.adjust_to_container_size(cx);
+    match sizes {
+      Some(sizes) => self.sync_sizes(sizes, cx),
+      None if changed => self.adjust_to_container_size(cx),
+      None => {}
     }
   }
 
@@ -180,30 +165,6 @@ impl ResizableState {
     cx.notify();
   }
 
-  /// Aligns the resizable layout with a structural sync from the layout
-  /// tree: the panel count first (newcomers placeholder-sized, no premature
-  /// redistribution), then the divider sizes (see [`Self::sync_sizes`]).
-  pub(crate) fn sync_layout(
-    &mut self, axis: Axis, panels_count: usize, sizes: Vec<Option<Pixels>>, cx: &mut Context<Self>,
-  ) {
-    self.axis = axis;
-    match panels_count.cmp(&self.panels.len()) {
-      std::cmp::Ordering::Greater => {
-        let diff = panels_count - self.panels.len();
-        self
-          .panels
-          .extend(vec![ResizablePanelState::default(); diff]);
-        self.sizes.extend(vec![self.min_panel_size(); diff]);
-      }
-      std::cmp::Ordering::Less => {
-        self.panels.truncate(panels_count);
-        self.sizes.truncate(panels_count);
-      }
-      std::cmp::Ordering::Equal => {}
-    }
-    self.sync_sizes(sizes, cx);
-  }
-
   pub(crate) fn update_panel_size(
     &mut self, panel_ix: usize, bounds: Bounds<Pixels>, size_range: Range<Pixels>,
     cx: &mut Context<Self>,
@@ -222,18 +183,6 @@ impl ResizableState {
     panel.bounds = bounds;
     panel.size_range = size_range;
     cx.notify();
-  }
-
-  #[allow(dead_code)]
-  pub(crate) fn remove_panel(&mut self, panel_ix: usize, cx: &mut Context<Self>) {
-    self.panels.remove(panel_ix);
-    self.sizes.remove(panel_ix);
-    if let Some(resizing_panel_ix) = self.resizing_panel_ix
-      && resizing_panel_ix > panel_ix
-    {
-      self.resizing_panel_ix = Some(resizing_panel_ix - 1);
-    }
-    self.adjust_to_container_size(cx);
   }
 
   #[inline]

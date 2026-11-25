@@ -129,7 +129,7 @@ impl StackPanel {
     self.axis = axis;
     let panels_len = self.panels.len();
     self.state.update(cx, |state, cx| {
-      state.sync_layout(axis, panels_len, sizes.to_vec(), cx);
+      state.sync_layout(axis, panels_len, Some(sizes.to_vec()), cx);
     });
     cx.notify();
   }

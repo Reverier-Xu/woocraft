@@ -1,7 +1,7 @@
 use gpui::{
-  App, Axis, BorderStyle, Bounds, ContentMask, Corners, Edges, Element, ElementId, GlobalElementId,
-  Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Pixels, Point, Position,
-  ScrollEvent, ScrollHandle, Style, Window, px, relative,
+  App, Axis, Bounds, ContentMask, Element, ElementId, GlobalElementId, Hitbox, IntoElement,
+  IsZero as _, LayoutId, Pixels, Point, Position, ScrollEvent, ScrollHandle, Style, Window, px,
+  relative,
 };
 
 use super::ScrollbarAxis;
@@ -35,7 +35,6 @@ impl From<ScrollbarAxis> for ScrollableMaskAxis {
 pub struct ScrollableMask {
   axis: ScrollableMaskAxis,
   scroll_handle: ScrollHandle,
-  debug: Option<Hsla>,
 }
 
 impl ScrollableMask {
@@ -43,14 +42,7 @@ impl ScrollableMask {
     Self {
       scroll_handle: scroll_handle.clone(),
       axis: axis.into(),
-      debug: None,
     }
-  }
-
-  #[allow(dead_code)]
-  pub fn debug(mut self) -> Self {
-    self.debug = Some(gpui::yellow());
-    self
   }
 }
 
@@ -115,17 +107,6 @@ impl Element for ScrollableMask {
     let bounds = hitbox.bounds;
 
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
-      if let Some(color) = self.debug {
-        window.paint_quad(PaintQuad {
-          bounds,
-          border_widths: Edges::all(px(1.0)),
-          border_color: color,
-          background: gpui::transparent_white().into(),
-          corner_radii: Corners::all(px(0.)),
-          border_style: BorderStyle::default(),
-        });
-      }
-
       window.on_mouse_event({
         let view_id = window.current_view();
         let scroll_handle = self.scroll_handle.clone();
