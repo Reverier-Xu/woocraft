@@ -264,19 +264,16 @@ pub fn try_translate_woocraft_in_locale(
 ) -> Option<String> {
   let locale = normalize_locale(locale.as_ref());
   let key = format_woocraft_key(key.as_ref());
-  lookup_rust_i18n_translation_merged(&locale, &key)
-}
-
-pub fn try_translate_woocraft(key: impl AsRef<str>) -> Option<String> {
-  let locale = locale();
-  try_translate_woocraft_in_locale(&*locale, key)
+  lookup_custom_translation_merged(&locale, &key)
 }
 
 pub fn translate_woocraft_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> String {
   let locale = normalize_locale(locale.as_ref());
   let key = format_woocraft_key(key.as_ref());
 
-  lookup_rust_i18n_translation_merged(&locale, &key)
+  // Nothing matched anywhere: `_rust_i18n_translate` supplies rust-i18n's
+  // `locale.key` placeholder for a missing translation.
+  lookup_custom_translation_merged(&locale, &key)
     .unwrap_or_else(|| crate::_rust_i18n_translate(&locale, &key).into_owned())
 }
 
@@ -285,18 +282,20 @@ pub fn translate_woocraft(key: impl AsRef<str>) -> String {
   translate_woocraft_in_locale(&*locale, key)
 }
 
-/// Cache entry of the hot-path translation cache, keyed by
-/// `(locale, key)`.
-type CachedTranslation = (String, String, SharedString);
-
 /// Cache of hot-path woocraft-domain translations, keyed by `(locale, key)`.
+///
+/// The outer map holds one bucket per locale, so both levels are looked up
+/// without allocating: `&str` borrows the `String` locale and the `'static`
+/// key directly.
 ///
 /// Entries are cleared whenever the active locale changes or custom
 /// translations are (re)loaded, mirroring the per-locale invalidation of the
 /// calendar's `LocaleCache`: a cached value can never outlive the translation
 /// data it was built from.
-static TRANSLATION_CACHE: LazyLock<RwLock<Vec<CachedTranslation>>> =
-  LazyLock::new(|| RwLock::new(Vec::new()));
+type TranslationCache = HashMap<String, HashMap<&'static str, SharedString>>;
+
+static TRANSLATION_CACHE: LazyLock<RwLock<TranslationCache>> =
+  LazyLock::new(|| RwLock::new(HashMap::new()));
 
 fn clear_translation_cache() {
   TRANSLATION_CACHE
@@ -320,10 +319,7 @@ pub fn translate_static(key: &'static str) -> SharedString {
     let cache = TRANSLATION_CACHE
       .read()
       .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some((_, _, value)) = cache
-      .iter()
-      .find(|(cached_locale, cached_key, _)| cached_locale == locale && cached_key == key)
-    {
+    if let Some(value) = cache.get(locale).and_then(|entries| entries.get(key)) {
       return value.clone();
     }
   }
@@ -332,41 +328,25 @@ pub fn translate_static(key: &'static str) -> SharedString {
   TRANSLATION_CACHE
     .write()
     .unwrap_or_else(|poisoned| poisoned.into_inner())
-    .push((locale.to_string(), key.to_string(), value.clone()));
+    .entry(locale.to_string())
+    .or_default()
+    .insert(key, value.clone());
   value
 }
 
 pub fn try_translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> Option<String> {
   let locale = normalize_locale(locale.as_ref());
-  let key = key.as_ref();
-
-  // First, try to find the translation in the custom locale chain
-  if let Some(value) = lookup_custom_translation_merged(&locale, key) {
-    return Some(value);
-  }
-
-  // If not found in custom or rust_i18n fallbacks, try rust_i18n directly
-  crate::_rust_i18n_try_translate(&locale, key).map(|value| value.into_owned())
-}
-
-pub fn try_translate(key: impl AsRef<str>) -> Option<String> {
-  let locale = locale();
-  try_translate_in_locale(&*locale, key)
+  lookup_custom_translation_merged(&locale, key.as_ref())
 }
 
 pub fn translate_in_locale(locale: impl AsRef<str>, key: impl AsRef<str>) -> String {
   let locale = normalize_locale(locale.as_ref());
   let key = key.as_ref();
 
-  // First, try to find the translation in the custom locale chain with
-  // rust_i18n fallback
-  if let Some(value) = lookup_custom_translation_merged(&locale, key) {
-    return value;
-  }
-
-  // This should not be reached, as rust_i18n should always return something
-  // (the key itself)
-  crate::_rust_i18n_translate(&locale, key).into_owned()
+  // Nothing matched anywhere: `_rust_i18n_translate` supplies rust-i18n's
+  // `locale.key` placeholder for a missing translation.
+  lookup_custom_translation_merged(&locale, key)
+    .unwrap_or_else(|| crate::_rust_i18n_translate(&locale, key).into_owned())
 }
 
 pub fn translate(key: impl AsRef<str>) -> String {
@@ -378,80 +358,57 @@ pub fn locale_display_name(locale: impl AsRef<str>) -> String {
   let locale = normalize_locale(locale.as_ref());
   let builtin_key = woocraft_key_cow("i18n.name");
 
-  // First try the built-in woocraft domain key
-  if let Some(name) = lookup_rust_i18n_translation_merged(&locale, &builtin_key) {
+  // Built-in display names live under the woocraft domain key, so they resolve
+  // through the builtin translations alone; the configured `en-us` fallback
+  // guarantees a name for every supported locale.
+  if let Some(name) = lookup_custom_translation_merged(&locale, &builtin_key) {
     return name;
   }
 
-  // Then try user-defined locale display names in custom locales
-  if let Some(name) = lookup_custom_translation_merged(&locale, "i18n.name") {
-    return name;
-  }
-
-  // If the locale has custom translations registered, use the locale code as
-  // fallback
-  let custom_locales = CUSTOM_LOCALES
-    .read()
-    .unwrap_or_else(|poisoned| poisoned.into_inner());
-  if custom_locales.contains_key(&locale) {
-    return locale;
-  }
-  drop(custom_locales);
-
-  // Last resort: just return the locale code
-  locale
+  // Custom locales may register their display name under the plain
+  // `i18n.name` key.
+  lookup_custom_translation_merged(&locale, "i18n.name").unwrap_or(locale)
 }
 
-/// Look up a translation with proper merging of custom and rust_i18n
-/// translations.
+/// Look up a translation in the custom translations, then in the builtin ones.
 ///
-/// This function implements a merged lookup strategy:
-/// 1. Check custom locale chain first
-/// 2. If not found, check rust_i18n for the same locale
-/// 3. If found in rust_i18n, return it
-/// 4. If not found, continue with fallback locale from rust_i18n
-/// 5. This ensures that incomplete user translations don't hide built-in
-///    translations
+/// Precedence: custom translations win over builtin translations.
+///
+/// 1. The custom store is walked once along the locale's RFC 4647 fallback
+///    chain (exact locale first, then e.g. `zh-hant-tw` → `zh-hant` → `zh`), so
+///    an application may register a translation for a parent locale only.
+/// 2. If no custom entry matches, exactly one
+///    [`crate::_rust_i18n_try_translate`] call resolves the key against the
+///    builtin translations. rust-i18n already applies the same fallback chain
+///    plus the configured fallback locales (`en-us`), so there is no need to
+///    walk the chain on the builtin side as well.
+///
+/// Woocraft-domain keys are never stored in the custom store (they are
+/// filtered by [`load_locale`] and [`extend_locale`]), so they skip straight to
+/// the builtin lookup.
 fn lookup_custom_translation_merged(locale: &str, key: &str) -> Option<String> {
   if is_woocraft_domain_key(key) {
-    return lookup_rust_i18n_translation_merged(locale, key);
+    return crate::_rust_i18n_try_translate(locale, key).map(Cow::into_owned);
   }
 
   let custom_locales = CUSTOM_LOCALES
     .read()
     .unwrap_or_else(|poisoned| poisoned.into_inner());
-  let mut current_locale = Some(locale.to_string());
+  let mut current_locale = Some(locale);
 
   while let Some(locale_str) = current_locale {
-    // First check if this locale has custom translations
-    if let Some(translations) = custom_locales.get(&locale_str)
-      && let Some(value) = translations.get(key)
+    if let Some(value) = custom_locales
+      .get(locale_str)
+      .and_then(|translations| translations.get(key))
     {
       return Some(value.clone());
     }
 
-    if let Some(value) = crate::_rust_i18n_try_translate(&locale_str, key) {
-      return Some(value.into_owned());
-    }
-
-    current_locale = crate::_rust_i18n_lookup_fallback(&locale_str).map(|s| s.to_string());
+    current_locale = crate::_rust_i18n_lookup_fallback(locale_str);
   }
+  drop(custom_locales);
 
-  None
-}
-
-fn lookup_rust_i18n_translation_merged(locale: &str, key: &str) -> Option<String> {
-  let mut current_locale = Some(locale.to_string());
-
-  while let Some(locale_str) = current_locale {
-    if let Some(value) = crate::_rust_i18n_try_translate(&locale_str, key) {
-      return Some(value.into_owned());
-    }
-
-    current_locale = crate::_rust_i18n_lookup_fallback(&locale_str).map(|s| s.to_string());
-  }
-
-  None
+  crate::_rust_i18n_try_translate(locale, key).map(Cow::into_owned)
 }
 #[cfg(test)]
 mod tests {
@@ -486,6 +443,16 @@ mod tests {
       .write()
       .unwrap_or_else(|poisoned| poisoned.into_inner())
       .clear();
+  }
+
+  /// Number of cached `(locale, key)` entries across all locale buckets.
+  fn cached_entries() -> usize {
+    TRANSLATION_CACHE
+      .read()
+      .unwrap_or_else(|poisoned| poisoned.into_inner())
+      .values()
+      .map(HashMap::len)
+      .sum()
   }
 
   #[test]
@@ -530,6 +497,62 @@ mod tests {
       "我的自定义语言名"
     );
     assert_eq!(translate_in_locale("test-locale", "some_key"), "自定义值");
+  }
+
+  #[test]
+  fn test_custom_translation_wins_over_builtin_fallback_locale() {
+    let _guard = LocaleTestGuard::new();
+
+    // `xx-latn` itself has no custom data, only its parent locale does. The
+    // custom chain must be walked to the end before the builtin lookup runs,
+    // otherwise the builtin `en-us` fallback would shadow the custom entry.
+    let mut custom_translations = HashMap::new();
+    custom_translations.insert("app.greeting".to_string(), "custom greeting".to_string());
+    load_locale("xx", custom_translations);
+
+    assert_eq!(
+      translate_in_locale("xx-latn", "app.greeting"),
+      "custom greeting"
+    );
+    assert_eq!(
+      try_translate_in_locale("xx-latn", "app.greeting").as_deref(),
+      Some("custom greeting")
+    );
+
+    // Without custom data the same key is unknown in every locale.
+    clear_custom_locales();
+    assert_eq!(try_translate_in_locale("xx-latn", "app.greeting"), None);
+  }
+
+  #[test]
+  fn test_builtin_lookup_walks_locale_fallback_chain() {
+    let _guard = LocaleTestGuard::new();
+
+    // `en-gb` is not a shipped locale and has no builtin data of its own;
+    // rust-i18n resolves it through the `en` subtag and the configured
+    // `en-us` fallback locale.
+    assert_eq!(normalize_locale("en-gb"), "en-gb");
+    assert_eq!(
+      try_translate_woocraft_in_locale("en-gb", "common.loading").as_deref(),
+      Some("Loading...")
+    );
+    assert_eq!(
+      translate_woocraft_in_locale("en-gb", "common.loading"),
+      "Loading..."
+    );
+  }
+
+  #[test]
+  fn test_locale_display_name_resolves_builtin_names() {
+    let _guard = LocaleTestGuard::new();
+
+    assert_eq!(locale_display_name("zh-hans"), "简体中文");
+    assert_eq!(locale_display_name("zh-CN"), "简体中文");
+    assert_eq!(locale_display_name("en-us"), "English (US)");
+
+    // A locale woocraft does not ship a name for still resolves through the
+    // builtin `en-us` fallback instead of returning the locale code.
+    assert_eq!(locale_display_name("xx-latn"), "English (US)");
   }
 
   #[test]
@@ -679,17 +702,26 @@ mod tests {
 
     set_locale("en-us");
     assert_eq!(translate_static("pagination.previous"), "Previous");
-    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+    assert_eq!(cached_entries(), 1);
 
     // Repeated lookups hit the cache instead of growing it.
     assert_eq!(translate_static("pagination.previous"), "Previous");
-    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+    assert_eq!(cached_entries(), 1);
+
+    // A different key for the same locale adds one entry.
+    assert_eq!(translate_static("pagination.next"), "Next");
+    assert_eq!(cached_entries(), 2);
 
     // Switching the locale invalidates the cache and repopulates it.
     set_locale("zh-hans");
-    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 0);
+    assert_eq!(cached_entries(), 0);
     assert_eq!(translate_static("pagination.previous"), "上一页");
-    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+    assert_eq!(cached_entries(), 1);
+
+    // The same key under a different locale is a distinct cache entry.
+    set_locale("en-us");
+    assert_eq!(translate_static("pagination.previous"), "Previous");
+    assert_eq!(cached_entries(), 1);
   }
 
   #[test]
@@ -698,16 +730,20 @@ mod tests {
 
     set_locale("en-us");
     assert_eq!(translate_static("pagination.previous"), "Previous");
-    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+    assert_eq!(cached_entries(), 1);
 
     // Loading custom translation data clears the cache.
     let mut translations = HashMap::new();
     translations.insert("custom.cached".to_string(), "translated".to_string());
     load_locale("en-us", translations);
-    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 0);
+    assert_eq!(cached_entries(), 0);
 
     // And the next lookup repopulates it from the current data.
     assert_eq!(translate_static("pagination.previous"), "Previous");
-    assert_eq!(TRANSLATION_CACHE.read().unwrap().len(), 1);
+    assert_eq!(cached_entries(), 1);
+
+    // Extending the active locale's data clears it as well.
+    extend_locale("en-us", [("custom.extended", "extended")]);
+    assert_eq!(cached_entries(), 0);
   }
 }
