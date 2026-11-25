@@ -41,7 +41,8 @@ use gpui::{
 };
 
 use super::{
-  player::{Player, PlayerEvent, format_time},
+  event::PlayerEvent,
+  player::{Player, format_time},
   snapshot::PlayerSnapshot,
 };
 use crate::{

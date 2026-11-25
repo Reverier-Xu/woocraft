@@ -17,7 +17,8 @@ use gpui::{
 };
 
 use super::{
-  player::{Player, PlayerEvent, VideoTransport},
+  event::PlayerEvent,
+  player::{Player, VideoTransport},
   snapshot::PlayerSnapshot,
   transport::PlayerTransport,
   video::MIN_RENDER_SIZE,

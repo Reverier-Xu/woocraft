@@ -29,7 +29,7 @@ use async_channel::Sender;
 use libmpv2::Mpv;
 use libmpv2_sys as sys;
 
-use super::player::PlayerEvent;
+use super::event::PlayerEvent;
 
 /// Lower bound for one render axis: mpv's software renderer needs a span of at
 /// least two pixels per axis to produce a meaningful frame. The view checks

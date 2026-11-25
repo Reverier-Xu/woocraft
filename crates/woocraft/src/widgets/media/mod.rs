@@ -25,6 +25,7 @@
 //! library: enabling it links `libmpv` and requires it (and its development
 //! package) at build time.
 
+mod event;
 #[cfg(target_os = "linux")]
 mod gpu;
 mod player;
@@ -35,9 +36,10 @@ mod transport;
 mod video;
 mod view;
 
+pub use event::{PlayerEvent, PropertyValue};
 pub use player::{
-  Chapter, HwDec, Player, PlayerEvent, PlayerOptions, PlayerState, PlaylistEntry, PropertyValue,
-  SubtitleStyle, Track, TrackKind, VideoTransport,
+  Chapter, HwDec, Player, PlayerOptions, PlayerState, PlaylistEntry, SubtitleStyle, Track,
+  TrackKind, VideoTransport,
 };
 pub use playlist::PlayerPlaylist;
 pub use snapshot::PlayerSnapshot;

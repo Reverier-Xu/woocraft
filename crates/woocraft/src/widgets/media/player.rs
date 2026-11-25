@@ -15,45 +15,10 @@ use async_channel::Sender;
 use gpui::{Bounds, Context, EventEmitter, Pixels, RenderImage, Task, Window};
 use libmpv2::{Format, Mpv};
 
-use super::video::{VideoFrame, VideoOutput};
-
-/// What a player reports to its views.
-#[derive(Clone, Debug, PartialEq)]
-pub enum PlayerEvent {
-  /// A file was loaded and playback may start.
-  FileLoaded,
-  /// Playback of the current entry ended (or failed).
-  EndFile {
-    /// The reason mpv reported, for example `eof` or `error`.
-    reason: String,
-  },
-  /// An observed property changed.
-  PropertyChanged {
-    /// The mpv property name, for example `time-pos`.
-    name: String,
-    /// Its new value.
-    value: PropertyValue,
-  },
-  /// The video track was (re)configured.
-  VideoReconfig,
-  /// The audio track was (re)configured.
-  AudioReconfig,
-  /// mpv logged an error.
-  Error(String),
-}
-
-/// A scalar mpv property value.
-#[derive(Clone, Debug, PartialEq)]
-pub enum PropertyValue {
-  /// A string property.
-  String(String),
-  /// A boolean property.
-  Flag(bool),
-  /// A 64-bit integer property.
-  Int64(i64),
-  /// A floating point property.
-  Double(f64),
-}
+use super::{
+  event::{PlayerEvent, PropertyValue},
+  video::{VideoFrame, VideoOutput},
+};
 
 /// How video frames reach the screen.
 ///
@@ -91,29 +56,27 @@ pub(crate) const fn composition_supported() -> bool {
   cfg!(target_os = "linux")
 }
 
-/// Why a requested [`VideoTransport::Composition`] was refused without a
-/// window. Attach-time failures carry their platform error in the log line
-/// instead; this type covers the decisions made up front.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TransportFallback {
-  /// The platform has no GPU transport implementation. Linux only, on
-  /// purpose: no other platform's path has been written or tested.
-  UnsupportedPlatform,
-}
+/// Why a requested [`VideoTransport::Composition`] was refused up front. Linux
+/// only, on purpose: no other platform's GPU path has been written or tested.
+/// Attach-time failures carry their platform error in the log line instead, so
+/// this reason covers all of the decisions made before a window is needed.
+const UNSUPPORTED_PLATFORM_REASON: &str =
+  "the composition transport is implemented on Linux (X11/Wayland) only";
 
 /// Decides which transport a player runs: what was requested, whether video
 /// exists at all, and what the platform can do — before any window is needed.
+/// The second item is why a requested composition transport was refused, and
+/// `None` whenever the request was honoured.
 pub(crate) fn negotiate(
   requested: VideoTransport, video_enabled: bool,
-) -> (VideoTransport, Option<TransportFallback>) {
+) -> (VideoTransport, Option<&'static str>) {
   match (requested, video_enabled) {
     // Nothing to transport without video, whatever was requested.
     (_, false) => (VideoTransport::Software, None),
     (VideoTransport::Software, _) => (VideoTransport::Software, None),
-    (VideoTransport::Composition, _) if !composition_supported() => (
-      VideoTransport::Software,
-      Some(TransportFallback::UnsupportedPlatform),
-    ),
+    (VideoTransport::Composition, _) if !composition_supported() => {
+      (VideoTransport::Software, Some(UNSUPPORTED_PLATFORM_REASON))
+    }
     (VideoTransport::Composition, _) => (VideoTransport::Composition, None),
   }
 }
@@ -1335,12 +1298,7 @@ impl Player {
 
   /// Logs why a requested composition transport was refused up front. The
   /// counterpart of the attach-time fallback log, and like it, once.
-  fn log_transport_fallback(&mut self, fallback: TransportFallback) {
-    let reason = match fallback {
-      TransportFallback::UnsupportedPlatform => {
-        "the composition transport is implemented on Linux (X11/Wayland) only"
-      }
-    };
+  fn log_transport_fallback(&mut self, reason: &'static str) {
     tracing::warn!("woocraft: video transport fell back to software: {reason}");
     self.fallback_logged = true;
   }
@@ -1510,36 +1468,6 @@ pub(crate) fn format_time(position: Duration) -> String {
     format!("{hours}:{minutes:02}:{seconds:02}")
   } else {
     format!("{minutes}:{seconds:02}")
-  }
-}
-
-impl From<String> for PropertyValue {
-  fn from(value: String) -> Self {
-    Self::String(value)
-  }
-}
-
-impl From<&str> for PropertyValue {
-  fn from(value: &str) -> Self {
-    Self::String(value.to_string())
-  }
-}
-
-impl From<bool> for PropertyValue {
-  fn from(value: bool) -> Self {
-    Self::Flag(value)
-  }
-}
-
-impl From<i64> for PropertyValue {
-  fn from(value: i64) -> Self {
-    Self::Int64(value)
-  }
-}
-
-impl From<f64> for PropertyValue {
-  fn from(value: f64) -> Self {
-    Self::Double(value)
   }
 }
 
@@ -1715,11 +1643,11 @@ mod tests {
     } else {
       assert_eq!(
         negotiate(VideoTransport::Composition, true),
-        (
-          VideoTransport::Software,
-          Some(TransportFallback::UnsupportedPlatform)
-        )
+        (VideoTransport::Software, Some(UNSUPPORTED_PLATFORM_REASON))
       );
+      // The refusal carries a reason a view could show verbatim, not an
+      // empty placeholder.
+      assert!(UNSUPPORTED_PLATFORM_REASON.contains("Linux"));
     }
   }
 
