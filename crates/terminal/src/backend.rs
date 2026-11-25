@@ -150,15 +150,18 @@ impl Lifecycle {
   /// that [`TerminalEvent::Exit`] keeps meaning "every output byte has been
   /// applied". Ignored once the exit is final, so the status a host observed
   /// with the lifecycle events cannot change behind its back.
+  ///
+  /// The status lock is what orders this against [`Lifecycle::finish_exit`]:
+  /// either the status is stored before the exit is finalized, or it is
+  /// rejected after the final status was chosen. A plain atomic check would
+  /// let `finish_exit` swap the flag first and then read a status that this
+  /// call is about to write, losing a real exit code.
   pub(crate) fn record_status(&self, status: ChildStatus) {
+    let mut recorded = self.exit_status.lock().unwrap();
     if self.exited.load(Ordering::SeqCst) {
       return;
     }
-    self.store_status(status);
-  }
-
-  fn store_status(&self, status: ChildStatus) {
-    *self.exit_status.lock().unwrap() = Some(status);
+    *recorded = Some(status);
   }
 
   /// The single child-exit transition: marks the session as exited and emits
@@ -172,13 +175,18 @@ impl Lifecycle {
   /// Idempotent: the first caller wins, later ones emit nothing and leave the
   /// recorded status alone.
   pub(crate) fn finish_exit(&self, status: Option<ChildStatus>) {
+    // Hold the status lock across the swap and the status read, so a
+    // concurrent `record_status` either lands before this transition or is
+    // rejected by it; it can never slip between the two.
+    let mut recorded = self.exit_status.lock().unwrap();
     if self.exited.swap(true, Ordering::SeqCst) {
       return;
     }
     let status = status
-      .or_else(|| self.status())
+      .or(*recorded)
       .unwrap_or_else(ChildStatus::unavailable);
-    self.store_status(status);
+    *recorded = Some(status);
+    drop(recorded);
     self.send(TerminalEvent::ChildExit(status));
     self.send(TerminalEvent::Exit);
   }
