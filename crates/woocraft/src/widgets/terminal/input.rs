@@ -104,44 +104,19 @@ pub fn to_esc_str(
     ("f20", TerminalModifiers::None) => Some("\x1b[34~"),
     // Caret notation for ctrl-combos (1 = ^A .. 26 = ^Z).
     //
-    // Note: the guard skips non-letters so the punctuation arms below still
-    // apply.
-    (key, TerminalModifiers::Ctrl)
+    // Letters are looked up in [`C0_OFFSETS`], lowercasing the shifted
+    // spellings (a `ctrl-shift-a` keystroke may arrive as `A`). The guard
+    // skips non-letters so the punctuation arms below still apply.
+    (key, TerminalModifiers::Ctrl | TerminalModifiers::CtrlShift)
       if key.len() == 1
         && key
           .chars()
           .next()
-          .is_some_and(|key| key.is_ascii_lowercase()) =>
+          .is_some_and(|key| key.is_ascii_alphabetic()) =>
     {
-      let key = key.chars().next()?;
+      let key = key.chars().next()?.to_ascii_lowercase();
       Some(C0_OFFSETS[(key as u8 - b'a') as usize])
     }
-    ("A", TerminalModifiers::CtrlShift) => Some("\x01"),
-    ("B", TerminalModifiers::CtrlShift) => Some("\x02"),
-    ("C", TerminalModifiers::CtrlShift) => Some("\x03"),
-    ("D", TerminalModifiers::CtrlShift) => Some("\x04"),
-    ("E", TerminalModifiers::CtrlShift) => Some("\x05"),
-    ("F", TerminalModifiers::CtrlShift) => Some("\x06"),
-    ("G", TerminalModifiers::CtrlShift) => Some("\x07"),
-    ("H", TerminalModifiers::CtrlShift) => Some("\x08"),
-    ("I", TerminalModifiers::CtrlShift) => Some("\x09"),
-    ("J", TerminalModifiers::CtrlShift) => Some("\x0a"),
-    ("K", TerminalModifiers::CtrlShift) => Some("\x0b"),
-    ("L", TerminalModifiers::CtrlShift) => Some("\x0c"),
-    ("M", TerminalModifiers::CtrlShift) => Some("\x0d"),
-    ("N", TerminalModifiers::CtrlShift) => Some("\x0e"),
-    ("O", TerminalModifiers::CtrlShift) => Some("\x0f"),
-    ("P", TerminalModifiers::CtrlShift) => Some("\x10"),
-    ("Q", TerminalModifiers::CtrlShift) => Some("\x11"),
-    ("R", TerminalModifiers::CtrlShift) => Some("\x12"),
-    ("S", TerminalModifiers::CtrlShift) => Some("\x13"),
-    ("T", TerminalModifiers::CtrlShift) => Some("\x14"),
-    ("U", TerminalModifiers::CtrlShift) => Some("\x15"),
-    ("V", TerminalModifiers::CtrlShift) => Some("\x16"),
-    ("W", TerminalModifiers::CtrlShift) => Some("\x17"),
-    ("X", TerminalModifiers::CtrlShift) => Some("\x18"),
-    ("Y", TerminalModifiers::CtrlShift) => Some("\x19"),
-    ("Z", TerminalModifiers::CtrlShift) => Some("\x1a"),
     ("@", TerminalModifiers::Ctrl) => Some("\x00"),
     ("[", TerminalModifiers::Ctrl) => Some("\x1b"),
     ("\\", TerminalModifiers::Ctrl) => Some("\x1c"),
@@ -315,6 +290,35 @@ mod tests {
         "letter {lower}/{upper}"
       );
     }
+  }
+
+  #[test]
+  fn ctrl_shift_letters_use_caret_codes() {
+    // Every `ctrl-shift-<letter>` resolves through the same table as
+    // `ctrl-<letter>`, whichever spelling the key event arrives in.
+    for (index, letter) in ('a'..='z').enumerate() {
+      let expected = Some(C0_OFFSETS[index].to_string());
+      assert_eq!(
+        esc(&format!("ctrl-shift-{letter}")),
+        expected,
+        "ctrl-shift-{letter}"
+      );
+      assert_eq!(
+        esc(&format!("ctrl-shift-{}", letter.to_ascii_uppercase())),
+        expected,
+        "ctrl-shift-{}",
+        letter.to_ascii_uppercase()
+      );
+    }
+  }
+
+  #[test]
+  fn ctrl_punctuation_keeps_its_caret_codes() {
+    assert_eq!(esc("ctrl-space").as_deref(), Some("\x00"));
+    assert_eq!(esc("ctrl-\\").as_deref(), Some("\x1c"));
+    assert_eq!(esc("ctrl-]").as_deref(), Some("\x1d"));
+    assert_eq!(esc("ctrl-^").as_deref(), Some("\x1e"));
+    assert_eq!(esc("ctrl-_").as_deref(), Some("\x1f"));
   }
 
   #[test]

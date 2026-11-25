@@ -1,13 +1,11 @@
-use std::{
-  rc::Rc,
-  sync::{LazyLock, RwLock},
-};
+use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, AppContext as _, ClickEvent, Context, Decorations, InteractiveElement as _,
-  IntoElement, MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, SharedString,
-  StatefulInteractiveElement as _, StyleRefinement, Styled, TitlebarOptions, Window,
-  WindowControlArea, WindowDecorations, WindowOptions, div, point, prelude::FluentBuilder as _, px,
+  AnyElement, App, AppContext as _, ClickEvent, Context, Decorations, Global,
+  InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, Render,
+  RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+  TitlebarOptions, Window, WindowControlArea, WindowDecorations, WindowOptions, div, point,
+  prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -32,48 +30,47 @@ const ZOOM_SLIDER_STEP: f32 = 5.0;
 /// Step of [`TitleBar::zoom_in`] and [`TitleBar::zoom_out`], in percent.
 const ZOOM_STEP: f32 = 10.0;
 
-/// App-wide interface zoom multiplier applied on top of the base rem size.
-///
-/// `1.0` keeps the UI at its base scale; the title-bar zoom menu slider moves
-/// this value between `ZOOM_FACTOR_MIN` and `ZOOM_FACTOR_MAX`. Every window
-/// hosting a [`TitleBar`] applies the multiplier on render, so a change takes
-/// effect everywhere on the next refresh.
-static ZOOM_FACTOR: LazyLock<RwLock<f32>> = LazyLock::new(|| RwLock::new(1.0));
+/// Interface zoom multiplier of an unzoomed application (100%).
+const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
 
-/// App-wide rem-size override for apps that configure the interface scale
-/// programmatically (e.g. restored from persisted settings).
+/// App-wide interface state owned by the [`TitleBar`]s of one application.
 ///
-/// `None` (the default) lets each title bar fall back to its own
-/// [`TitleBar::rem_size`] argument or the platform default (see
-/// [`TitleBar::default_rem_size`]).
-static REM_SIZE_OVERRIDE: LazyLock<RwLock<Option<Pixels>>> = LazyLock::new(|| RwLock::new(None));
-
-/// App-wide override of the locales offered by the title-bar language menu.
-///
-/// `None` (the default) lets each title bar fall back to its own
-/// [`TitleBar::languages`] argument, then to the full list of available
-/// locales (see [`available_locales`]). Apps use this to offer only the
-/// languages they actually ship — a subset of woocraft's coverage — across
-/// every window, without touching each [`TitleBar`] instance.
-static LANGUAGES_OVERRIDE: LazyLock<RwLock<Option<Vec<String>>>> =
-  LazyLock::new(|| RwLock::new(None));
-
-fn zoom_factor_locked() -> f32 {
-  *ZOOM_FACTOR.read().expect("zoom factor lock poisoned")
+/// GPUI stores it as a global of the `App`, so it belongs to the application
+/// that owns it rather than to the process: two applications in one process
+/// (a test suite, an embedded second app) never share a zoom level, and the
+/// state dies with its application. Every window hosting a [`TitleBar`] reads
+/// the multiplier on render, so a change takes effect everywhere on the next
+/// refresh.
+struct TitleBarGlobals {
+  /// Interface zoom multiplier applied on top of the base rem size: `1.0`
+  /// keeps the UI at its base scale, the title-bar zoom menu slider moves it
+  /// between `ZOOM_FACTOR_MIN` and `ZOOM_FACTOR_MAX`.
+  zoom_factor: f32,
+  /// Rem-size override for apps that configure the interface scale
+  /// programmatically (e.g. restored from persisted settings). `None` lets
+  /// each title bar fall back to its own [`TitleBar::rem_size`] argument or
+  /// the platform default (see [`TitleBar::default_rem_size`]).
+  rem_size_override: Option<Pixels>,
+  /// Override of the locales offered by the title-bar language menu. `None`
+  /// lets each title bar fall back to its own [`TitleBar::languages`]
+  /// argument, then to the full list of available locales (see
+  /// [`available_locales`]). Apps use this to offer only the languages they
+  /// actually ship — a subset of woocraft's coverage — across every window,
+  /// without touching each [`TitleBar`] instance.
+  languages_override: Option<Vec<String>>,
 }
 
-fn rem_size_override_locked() -> Option<Pixels> {
-  *REM_SIZE_OVERRIDE
-    .read()
-    .expect("rem size override lock poisoned")
+impl Default for TitleBarGlobals {
+  fn default() -> Self {
+    Self {
+      zoom_factor: DEFAULT_ZOOM_FACTOR,
+      rem_size_override: None,
+      languages_override: None,
+    }
+  }
 }
 
-fn languages_override_locked() -> Option<Vec<String>> {
-  LANGUAGES_OVERRIDE
-    .read()
-    .expect("languages override lock poisoned")
-    .clone()
-}
+impl Global for TitleBarGlobals {}
 
 /// Normalizes a locale list for menu display: each entry passes through
 /// [`normalize_locale`], first occurrences kept in the given order.
@@ -277,26 +274,27 @@ impl TitleBar {
   }
 
   /// Returns the app-wide interface zoom multiplier (1.0 by default).
-  pub fn zoom_factor() -> f32 {
-    zoom_factor_locked()
+  pub fn zoom_factor(cx: &App) -> f32 {
+    cx.try_global::<TitleBarGlobals>()
+      .map_or(DEFAULT_ZOOM_FACTOR, |globals| globals.zoom_factor)
   }
 
   /// Returns the app-wide rem-size override, if the app set one.
-  pub fn rem_size_override() -> Option<Pixels> {
-    rem_size_override_locked()
+  pub fn rem_size_override(cx: &App) -> Option<Pixels> {
+    cx.try_global::<TitleBarGlobals>()
+      .and_then(|globals| globals.rem_size_override)
   }
 
   /// Replaces the app-wide rem-size override (the base the zoom multiplier
   /// is applied to). Passing `None` restores the platform default fallback.
-  pub fn set_rem_size_override(rem_size: Option<Pixels>) {
-    *REM_SIZE_OVERRIDE
-      .write()
-      .expect("rem size override lock poisoned") = rem_size;
+  pub fn set_rem_size_override(rem_size: Option<Pixels>, cx: &mut App) {
+    cx.default_global::<TitleBarGlobals>().rem_size_override = rem_size;
   }
 
   /// Returns the app-wide language-menu override, if set.
-  pub fn languages_override() -> Option<Vec<String>> {
-    languages_override_locked()
+  pub fn languages_override(cx: &App) -> Option<Vec<String>> {
+    cx.try_global::<TitleBarGlobals>()
+      .and_then(|globals| globals.languages_override.clone())
   }
 
   /// Replaces the app-wide language-menu override: the locale list every
@@ -304,21 +302,18 @@ impl TitleBar {
   ///
   /// Use this at startup to restrict the language menu to the languages the
   /// application ships; see [`TitleBar::languages`] for the semantics.
-  pub fn set_languages_override<I, L>(languages: I)
+  pub fn set_languages_override<I, L>(languages: I, cx: &mut App)
   where
     I: IntoIterator<Item = L>,
     L: AsRef<str>, {
-    *LANGUAGES_OVERRIDE
-      .write()
-      .expect("languages override lock poisoned") = Some(normalized_locale_list(languages));
+    cx.default_global::<TitleBarGlobals>().languages_override =
+      Some(normalized_locale_list(languages));
   }
 
   /// Clears the app-wide language-menu override, restoring the full
   /// [`available_locales`] fallback.
-  pub fn clear_languages_override() {
-    *LANGUAGES_OVERRIDE
-      .write()
-      .expect("languages override lock poisoned") = None;
+  pub fn clear_languages_override(cx: &mut App) {
+    cx.default_global::<TitleBarGlobals>().languages_override = None;
   }
 
   /// Stores the interface zoom multiplier without touching any window.
@@ -328,22 +323,22 @@ impl TitleBar {
   /// startup to restore a persisted zoom level before windows are drawn; use
   /// [`TitleBar::zoom_in`], [`TitleBar::zoom_out`] or
   /// [`TitleBar::reset_zoom`] to zoom a live window.
-  pub fn set_zoom_factor(factor: f32) {
-    *ZOOM_FACTOR.write().expect("zoom factor lock poisoned") =
+  pub fn set_zoom_factor(factor: f32, cx: &mut App) {
+    cx.default_global::<TitleBarGlobals>().zoom_factor =
       factor.clamp(ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
   }
 
   /// Zooms the given window one step in (towards larger UI) and refreshes
   /// every window.
   pub fn zoom_in(window: &mut Window, cx: &mut App) {
-    let factor = stepped_zoom_factor(zoom_factor_locked(), true);
+    let factor = stepped_zoom_factor(Self::zoom_factor(cx), true);
     Self::apply_zoom_factor(factor, window, cx);
   }
 
   /// Zooms the given window one step out (towards smaller UI) and refreshes
   /// every window.
   pub fn zoom_out(window: &mut Window, cx: &mut App) {
-    let factor = stepped_zoom_factor(zoom_factor_locked(), false);
+    let factor = stepped_zoom_factor(Self::zoom_factor(cx), false);
     Self::apply_zoom_factor(factor, window, cx);
   }
 
@@ -354,12 +349,12 @@ impl TitleBar {
 
   /// Stores the zoom multiplier and rescales the given window relative to
   /// its current zoom, then refreshes every window so all title bars pick
-  /// up the new multiplier. No-op when the factor is unchanged (the slider
-  /// emits a change event for every drag tick).
+  /// up the new multiplier. The rescale is a ratio, so an unchanged factor
+  /// leaves the rem size alone.
   fn apply_zoom_factor(factor: f32, window: &mut Window, cx: &mut App) {
-    let previous = zoom_factor_locked();
+    let previous = Self::zoom_factor(cx);
     let factor = factor.clamp(ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
-    *ZOOM_FACTOR.write().expect("zoom factor lock poisoned") = factor;
+    cx.default_global::<TitleBarGlobals>().zoom_factor = factor;
     window.set_rem_size(window.rem_size() * (factor / previous));
     cx.refresh_windows();
   }
@@ -572,9 +567,10 @@ impl RenderOnce for TitleBar {
     // multiplier. This must happen before anything below reads
     // `window.rem_size()` (e.g. the macOS traffic-light position).
     let base_rem_size = rem_size
-      .or_else(Self::rem_size_override)
+      .or_else(|| Self::rem_size_override(cx))
       .unwrap_or_else(Self::default_rem_size);
-    window.set_rem_size(base_rem_size * zoom_factor_locked());
+    let zoom_factor = Self::zoom_factor(cx);
+    window.set_rem_size(base_rem_size * zoom_factor);
     let decorations = window.window_decorations();
     let is_client_decorated = matches!(decorations, Decorations::Client { .. });
     let is_linux = cfg!(target_os = "linux");
@@ -614,6 +610,8 @@ impl RenderOnce for TitleBar {
     };
 
     let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
+    // Read before the element tree below, whose closures borrow the context.
+    let languages_override = Self::languages_override(cx);
 
     div().flex_shrink_0().child(
       div()
@@ -720,7 +718,7 @@ impl RenderOnce for TitleBar {
             .when(language_button_enabled, |this| {
               let current_locale = locale().to_string();
               let languages = languages
-                .or_else(languages_override_locked)
+                .or(languages_override)
                 .unwrap_or_else(available_locales);
               this.child(
                 Button::new("title-bar-language")
@@ -772,7 +770,7 @@ impl RenderOnce for TitleBar {
                         .min(ZOOM_FACTOR_MIN * 100.)
                         .max(ZOOM_FACTOR_MAX * 100.)
                         .step(ZOOM_SLIDER_STEP)
-                        .default_value(zoom_factor_locked() * 100.)
+                        .default_value(zoom_factor * 100.)
                     });
 
                     window
@@ -853,6 +851,8 @@ impl RenderOnce for TitleBar {
 
 #[cfg(test)]
 mod tests {
+  use gpui::TestAppContext;
+
   use super::*;
 
   #[test]
@@ -873,26 +873,37 @@ mod tests {
     assert_eq!(stepped_zoom_factor(ZOOM_FACTOR_MIN, false), ZOOM_FACTOR_MIN);
   }
 
-  #[test]
-  fn set_zoom_factor_clamps_to_safe_bounds() {
-    let saved = TitleBar::zoom_factor();
-    TitleBar::set_zoom_factor(9.0);
-    assert_eq!(TitleBar::zoom_factor(), ZOOM_FACTOR_MAX);
-    TitleBar::set_zoom_factor(0.0);
-    assert_eq!(TitleBar::zoom_factor(), ZOOM_FACTOR_MIN);
-    TitleBar::set_zoom_factor(1.25);
-    assert_eq!(TitleBar::zoom_factor(), 1.25);
-    TitleBar::set_zoom_factor(saved);
+  #[gpui::test]
+  fn set_zoom_factor_clamps_to_safe_bounds(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+      assert_eq!(TitleBar::zoom_factor(cx), 1.0);
+      TitleBar::set_zoom_factor(9.0, cx);
+      assert_eq!(TitleBar::zoom_factor(cx), ZOOM_FACTOR_MAX);
+      TitleBar::set_zoom_factor(0.0, cx);
+      assert_eq!(TitleBar::zoom_factor(cx), ZOOM_FACTOR_MIN);
+      TitleBar::set_zoom_factor(1.25, cx);
+      assert_eq!(TitleBar::zoom_factor(cx), 1.25);
+    });
   }
 
-  #[test]
-  fn rem_size_override_roundtrips() {
-    let saved = TitleBar::rem_size_override();
-    TitleBar::set_rem_size_override(Some(px(18.)));
-    assert_eq!(TitleBar::rem_size_override(), Some(px(18.)));
-    TitleBar::set_rem_size_override(None);
-    assert_eq!(TitleBar::rem_size_override(), None);
-    TitleBar::set_rem_size_override(saved);
+  #[gpui::test]
+  fn zoom_state_belongs_to_its_app(cx: &mut TestAppContext) {
+    cx.update(|cx| TitleBar::set_zoom_factor(1.5, cx));
+
+    let other_app = TestAppContext::single();
+    other_app.update(|cx| assert_eq!(TitleBar::zoom_factor(cx), DEFAULT_ZOOM_FACTOR));
+    cx.update(|cx| assert_eq!(TitleBar::zoom_factor(cx), 1.5));
+  }
+
+  #[gpui::test]
+  fn rem_size_override_roundtrips(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+      assert_eq!(TitleBar::rem_size_override(cx), None);
+      TitleBar::set_rem_size_override(Some(px(18.)), cx);
+      assert_eq!(TitleBar::rem_size_override(cx), Some(px(18.)));
+      TitleBar::set_rem_size_override(None, cx);
+      assert_eq!(TitleBar::rem_size_override(cx), None);
+    });
   }
 
   #[test]
@@ -912,18 +923,17 @@ mod tests {
     );
   }
 
-  #[test]
-  fn languages_override_roundtrips_and_clears() {
-    let saved = TitleBar::languages_override();
-    TitleBar::set_languages_override(["de", "fr_FR", "de"]);
-    assert_eq!(
-      TitleBar::languages_override(),
-      Some(vec!["de-de".to_string(), "fr-fr".to_string()])
-    );
-    TitleBar::clear_languages_override();
-    assert_eq!(TitleBar::languages_override(), None);
-    if let Some(saved) = saved {
-      TitleBar::set_languages_override(saved);
-    }
+  #[gpui::test]
+  fn languages_override_roundtrips_and_clears(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+      assert_eq!(TitleBar::languages_override(cx), None);
+      TitleBar::set_languages_override(["de", "fr_FR", "de"], cx);
+      assert_eq!(
+        TitleBar::languages_override(cx),
+        Some(vec!["de-de".to_string(), "fr-fr".to_string()])
+      );
+      TitleBar::clear_languages_override(cx);
+      assert_eq!(TitleBar::languages_override(cx), None);
+    });
   }
 }

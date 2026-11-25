@@ -129,6 +129,18 @@ pub fn default_font() -> Font {
   }
 }
 
+/// Results of the fontconfig probe for `sans-serif`, kept for the life of the
+/// process: `fc-match` spawns a process per call, and the answer only changes
+/// when the user edits their font configuration.
+#[cfg(target_os = "linux")]
+static SANS_SERIF_FAMILIES: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
+
+/// Results of the fontconfig probe for `monospace`, shared by every monospace
+/// fallback chain (see [`platform_monospace_font_fallbacks`] and
+/// [`terminal_font_fallbacks`]).
+#[cfg(target_os = "linux")]
+static MONOSPACE_FAMILIES: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
+
 /// Returns the platform-appropriate font fallback families for non-Latin
 /// scripts in UI text.
 ///
@@ -150,8 +162,7 @@ pub fn default_font() -> Font {
 pub fn platform_font_fallbacks() -> Option<FontFallbacks> {
   #[cfg(target_os = "linux")]
   {
-    static FAMILIES: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
-    fontconfig_fallbacks("sans-serif", &FAMILIES)
+    fontconfig_fallbacks("sans-serif", &SANS_SERIF_FAMILIES)
   }
   #[cfg(not(target_os = "linux"))]
   {
@@ -167,8 +178,7 @@ pub fn platform_font_fallbacks() -> Option<FontFallbacks> {
 pub fn platform_monospace_font_fallbacks() -> Option<FontFallbacks> {
   #[cfg(target_os = "linux")]
   {
-    static FAMILIES: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
-    fontconfig_fallbacks("monospace", &FAMILIES)
+    fontconfig_fallbacks("monospace", &MONOSPACE_FAMILIES)
   }
   #[cfg(not(target_os = "linux"))]
   {
@@ -186,20 +196,15 @@ pub fn platform_monospace_font_fallbacks() -> Option<FontFallbacks> {
 /// fallback overrides ([`set_font_overrides`]) replace the whole chain —
 /// including the icon family — when set.
 pub fn terminal_font_fallbacks() -> Option<FontFallbacks> {
-  #[cfg(target_os = "linux")]
-  let platform_families: Option<Vec<String>> = {
-    static FAMILIES: std::sync::OnceLock<Option<Vec<String>>> = std::sync::OnceLock::new();
-    FAMILIES
-      .get_or_init(|| fontconfig_families("monospace"))
-      .clone()
-  };
-
+  // The embedded icon family goes first so Nerd Font codepoints resolve
+  // before the CJK chain; fontconfig's monospace families only exist on
+  // Linux, so elsewhere the symbol font stands alone.
   #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
   let mut families = vec![crate::SYMBOLS_FONT_FAMILY.to_owned()];
-  // fontconfig's monospace families only exist on Linux; elsewhere the
-  // symbol font stands alone.
   #[cfg(target_os = "linux")]
-  families.extend(platform_families.unwrap_or_default());
+  if let Some(platform_fallbacks) = fontconfig_fallbacks("monospace", &MONOSPACE_FAMILIES) {
+    families.extend_from_slice(platform_fallbacks.fallback_list());
+  }
   Some(FontFallbacks::from_fonts(families))
 }
 
@@ -301,10 +306,20 @@ fn language_tag_from_locale(locale: &str) -> Option<String> {
   )
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(test)]
 mod tests {
   use super::*;
 
+  #[test]
+  fn terminal_font_fallbacks_lead_with_the_symbol_family() {
+    let fallbacks = terminal_font_fallbacks().expect("terminal fallbacks are always present");
+    assert_eq!(
+      fallbacks.fallback_list().first().map(String::as_str),
+      Some(crate::SYMBOLS_FONT_FAMILY),
+    );
+  }
+
+  #[cfg(target_os = "linux")]
   #[test]
   fn language_tags_follow_locale_naming() {
     assert_eq!(
@@ -328,6 +343,7 @@ mod tests {
     assert_eq!(language_tag_from_locale("_DE"), None);
   }
 
+  #[cfg(target_os = "linux")]
   #[test]
   fn fc_match_output_yields_distinct_families() {
     let output = "Noto Sans CJK SC,Noto Sans CJK SC Thin\nWenQuanYi Zen Hei\n\n";
