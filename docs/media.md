@@ -70,11 +70,13 @@ without a separate text renderer in `woocraft`.
 ## Transport bar
 
 `PlayerView` renders a `PlayerTransport` by default. It is two rows: the
-timeline (position, seek slider, duration) above the controls — previous,
-play/pause and next on the leading side, mute, volume, fullscreen and settings
-on the trailing side. Every built-in button is flat and icon-only at the bar's
-`Size` tier, with a tooltip; the play/pause, mute and fullscreen icons follow
-the player and window state.
+timeline (position, seek slider, duration) above the controls — previous, back
+ten seconds, play/pause, forward ten seconds and next on the leading side,
+mute, volume, fullscreen and settings on the trailing side. Every built-in
+button is flat and icon-only at the bar's `Size` tier, with a tooltip; the
+play/pause, mute and fullscreen icons follow the player and window state. The
+two skip controls use `PlayerTransport::seek_step` (ten seconds by default;
+`Player::seek_by` does the work).
 
 Each control can be hidden or rewired, and either side of the control row can
 be replaced with host content. `PlayerView::with_transport` configures the
@@ -100,6 +102,26 @@ A standalone bar works the same way without the view
 (`PlayerTransport::new(&player, cx)` then mount it wherever), and
 `PlayerView::transport_bar()` reaches the view's bar afterwards. Replacing the
 bar outright is still `PlayerView::transport`.
+
+`PlayerTransport::floating(true)` swaps the flush card for an elevated surface
+(a hairline border and a drop shadow) for a bar laid *over* the picture. The
+bar stops there: it never positions or hides itself. A host that wants
+player-style chrome composes it — a stage-only `PlayerView`
+(`PlayerView::transport` replaced with an empty element), a standalone bar in an
+absolute box over the stage, and its own pointer activity/idle state to mount
+and unmount that box. The `player` example does exactly this, including
+rewiring `TransportControl::Settings` with `on_control` to toggle its control
+panel instead of opening the speed menu.
+
+One caveat applies to chrome laid *over* the picture with the composition
+transport: on Linux the GPU video is a platform-native child surface stacked
+above gpui's base layer, so content painted with the root view is covered by
+the picture and hit-tested below it. Mount such chrome through `deferred(..)`
+instead — a window-level draw lands on gpui's overlay layer, above the video,
+which is also the layer gpui hit-tests first — and put any pointer-activity
+capture for it on that layer too, since only overlay-layer hitboxes see the
+pointer over native content. The `player` example's overlays and its pointer
+catcher are both deferred for this reason.
 
 ## Video transports: software and composition
 

@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+#[cfg(target_os = "linux")]
+use gpui::WindowBackgroundAppearance;
 use gpui::{
   AnyElement, App, AppContext as _, ClickEvent, Context, Decorations, Global,
   InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, Render,
@@ -367,6 +369,11 @@ impl TitleBar {
   /// [`TitlebarOptions::appears_transparent`] for the same effect, which
   /// [`Self::title_bar_options`] already sets.
   ///
+  /// On Linux the decorations are drawn by the client, so the window root must
+  /// be wrapped in [`window_border()`](crate::window_border): that widget draws
+  /// the border, the rounded corners, the drop shadow and the resize edges.
+  /// Without it the window has no frame at all.
+  ///
   /// ```ignore
   /// let options = WindowOptions {
   ///   window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -377,6 +384,10 @@ impl TitleBar {
     WindowOptions {
       titlebar: Some(Self::title_bar_options()),
       window_decorations: Some(WindowDecorations::Client),
+      // The shadow and the rounded corners live outside the client area, so
+      // the window itself has to be transparent for them to show.
+      #[cfg(target_os = "linux")]
+      window_background: WindowBackgroundAppearance::Transparent,
       ..Default::default()
     }
   }

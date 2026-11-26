@@ -14,12 +14,20 @@
 //! # Layout
 //!
 //! Two rows: the timeline — position, seek slider, duration — above the
-//! controls. The second row is split into a leading group (previous,
-//! play/pause, next) and a trailing group (mute, volume, fullscreen,
-//! settings). Both groups are replaceable wholesale through
-//! [`PlayerTransport::leading`] and [`PlayerTransport::trailing`], and each
-//! built-in control can be hidden ([`PlayerTransport::control`]) or rewired
-//! to a host action ([`PlayerTransport::on_control`]).
+//! controls. The second row is split into a leading group (previous, back
+//! ten seconds, play/pause, forward ten seconds, next) and a trailing group
+//! (mute, volume, fullscreen, settings). Both groups are replaceable wholesale
+//! through [`PlayerTransport::leading`] and [`PlayerTransport::trailing`], and
+//! each built-in control can be hidden ([`PlayerTransport::control`]) or
+//! rewired to a host action ([`PlayerTransport::on_control`]).
+//!
+//! # Floating chrome
+//!
+//! [`PlayerTransport::floating`] turns the bar into an elevated surface — a
+//! border and a drop shadow instead of a flush card — for bars laid over the
+//! picture rather than docked under it. The bar itself never positions or
+//! hides itself: an overlay is the host's layout, since only the host knows
+//! when the pointer is idle (see the `player` example).
 //!
 //! Sizing: a single [`Size`] tier threads through every part — the container
 //! metrics, the buttons, the sliders, the icons and the labels — so
@@ -35,9 +43,9 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  AnyElement, App, AppContext as _, ClickEvent, Context, Div, ElementId, Entity,
-  InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString, Stateful,
-  Styled as _, Subscription, Window, div,
+  AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity, IntoElement,
+  ParentElement as _, Render, SharedString, Styled as _, Subscription, Window, div,
+  prelude::FluentBuilder as _,
 };
 
 use super::{
@@ -46,9 +54,9 @@ use super::{
   snapshot::PlayerSnapshot,
 };
 use crate::{
-  ActiveTheme as _, Anchor, Button, ButtonVariants as _, DropdownMenu as _, Icon, IconName,
-  PopupMenu, PopupMenuItem, Sizable, Size, Slider, SliderEvent, SliderState, StyleSized, Theme,
-  Tooltip, h_flex, translate_woocraft, v_flex,
+  ActiveTheme as _, Anchor, Button, ButtonVariants as _, DropdownMenu as _, Icon, IconLabel,
+  IconName, PopupMenu, PopupMenuItem, Sizable, Size, Slider, SliderEvent, SliderState, StyleSized,
+  Theme, Tooltip, h_flex, translate_woocraft, v_flex,
 };
 
 /// Playback speeds the default settings menu offers, ascending.
@@ -68,20 +76,33 @@ const SEEK_EPSILON_SECS: f64 = 0.1;
 /// other metric here.
 const VOLUME_SLIDER_WIDTH_EM: f32 = 6.;
 
+/// The seek step of the two skip controls, in seconds, when the host does not
+/// set one through [`PlayerTransport::seek_step`].
+///
+/// Ten seconds is also what the `media.seek_back` / `media.seek_forward`
+/// tooltips say, so a host changing the step should keep its own labels in
+/// step.
+const DEFAULT_SEEK_STEP_SECS: f64 = 10.;
+
 /// The built-in controls of the bar's second row, in bar order.
 ///
 /// Every control is shown by default; [`PlayerTransport::control`] hides or
 /// re-shows one, and [`PlayerTransport::on_control`] replaces what clicking it
 /// does. The two groups the controls are laid out in — leading (`Previous`,
-/// `PlayPause`, `Next`) and trailing (`Mute`, `Volume`, `Fullscreen`,
-/// `Settings`) — can each be replaced wholesale by a host element through
-/// [`PlayerTransport::leading`] and [`PlayerTransport::trailing`].
+/// `SeekBackward`, `PlayPause`, `SeekForward`, `Next`) and trailing (`Mute`,
+/// `Volume`, `Fullscreen`, `Settings`) — can each be replaced wholesale by a
+/// host element through [`PlayerTransport::leading`] and
+/// [`PlayerTransport::trailing`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TransportControl {
   /// Previous playlist entry (`playlist-prev`).
   Previous,
+  /// Skip backwards by [`PlayerTransport::seek_step`] seconds.
+  SeekBackward,
   /// Play/pause toggle, with the icon following the player's state.
   PlayPause,
+  /// Skip forwards by [`PlayerTransport::seek_step`] seconds.
+  SeekForward,
   /// Next playlist entry (`playlist-next`).
   Next,
   /// Mute/unmute, with the icon following the player's state.
@@ -96,9 +117,11 @@ pub enum TransportControl {
 
 impl TransportControl {
   /// Every control, in bar order.
-  pub const ALL: [TransportControl; 7] = [
+  pub const ALL: [TransportControl; 9] = [
     TransportControl::Previous,
+    TransportControl::SeekBackward,
     TransportControl::PlayPause,
+    TransportControl::SeekForward,
     TransportControl::Next,
     TransportControl::Mute,
     TransportControl::Volume,
@@ -107,9 +130,11 @@ impl TransportControl {
   ];
 
   /// The controls of the second row's leading group.
-  const LEADING: [TransportControl; 3] = [
+  const LEADING: [TransportControl; 5] = [
     TransportControl::Previous,
+    TransportControl::SeekBackward,
     TransportControl::PlayPause,
+    TransportControl::SeekForward,
     TransportControl::Next,
   ];
 
@@ -161,8 +186,16 @@ pub struct PlayerTransport {
   /// writes; see [`Self::sync_seek`].
   pending_seek_echoes: usize,
   size: Size,
-  /// One bit per hidden [`TransportControl`]; zero shows everything.
-  hidden: u8,
+  /// The skip step of [`TransportControl::SeekBackward`] and
+  /// [`TransportControl::SeekForward`], in seconds.
+  seek_step: f64,
+  /// Whether the bar draws itself as an elevated surface for use over the
+  /// picture; see [`Self::floating`].
+  floating: bool,
+  /// One bit per hidden [`TransportControl`]; zero shows everything. `u16`
+  /// so the set has room for the controls to grow past eight entries, which
+  /// a `u8` bit set would not.
+  hidden: u16,
   /// Host actions overriding the built-in behavior, per control.
   handlers: [Option<TransportHandler>; TransportControl::ALL.len()],
   /// Host-built settings menu; `None` uses the default speed menu.
@@ -254,6 +287,8 @@ impl PlayerTransport {
       volume,
       pending_seek_echoes: 0,
       size: Size::default(),
+      seek_step: DEFAULT_SEEK_STEP_SECS,
+      floating: false,
       hidden: 0,
       handlers: std::array::from_fn(|_| None),
       settings_menu: None,
@@ -270,6 +305,46 @@ impl PlayerTransport {
   /// The player this bar transports.
   pub fn player(&self) -> &Entity<Player> {
     &self.player
+  }
+
+  /// Sets how far the two skip controls move playback, in seconds: that much
+  /// back for [`TransportControl::SeekBackward`], that much forward for
+  /// [`TransportControl::SeekForward`].
+  ///
+  /// Defaults to ten seconds. The built-in tooltips name ten seconds (the
+  /// `media.seek_back` and `media.seek_forward` translations), so a host
+  /// choosing another step should supply its own labels — rewiring the two
+  /// controls through [`Self::on_control`] keeps the icons and tooltip slot
+  /// available for that.
+  pub fn seek_step(mut self, seconds: f64) -> Self {
+    self.set_seek_step(seconds);
+    self
+  }
+
+  /// Runtime form of [`Self::seek_step`]; a non-finite or non-positive step
+  /// is ignored rather than turning the skip controls into no-ops.
+  pub fn set_seek_step(&mut self, seconds: f64) {
+    if seconds.is_finite() && seconds > 0.0 {
+      self.seek_step = seconds;
+    }
+  }
+
+  /// The skip step of the two seek controls, in seconds; see
+  /// [`Self::seek_step`].
+  pub fn seek_step_secs(&self) -> f64 {
+    self.seek_step
+  }
+
+  /// Draws the bar as a floating surface: a hairline border and a drop shadow
+  /// around the same card, for a bar laid over the picture instead of docked
+  /// beneath it.
+  ///
+  /// The flag only changes the surface. Positioning, showing and hiding the
+  /// bar over the stage stay the host's business, since only the host knows
+  /// when the pointer is idle — the `player` example does both.
+  pub fn floating(mut self, floating: bool) -> Self {
+    self.floating = floating;
+    self
   }
 
   /// Shows or hides one built-in control. Every control is shown by default.
@@ -294,7 +369,7 @@ impl PlayerTransport {
 
   /// Runtime form of [`Self::control`], for a bar that already exists.
   pub fn set_control(&mut self, control: TransportControl, shown: bool) {
-    let bit = 1u8 << control.index();
+    let bit = 1u16 << control.index();
     if shown {
       self.hidden &= !bit;
     } else {
@@ -304,7 +379,7 @@ impl PlayerTransport {
 
   /// Whether one built-in control is currently shown.
   pub fn is_control_shown(&self, control: TransportControl) -> bool {
-    self.hidden & (1u8 << control.index()) == 0
+    self.hidden & (1u16 << control.index()) == 0
   }
 
   /// Replaces what clicking one built-in control does, keeping its icon,
@@ -453,6 +528,32 @@ impl PlayerTransport {
         )
         .on_click(move |event, window, cx| handler(event, window, cx))
         .into_any_element()
+      }
+      TransportControl::SeekBackward | TransportControl::SeekForward => {
+        let step = if matches!(control, TransportControl::SeekBackward) {
+          -self.seek_step
+        } else {
+          self.seek_step
+        };
+        let player = self.player.clone();
+        let handler = self.handler(control, move |_, _, cx| {
+          let _ = player.read(cx).seek_by(step);
+        });
+        let (element_id, icon, label) = match control {
+          TransportControl::SeekBackward => (
+            ("player-seek-back", id),
+            IconName::Rewind,
+            "media.seek_back",
+          ),
+          _ => (
+            ("player-seek-forward", id),
+            IconName::FastForward,
+            "media.seek_forward",
+          ),
+        };
+        control_button(element_id, icon, tooltip(label), size)
+          .on_click(move |event, window, cx| handler(event, window, cx))
+          .into_any_element()
       }
       TransportControl::Mute => {
         let player = self.player.clone();
@@ -655,6 +756,12 @@ impl Render for PlayerTransport {
       .container_rounded(size)
       .bg(theme.card)
       .text_color(theme.card_foreground)
+      // A floating bar reads as an elevated surface: the hairline keeps it
+      // apart from a bright frame behind it, the shadow lifts it off the
+      // picture. A docked bar needs neither.
+      .when(self.floating, |this| {
+        this.border_1().border_color(theme.border).shadow_md()
+      })
       .children(rows)
   }
 }
@@ -695,27 +802,23 @@ fn speed_menu(mut menu: PopupMenu, player: &Entity<Player>, cx: &mut App) -> Pop
 /// One ticking time label (position or duration): secondary information, so
 /// muted colour at the bar's own tier — never a smaller font.
 ///
-/// The label is sized by its text. `format_time` switches from `M:SS` to
+/// An [`IconLabel`] takes the label's metrics, colour and insets from the bar's
+/// tier instead of hardcoding a text size, so the times line up with every
+/// other label and scale with the window font like the buttons beside them.
+///
+/// The label is still sized by its text: `format_time` switches from `M:SS` to
 /// `H:MM:SS` only once the value passes an hour, and every glyph of the UI
 /// family is a single cell wide, so the box changes width at minute and hour
 /// boundaries — not on every tick. A reserved width would leave slack that
 /// reads as a gap between the time and the slider; the seek slider's `flex_1`
 /// absorbs the shift instead.
-///
-/// This is a bare `div` rather than an `IconLabel`: the latter brings the
-/// component insets (0.5em each side) and truncation of an interactive control,
-/// which around a four-cell time reads as padding between the time and the
-/// track.
 fn time_label(
   element_id: impl Into<ElementId>, size: Size, theme: &Theme, seconds: f64,
-) -> Stateful<Div> {
-  div()
-    .id(element_id)
-    .flex_none()
-    .text_size(size.text_size())
-    .line_height(size.text_size())
+) -> IconLabel {
+  IconLabel::new(element_id)
+    .with_size(size)
+    .label(format_time(Duration::from_secs_f64(seconds.max(0.0))))
     .text_color(theme.muted_foreground)
-    .child(format_time(Duration::from_secs_f64(seconds.max(0.0))))
 }
 
 /// Whether a seek-slider change should seek the player.
@@ -791,6 +894,13 @@ mod tests {
       assert_eq!(seen & bit, 0, "{control:?} reuses another control's bit");
       seen |= bit;
     }
+    // The bar's own set is a `u16`: one more control than it has bits would
+    // silently alias two controls into one hidden flag.
+    assert!(
+      TransportControl::ALL.len() <= u16::BITS as usize,
+      "the shown/hidden set cannot hold {} controls",
+      TransportControl::ALL.len()
+    );
     // `index()` is the discriminant, so `ALL` has to stay in declaration order
     // or a control's bit would drift away from its position.
     for (position, control) in TransportControl::ALL.into_iter().enumerate() {
@@ -808,9 +918,9 @@ mod tests {
   fn hiding_controls_is_a_per_control_switch() {
     // The bit set is a plain per-control flag: hiding one leaves every other
     // control alone, and showing it again restores exactly that one.
-    let mut hidden = 0u8;
-    let hide = |hidden: &mut u8, control: TransportControl| *hidden |= 1 << control.index();
-    let show = |hidden: &mut u8, control: TransportControl| *hidden &= !(1 << control.index());
+    let mut hidden = 0u16;
+    let hide = |hidden: &mut u16, control: TransportControl| *hidden |= 1 << control.index();
+    let show = |hidden: &mut u16, control: TransportControl| *hidden &= !(1 << control.index());
     hide(&mut hidden, TransportControl::Settings);
     assert_eq!(hidden, 1 << TransportControl::Settings.index());
     hide(&mut hidden, TransportControl::Volume);

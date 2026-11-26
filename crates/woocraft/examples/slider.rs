@@ -10,7 +10,7 @@ use gpui::{
 };
 use woocraft::{
   ActiveTheme as _, Label, Sizable as _, Size, Slider, SliderEvent, SliderOrigin, SliderState,
-  StyleSized, Theme, ThemeMode, TitleBar, init, v_flex,
+  StyleSized, Theme, ThemeMode, TitleBar, init, v_flex, window_border,
 };
 
 struct SliderDemo {
@@ -97,59 +97,60 @@ impl Render for SliderDemo {
     let size = self.size;
     let value_of = |state: &Entity<SliderState>, cx: &App| state.read(cx).value().start();
 
-    v_flex()
-      .size_full()
-      .bg(theme.background)
-      .text_color(theme.foreground)
-      .child(TitleBar::new().title("Slider"))
-      .child(
-        v_flex()
-          .w_full()
-          .container_padding(size)
-          .container_gap_y(size)
-          .child(Label::new("Volume — default origin, no ticks"))
-          .child(
-            div()
-              .w_full()
-              .child(Slider::new("demo-volume", &self.volume).with_size(size)),
-          )
-          .child(Label::new(format!(
-            "Bass — origin middle, ticks, major every 5  ({:+.0} dB)",
-            value_of(&self.eq_bass, cx)
-          )))
-          .child(
-            div()
-              .w_full()
-              .child(Slider::new("demo-bass", &self.eq_bass).with_size(size)),
-          )
-          .child(Label::new(format!(
-            "Mid — major every 2  ({:+.0} dB)",
-            value_of(&self.eq_mid, cx)
-          )))
-          .child(
-            div()
-              .w_full()
-              .child(Slider::new("demo-mid", &self.eq_mid).with_size(size)),
-          )
-          .child(Label::new(format!(
-            "Treble — origin middle  ({:+.0} dB)",
-            value_of(&self.eq_treble, cx)
-          )))
-          .child(
-            div()
-              .w_full()
-              .child(Slider::new("demo-treble", &self.eq_treble).with_size(size)),
-          )
-          .child(Label::new(
-            "Scrub — immediate off: drag previews, release commits",
-          ))
-          .child(
-            div()
-              .w_full()
-              .child(Slider::new("demo-scrub", &self.scrub).with_size(size)),
-          )
-          .child(Label::new(format!("last event: {}", self.seen))),
-      )
+    window_border().child(
+      v_flex()
+        .size_full()
+        .text_color(theme.foreground)
+        .child(TitleBar::new().title("Slider"))
+        .child(
+          v_flex()
+            .w_full()
+            .container_padding(size)
+            .container_gap_y(size)
+            .child(Label::new("Volume — default origin, no ticks"))
+            .child(
+              div()
+                .w_full()
+                .child(Slider::new("demo-volume", &self.volume).with_size(size)),
+            )
+            .child(Label::new(format!(
+              "Bass — origin middle, ticks, major every 5  ({:+.0} dB)",
+              value_of(&self.eq_bass, cx)
+            )))
+            .child(
+              div()
+                .w_full()
+                .child(Slider::new("demo-bass", &self.eq_bass).with_size(size)),
+            )
+            .child(Label::new(format!(
+              "Mid — major every 2  ({:+.0} dB)",
+              value_of(&self.eq_mid, cx)
+            )))
+            .child(
+              div()
+                .w_full()
+                .child(Slider::new("demo-mid", &self.eq_mid).with_size(size)),
+            )
+            .child(Label::new(format!(
+              "Treble — origin middle  ({:+.0} dB)",
+              value_of(&self.eq_treble, cx)
+            )))
+            .child(
+              div()
+                .w_full()
+                .child(Slider::new("demo-treble", &self.eq_treble).with_size(size)),
+            )
+            .child(Label::new(
+              "Scrub — immediate off: drag previews, release commits",
+            ))
+            .child(
+              div()
+                .w_full()
+                .child(Slider::new("demo-scrub", &self.scrub).with_size(size)),
+            )
+            .child(Label::new(format!("last event: {}", self.seen))),
+        ),
+    )
   }
 }
 

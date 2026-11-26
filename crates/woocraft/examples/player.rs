@@ -23,45 +23,74 @@
 //! - `--size` sets the one size tier that drives the `PlayerView` and every
 //!   control in the window (`Sizable`).
 //! - `--audio` plays audio only (`PlayerOptions::audio_only`).
-//! - The optional argument is a file path or URL; without it the header's
-//!   source field loads one through `Player::load`.
+//! - The optional argument is a file path or URL; without it the title bar's
+//!   open button picks one through the platform file chooser and loads it with
+//!   `Player::load`.
 //!
 //! The window:
 //!
-//! - The header carries the source field, the title (`PlayerState::title`,
-//!   falling back to the source string), and the latest error —
-//!   `PlayerState::error` or a failed control call — at the same tier in the
-//!   muted colour, never a bespoke banner.
-//! - The left column is a `PlayerView` with its default stage and transport
-//!   bar; the standalone `PlayerTrackMenu` and `PlayerPlaylist` are mounted
-//!   through the `controls` slots. That is the whole pluggable-chrome point:
-//!   nothing of this example lives inside the library.
-//! - The right column is the control panel, one group per area of the `Player`
-//!   API. Playback: seek steps, frame stepping, speed, the A-B loop, chapters.
-//!   Audio: volume and mute (the bar carries its own pair), balance, delay,
-//!   ReplayGain, pitch correction, the output device, the raw `af` chain with
-//!   an equalizer preset, the volume ceiling. Subtitles: track pickers, delay,
-//!   scale, position, visibility, ASS styling, external files. Video: decoder,
-//!   transport, size tier, deinterlace, rotation, aspect ratio. Info:
+//! - The title bar carries the current title (`PlayerState::title`, falling
+//!   back to the source string) and one icon-only button that runs the platform
+//!   file chooser. There is no source field: a player window is mostly picture,
+//!   and a path field across the top of it is not.
+//! - The stage fills the window: a `PlayerView` whose transport slot is empty,
+//!   so the view paints the picture and this example owns every piece of chrome
+//!   around it.
+//! - The transport bar is a standalone `PlayerTransport` floating over the
+//!   bottom of the stage ([`PlayerTransport::floating`]). It appears on mouse
+//!   activity over the stage, stays while the pointer rests on it, and goes
+//!   away once the pointer is idle or leaves — so the picture has the whole
+//!   window at rest.
+//! - The control panel floats over the right edge, closed by default: the
+//!   transport's settings button toggles it, which is why the transport hides
+//!   its own settings menu ([`PlayerTransport::on_control`] rewires the button
+//!   rather than growing a second one). It is one group per area of the
+//!   `Player` API. Playback: seek steps, frame stepping, speed, the A-B loop,
+//!   chapters. Audio: volume and mute (the bar carries its own pair), balance,
+//!   delay, ReplayGain, pitch correction, the output device, the raw `af` chain
+//!   with an equalizer preset, the volume ceiling. Subtitles: track pickers,
+//!   delay, scale, position, visibility, ASS styling, external files. Video:
+//!   decoder, transport, size tier, deinterlace, rotation, aspect ratio. Info:
 //!   `PlayerState` fields, track and metadata summaries, and a handful of live
 //!   mpv properties (`Player::get_property`) polled once a second — structure
 //!   refreshes on player events, runtime stats on the timer, and neither runs
 //!   on the per-render path.
+//! - A notice — a failed control call or a reported player error — floats over
+//!   the top left of the stage at the same tier in the muted colour, and clears
+//!   itself when a file loads or when clicked.
+//!
+//! The overlays are mounted through `deferred(..)`, which paints them as
+//! window-level draws instead of part of the root view. That is what keeps them
+//! usable with the composition transport: on Linux the GPU video is a
+//! platform-native child surface stacked above gpui's base layer, so chrome
+//! painted with the root view is covered by the picture and hit-tested below
+//! it. A deferred draw lands on gpui's overlay layer — above the video — which
+//! is also the layer gpui hit-tests first, so the buttons stay clickable over a
+//! GPU-rendered frame. The pointer catcher ([`PlayerApp::pointer_catcher`]) is
+//! a deferred draw for the same reason: over native content, only overlay-layer
+//! hitboxes see the pointer, and the activity that reveals the bar comes from
+//! exactly there.
+//!
+//! Nothing of that chrome lives in the library: floating, hovering, hiding and
+//! the idle countdown are all this example's, and the library only renders the
+//! bars it was handed.
 
 use std::time::Duration;
 
 use gpui::{
-  App, AppContext as _, Bounds, ClickEvent, Context, Div, Entity, InteractiveElement as _,
-  IntoElement, ParentElement as _, Render, Styled as _, Subscription, Task, Window, WindowBounds,
-  WindowOptions, div, prelude::FluentBuilder as _, px,
+  AnyElement, App, AppContext as _, Bounds, ClickEvent, Context, Div, Entity,
+  InteractiveElement as _, IntoElement, ParentElement as _, Render,
+  StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, WindowBounds,
+  WindowOptions, deferred, div, prelude::FluentBuilder as _, px, rems,
 };
 use woocraft::{
-  ActiveTheme as _, Button, Disableable, Divider, DropdownMenu, Icon, IconLabel, IconName, Input,
-  InputEvent, InputState, Player, PlayerEvent, PlayerOptions, PlayerPlaylist, PlayerTrackMenu,
-  PlayerView, PopupMenuItem, PropertyValue, ScrollableElement, ScrollbarShow, Sizable, Size,
-  Slider, SliderEvent, SliderOrigin, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar,
-  Tooltip, Track, TrackKind, TransportControl, VideoTransport, h_flex, init, translate_woocraft,
-  v_flex,
+  ActiveTheme as _, Button, ButtonVariants as _, Disableable, Divider, DropdownMenu, Icon,
+  IconLabel, IconName, Input, InputEvent, InputState, Player, PlayerEvent, PlayerOptions,
+  PlayerPlaylist, PlayerTrackMenu, PlayerTransport, PlayerView, PopupMenuItem, Presence,
+  PropertyValue, ScrollableElement, ScrollbarShow, Sizable, Size, Slider, SliderEvent,
+  SliderOrigin, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track,
+  TrackKind, Transition, TransportControl, VideoTransport, h_flex, init, translate_woocraft,
+  v_flex, window_border,
 };
 
 /// The decoder menu entries, as mpv `hwdec` values: the four generic modes
@@ -81,6 +110,27 @@ const DECODERS: [&str; 7] = [
 
 /// The playback speeds the speed picker offers.
 const SPEEDS: [f64; 4] = [0.5, 1.0, 1.5, 2.0];
+
+/// Seconds the transport bar's two skip controls move playback by.
+const SEEK_STEP: f64 = 10.0;
+
+/// How often the floating chrome re-evaluates its own visibility.
+const CHROME_TICK: Duration = Duration::from_millis(250);
+
+/// Ticks of pointer silence after which the transport bar goes away, counted
+/// in [`CHROME_TICK`]s — ten of them are two and a half seconds.
+const CHROME_IDLE_TICKS: u32 = 10;
+
+/// Fade-in of a floating overlay, matching the system's tooltip/preview timing
+/// scale. Hiding is instant: an overlay that lingers on its way out reads as
+/// lag, not as motion.
+const CHROME_FADE: Duration = Duration::from_millis(140);
+
+/// Width of the floating control panel, in rems.
+const PANEL_WIDTH_REM: f32 = 20.;
+
+/// Inset of the floating chrome from the stage edges, in rems.
+const OVERLAY_INSET_REM: f32 = 0.75;
 
 /// `(frequency Hz, gain dB)` bands of the equalizer presets, applied through
 /// `Player::set_equalizer`.
@@ -169,6 +219,24 @@ struct PlayerApp {
   /// The player's view; replaced when the player is rebuilt or the size tier
   /// changes (its tier is set at construction through `Sizable`).
   view: Entity<PlayerView>,
+  /// The floating transport bar, drawn by this example over the stage instead
+  /// of by the view under it. Rebuilt with the view: the tier is fixed at
+  /// construction there too.
+  transport_bar: Entity<PlayerTransport>,
+  /// Whether the floating control panel is open. Only the transport bar's
+  /// settings button changes it.
+  panel_open: bool,
+  /// Whether the floating transport bar is on screen: while the pointer is
+  /// over the stage and recently active, while it rests on the chrome, and
+  /// while the panel the bar opened is open.
+  transport_visible: bool,
+  /// Whether the pointer is inside the stage area at all.
+  pointer_inside: bool,
+  /// Whether the pointer rests on the transport bar or on the panel.
+  pointer_on_chrome: bool,
+  /// [`CHROME_TICK`]s since the pointer last moved over the stage; see
+  /// [`Self::tick_chrome`].
+  idle_ticks: u32,
   /// The transport the *next* player build will request.
   transport: VideoTransport,
   /// The decoder mode (an mpv `hwdec` value) new players start with;
@@ -181,8 +249,8 @@ struct PlayerApp {
   /// The source the player was last asked to load, so a rebuild can reissue
   /// it.
   source: Option<String>,
-  /// The latest failure to surface in the header (a failed control call or
-  /// a reported mpv error).
+  /// The latest failure to surface in the stage's notice pill (a failed
+  /// control call or a reported mpv error).
   notice: Option<String>,
   /// Live mpv properties, refreshed once a second.
   live: LiveInfo,
@@ -203,7 +271,6 @@ struct PlayerApp {
   pending_volume_echoes: usize,
   // Text fields and sliders live in entities, so they keep their content,
   // caret and thumb across renders; the builders below only re-mount them.
-  source_input: Entity<InputState>,
   audio_device: Entity<InputState>,
   audio_filters: Entity<InputState>,
   volume_max: Entity<InputState>,
@@ -219,20 +286,13 @@ struct PlayerApp {
   _player_subscription: Subscription,
   _control_subscriptions: Vec<Subscription>,
   _live_poll: Task<()>,
+  _chrome_tick: Task<()>,
 }
 
 impl PlayerApp {
   fn new(launch: Launch, cx: &mut Context<Self>) -> Self {
     let size = launch.size;
-    let launch_source = launch.source.clone();
 
-    let source_input = cx.new(|cx| {
-      let state = InputState::new(cx).placeholder(t("media.source_placeholder"));
-      match launch_source {
-        Some(source) => state.default_value(source),
-        None => state,
-      }
-    });
     let audio_device = cx.new(|cx| InputState::new(cx).placeholder("auto"));
     let audio_filters =
       cx.new(|cx| InputState::new(cx).placeholder(t("media.filters_placeholder")));
@@ -293,13 +353,23 @@ impl PlayerApp {
         .default_value(100.0)
     });
     let view = mount_player_view(&player, size, cx);
+    let transport_bar = mount_transport(&player, size, cx);
     let live_poll = Self::spawn_live_poll(cx);
+    let chrome_tick = Self::spawn_chrome_tick(cx);
     let player_subscription = cx.subscribe(&player, Self::on_player_event);
     let notice = player.read(cx).state().error.clone();
 
     let mut this = Self {
       player,
       view,
+      transport_bar,
+      panel_open: false,
+      // Both overlays start hidden: the picture owns the window until the
+      // pointer asks for the chrome.
+      transport_visible: false,
+      pointer_inside: false,
+      pointer_on_chrome: false,
+      idle_ticks: 0,
       transport: launch.transport,
       hwdec: launch.decoder,
       size,
@@ -314,7 +384,6 @@ impl PlayerApp {
       audio_delay: 0.0,
       subtitle_delay: 0.0,
       pending_volume_echoes: 0,
-      source_input,
       audio_device,
       audio_filters,
       volume_max,
@@ -330,13 +399,13 @@ impl PlayerApp {
       _player_subscription: player_subscription,
       _control_subscriptions: Vec::new(),
       _live_poll: live_poll,
+      _chrome_tick: chrome_tick,
     };
     this.bind_controls(cx);
     this.refresh_structure(cx);
     this.refresh_live(cx);
     if let Some(source) = launch.source {
-      let result = this.player.update(cx, |player, _| player.load(&source));
-      this.note_result(cx, "load", result);
+      this.load_source(source, cx);
     }
     this
   }
@@ -347,14 +416,6 @@ impl PlayerApp {
   fn bind_controls(&mut self, cx: &mut Context<Self>) {
     let mut subscriptions = Vec::new();
 
-    subscriptions.push(cx.subscribe(
-      &self.source_input,
-      |this: &mut Self, _, event: &InputEvent, cx| {
-        if matches!(event, InputEvent::PressEnter { .. }) {
-          this.open_source(cx);
-        }
-      },
-    ));
     let text_fields: [(Entity<InputState>, EnterApply); 5] = [
       (self.audio_device.clone(), Self::apply_audio_device),
       (self.audio_filters.clone(), Self::apply_audio_filters),
@@ -471,7 +532,7 @@ impl PlayerApp {
 
   /// One player report. Structure changes refresh the cached summaries, the
   /// volume property keeps the panel slider in step (echo-guarded), and
-  /// errors surface in the header.
+  /// errors surface in the notice pill.
   fn on_player_event(
     this: &mut Self, _player: Entity<Player>, event: &PlayerEvent, cx: &mut Context<Self>,
   ) {
@@ -480,7 +541,14 @@ impl PlayerApp {
       PlayerEvent::EndFile { reason } if reason.contains("Error") => {
         this.notice = Some(reason.clone());
       }
-      PlayerEvent::FileLoaded | PlayerEvent::VideoReconfig | PlayerEvent::AudioReconfig => {
+      PlayerEvent::FileLoaded => {
+        // A fresh file retires whatever the last one failed at: the notice
+        // floats over the picture, so a stale one would sit there forever.
+        this.notice = None;
+        this.refresh_structure(cx);
+        this.refresh_live(cx);
+      }
+      PlayerEvent::VideoReconfig | PlayerEvent::AudioReconfig => {
         this.refresh_structure(cx);
         this.refresh_live(cx);
       }
@@ -513,6 +581,96 @@ impl PlayerApp {
         }
       }
     })
+  }
+
+  /// Drives the floating chrome: one tick of [`CHROME_TICK`], deciding whether
+  /// the transport bar is on screen; see [`Self::tick_chrome`].
+  fn spawn_chrome_tick(cx: &mut Context<Self>) -> Task<()> {
+    cx.spawn(async move |this, cx| {
+      loop {
+        cx.background_executor().timer(CHROME_TICK).await;
+        let alive = this.update(cx, |this, cx| this.tick_chrome(cx));
+        if alive.is_err() {
+          break;
+        }
+      }
+    })
+  }
+
+  /// One visibility tick of the floating transport bar.
+  ///
+  /// The bar is pinned while the pointer rests on the chrome or while the
+  /// panel is open — a control that disappears from under the pointer would
+  /// be unusable — and otherwise shown for [`CHROME_IDLE_TICKS`] after the
+  /// pointer last moved over the stage. A pointer outside the stage hides it
+  /// one tick later, so slipping out for a moment does not blink it away.
+  fn tick_chrome(&mut self, cx: &mut Context<Self>) {
+    // A hover flag can only be stale while neither overlay is mounted: the
+    // element that set it is gone, so no leave event will ever clear it.
+    if !self.transport_visible && !self.panel_open {
+      self.pointer_on_chrome = false;
+    }
+    let pinned = self.pointer_on_chrome || self.panel_open;
+    self.idle_ticks = if pinned {
+      0
+    } else {
+      self.idle_ticks.saturating_add(1)
+    };
+    let visible = pinned || (self.pointer_inside && self.idle_ticks < CHROME_IDLE_TICKS);
+    if visible != self.transport_visible {
+      self.transport_visible = visible;
+      cx.notify();
+    }
+  }
+
+  /// The pointer moved over the stage: show the transport bar and restart its
+  /// idle countdown.
+  fn on_pointer_activity(&mut self, cx: &mut Context<Self>) {
+    self.pointer_inside = true;
+    self.idle_ticks = 0;
+    if !self.transport_visible {
+      self.transport_visible = true;
+      cx.notify();
+    }
+  }
+
+  /// The pointer entered or left the stage area.
+  fn set_pointer_inside(&mut self, inside: bool, cx: &mut Context<Self>) {
+    if self.pointer_inside == inside {
+      return;
+    }
+    self.pointer_inside = inside;
+    if inside {
+      // Re-entering counts as activity, so the bar is there immediately
+      // rather than on the next tick.
+      self.idle_ticks = 0;
+      if !self.transport_visible {
+        self.transport_visible = true;
+      }
+    }
+    cx.notify();
+  }
+
+  /// The pointer entered or left the floating chrome (the transport bar or the
+  /// panel): pinning it keeps a control from vanishing under the cursor.
+  fn set_pointer_on_chrome(&mut self, on: bool) {
+    self.pointer_on_chrome = on;
+    if on {
+      self.idle_ticks = 0;
+    }
+  }
+
+  /// Opens or closes the floating control panel — the action behind the
+  /// transport bar's settings button.
+  fn toggle_panel(&mut self, cx: &mut Context<Self>) {
+    self.panel_open = !self.panel_open;
+    if self.panel_open {
+      // The button that opened the panel lives in the bar: keeping the bar
+      // around leaves the way back visible.
+      self.transport_visible = true;
+      self.idle_ticks = 0;
+    }
+    cx.notify();
   }
 
   /// Re-reads the track summary and the selected subtitle labels.
@@ -597,9 +755,12 @@ impl PlayerApp {
     let options = options_for(!self.audio_only, self.transport, self.hwdec);
     let player = cx.new(|cx| Player::new(cx, options));
     let view = mount_player_view(&player, self.size, cx);
-    // Replace the view first: releasing it detaches its video surface while
-    // the old player is still there to own it, then the player goes.
+    let transport_bar = mount_transport(&player, self.size, cx);
+    // Replace the view and the bar first: releasing the view detaches its
+    // video surface while the old player is still there to own it, then the
+    // player goes.
     self.view = view;
+    self.transport_bar = transport_bar;
     self.player = player;
     self._player_subscription = cx.subscribe(&self.player, Self::on_player_event);
     self.refresh_structure(cx);
@@ -612,21 +773,21 @@ impl PlayerApp {
   }
 
   /// Applies the size tier to the whole window: one tier drives the player
-  /// view and every control. Only the view is rebuilt — its tier is set at
-  /// construction through `Sizable` — the player keeps playing.
+  /// view, the transport bar and every control. Only the view and the bar are
+  /// rebuilt — their tier is set at construction through `Sizable` — the
+  /// player keeps playing.
   fn set_size_tier(&mut self, size: Size, cx: &mut Context<Self>) {
     self.size = size;
     self.view = mount_player_view(&self.player, size, cx);
+    self.transport_bar = mount_transport(&self.player, size, cx);
     cx.notify();
   }
 
-  /// Loads whatever the source field holds (`Player::load`), remembering it
-  /// as the player's source so a transport switch can rebuild around it.
-  /// Opens the platform's file chooser and loads what it returns.
+  /// Opens the platform's file chooser and loads what it returns — the title
+  /// bar's open button.
   ///
   /// The dialog is a blocking native call, so it runs on the background
-  /// executor and only the result comes back to the UI thread; the source
-  /// field stays editable for people who prefer pasting a path or URL.
+  /// executor and only the result comes back to the UI thread.
   fn browse_source(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     cx.spawn_in(window, async move |this, cx| {
       let picked = cx
@@ -637,12 +798,7 @@ impl PlayerApp {
         return;
       };
       let source = path.display().to_string();
-      let loaded = this.update_in(cx, |this, window, cx| {
-        this
-          .source_input
-          .update(cx, |input, cx| input.set_value(source.clone(), window, cx));
-        this.open_source(cx);
-      });
+      let loaded = this.update(cx, |this, cx| this.load_source(source, cx));
       if loaded.is_err() {
         tracing::debug!("woocraft: player window closed before the dialog returned");
       }
@@ -650,13 +806,9 @@ impl PlayerApp {
     .detach();
   }
 
-  fn open_source(&mut self, cx: &mut Context<Self>) {
-    let source = self.source_input.read(cx).value().trim().to_string();
-    if source.is_empty() {
-      self.notice = Some(t("media.source_placeholder"));
-      cx.notify();
-      return;
-    }
+  /// Loads `source` (`Player::load`), remembering it as the player's source so
+  /// a transport switch can rebuild around it.
+  fn load_source(&mut self, source: String, cx: &mut Context<Self>) {
     self.source = Some(source.clone());
     let result = self.player.update(cx, |player, _| player.load(&source));
     self.note_result(cx, "load", result);
@@ -719,7 +871,7 @@ impl PlayerApp {
   }
 
   /// Runs one `&self`-taking player call and surfaces any failure in the
-  /// header notice instead of panicking in a click handler.
+  /// notice pill instead of panicking in a click handler.
   fn call_player<E: std::fmt::Display>(
     &mut self, cx: &mut Context<Self>, what: &str, call: impl FnOnce(&Player) -> Result<(), E>,
   ) {
@@ -739,71 +891,97 @@ impl PlayerApp {
 
   // ----- render -----------------------------------------------------------
 
-  /// The header: the source field, the current title, and any error the
-  /// player or a control reported — muted, at the same tier.
-  fn header(&self, size: Size, theme: &Theme, cx: &Context<Self>) -> Div {
-    let title = self
+  /// The title the title bar shows: the playing title, else the source the
+  /// player was asked for, else the placeholder.
+  fn title(&self, cx: &Context<Self>) -> String {
+    self
       .player
       .read(cx)
       .state()
       .title
       .clone()
       .or_else(|| self.source.clone())
-      .unwrap_or_else(|| t("media.nothing_playing"));
-    let error = self
+      .unwrap_or_else(|| t("media.nothing_playing"))
+  }
+
+  /// The notice the stage shows, if any: a failed control call outranks the
+  /// player's own last error.
+  fn current_notice(&self, cx: &Context<Self>) -> Option<String> {
+    self
       .notice
       .clone()
-      .or_else(|| self.player.read(cx).state().error.clone());
+      .or_else(|| self.player.read(cx).state().error.clone())
+  }
 
-    v_flex()
-      .w_full()
-      .container_size(size)
-      .container_gap_y(size)
+  /// The notice pill: the latest failure, floating over the top left of the
+  /// stage — muted, at the same tier as everything else, never a banner the
+  /// picture has to make room for. Clicking it dismisses it.
+  fn notice_pill(
+    &self, notice: String, size: Size, theme: &Theme, cx: &Context<Self>,
+  ) -> AnyElement {
+    div()
+      .id("player-notice")
+      .absolute()
+      .top(rems(OVERLAY_INSET_REM))
+      .left(rems(OVERLAY_INSET_REM))
+      .max_w(rems(48.))
+      .container_px(size)
+      .container_py(size)
+      .rounded(size.container_radius())
+      .border_1()
+      .border_color(theme.border)
+      .bg(theme.card)
+      .shadow_md()
+      .cursor_pointer()
+      .on_click(cx.listener(|this, _, _, cx| {
+        this.notice = None;
+        cx.notify();
+      }))
       .child(
-        h_flex()
-          .w_full()
-          .items_center()
-          .container_gap(size)
-          .child(icon_button(
-            "open",
-            IconName::FolderOpen,
-            t("media.open"),
-            size,
-            cx.listener(|this, _, window, cx| this.browse_source(window, cx)),
-          ))
-          .child(
-            div().min_w_0().flex_1().child(
-              Input::new(&self.source_input)
-                .with_size(size)
-                .cleanable(true),
-            ),
-          )
-          .child(
-            div()
-              .min_w_0()
-              .flex_1()
-              .child(IconLabel::new("header-title").with_size(size).label(title)),
-          ),
+        IconLabel::new("player-notice-label")
+          .with_size(size)
+          .icon(Icon::new(IconName::Info))
+          .label(notice)
+          .text_color(theme.muted_foreground),
       )
-      .when_some(error, |this, error| {
-        this.child(
-          IconLabel::new("header-error")
-            .with_size(size)
-            .icon(Icon::new(IconName::Info))
-            .label(error)
-            .text_color(theme.muted_foreground),
-        )
-      })
+      .into_any_element()
+  }
+
+  /// The pointer catcher: a transparent, deferred layer over the whole stage.
+  ///
+  /// It exists for the composition transport. The GPU video is a native child
+  /// surface above gpui's base layer, so the stage area itself never sees the
+  /// pointer there — this layer is drawn (and therefore hit-tested) above the
+  /// video, which is where mouse activity and hover can still be observed. Its
+  /// listeners are the same pair the stage area carries, so the software
+  /// transport behaves identically; both end in idempotent state updates.
+  fn pointer_catcher(&self, cx: &Context<Self>) -> AnyElement {
+    deferred(
+      div()
+        .id("player-pointer-catcher")
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .on_mouse_move(cx.listener(|this, _, _, cx| this.on_pointer_activity(cx)))
+        .on_hover(cx.listener(|this, hovered, _, cx| this.set_pointer_inside(*hovered, cx))),
+    )
+    .into_any_element()
   }
 
   /// The control panel: one group per area of the `Player` API.
   ///
-  /// The chrome (fixed width, border, background) sits on an outer box that
-  /// owns the row height; the scrolling content is a separate `Scrollable`
-  /// whose own styles — applied *after* `overflow_y_scrollbar()` wraps it — are
-  /// what give the scroll area a bounded height. Sizing the inner `v_flex`
-  /// instead leaves the wrapper auto-height and the panel cannot scroll.
-  fn control_panel(&self, size: Size, theme: &Theme, cx: &Context<Self>) -> impl IntoElement {
+  /// The chrome (surface, border, radius, shadow) and the padding sit on an
+  /// outer box that owns the column height; the scrolling content is a
+  /// separate `Scrollable` whose own styles — applied *after*
+  /// `overflow_y_scrollbar()` wraps it — are what give the scroll area a
+  /// bounded height. Sizing the inner `v_flex` instead leaves the wrapper
+  /// auto-height and the panel cannot scroll.
+  ///
+  /// The box fills whatever the overlay lays out (it set the width); it draws
+  /// itself like a popover because that is what it is: a layer above the
+  /// picture, not a docked column.
+  fn control_panel(&self, size: Size, theme: &Theme, cx: &Context<Self>) -> AnyElement {
     let content = v_flex()
       .id("control-panel-scroll")
       .w_full()
@@ -841,19 +1019,31 @@ impl PlayerApp {
       .w_full();
 
     div()
-      .w_80()
+      .w_full()
       .h_full()
       .min_h_0()
-      .flex_none()
-      .border_l_1()
+      .rounded(size.container_radius())
+      .border_1()
       .border_color(theme.border)
       .bg(theme.card)
       .text_color(theme.card_foreground)
-      .child(content)
+      .shadow_md()
+      .overflow_hidden()
+      .child(
+        div()
+          .w_full()
+          .h_full()
+          .min_h_0()
+          .p(rems(0.5))
+          .child(content),
+      )
+      .into_any_element()
   }
 
-  /// Playback: the transport commands the bar does not carry — seek steps,
-  /// frame stepping, speed, the A-B loop, chapters.
+  /// Playback: the transport commands, from the ones the bar carries (stop,
+  /// skip) to the ones it does not (frame stepping, speed, the A-B loop,
+  /// chapters), plus the panel's own copy of the two skip buttons — the bar's
+  /// are the ones within reach while the pointer is on the picture.
   fn playback_group(&self, size: Size, theme: &Theme, cx: &Context<Self>) -> Div {
     let paused = self.player.read(cx).state().paused;
     let (loop_start, loop_end) = self.ab_loop;
@@ -1862,35 +2052,109 @@ impl PlayerApp {
 }
 
 impl Render for PlayerApp {
-  fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+  fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
     let theme = cx.theme().clone();
     let size = self.size;
+    let title = self.title(cx);
+    let notice = self.current_notice(cx);
+    // Built up front so the overlay closures below borrow nothing of `self`:
+    // each of them takes a mutable context for its fade and for `deferred`.
+    let view = self.view.clone();
+    let transport_bar = self.transport_bar.clone();
+    let panel = self
+      .panel_open
+      .then(|| self.control_panel(size, &theme, cx));
+    let notice_pill = notice.map(|notice| self.notice_pill(notice, size, &theme, cx));
+    let pointer_catcher = self.pointer_catcher(cx);
 
-    v_flex()
-      .size_full()
-      .bg(theme.background)
-      .child(
-        TitleBar::new()
-          .title(t("media.title"))
-          .theme_button(true)
-          .language_button(true),
-      )
-      .child(self.header(size, &theme, cx))
-      .child(
-        h_flex()
-          .flex_1()
-          .min_h_0()
-          .w_full()
-          .child(
-            div()
-              .flex_1()
-              .min_w_0()
-              .min_h_0()
-              .h_full()
-              .child(self.view.clone()),
-          )
-          .child(self.control_panel(size, &theme, cx)),
-      )
+    // The panel sits over the right edge; the bar keeps clear of it, so the
+    // two never overlap. Both are inset from the stage edges by the same gap.
+    let transport_right = if panel.is_some() {
+      rems(OVERLAY_INSET_REM * 2. + PANEL_WIDTH_REM)
+    } else {
+      rems(OVERLAY_INSET_REM)
+    };
+
+    window_border().child(
+      v_flex()
+        .size_full()
+        .min_h_0()
+        .child(
+          TitleBar::new()
+            .title(title)
+            .theme_button(true)
+            .language_button(true)
+            // The only way in: an icon-only open button, instead of a source
+            // field and its buttons across the top of the picture. Flat like
+            // the title bar's own actions — chrome over the window, not
+            // another filled button in the title bar's row.
+            .child(
+              icon_button(
+                "open",
+                IconName::FolderOpen,
+                t("media.open"),
+                size,
+                cx.listener(|this, _, window, cx| this.browse_source(window, cx)),
+              )
+              .flat(),
+            ),
+        )
+        .child(
+          // The stage area: the picture, the pointer catcher, the two floating
+          // overlays and the notice, all layered on the same box. The
+          // listeners on this box and on the catcher are what make the chrome
+          // appear and go away again.
+          div()
+            .id("player-stage-area")
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .bg(theme.background)
+            .on_mouse_move(cx.listener(|this, _, _, cx| this.on_pointer_activity(cx)))
+            .on_hover(cx.listener(|this, hovered, _, cx| this.set_pointer_inside(*hovered, cx)))
+            .child(div().size_full().child(view))
+            .child(pointer_catcher)
+            .when_some(notice_pill, |this, pill| this.child(deferred(pill)))
+            .when_some(panel, |this, panel| {
+              // A short fade on the way in; hiding is instant, which reads as
+              // "the pointer stopped moving" rather than as an animation.
+              let enter = Presence::new("player-panel", true)
+                .transition(Transition::new(CHROME_FADE))
+                .sample(window, cx)
+                .progress;
+              this.child(deferred(
+                div()
+                  .id("player-panel-overlay")
+                  .absolute()
+                  .top(rems(OVERLAY_INSET_REM))
+                  .right(rems(OVERLAY_INSET_REM))
+                  .bottom(rems(OVERLAY_INSET_REM))
+                  .w(rems(PANEL_WIDTH_REM))
+                  .opacity(enter)
+                  .on_hover(cx.listener(|this, hovered, _, _| this.set_pointer_on_chrome(*hovered)))
+                  .child(panel),
+              ))
+            })
+            .when(self.transport_visible, |this| {
+              let enter = Presence::new("player-transport", true)
+                .transition(Transition::new(CHROME_FADE))
+                .sample(window, cx)
+                .progress;
+              this.child(deferred(
+                div()
+                  .id("player-transport-overlay")
+                  .absolute()
+                  .left(rems(OVERLAY_INSET_REM))
+                  .bottom(rems(OVERLAY_INSET_REM))
+                  .right(transport_right)
+                  .opacity(enter)
+                  .on_hover(cx.listener(|this, hovered, _, _| this.set_pointer_on_chrome(*hovered)))
+                  .child(transport_bar),
+              ))
+            }),
+        ),
+    )
   }
 }
 
@@ -2115,45 +2379,39 @@ fn options_for(video: bool, transport: VideoTransport, decoder: &str) -> PlayerO
 fn mount_player_view(
   player: &Entity<Player>, size: Size, cx: &mut Context<PlayerApp>,
 ) -> Entity<PlayerView> {
-  let slot_player = player.clone();
   cx.new(|cx| {
-    // The bar's own settings button would duplicate the control panel this
-    // example already mounts on the right, so it is switched off — the same
-    // per-control switch hides or re-shows any built-in button, and
-    // `PlayerTransport::on_control` rewires one to a host action.
-    PlayerView::with_transport(player, cx, |transport| {
-      transport.hide_control(TransportControl::Settings)
-    })
-    .with_size(size)
-    // The slot stays available for host chrome; the standard track menu and
-    // playlist live in the control panel instead, where they scroll with it.
-    .controls(move |_, _, _| {
-      // `controls` takes an `Fn`, so the entity handles are cloned per call.
-      let back = slot_player.clone();
-      let forward = slot_player.clone();
-      h_flex()
-        .w_full()
-        .container_gap(size)
-        .child(icon_button(
-          "slot-back",
-          IconName::ArrowCircleLeft,
-          t("media.seek_back"),
-          size,
-          move |_, _, cx| {
-            let _ = back.update(cx, |player, _| player.seek_by(-10.0));
-          },
-        ))
-        .child(icon_button(
-          "slot-forward",
-          IconName::ArrowCircleRight,
-          t("media.seek_forward"),
-          size,
-          move |_, _, cx| {
-            let _ = forward.update(cx, |player, _| player.seek_by(10.0));
-          },
-        ))
-        .into_any_element()
-    })
+    // Stage only: the transport bar is a standalone `PlayerTransport` this
+    // example floats over the picture (see `mount_transport`), so the view's
+    // own bar is replaced with nothing. Everything else the view offers — the
+    // stage, its size threading, the video surface bookkeeping — stays.
+    PlayerView::new(player, cx)
+      .with_size(size)
+      .transport(|_, _, _| div().into_any_element())
+  })
+}
+
+/// Builds the floating transport bar: the standard bar at this tier, with a
+/// ten-second skip on either side of play/pause, an elevated surface (it is
+/// laid over the picture, not docked under it), and its settings button
+/// rewired to open the control panel.
+///
+/// Rewiring `Settings` through `PlayerTransport::on_control` is the extension
+/// point the bar offers for exactly this: the button, its icon, its tooltip
+/// and its place at the right end of the row all stay the library's, and the
+/// action becomes the host's. The speed menu the button would open by default
+/// is in the panel, under Playback.
+fn mount_transport(
+  player: &Entity<Player>, size: Size, cx: &mut Context<PlayerApp>,
+) -> Entity<PlayerTransport> {
+  let app = cx.entity().downgrade();
+  cx.new(move |cx| {
+    PlayerTransport::new(player, cx)
+      .with_size(size)
+      .floating(true)
+      .seek_step(SEEK_STEP)
+      .on_control(TransportControl::Settings, move |_, _, cx| {
+        let _ = app.update(cx, |app, cx| app.toggle_panel(cx));
+      })
   })
 }
 
