@@ -103,14 +103,20 @@ impl PtySender {
 /// The host event channel plus the child lifecycle state, shared by the
 /// session handle and the PTY backend listener.
 ///
-/// The `exited` flag is the single source of truth for "the child is gone":
-/// the PTY event loop and [`crate::TerminalSession::kill`] both report the
-/// exit through [`Lifecycle::finish_exit`], which emits the lifecycle events
-/// exactly once even when a real exit races a shutdown.
+/// Two flags describe the exit, because it is observed in two stages:
+///
+/// - `exited` turns true as soon as the child's exit is observed, which is
+///   before its last output has been drained. [`Lifecycle::status`] and this
+///   flag always agree, so a host that read a status never sees a session it
+///   just observed as finished still reporting itself alive.
+/// - `reported` turns true when [`Lifecycle::finish_exit`] emits the lifecycle
+///   events. It is what makes that transition idempotent when a real exit races
+///   [`crate::TerminalSession::kill`].
 #[derive(Clone)]
 pub(crate) struct Lifecycle {
   events_tx: async_channel::Sender<TerminalEvent>,
   exited: Arc<AtomicBool>,
+  reported: Arc<AtomicBool>,
   exit_status: Arc<Mutex<Option<ChildStatus>>>,
 }
 
@@ -121,6 +127,7 @@ impl Lifecycle {
     let lifecycle = Self {
       events_tx,
       exited: Arc::new(AtomicBool::new(false)),
+      reported: Arc::new(AtomicBool::new(false)),
       exit_status: Arc::new(Mutex::new(None)),
     };
     (lifecycle, events_rx)
@@ -133,23 +140,29 @@ impl Lifecycle {
     let _ = self.events_tx.try_send(event);
   }
 
-  /// Whether the child was already reported as exited.
+  /// Whether the child is gone, whether or not its last output was drained
+  /// and its lifecycle events emitted yet.
   pub(crate) fn has_exited(&self) -> bool {
     self.exited.load(Ordering::SeqCst)
   }
 
-  /// The exit status recorded by [`Lifecycle::finish_exit`], once it ran.
+  /// The exit status of the child, once one was observed.
   pub(crate) fn status(&self) -> Option<ChildStatus> {
     *self.exit_status.lock().unwrap()
   }
 
   /// Records the status reported while the PTY event loop is still draining
-  /// its last output.
+  /// its last output, and marks the child as gone.
   ///
   /// The lifecycle events are emitted later, by [`Lifecycle::finish_exit`], so
   /// that [`TerminalEvent::Exit`] keeps meaning "every output byte has been
-  /// applied". Ignored once the exit is final, so the status a host observed
-  /// with the lifecycle events cannot change behind its back.
+  /// applied". Marking `exited` here rather than there is what keeps
+  /// [`Lifecycle::status`] and `has_exited` consistent: a host that polls the
+  /// status and then asks whether the session is alive must not get a status
+  /// and a live session.
+  ///
+  /// Ignored once the exit is final, so the status a host observed with the
+  /// lifecycle events cannot change behind its back.
   ///
   /// The status lock is what orders this against [`Lifecycle::finish_exit`]:
   /// either the status is stored before the exit is finalized, or it is
@@ -158,14 +171,15 @@ impl Lifecycle {
   /// call is about to write, losing a real exit code.
   pub(crate) fn record_status(&self, status: ChildStatus) {
     let mut recorded = self.exit_status.lock().unwrap();
-    if self.exited.load(Ordering::SeqCst) {
+    if self.reported.load(Ordering::SeqCst) {
       return;
     }
     *recorded = Some(status);
+    self.exited.store(true, Ordering::SeqCst);
   }
 
-  /// The single child-exit transition: marks the session as exited and emits
-  /// one [`TerminalEvent::ChildExit`] followed by one [`TerminalEvent::Exit`].
+  /// The single child-exit transition: emits one [`TerminalEvent::ChildExit`]
+  /// followed by one [`TerminalEvent::Exit`] and marks the session as exited.
   ///
   /// `status` is the status the caller observed; when it is `None` the status
   /// recorded by [`Lifecycle::record_status`] is used, falling back to
@@ -179,9 +193,10 @@ impl Lifecycle {
     // concurrent `record_status` either lands before this transition or is
     // rejected by it; it can never slip between the two.
     let mut recorded = self.exit_status.lock().unwrap();
-    if self.exited.swap(true, Ordering::SeqCst) {
+    if self.reported.swap(true, Ordering::SeqCst) {
       return;
     }
+    self.exited.store(true, Ordering::SeqCst);
     let status = status
       .or(*recorded)
       .unwrap_or_else(ChildStatus::unavailable);
@@ -632,6 +647,15 @@ mod tests {
   use super::*;
   use crate::types::{CellColor, NamedColor};
 
+  /// A status carrying `code`, built without the unix-only `signal` field.
+  fn status(code: i32) -> ChildStatus {
+    ChildStatus {
+      code: Some(code),
+      #[cfg(unix)]
+      signal: None,
+    }
+  }
+
   #[test]
   fn lf_to_crlf_conversion() {
     let mut previous = false;
@@ -686,5 +710,48 @@ mod tests {
 
     term.selection = None;
     assert!(term.selection.is_none());
+  }
+
+  /// A host may poll the exit status and then ask whether the session is alive
+  /// (that is exactly what `wait_for_exit` followed by `is_alive` does). The
+  /// status is published while the event loop still drains output, so it must
+  /// not be observable while the session still reports itself alive.
+  #[test]
+  fn a_recorded_status_means_the_session_is_not_alive() {
+    let (lifecycle, _events) = Lifecycle::new();
+    assert!(!lifecycle.has_exited());
+    assert_eq!(lifecycle.status(), None);
+
+    lifecycle.record_status(status(0));
+
+    assert_eq!(lifecycle.status(), Some(status(0)));
+    assert!(
+      lifecycle.has_exited(),
+      "a published status must not coexist with a session that still reports itself alive"
+    );
+  }
+
+  /// `finish_exit` is the one transition that emits the lifecycle events, and
+  /// it stays idempotent after a status was recorded ahead of it.
+  #[test]
+  fn finish_exit_reports_the_recorded_status_exactly_once() {
+    let (lifecycle, events) = Lifecycle::new();
+    lifecycle.record_status(status(7));
+
+    lifecycle.finish_exit(None);
+    lifecycle.finish_exit(Some(status(9)));
+
+    let mut seen = Vec::new();
+    while let Ok(event) = events.try_recv() {
+      seen.push(event);
+    }
+    assert_eq!(seen.len(), 2, "exactly one ChildExit/Exit pair: {seen:?}");
+    assert!(
+      matches!(seen[0], TerminalEvent::ChildExit(reported) if reported == status(7)),
+      "first event carries the status recorded before the exit was finalized: {:?}",
+      seen[0]
+    );
+    assert!(matches!(seen[1], TerminalEvent::Exit));
+    assert_eq!(lifecycle.status(), Some(status(7)));
   }
 }
