@@ -13,7 +13,7 @@ The GPUI view components built on top of this crate live in the [`woocraft`](htt
 
 ## Requirements
 
-- Rust `1.99` or newer
+- Rust `1.100.0` or newer
 - Linux, macOS, or Windows
 
 ## Installation
