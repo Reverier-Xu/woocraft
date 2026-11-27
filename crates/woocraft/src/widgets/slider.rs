@@ -1193,7 +1193,9 @@ impl RenderOnce for Slider {
 
     let primary = cx.theme().primary;
     let warning = cx.theme().warning;
-    let track = crate::track_color(cx.theme());
+    // The rail is the same hue as the fill it sits beside, stepped back toward
+    // the surface so the filled part stays the strong one.
+    let track = crate::fill_track_color(cx.theme(), primary);
     let color_of = |kind: TrackSegment| match kind {
       TrackSegment::Track => track,
       TrackSegment::Primary => primary,

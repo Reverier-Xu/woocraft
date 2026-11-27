@@ -197,16 +197,15 @@ impl RenderOnce for Switch {
     let thumb_inset = self.size.em(0.5).to_pixels(rem_size);
     let thumb_radius = self.size.em(0.125);
 
-    // The unfilled track follows the palette's one rule for recessed chrome:
-    // the foreground at reduced alpha, so it reads as structure rather than
-    // content and works on whatever surface the switch sits on.
-    let track_bg = crate::track_color(cx.theme());
     let active_color = match self.variant {
       SwitchVariant::Primary => cx.theme().primary,
       SwitchVariant::Success => cx.theme().success,
       SwitchVariant::Warning => cx.theme().warning,
       SwitchVariant::Danger => cx.theme().danger,
     };
+    // The off state is the same hue as the colour it turns into, stepped back
+    // toward the surface: the two states differ by weight, not by hue.
+    let track_bg = crate::fill_track_color(cx.theme(), active_color);
 
     // Hover grows and brightens the thumb through the same interruptible
     // target-value transition scheme as the toggle; the hover flag itself is

@@ -94,8 +94,7 @@ use woocraft::{
   PlayerTrackMenu, PlayerTransport, PlayerView, PopupMenuItem, Presence, PropertyValue,
   ScrollableElement, ScrollbarShow, SeekPreview, Sizable, Size, Slider, SliderEvent, SliderOrigin,
   SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track, TrackKind,
-  Transition, TransportControl, VideoTransport, h_flex, init, track_color, translate, v_flex,
-  window_border,
+  Transition, TransportControl, VideoTransport, h_flex, init, translate, v_flex, window_border,
 };
 
 /// The decoder menu entries, as mpv `hwdec` values: the four generic modes
@@ -2470,7 +2469,7 @@ fn seek_preview(preview: SeekPreview, _: &mut Window, cx: &mut App) -> AnyElemen
         .w_full()
         .h(px(4.))
         .rounded_full()
-        .bg(track_color(theme))
+        .bg(woocraft::fill_track_color(theme, accent))
         .child(
           div()
             .w(relative(percentage))

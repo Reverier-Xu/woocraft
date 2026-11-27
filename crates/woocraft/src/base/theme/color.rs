@@ -323,20 +323,53 @@ fn hct_to_hsla(color: Hct, alpha: f32) -> Hsla {
 
 /// The color of an unfilled track, thumb or other recessed chrome.
 ///
-/// Track surfaces are the page foreground at reduced alpha rather than a
-/// separate opaque color. That keeps one expression for "structure, but not
-/// content", lets the same value work on any surface the control sits on, and
-/// means a themed foreground (say, a warm palette) carries through to the
-/// controls instead of being mixed from a fixed black or white.
+/// A track is the page's own hue at a tone solved for one contrast ratio
+/// against the surface, so it reads as a recess of that surface rather than as
+/// a filled control of its own.
+///
+/// It used to be the foreground at reduced alpha. Compositing is linear in
+/// luminance, so one alpha gave 1.4:1 on a light surface and 4.3:1 on a dark
+/// one: the same track read as a faint hint in one mode and as a solid bar in
+/// the other. Solving the tone instead gives the ratio it asks for either way.
 pub fn track_color(theme: &super::Theme) -> Hsla {
-  theme.foreground.opacity(TRACK_ALPHA)
+  hct_to_hsla(
+    hct_of_hsla(theme.background).foreground(Contrast::TRACK),
+    1.0,
+  )
 }
 
-/// Alpha of [`track_color`].
+/// How far a fill's track steps back toward the surface, as a fraction of the
+/// tone gap between the fill and that surface.
+const FILL_TRACK_TO_SURFACE: f64 = 0.45;
+
+/// How much of the fill's chroma a fill's track keeps.
+const FILL_TRACK_CHROMA: f64 = 0.25;
+
+/// The unfilled part of a track whose filled part is `fill`.
 ///
-/// Low enough that a track reads as a recess behind its content rather than as
-/// a filled control of its own.
-pub const TRACK_ALPHA: f32 = 0.3;
+/// Not the same thing as [`track_color`], which is neutral chrome (a tag's or
+/// an avatar's background): this is the *other half* of a control that has a
+/// fill in it — a slider's rail, a switch's off state, the remainder of a
+/// progress bar. It keeps the fill's hue at a fraction of its chroma and steps
+/// the tone most of the way back toward the surface, which is what keeps the
+/// filled part the strong one in both modes.
+///
+/// One neutral track for both jobs put the rail at the fill's own tone in a
+/// light theme (both land on tone 62), leaving hue as the only difference — a
+/// mid-tone bar beside a mid-tone bar.
+pub fn fill_track_color(theme: &super::Theme, fill: Hsla) -> Hsla {
+  let fill = hct_of_hsla(fill);
+  let surface = hct_of_hsla(theme.background);
+  let tone =
+    fill.tone().value() + (surface.tone().value() - fill.tone().value()) * FILL_TRACK_TO_SURFACE;
+
+  hct_to_hsla(
+    fill
+      .with_tone(Tone::new(tone))
+      .with_chroma(fill.chroma() * FILL_TRACK_CHROMA),
+    1.0,
+  )
+}
 
 /// Replaces a color's alpha, keeping its hue, saturation and lightness.
 fn with_alpha(color: Hsla, alpha: f32) -> Hsla {
@@ -496,8 +529,8 @@ impl ThemeColors {
     // it. No candidate list, no audit: the tone axis answers this, and asking
     // for more than the minimum keeps body text solidly readable instead of
     // landing at the threshold.
-    let foreground = background.foreground(Contrast::ENHANCED);
-    let card_foreground = card.foreground(Contrast::ENHANCED);
+    let foreground = background.foreground(Contrast::INK);
+    let card_foreground = card.foreground(Contrast::INK);
     let popover_foreground = foreground;
     let accent_foreground = fill_foreground(accent);
     let primary_foreground = primary.foreground(Contrast::BODY_TEXT);
@@ -506,7 +539,12 @@ impl ThemeColors {
     let muted_foreground = with_alpha(hct_to_hsla(foreground, 1.0), 0.6);
     let secondary_foreground = fill_foreground(secondary);
 
-    let border = with_alpha(hct_to_hsla(foreground, 1.0), 0.1);
+    // An edge is an opaque tone, not the text colour at an opacity: alpha
+    // compositing is linear in luminance, so the same 10% vanishes on a light
+    // surface (1.1:1) and stands out on a dark one (1.6:1). Solving the tone
+    // for one ratio gives the same edge in both modes, and gets there from the
+    // surface itself so the hue stays the page's own.
+    let border = hct_to_hsla(background.foreground(Contrast::HAIRLINE), 1.0);
     let input = border;
 
     let scrollbar = with_alpha(hct_to_hsla(background, 1.0), 0.4);
@@ -534,7 +572,7 @@ impl ThemeColors {
     } else {
       fill_tone - 4.0
     });
-    let tab_bar_segmented = with_alpha(hct_to_hsla(foreground, 1.0), TRACK_ALPHA);
+    let tab_bar_segmented = hct_to_hsla(background.foreground(Contrast::TRACK), 1.0);
     let tab_bar = hct_to_hsla(card, 1.0);
     let tab_foreground = muted_foreground;
     let tab_active = hct_to_hsla(background, 1.0);
@@ -690,13 +728,96 @@ mod tests {
     Contrast::ratio_of_tones(tone_of_hsla(a), tone_of_hsla(b))
   }
 
+  /// A border marks an edge at the same strength in both modes.
+  ///
+  /// The rule used to be "the text colour at 10% alpha", which composites to
+  /// 1.1:1 on a light surface and 1.6:1 on a dark one: invisible on one side,
+  /// just right on the other.
   #[test]
-  fn border_uses_text_alpha_rule() {
+  fn border_is_a_hairline_in_both_modes() {
+    for colors in [ThemeColors::light(), ThemeColors::dark()] {
+      assert!((colors.border.a - 1.0).abs() < 1e-6, "an edge is opaque");
+      let on_background = ratio(colors.border, colors.background);
+      assert!(
+        (on_background - Contrast::HAIRLINE).abs() < 0.1,
+        "border sits at the hairline ratio, got {on_background:.2}"
+      );
+      let on_card = ratio(colors.border, colors.card);
+      assert!(
+        (on_card - Contrast::HAIRLINE).abs() < 0.15,
+        "and keeps it on the raised surface, got {on_card:.2}"
+      );
+    }
+  }
+
+  /// The border carries the page's own hue, not the text's: it is derived from
+  /// the surface it rules.
+  #[test]
+  fn border_keeps_the_surface_hue() {
     let colors = ThemeColors::from_tokens(ThemeTokens::default(), false);
-    assert!((colors.border.a - 0.1).abs() < 1e-6);
-    assert!((colors.border.h - colors.foreground.h).abs() < 1e-6);
-    assert!((colors.border.s - colors.foreground.s).abs() < 1e-6);
-    assert!((colors.border.l - colors.foreground.l).abs() < 1e-6);
+    assert!((colors.border.h - colors.background.h).abs() < 1e-6);
+  }
+
+  /// A track is cut into its surface at the same depth in both modes.
+  ///
+  /// It used to be the foreground at 30% alpha, which composites to 1.4:1 on a
+  /// light surface and 4.3:1 on a dark one — the same control, faint on one
+  /// side and solid on the other.
+  #[test]
+  fn track_is_the_same_depth_in_both_modes() {
+    for mode in [false, true] {
+      let theme = crate::Theme {
+        colors: ThemeColors::from_tokens(ThemeTokens::default(), mode),
+        ..crate::Theme::default()
+      };
+      let track = crate::track_color(&theme);
+      assert!((track.a - 1.0).abs() < 1e-6, "a track is opaque");
+      let on_background = ratio(track, theme.background);
+      assert!(
+        (on_background - Contrast::TRACK).abs() < 0.15,
+        "track sits at the track ratio, got {on_background:.2}"
+      );
+      assert!(
+        (theme.tab_bar_segmented.a - 1.0).abs() < 1e-6,
+        "the segmented tab bar is cut at the same depth"
+      );
+    }
+  }
+
+  /// A fill's track is the fill's hue at a lighter weight, and the fill stays
+  /// the strong half in both modes.
+  ///
+  /// The rail used to share the neutral track colour, which lands on the same
+  /// tone as `primary` (62) in a light theme: the filled and unfilled halves of
+  /// a slider differed only in hue.
+  #[test]
+  fn fill_track_leaves_the_fill_the_strong_half() {
+    for mode in [false, true] {
+      let theme = crate::Theme {
+        colors: ThemeColors::from_tokens(ThemeTokens::default(), mode),
+        ..crate::Theme::default()
+      };
+      let fill = theme.primary;
+      let track = crate::fill_track_color(&theme, fill);
+      let fill_tone = tone_of_hsla(fill).value();
+      let track_tone = tone_of_hsla(track).value();
+
+      assert!((track.a - 1.0).abs() < 1e-6, "a track is opaque");
+      assert!(
+        (track_tone - fill_tone).abs() >= 12.0,
+        "the rail is a visible step off the fill: fill {fill_tone:.1} vs rail {track_tone:.1}"
+      );
+      assert!(
+        ratio(track, theme.background) < ratio(fill, theme.background),
+        "the fill keeps the stronger end of the pair"
+      );
+      // Same hue in, same hue out: the rail reads as a tint of the fill.
+      let hue_drift = (hct_of_hsla(track).hue() - hct_of_hsla(fill).hue()).abs();
+      assert!(
+        hue_drift < 15.0,
+        "the rail keeps the fill's hue, drifted {hue_drift:.1}°"
+      );
+    }
   }
 
   #[test]
@@ -711,7 +832,7 @@ mod tests {
   #[test]
   fn with_alpha_multiplies_existing_alpha() {
     let colors = ThemeColors::light().with_alpha(0.5);
-    assert!((colors.border.a - 0.05).abs() < 1e-6);
+    assert!((colors.border.a - 0.5).abs() < 1e-6);
     assert!((colors.selection.a - 0.15).abs() < 1e-6);
   }
 

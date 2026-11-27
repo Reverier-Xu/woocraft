@@ -98,7 +98,9 @@ impl_sizable!(Progress);
 impl RenderOnce for Progress {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let color = self.color.unwrap_or(cx.theme().primary);
-    let track_color = self.track_color.unwrap_or(color.opacity(0.2));
+    let track_color = self
+      .track_color
+      .unwrap_or_else(|| crate::fill_track_color(cx.theme(), color));
     let text_color = self.text_color.unwrap_or(cx.theme().foreground);
     let text_size = self.size.text_size();
     let progress = format!("{:.0}%", self.value);
@@ -195,7 +197,9 @@ impl_sizable!(ProgressCircle);
 impl RenderOnce for ProgressCircle {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let color = self.color.unwrap_or(cx.theme().primary);
-    let track_color = self.track_color.unwrap_or(color.opacity(0.2));
+    let track_color = self
+      .track_color
+      .unwrap_or_else(|| crate::fill_track_color(cx.theme(), color));
     let text_color = self.text_color.unwrap_or(cx.theme().foreground);
     let percentage_text = format!("{:.0}%", self.value);
 

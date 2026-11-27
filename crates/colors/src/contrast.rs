@@ -27,6 +27,28 @@ impl Contrast {
   pub const BODY_TEXT: f64 = 4.5;
   /// The ratio required for the enhanced level.
   pub const ENHANCED: f64 = 7.0;
+  /// The ratio a page's own text is solved for.
+  ///
+  /// Well past [`Self::ENHANCED`]: a ratio met exactly is a threshold passed,
+  /// not an ink, and text solved there reads as grey no matter the hue. This is
+  /// the strength at which the surface's own text looks like the surface's own
+  /// text in both modes.
+  pub const INK: f64 = 12.0;
+  /// The ratio a hairline sits at against the surface it rules.
+  ///
+  /// Borders and dividers are not text: they mark an edge, so the ratio is
+  /// small — but it is a ratio, not an opacity. Compositing a translucent line
+  /// over a surface is linear in luminance, which makes the same alpha vanish
+  /// on a light surface and stand out on a dark one; solving the tone instead
+  /// gives the same edge in both modes.
+  pub const HAIRLINE: f64 = 1.6;
+  /// The ratio a recessed track sits at against the surface it is cut into.
+  ///
+  /// A track is chrome, not text: it marks the empty part of a control, so it
+  /// is stronger than a [`Self::HAIRLINE`] but nowhere near text. Same rule as
+  /// the hairline — the ratio is solved, never an opacity — for the same
+  /// reason.
+  pub const TRACK: f64 = 2.8;
 
   /// The WCAG contrast ratio between two tones, `1.0..=21.0`.
   pub fn ratio_of_tones(a: Tone, b: Tone) -> f64 {

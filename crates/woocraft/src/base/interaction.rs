@@ -68,26 +68,6 @@ impl InteractionColors {
     }
   }
 
-  /// Creates interactive colors for an outline (border-only) button style.
-  ///
-  /// Base is transparent with visible border. Foreground and border use the
-  /// provided color.
-  pub fn outline(color: Hsla, foreground: Hsla) -> Self {
-    Self {
-      base: Hsla::transparent_black(),
-      foreground: color,
-      border: color,
-      hover: Hsla {
-        a: opacity::transparent::HOVER,
-        ..foreground
-      },
-      active: Hsla {
-        a: opacity::transparent::ACTIVE,
-        ..foreground
-      },
-    }
-  }
-
   /// Overrides the border color while keeping other colors unchanged.
   pub fn with_border(mut self, border: Hsla) -> Self {
     self.border = border;

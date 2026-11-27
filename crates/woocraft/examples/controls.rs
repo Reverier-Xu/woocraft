@@ -272,12 +272,17 @@ impl ListDelegate for DemoListDelegate {
     &mut self, section: usize, _window: &mut Window, cx: &mut Context<ListState<Self>>,
   ) -> Option<impl IntoElement> {
     let total = self.filtered_indices.get(section).map_or(0, Vec::len);
+    // A grouping label sits on a surface step, not on control chrome: the
+    // track colour is a recess cut into the page for a control to sit in, and
+    // as a full-width band it reads as a lit strip in a dark theme.
     Some(
       h_flex()
         .px_2()
         .py_1()
         .justify_between()
-        .bg(woocraft::track_color(cx.theme()))
+        .bg(cx.theme().tab_bar)
+        .border_b_1()
+        .border_color(cx.theme().border)
         .child(div().font_semibold().child(self.section_titles[section]))
         .child(
           div()
@@ -1065,15 +1070,13 @@ impl ControlsWindow {
                 Progress::new()
                   .label("[registry] 欢迎使用进制回溯！")
                   .color(cx.theme().primary)
-                  .track_color(woocraft::track_color(cx.theme()))
                   .value(slider_value),
               ),
             )
             .child(
               ProgressCircle::new()
                 .value(slider_value)
-                .color(cx.theme().primary)
-                .track_color(woocraft::track_color(cx.theme())),
+                .color(cx.theme().primary),
             ),
         ),
     )
