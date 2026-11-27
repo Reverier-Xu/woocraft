@@ -55,25 +55,30 @@ impl Contrast {
     Self::solve_contrast(tone, ratio, false)
   }
 
-  /// The tone furthest from `tone` that still reaches `ratio`, preferring
-  /// lighter.
+  /// The tone of the opposite polarity that reaches `ratio` against `tone`.
   ///
   /// This is the "pick a foreground for this surface" question, answered
-  /// without a search: exactly one of lighter/darker is feasible in most
-  /// cases, and the tie is broken toward lighter for readability on dark
-  /// surfaces.
+  /// without a search. A foreground is text, so it should sit on the other side
+  /// of the surface rather than next to it: on a light surface it is dark, on a
+  /// dark surface it is light. Both directions are tried, the opposite
+  /// polarity is preferred, and the nearest tone in that direction wins — so
+  /// the result is the closest readable tone, not the far end of the scale.
   pub fn contrasting_tone(tone: Tone, ratio: f64) -> Option<Tone> {
-    match (Self::lighter(tone, ratio), Self::darker(tone, ratio)) {
-      (Some(lighter), Some(darker)) => {
-        // Both feasible: prefer the one that is further away, which is the
-        // more legible choice on a mid-tone surface.
-        if lighter.distance_to(tone).abs() >= darker.distance_to(tone).abs() {
-          Some(lighter)
+    let lighter = Self::lighter(tone, ratio);
+    let darker = Self::darker(tone, ratio);
+
+    // Polarity: a surface at or above mid-scale wants dark text and vice versa.
+    let prefer_lighter = tone.value() < 50.0;
+    match (lighter, darker) {
+      (Some(light), Some(dark)) => {
+        if prefer_lighter {
+          Some(light)
         } else {
-          Some(darker)
+          Some(dark)
         }
       }
-      (Some(tone), None) | (None, Some(tone)) => Some(tone),
+      (Some(light), None) => Some(light),
+      (None, Some(dark)) => Some(dark),
       (None, None) => None,
     }
   }
