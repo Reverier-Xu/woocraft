@@ -171,7 +171,7 @@ impl RenderOnce for Divider {
             .px_2()
             .py_1()
             .text_size(Size::Medium.text_size())
-            .text_color(cx.theme().muted_foreground)
+            .text_color(cx.theme().foreground)
             .child(label),
         )
         .child(segment())

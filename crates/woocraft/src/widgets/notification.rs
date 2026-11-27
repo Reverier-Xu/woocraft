@@ -723,7 +723,7 @@ impl RenderOnce for NotificationCard {
           .w_full()
           .container_padding(self.size)
           .flex_1()
-          .text_color(cx.theme().muted_foreground)
+          .text_color(cx.theme().foreground)
           .when_some(self.data.message.clone(), |this, message| {
             this.child(message)
           }),

@@ -44,7 +44,7 @@ pub(super) fn paint_axes(
       XTickAlign::Band { band_width } => (tick + band_width / 2., TextAlign::Center),
     };
 
-    Some(AxisText::new(text, tick, cx.theme().muted_foreground).align(align))
+    Some(AxisText::new(text, tick, cx.theme().foreground).align(align))
   });
 
   PlotAxis::new()

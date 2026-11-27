@@ -1067,7 +1067,6 @@ impl ControlsWindow {
                   .label("[registry] 欢迎使用进制回溯！")
                   .color(cx.theme().primary)
                   .track_color(woocraft::track_color(cx.theme()))
-                  .text_color(cx.theme().muted_foreground)
                   .value(slider_value),
               ),
             )
@@ -1075,8 +1074,7 @@ impl ControlsWindow {
               ProgressCircle::new()
                 .value(slider_value)
                 .color(cx.theme().primary)
-                .track_color(woocraft::track_color(cx.theme()))
-                .text_color(cx.theme().muted_foreground),
+                .track_color(woocraft::track_color(cx.theme())),
             ),
         ),
     )

@@ -208,7 +208,7 @@ impl RenderOnce for Kbd {
     }
 
     div()
-      .text_color(cx.theme().muted_foreground)
+      .text_color(cx.theme().foreground)
       .bg(crate::track_color(cx.theme()))
       .when(self.outline, |this| {
         this

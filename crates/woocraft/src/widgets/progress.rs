@@ -4,6 +4,11 @@
 //! typically used during file uploads, downloads, or long-running operations.
 //! Includes an optional label and percentage text, with customizable colors.
 //!
+//! Progress has no states of its own — nothing here is hovered, selected or
+//! disabled — so its label and percentage are ordinary content and render in
+//! the theme foreground. Muted text belongs to interactive components, where it
+//! marks a control that is secondary or unavailable.
+//!
 //! Motion note: value changes are not animated. `Progress` is `RenderOnce`
 //! without a stable `ElementId`, and the motion system
 //! (`crate::base::motion`) keys its retained state by element id, so a smooth
@@ -81,7 +86,7 @@ impl Progress {
     self
   }
 
-  /// Sets the text color for label and percentage (defaults to theme muted
+  /// Sets the text color for label and percentage (defaults to theme
   /// foreground).
   pub fn text_color(mut self, color: impl Into<Hsla>) -> Self {
     self.text_color = Some(color.into());
@@ -96,7 +101,7 @@ impl RenderOnce for Progress {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     let color = self.color.unwrap_or(cx.theme().primary);
     let track_color = self.track_color.unwrap_or(color.opacity(0.2));
-    let text_color = self.text_color.unwrap_or(cx.theme().muted_foreground);
+    let text_color = self.text_color.unwrap_or(cx.theme().foreground);
     let text_size = self.size.text_size();
     let progress = format!("{:.0}%", self.value);
     let line_h = self.size.track_thickness();
@@ -193,7 +198,7 @@ impl RenderOnce for ProgressCircle {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let color = self.color.unwrap_or(cx.theme().primary);
     let track_color = self.track_color.unwrap_or(color.opacity(0.2));
-    let text_color = self.text_color.unwrap_or(cx.theme().muted_foreground);
+    let text_color = self.text_color.unwrap_or(cx.theme().foreground);
     let percentage_text = format!("{:.0}%", self.value);
 
     let diameter = self.size.circle_diameter();

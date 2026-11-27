@@ -296,7 +296,7 @@ impl Render for DragColumn {
       .px_4()
       .py_1()
       .bg(cx.theme().table_head())
-      .text_color(cx.theme().muted_foreground)
+      .text_color(cx.theme().table_head_foreground())
       .opacity(0.9)
       .border_1()
       .border_color(cx.theme().border)
