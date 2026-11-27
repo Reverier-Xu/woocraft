@@ -44,7 +44,7 @@ chroma          = "Kroma"
 hex_placeholder = "#RRGGBBAA"
 hue             = "Värisävy"
 hue_unit        = "°"
-lightness       = "Valoisuus"
+tone            = "Sävy"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "Pe"

@@ -48,7 +48,7 @@ impl Render for ColorPickerWindow {
           v_flex()
             .p_6()
             .gap_4()
-            .child(div().text_xl().font_semibold().child("OKLCH Color Picker"))
+            .child(div().text_xl().font_semibold().child("HCT Color Picker"))
             .child(
               div()
                 .text_sm()
@@ -84,8 +84,8 @@ impl Render for ColorPickerWindow {
               value.rgba.r, value.rgba.g, value.rgba.b, value.rgba.a
             )))
             .child(div().text_sm().child(format!(
-              "OKLCH: l={:.3}, c={:.3}, h={:.1}, a={:.3}",
-              value.oklch.lightness, value.oklch.chroma, value.oklch.hue, value.oklch.alpha
+              "HCT: h={:.1}, c={:.1}, tone={:.1}, a={:.3}",
+              value.hct.hue, value.hct.chroma, value.hct.tone, value.hct.alpha
             )))
             .child(div().text_sm().child(format!(
               "HSLA: h={:.1}, s={:.3}, l={:.3}, a={:.3}",

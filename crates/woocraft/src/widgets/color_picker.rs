@@ -1,14 +1,12 @@
 //! Advanced color picker with multiple color space support.
 //!
 //! ColorPicker provides a comprehensive color selection interface that supports
-//! multiple color spaces: RGBA (Red/Green/Blue with Alpha), Oklch (perceptually
-//! uniform), and HSLA (traditional hue/saturation/lightness). The picker
-//! includes a 2D gradient selector for lightness/chroma and 1D sliders for hue
-//! and alpha.
+//! multiple color spaces: HCT (hue, chroma, tone — the design system's own),
+//! RGBA, and HSLA. The picker exposes 1D sliders for tone, chroma, hue and
+//! alpha, each painted with the gradient it selects from.
 //!
 //! # Features
-//! - **Multi-space support**: RGBA, Oklch (perceptually uniform), HSLA
-//!   (traditional)
+//! - **Multi-space support**: HCT (the internal space), RGBA, HSLA
 //! - **Hex editor**: Type or paste hex color codes directly (8-digit RGB hex)
 //! - **2D gradient picker**: Visual lightness/chroma selection with interactive
 //!   gradient
@@ -22,7 +20,7 @@
 //! # Example
 //! ```rust,ignore
 //! use gpui::{App, Context};
-//! use woocraft::{ColorPickerState, ColorPicker, ColorPickerOklch};
+//! use woocraft::{ColorPickerState, ColorPicker, ColorPickerHct};
 //!
 //! let color_picker_state = cx.new(|cx| ColorPickerState::new());
 //!
@@ -31,10 +29,11 @@
 //! ```
 //!
 //! # Internals
-//! The picker uses Oklch as the internal representation because it's
-//! perceptually uniform— equal numeric changes produce visually equal color
-//! differences. RGB values and hex input are converted to Oklch on change, with
-//! hue preservation when changing from RGB.
+//! The picker uses HCT as the internal representation, matching the rest of the
+//! design system: hue and chroma come from CAM16, so equal steps look equal and
+//! hue holds when chroma changes, while tone is CIE L\*, so a tone difference
+//! is a contrast difference. RGB values and hex input are converted to HCT on
+//! change, with hue preservation when the color is neutral.
 
 use std::sync::Arc;
 
@@ -45,7 +44,7 @@ use gpui::{
   StyleRefinement, Styled, Subscription, Window, canvas, div, fill, point,
   prelude::FluentBuilder as _, px, rems, size,
 };
-use palette::{FromColor, Hsl, OklabHue, Oklch, Srgb};
+use woocraft_colors::{Hct, Tone};
 
 use crate::{
   ActiveTheme, Anchor, Button, ButtonVariant, ButtonVariants, Disableable, ElementExt, Input,
@@ -53,8 +52,15 @@ use crate::{
   translate_woocraft, v_flex,
 };
 
-const CHROMA_MAX: f32 = 0.4;
+/// Upper bound of the chroma slider.
+///
+/// HCT chroma is unbounded in principle but the sRGB gamut caps it at roughly
+/// 130, so a slider that reaches past that can always express everything a
+/// display can show. Requests above the gamut are reduced by the solver.
+const CHROMA_MAX: f32 = 130.0;
 const HUE_MAX: f32 = 360.0;
+/// Upper bound of the tone slider: CIE L\* runs 0 (black) to 100 (white).
+const TONE_MAX: f32 = 100.0;
 const WARNING_LINE_THICKNESS: Rems = rems(0.125);
 /// Fixed number of gradient segments per channel slider. 96 segments are
 /// visually indistinguishable from per-pixel segmentation (gpui-kit uses the
@@ -103,21 +109,22 @@ pub struct ColorPickerRgba {
   pub a: f32,
 }
 
-/// Oklch color representation for the color picker (default internal space).
+/// HCT color representation for the color picker (the internal space).
 ///
-/// Oklch is a perceptually uniform color space ideal for intuitive color
-/// selection. All components are in range 0.0..=1.0 (except hue which is
-/// 0.0..=360.0).
-/// - `lightness`: Perceived brightness (0.0 = black, 1.0 = white)
-/// - `chroma`: Color intensity/saturation (0.0 = gray, higher = more vivid, max
-///   ~0.4)
-/// - `hue`: Color angle in degrees (0.0..=360.0; red=0, green=120, blue=240)
+/// HCT is what the design system reasons in, so the picker speaks it too: a
+/// color is a hue, a chroma and a tone, and tone is the axis contrast is
+/// measured on.
+/// - `hue`: CAM16 hue in degrees (0.0..=360.0)
+/// - `chroma`: CAM16 chroma (0.0 = grey; the sRGB gamut bounds it at roughly
+///   130 depending on hue and tone)
+/// - `tone`: CIE L* (0.0 = black, 100.0 = white). Unlike a perceptual
+///   lightness, equal tone steps are equal contrast steps.
 /// - `alpha`: Transparency (0.0 = transparent, 1.0 = opaque)
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ColorPickerOklch {
-  pub lightness: f32,
-  pub chroma: f32,
+pub struct ColorPickerHct {
   pub hue: f32,
+  pub chroma: f32,
+  pub tone: f32,
   pub alpha: f32,
 }
 
@@ -146,7 +153,7 @@ pub struct ColorPickerHsla {
 pub struct ColorPickerValue {
   pub rgba_hex: SharedString,
   pub rgba: ColorPickerRgba,
-  pub oklch: ColorPickerOklch,
+  pub hct: ColorPickerHct,
   pub hsla: ColorPickerHsla,
 }
 
@@ -161,7 +168,7 @@ pub enum ColorPickerEvent {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PickerChannel {
-  Lightness,
+  Tone,
   Chroma,
   Hue,
   Alpha,
@@ -170,7 +177,7 @@ enum PickerChannel {
 impl PickerChannel {
   fn index(self) -> usize {
     match self {
-      Self::Lightness => 0,
+      Self::Tone => 0,
       Self::Chroma => 1,
       Self::Hue => 2,
       Self::Alpha => 3,
@@ -179,7 +186,7 @@ impl PickerChannel {
 
   fn id_label(self) -> &'static str {
     match self {
-      Self::Lightness => "Lightness",
+      Self::Tone => "Tone",
       Self::Chroma => "Chroma",
       Self::Hue => "Hue",
       Self::Alpha => "Alpha",
@@ -188,7 +195,7 @@ impl PickerChannel {
 
   fn i18n_key(self) -> &'static str {
     match self {
-      Self::Lightness => "color_picker.lightness",
+      Self::Tone => "color_picker.tone",
       Self::Chroma => "color_picker.chroma",
       Self::Hue => "color_picker.hue",
       Self::Alpha => "color_picker.alpha",
@@ -197,37 +204,37 @@ impl PickerChannel {
 
   fn range(self) -> (f32, f32) {
     match self {
-      Self::Lightness => (0.0, 1.0),
+      Self::Tone => (0.0, TONE_MAX),
       Self::Chroma => (0.0, CHROMA_MAX),
       Self::Hue => (0.0, HUE_MAX),
       Self::Alpha => (0.0, 1.0),
     }
   }
 
-  fn value(self, oklch: ColorPickerOklch) -> f32 {
+  fn value(self, color: ColorPickerHct) -> f32 {
     match self {
-      Self::Lightness => oklch.lightness,
-      Self::Chroma => oklch.chroma,
-      Self::Hue => oklch.hue,
-      Self::Alpha => oklch.alpha,
+      Self::Tone => color.tone,
+      Self::Chroma => color.chroma,
+      Self::Hue => color.hue,
+      Self::Alpha => color.alpha,
     }
   }
 
-  fn assign(self, oklch: &mut ColorPickerOklch, value: f32) {
+  fn assign(self, color: &mut ColorPickerHct, value: f32) {
     let (min, max) = self.range();
     let value = value.clamp(min, max);
     match self {
-      Self::Lightness => oklch.lightness = value,
-      Self::Chroma => oklch.chroma = value,
-      Self::Hue => oklch.hue = value,
-      Self::Alpha => oklch.alpha = value,
+      Self::Tone => color.tone = value,
+      Self::Chroma => color.chroma = value,
+      Self::Hue => color.hue = value,
+      Self::Alpha => color.alpha = value,
     }
   }
 
-  fn normalized_value(self, oklch: ColorPickerOklch) -> f32 {
+  fn normalized_value(self, color: ColorPickerHct) -> f32 {
     let (min, max) = self.range();
     let span = (max - min).max(f32::EPSILON);
-    ((self.value(oklch) - min) / span).clamp(0.0, 1.0)
+    ((self.value(color) - min) / span).clamp(0.0, 1.0)
   }
 
   fn value_from_ratio(self, ratio: f32) -> f32 {
@@ -235,12 +242,12 @@ impl PickerChannel {
     min + (max - min) * ratio.clamp(0.0, 1.0)
   }
 
-  /// Cache key for this channel's gradient table: the oklch components the
+  /// Cache key for this channel's gradient table: the HCT components the
   /// gradient depends on, with the channel's own component zeroed because the
   /// gradient sweeps it across the full range.
-  fn gradient_cache_key(self, mut oklch: ColorPickerOklch) -> ColorPickerOklch {
-    self.assign(&mut oklch, 0.0);
-    oklch
+  fn gradient_cache_key(self, mut color: ColorPickerHct) -> ColorPickerHct {
+    self.assign(&mut color, 0.0);
+    color
   }
 }
 
@@ -253,18 +260,19 @@ struct ChannelGradientStop {
 
 /// Cached gradient color table for one channel.
 struct ChannelGradient {
-  /// Oklch snapshot the table was built from, as produced by
+  /// HCT snapshot the table was built from, as produced by
   /// [`PickerChannel::gradient_cache_key`].
-  key: ColorPickerOklch,
+  key: ColorPickerHct,
   colors: Arc<[ChannelGradientStop]>,
 }
 
-impl Default for ColorPickerOklch {
+impl Default for ColorPickerHct {
+  /// A medium-saturation blue at body-text tone.
   fn default() -> Self {
     Self {
-      lightness: 0.64,
-      chroma: 0.17,
       hue: 248.0,
+      chroma: 48.0,
+      tone: 45.0,
       alpha: 1.0,
     }
   }
@@ -272,12 +280,12 @@ impl Default for ColorPickerOklch {
 
 /// State management for the color picker.
 ///
-/// Holds the current color value in Oklch space (perceptually uniform), manages
+/// Holds the current color value in HCT space, manages
 /// internal channel sliders, and maintains the hex input field state.
 /// Emits `ColorPickerEvent::Change` whenever the color changes.
 pub struct ColorPickerState {
-  value: ColorPickerOklch,
-  /// Fully resolved value cache, kept in sync with `value` by `set_oklch` and
+  value: ColorPickerHct,
+  /// Fully resolved value cache, kept in sync with `value` by `set_hct` and
   /// `default_value` so renders never re-run color space conversions.
   resolved: ColorPickerValue,
   channel_bounds: [Bounds<Pixels>; 4],
@@ -297,11 +305,11 @@ impl Default for ColorPickerState {
 }
 
 impl ColorPickerState {
-  /// Creates a new color picker state with default blue color (Oklch).
+  /// Creates a new color picker state with a default blue color.
   ///
   /// Default color is a medium-saturation blue (h=248°, c=0.17, l=0.64, a=1.0).
   pub fn new() -> Self {
-    let value = ColorPickerOklch::default();
+    let value = ColorPickerHct::default();
     Self {
       value,
       resolved: resolve_value(value),
@@ -314,23 +322,23 @@ impl ColorPickerState {
     }
   }
 
-  /// Sets the initial color value in Oklch color space.
+  /// Sets the initial color value in HCT color space.
   ///
   /// Call before rendering to start with a specific color. Values are clamped
   /// to valid ranges (lightness 0..1, chroma 0..0.4, hue 0..360, alpha 0..1).
-  pub fn default_value(mut self, value: ColorPickerOklch) -> Self {
-    self.value = sanitize_oklch(value);
+  pub fn default_value(mut self, value: ColorPickerHct) -> Self {
+    self.value = sanitize_hct(value);
     self.resolved = resolve_value(self.value);
     self
   }
 
-  /// Updates the color to the specified Oklch value, emitting Change event.
+  /// Updates the color to the specified HCT value, emitting Change event.
   ///
   /// Use this to programmatically set the color (e.g., from external input).
   /// If the value hasn't changed, no event is emitted. All values are clamped
   /// to valid ranges.
-  pub fn set_oklch(&mut self, value: ColorPickerOklch, cx: &mut Context<Self>) {
-    let next = sanitize_oklch(value);
+  pub fn set_hct(&mut self, value: ColorPickerHct, cx: &mut Context<Self>) {
+    let next = sanitize_hct(value);
     if self.value == next {
       return;
     }
@@ -340,15 +348,15 @@ impl ColorPickerState {
     cx.notify();
   }
 
-  /// Returns the current color in Oklch color space.
-  pub fn oklch(&self) -> ColorPickerOklch {
+  /// Returns the current color in HCT color space.
+  pub fn hct(&self) -> ColorPickerHct {
     self.value
   }
 
   /// Returns the complete current color with all color space representations.
   ///
-  /// Includes RGBA hex (8-digit), RGBA normalized values, Oklch, and HSLA.
-  /// Clones the cache maintained by [`Self::set_oklch`] instead of re-running
+  /// Includes RGBA hex (8-digit), RGBA normalized values, HCT, and HSLA.
+  /// Clones the cache maintained by [`Self::set_hct`] instead of re-running
   /// color space conversions.
   pub fn value(&self) -> ColorPickerValue {
     self.resolved.clone()
@@ -402,7 +410,7 @@ impl ColorPickerState {
   }
 
   /// Returns the gradient color table for `channel`, rebuilding it only when
-  /// an oklch component the gradient depends on has changed.
+  /// an HCT component the gradient depends on has changed.
   fn channel_gradient(&mut self, channel: PickerChannel) -> Arc<[ChannelGradientStop]> {
     let cache_key = channel.gradient_cache_key(self.value);
     let current = self.value;
@@ -438,7 +446,7 @@ impl ColorPickerState {
     let ratio = ((position.x - travel.left()) / travel.size.width).clamp(0.0, 1.0);
     let mut next = self.value;
     channel.assign(&mut next, channel.value_from_ratio(ratio));
-    self.set_oklch(next, cx);
+    self.set_hct(next, cx);
     self.sync_hex_input_display(window, cx);
   }
 
@@ -515,8 +523,8 @@ impl ColorPickerState {
     }
 
     self.hex_input_dirty = false;
-    let next = oklch_from_rgba(rgba, self.value.hue);
-    self.set_oklch(next, cx);
+    let next = hct_from_rgba(rgba, self.value.hue);
+    self.set_hct(next, cx);
     self.sync_hex_input_display(window, cx);
   }
 }
@@ -585,12 +593,12 @@ impl_styled!(ColorPicker);
 impl RenderOnce for ColorPicker {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     // Lazily create the hex input; its display is synced when the value
-    // changes (right after `set_oklch`) and when popover content is rebuilt.
+    // changes (right after `set_hct`) and when popover content is rebuilt.
     self.state.update(cx, |state, cx| {
       state.ensure_hex_input(window, cx);
     });
 
-    // Reads the value cache maintained by `set_oklch`; this render-hot path
+    // Reads the value cache maintained by `set_hct`; this render-hot path
     // performs no color space conversions.
     let resolved = self.state.read(cx).value();
     let state_id = self.state.entity_id();
@@ -644,7 +652,7 @@ impl RenderOnce for ColorPicker {
         state.update(cx, |state, cx| {
           // Sync the hex echo here so programmatic value changes made outside
           // the picker are picked up when the popover renders; channel drags
-          // already sync right after `set_oklch`.
+          // already sync right after `set_hct`.
           state.sync_hex_input_display(window, cx);
         });
         let hex_input = state.read(cx).hex_input();
@@ -655,7 +663,7 @@ impl RenderOnce for ColorPicker {
         }
 
         for channel in [
-          PickerChannel::Lightness,
+          PickerChannel::Tone,
           PickerChannel::Chroma,
           PickerChannel::Hue,
           PickerChannel::Alpha,
@@ -674,15 +682,15 @@ fn render_channel_row(
 ) -> impl IntoElement {
   // Refresh (or reuse) the cached gradient color table for this channel so
   // painting below never re-runs color space conversions.
-  let (current_oklch, value, stops) = state.update(cx, |state, _| {
-    let current_oklch = state.oklch();
+  let (current_hct, value, stops) = state.update(cx, |state, _| {
+    let current_hct = state.hct();
     (
-      current_oklch,
-      channel.value(current_oklch),
+      current_hct,
+      channel.value(current_hct),
       state.channel_gradient(channel),
     )
   });
-  let out_of_gamut = is_out_of_gamut(current_oklch);
+  let out_of_gamut = is_out_of_gamut(current_hct);
 
   let state_for_bounds = state.clone();
   let state_for_down = state.clone();
@@ -690,7 +698,7 @@ fn render_channel_row(
   let state_for_paint = state.clone();
   let entity_id = state.entity_id();
   let channel_id = ElementId::from(("color-picker-channel", entity_id));
-  let ratio = channel.normalized_value(current_oklch);
+  let ratio = channel.normalized_value(current_hct);
 
   v_flex()
     .gap(rems(0.25))
@@ -994,15 +1002,15 @@ fn stop_color(stop: &ChannelGradientStop) -> Hsla {
 }
 
 /// Resolves one gradient segment: display color plus gamut warning flag.
-fn resolve_gradient_stop(value: ColorPickerOklch) -> ChannelGradientStop {
+fn resolve_gradient_stop(value: ColorPickerHct) -> ChannelGradientStop {
   let (rgba, out_of_gamut) = resolve_rgba(value);
   ChannelGradientStop { rgba, out_of_gamut }
 }
 
 /// Builds the gradient color table for `channel`, sweeping it across its full
-/// range while keeping every other oklch component fixed.
+/// range while keeping every other HCT component fixed.
 fn build_channel_gradient(
-  channel: PickerChannel, value: ColorPickerOklch,
+  channel: PickerChannel, value: ColorPickerHct,
 ) -> Vec<ChannelGradientStop> {
   let mut colors = Vec::with_capacity(GRADIENT_STEPS);
   for step in 0..GRADIENT_STEPS {
@@ -1014,112 +1022,79 @@ fn build_channel_gradient(
   colors
 }
 
-fn sanitize_oklch(value: ColorPickerOklch) -> ColorPickerOklch {
-  ColorPickerOklch {
-    lightness: value.lightness.clamp(0.0, 1.0),
-    chroma: value.chroma.clamp(0.0, CHROMA_MAX),
+fn sanitize_hct(value: ColorPickerHct) -> ColorPickerHct {
+  ColorPickerHct {
     hue: value.hue.clamp(0.0, HUE_MAX),
+    chroma: value.chroma.clamp(0.0, CHROMA_MAX),
+    tone: value.tone.clamp(0.0, TONE_MAX),
     alpha: value.alpha.clamp(0.0, 1.0),
   }
 }
 
-fn is_out_of_gamut(value: ColorPickerOklch) -> bool {
-  convert_oklch(value).1
+/// The HCT color as the crate's type.
+fn to_hct(value: ColorPickerHct) -> Hct {
+  let value = sanitize_hct(value);
+  Hct::new(
+    f64::from(value.hue),
+    f64::from(value.chroma),
+    Tone::new(f64::from(value.tone)),
+  )
 }
 
-fn fallback_global(value: ColorPickerOklch) -> ColorPickerOklch {
-  let mut low = 0.0;
-  let mut high = value.chroma;
-  let mut best = value;
-  best.chroma = 0.0;
-
-  if convert_oklch(best).1 {
-    return best;
+/// Whether the request fell outside the sRGB gamut.
+///
+/// The solver always returns a displayable color, so the honest signal is how
+/// much chroma it had to give up: if the produced color carries meaningfully
+/// less chroma than asked for, the request was out of gamut.
+fn is_out_of_gamut(value: ColorPickerHct) -> bool {
+  let requested = f64::from(sanitize_hct(value).chroma);
+  if requested < 0.5 {
+    return false;
   }
-
-  for _ in 0..20 {
-    let mid = (low + high) * 0.5;
-    let mut candidate = value;
-    candidate.chroma = mid;
-    let out = convert_oklch(candidate).1;
-    if out {
-      high = mid;
-    } else {
-      low = mid;
-      best = candidate;
-    }
-  }
-
-  best
+  let produced = to_hct(value).chroma();
+  requested - produced > 1.0
 }
 
-fn convert_oklch(value: ColorPickerOklch) -> (Srgb, bool) {
-  let oklch = Oklch::new(
-    value.lightness,
-    value.chroma,
-    OklabHue::from_degrees(value.hue),
-  );
-  let raw_rgb: Srgb = Srgb::from_color(oklch);
-
-  let rgb_out_of_range = raw_rgb.red < 0.0
-    || raw_rgb.red > 1.0
-    || raw_rgb.green < 0.0
-    || raw_rgb.green > 1.0
-    || raw_rgb.blue < 0.0
-    || raw_rgb.blue > 1.0;
-
-  let raw_hsl: Hsl = Hsl::from_color(raw_rgb);
-  let saturation = raw_hsl.saturation;
-  let lightness = raw_hsl.lightness;
-  let hue = raw_hsl.hue.into_degrees();
-  let hue_out_of_range = !hue.is_finite() && saturation > 0.000_01;
-  let hsl_out_of_range = hue_out_of_range
-    || !saturation.is_finite()
-    || !lightness.is_finite()
-    || !(0.0..=1.0).contains(&saturation)
-    || !(0.0..=1.0).contains(&lightness);
-
-  (raw_rgb, rgb_out_of_range || hsl_out_of_range)
-}
-
-/// Converts `value` to a displayable sRGB color, bisecting chroma toward the
-/// nearest in-gamut color when the requested color is out of gamut. Returns
-/// the clamped RGBA plus whether the requested color was out of gamut.
-fn resolve_rgba(value: ColorPickerOklch) -> (ColorPickerRgba, bool) {
-  let value = sanitize_oklch(value);
-  let (_, out_of_gamut) = convert_oklch(value);
-  let fallback = if out_of_gamut {
-    fallback_global(value)
-  } else {
-    value
-  };
-
-  let (raw_rgb, _) = convert_oklch(fallback);
+/// Converts `value` to a displayable sRGB color.
+///
+/// HCT has no out-of-gamut representation to clamp: the solver keeps hue and
+/// tone and reduces chroma until the color fits, so this is a plain conversion
+/// and the gamut flag is a report rather than a correction.
+fn resolve_rgba(value: ColorPickerHct) -> (ColorPickerRgba, bool) {
+  let value = sanitize_hct(value);
+  let color = to_hct(value);
+  let srgb = color.srgb();
   let rgba = ColorPickerRgba {
-    r: raw_rgb.red.clamp(0.0, 1.0),
-    g: raw_rgb.green.clamp(0.0, 1.0),
-    b: raw_rgb.blue.clamp(0.0, 1.0),
-    a: fallback.alpha.clamp(0.0, 1.0),
+    r: srgb.r as f32,
+    g: srgb.g as f32,
+    b: srgb.b as f32,
+    a: value.alpha,
   };
-  (rgba, out_of_gamut)
+  (rgba, is_out_of_gamut(value))
 }
 
-fn resolve_value(value: ColorPickerOklch) -> ColorPickerValue {
-  let value = sanitize_oklch(value);
+fn resolve_value(value: ColorPickerHct) -> ColorPickerValue {
+  let value = sanitize_hct(value);
   let (clamped, _) = resolve_rgba(value);
+  let hct = to_hct(value);
+  let hsl = hct.hsl();
 
-  let hsl: Hsl = Hsl::from_color(Srgb::new(clamped.r, clamped.g, clamped.b));
   let hsla = ColorPickerHsla {
-    hue: normalize_degrees(hsl.hue.into_degrees()),
-    saturation: hsl.saturation.clamp(0.0, 1.0),
-    lightness: hsl.lightness.clamp(0.0, 1.0),
+    hue: normalize_degrees(hsl.h as f32),
+    saturation: (hsl.s as f32).clamp(0.0, 1.0),
+    lightness: (hsl.l as f32).clamp(0.0, 1.0),
     alpha: clamped.a,
   };
 
   ColorPickerValue {
     rgba_hex: rgba_to_hex(clamped).into(),
     rgba: clamped,
-    oklch: value,
+    hct: ColorPickerHct {
+      hue: hct.hue() as f32,
+      chroma: hct.chroma() as f32,
+      tone: hct.tone().value() as f32,
+      alpha: value.alpha,
+    },
     hsla,
   }
 }
@@ -1234,18 +1209,27 @@ fn parse_hex_byte_pair(left: char, right: char) -> Option<u8> {
   parse_hex_byte(text)
 }
 
-fn oklch_from_rgba(rgba: ColorPickerRgba, fallback_hue: f32) -> ColorPickerOklch {
-  let rgb = Srgb::new(rgba.r, rgba.g, rgba.b);
-  let oklch: Oklch = Oklch::from_color(rgb);
-  let hue = oklch.hue.into_degrees();
-  ColorPickerOklch {
-    lightness: oklch.l,
-    chroma: oklch.chroma,
-    hue: if hue.is_finite() {
-      normalize_degrees(hue)
-    } else {
-      normalize_degrees(fallback_hue)
-    },
+fn hct_from_rgba(rgba: ColorPickerRgba, fallback_hue: f32) -> ColorPickerHct {
+  let srgb = woocraft_colors::Srgb::with_alpha(
+    f64::from(rgba.r),
+    f64::from(rgba.g),
+    f64::from(rgba.b),
+    f64::from(rgba.a),
+  );
+  let hct = Hct::from_srgb(srgb);
+
+  // A neutral has no hue of its own, so keep the hue the user was editing
+  // instead of letting the conversion snap it to an arbitrary angle.
+  let hue = if hct.chroma() < 0.5 {
+    normalize_degrees(fallback_hue)
+  } else {
+    hct.hue() as f32
+  };
+
+  ColorPickerHct {
+    hue,
+    chroma: hct.chroma() as f32,
+    tone: hct.tone().value() as f32,
     alpha: rgba.a,
   }
 }
@@ -1270,18 +1254,18 @@ mod tests {
   use super::*;
   use crate::Theme;
 
-  fn sample_oklch() -> ColorPickerOklch {
-    ColorPickerOklch {
-      lightness: 0.64,
-      chroma: 0.17,
+  fn sample_hct() -> ColorPickerHct {
+    ColorPickerHct {
       hue: 248.0,
+      chroma: 48.0,
+      tone: 45.0,
       alpha: 1.0,
     }
   }
 
   fn gradient_channels() -> [PickerChannel; 4] {
     [
-      PickerChannel::Lightness,
+      PickerChannel::Tone,
       PickerChannel::Chroma,
       PickerChannel::Hue,
       PickerChannel::Alpha,
@@ -1345,7 +1329,7 @@ mod tests {
 
   #[test]
   fn gradient_cache_key_tracks_dependency_components_only() {
-    let base = sample_oklch();
+    let base = sample_hct();
 
     // Sweeping the channel's own component keeps the key stable.
     for channel in gradient_channels() {
@@ -1379,24 +1363,24 @@ mod tests {
   fn channel_gradient_cache_reuses_matching_tables() {
     let mut state = ColorPickerState::new();
 
-    let first = state.channel_gradient(PickerChannel::Lightness);
-    let second = state.channel_gradient(PickerChannel::Lightness);
+    let first = state.channel_gradient(PickerChannel::Tone);
+    let second = state.channel_gradient(PickerChannel::Tone);
     assert!(
       Arc::ptr_eq(&first, &second),
       "unchanged value reuses the table"
     );
 
-    // The lightness gradient depends on chroma, so it must rebuild.
-    state.value.chroma += 0.01;
-    let third = state.channel_gradient(PickerChannel::Lightness);
+    // The tone gradient depends on chroma, so it must rebuild.
+    state.value.chroma += 1.0;
+    let third = state.channel_gradient(PickerChannel::Tone);
     assert!(!Arc::ptr_eq(&first, &third));
 
     // Moving the swept component itself must not invalidate the table.
     let chroma_table = state.channel_gradient(PickerChannel::Chroma);
-    state.value.lightness += 0.01;
+    state.value.tone += 1.0;
     assert!(Arc::ptr_eq(
       &third,
-      &state.channel_gradient(PickerChannel::Lightness)
+      &state.channel_gradient(PickerChannel::Tone)
     ));
     assert!(!Arc::ptr_eq(
       &chroma_table,
@@ -1406,7 +1390,7 @@ mod tests {
 
   #[test]
   fn alpha_gradient_spans_full_range() {
-    let colors = build_channel_gradient(PickerChannel::Alpha, sample_oklch());
+    let colors = build_channel_gradient(PickerChannel::Alpha, sample_hct());
     assert_eq!(colors.len(), GRADIENT_STEPS);
     assert!(colors.first().unwrap().rgba.a < 0.1);
     assert!((colors.last().unwrap().rgba.a - 1.0).abs() < 0.05);
@@ -1414,10 +1398,10 @@ mod tests {
 
   #[test]
   fn hue_gradient_of_gray_is_uniform() {
-    let gray = ColorPickerOklch {
-      lightness: 0.5,
-      chroma: 0.0,
+    let gray = ColorPickerHct {
       hue: 0.0,
+      chroma: 0.0,
+      tone: 50.0,
       alpha: 1.0,
     };
     let colors = build_channel_gradient(PickerChannel::Hue, gray);
@@ -1427,24 +1411,28 @@ mod tests {
   }
 
   #[gpui::test]
-  fn set_oklch_keeps_resolved_cache_consistent(cx: &mut TestAppContext) {
+  fn set_hct_keeps_resolved_cache_consistent(cx: &mut TestAppContext) {
     let state = cx.new(|_| ColorPickerState::new());
     cx.update(|app| {
       assert_eq!(
         state.read(app).value(),
-        resolve_value(ColorPickerOklch::default())
+        resolve_value(ColorPickerHct::default())
       );
 
-      let next = ColorPickerOklch {
-        lightness: 0.8,
-        chroma: 0.1,
+      let next = ColorPickerHct {
         hue: 90.0,
+        chroma: 30.0,
+        tone: 80.0,
         alpha: 0.5,
       };
-      state.update(app, |state, cx| state.set_oklch(next, cx));
+      state.update(app, |state, cx| state.set_hct(next, cx));
 
       let resolved = state.read(app).value();
-      assert_eq!(resolved.oklch, next);
+      // Hue and tone survive the conversion; chroma is whatever the gamut
+      // allowed at that hue and tone.
+      assert!((resolved.hct.hue - next.hue).abs() < 2.0);
+      assert!((resolved.hct.tone - next.tone).abs() < 1.0);
+      assert!(resolved.hct.chroma <= next.chroma + 1.0);
       // The cached value must stay consistent with a fresh resolve.
       assert_eq!(resolved, resolve_value(next));
     });
@@ -1508,7 +1496,7 @@ mod tests {
 
   #[gpui::test]
   fn drag_keeps_steering_the_channel_outside_the_track(cx: &mut TestAppContext) {
-    let (mut visual, state, bounds) = open_track_window(cx, &[PickerChannel::Lightness]);
+    let (mut visual, state, bounds) = open_track_window(cx, &[PickerChannel::Tone]);
     let bounds = bounds[0];
     let center = bounds.center();
 
@@ -1522,10 +1510,10 @@ mod tests {
       Modifiers::default(),
     );
     visual.run_until_parked();
-    let inside = visual.update(|_, cx| state.read(cx).oklch().lightness);
+    let inside = visual.update(|_, cx| state.read(cx).hct().tone);
     assert!(
-      (inside - 0.75).abs() < 0.05,
-      "pointer at 75% of the track selects {inside}"
+      (inside - 75.0).abs() < 2.0,
+      "pointer at 75% of the track selects tone {inside}"
     );
 
     // The pointer leaves the track but stays pressed: the value must keep
@@ -1537,8 +1525,8 @@ mod tests {
     );
     visual.run_until_parked();
     assert_eq!(
-      visual.update(|_, cx| state.read(cx).oklch().lightness),
-      1.0,
+      visual.update(|_, cx| state.read(cx).hct().tone),
+      TONE_MAX,
       "dragging past the right edge must still reach the maximum"
     );
 
@@ -1549,7 +1537,7 @@ mod tests {
     );
     visual.run_until_parked();
     assert_eq!(
-      visual.update(|_, cx| state.read(cx).oklch().lightness),
+      visual.update(|_, cx| state.read(cx).hct().tone),
       0.0,
       "dragging past the left edge must still reach the minimum"
     );
@@ -1569,7 +1557,7 @@ mod tests {
     );
     visual.run_until_parked();
     assert_eq!(
-      visual.update(|_, cx| state.read(cx).oklch().lightness),
+      visual.update(|_, cx| state.read(cx).hct().tone),
       0.0,
       "a released gesture must not keep following the pointer"
     );
@@ -1580,7 +1568,7 @@ mod tests {
     let (mut visual, state, bounds) =
       open_track_window(cx, &[PickerChannel::Hue, PickerChannel::Alpha]);
     let (hue_track, alpha_track) = (bounds[0], bounds[1]);
-    let alpha_before = visual.update(|_, cx| state.read(cx).oklch().alpha);
+    let alpha_before = visual.update(|_, cx| state.read(cx).hct().alpha);
 
     visual.simulate_mouse_down(hue_track.center(), MouseButton::Left, Modifiers::default());
     visual.run_until_parked();
@@ -1597,14 +1585,14 @@ mod tests {
     );
     visual.run_until_parked();
 
-    let oklch = visual.update(|_, cx| state.read(cx).oklch());
+    let hct = visual.update(|_, cx| state.read(cx).hct());
     assert!(
-      (oklch.hue - 90.0).abs() < 5.0,
+      (hct.hue - 90.0).abs() < 5.0,
       "pointer at 25% of the hue track selects {}°",
-      oklch.hue
+      hct.hue
     );
     assert_eq!(
-      oklch.alpha, alpha_before,
+      hct.alpha, alpha_before,
       "the alpha track must not pick up a drag that began on hue"
     );
   }

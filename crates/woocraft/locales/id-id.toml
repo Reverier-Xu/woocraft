@@ -44,7 +44,7 @@ chroma          = "Saturasi"
 hex_placeholder = "#RRGGBBAA"
 hue             = "Rona"
 hue_unit        = "°"
-lightness       = "Keterangan"
+tone            = "Nada"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "Jum"

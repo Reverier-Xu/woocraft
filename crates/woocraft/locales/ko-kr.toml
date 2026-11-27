@@ -44,7 +44,7 @@ chroma          = "채도"
 hex_placeholder = "#RRGGBBAA"
 hue             = "색상"
 hue_unit        = "°"
-lightness       = "명도"
+tone            = "명도"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "금"

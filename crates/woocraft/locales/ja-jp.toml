@@ -44,7 +44,7 @@ chroma          = "彩度"
 hex_placeholder = "#RRGGBBAA"
 hue             = "色相"
 hue_unit        = "度"
-lightness       = "明度"
+tone            = "明度"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "金"

@@ -44,7 +44,7 @@ chroma          = "Kroma"
 hex_placeholder = "#RRGGBBAA"
 hue             = "Fargetone"
 hue_unit        = "°"
-lightness       = "Lyshet"
+tone            = "Tone"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "Fr"

@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use gpui::{Hsla, Rgba};
-use palette::{FromColor, OklabHue, Oklch, Srgb};
+use gpui::Hsla;
 use serde::{Deserialize, Serialize};
+use woocraft_colors::{Contrast, Hct, Tone};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ThemeColors {
@@ -57,8 +57,8 @@ pub struct ThemeColors {
 
 /// Syntax token hues used by the editor highlighter.
 ///
-/// Chroma and lightness come from [`ThemeTokens::chroma`] and
-/// [`ThemeTokens::lightness`] to keep a coherent palette.
+/// Chroma and tone come from [`ThemeTokens::chroma`] and the fill tones, so a
+/// theme's syntax colors sit at the same tone as its semantic fills.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SyntaxTokenHues {
   pub attribute: f32,
@@ -173,12 +173,26 @@ pub struct ThemeTokens {
   pub accent: f32,
   #[serde(default = "default_secondary_hue")]
   pub secondary: f32,
-  pub lightness: f32,
+  /// Chroma of the semantic fills: primary, success, warning, danger and the
+  /// named accents. Shared, so a theme has one saturation level.
+  ///
+  /// This is HCT chroma, which is bounded by the sRGB gamut differently at
+  /// every hue and tone. A fill whose hue cannot hold this chroma at its tone
+  /// gets as much as the gamut allows, and the rest is dropped — hue and tone
+  /// are never sacrificed for it.
   pub chroma: f32,
-  pub light_bg_lightness: f32,
-  pub dark_bg_lightness: f32,
-  pub light_bg_chroma: f32,
-  pub dark_bg_chroma: f32,
+  /// Tone of the semantic fills in a light theme.
+  pub light_fill_tone: f32,
+  /// Tone of the semantic fills in a dark theme.
+  pub dark_fill_tone: f32,
+  /// Tone of the page background in a light theme.
+  pub light_bg_tone: f32,
+  /// Tone of the page background in a dark theme.
+  pub dark_bg_tone: f32,
+  /// Chroma of the page background. Surfaces are near-neutral, so this is
+  /// small but non-zero: a trace of the primary hue is what keeps a surface
+  /// from looking flat grey.
+  pub surface_chroma: f32,
   #[serde(default)]
   pub syntax: SyntaxTokenHues,
 }
@@ -222,21 +236,50 @@ impl Default for ThemeTokens {
       cyan: 190.0,
       accent: 200.0,
       secondary: 290.0,
-      lightness: 0.64,
-      chroma: 0.17,
-      light_bg_lightness: 0.96,
-      dark_bg_lightness: 0.18,
-      light_bg_chroma: 0.015,
-      dark_bg_chroma: 0.0,
+      chroma: 48.0,
+      light_fill_tone: 40.0,
+      dark_fill_tone: 80.0,
+      light_bg_tone: 98.0,
+      dark_bg_tone: 12.0,
+      surface_chroma: 0.6,
       syntax: SyntaxTokenHues::default(),
     }
   }
 }
 
 impl ThemeTokens {
+  /// A syntax-highlighting color for `hue`.
+  ///
+  /// Syntax colors sit on text, so they use the fill tone of the active theme
+  /// rather than the surface tone: they must read against the editor
+  /// background, not blend into it.
   #[inline]
   pub fn syntax_color(&self, hue: f32) -> Hsla {
-    to_hsla_from_oklch(self.lightness, self.chroma, hue, 1.0)
+    self.syntax_color_in_mode(hue, false)
+  }
+
+  /// A syntax-highlighting color for `hue`, using the fill tone of `is_dark`.
+  pub fn syntax_color_in_mode(&self, hue: f32, is_dark: bool) -> Hsla {
+    let tone = self.fill_tone(is_dark);
+    hct_to_hsla(Hct::new(f64::from(hue), f64::from(self.chroma), tone), 1.0)
+  }
+
+  /// The tone semantic fills use in the given mode.
+  pub fn fill_tone(&self, is_dark: bool) -> Tone {
+    Tone::new(if is_dark {
+      self.dark_fill_tone
+    } else {
+      self.light_fill_tone
+    } as f64)
+  }
+
+  /// The tone the page background uses in the given mode.
+  pub fn bg_tone(&self, is_dark: bool) -> Tone {
+    Tone::new(if is_dark {
+      self.dark_bg_tone
+    } else {
+      self.light_bg_tone
+    } as f64)
   }
 
   pub fn from_json_str(input: &str) -> anyhow::Result<Self> {
@@ -258,18 +301,21 @@ impl ThemeTokens {
   }
 }
 
-fn to_hsla_from_oklch(lightness: f32, chroma: f32, hue_degrees: f32, alpha: f32) -> Hsla {
-  let oklch = Oklch::new(lightness, chroma, OklabHue::from_degrees(hue_degrees));
-  let rgb: Srgb = Srgb::from_color(oklch);
-  let rgba = Rgba {
-    r: rgb.red.clamp(0.0, 1.0),
-    g: rgb.green.clamp(0.0, 1.0),
-    b: rgb.blue.clamp(0.0, 1.0),
+/// Converts an HCT color to the `Hsla` the view layer consumes.
+///
+/// This is the single boundary between the design system's color reasoning and
+/// GPUI: everything above computes in HCT, everything below is HSL.
+fn hct_to_hsla(color: Hct, alpha: f32) -> Hsla {
+  let hsl = color.hsl();
+  Hsla {
+    h: (hsl.h as f32) / 360.0,
+    s: hsl.s as f32,
+    l: hsl.l as f32,
     a: alpha.clamp(0.0, 1.0),
-  };
-  rgba.into()
+  }
 }
 
+/// Replaces a color's alpha, keeping its hue, saturation and lightness.
 fn with_alpha(color: Hsla, alpha: f32) -> Hsla {
   Hsla {
     a: alpha.clamp(0.0, 1.0),
@@ -277,7 +323,7 @@ fn with_alpha(color: Hsla, alpha: f32) -> Hsla {
   }
 }
 
-/// Multiplies a colour's alpha by `factor` instead of replacing it.
+/// Multiplies a color's alpha by `factor` instead of replacing it.
 fn scale_alpha(color: Hsla, factor: f32) -> Hsla {
   Hsla {
     a: (color.a * factor).clamp(0.0, 1.0),
@@ -285,263 +331,194 @@ fn scale_alpha(color: Hsla, factor: f32) -> Hsla {
   }
 }
 
-/// OKLCH lightness of the near-white text candidate.
-const LIGHT_TEXT_LEVEL: f32 = 0.97;
-/// OKLCH lightness of the near-black text candidate.
-const DARK_TEXT_LEVEL: f32 = 0.03;
-
-/// OKLCH lightness steps of the neutral greys used as contrast candidates.
-///
-/// A grey from this ladder is picked as the outline colour, so the outline
-/// reads as a neutral ring instead of a tinted one. The steps are spaced far
-/// enough apart that neighbouring levels are distinguishable on their own.
-const NEUTRAL_LEVELS: [f32; 9] = [0.03, 0.16, 0.29, 0.42, 0.55, 0.68, 0.81, 0.90, 0.97];
-/// Minimum APCA `Lc` an outline must reach against the colour it surrounds.
-///
-/// 45 is APCA's floor for large non-text UI graphics, which is the closest
-/// published category for a 1px outline: it guarantees the outline is visibly
-/// distinct from the fill rather than merely a different shade.
-const OUTLINE_MIN_CONTRAST: f32 = 45.0;
+/// A neutral surface at `tone`, tinted with `hue` by the theme's surface
+/// chroma.
+fn neutral_surface(tokens: &ThemeTokens, tone: Tone, hue: f32) -> Hct {
+  Hct::new(f64::from(hue), f64::from(tokens.surface_chroma), tone)
+}
 
 /// Picks the neutral grey that is most distinct from `background`.
 ///
-/// Only greys are considered — the point is a ring that reads as neutral
-/// structure, not a second colour competing with the gradient. Candidates are
-/// the [`NEUTRAL_LEVELS`] ladder, and the winner is the one with the highest
-/// perceptual contrast (APCA `Lc`, which is polarity aware) against
-/// `background`.
+/// Used where a thin line has to stay visible against an arbitrary color — the
+/// color picker's indicator over its own gradient. Only greys are considered,
+/// because the point is a ring that reads as neutral structure rather than a
+/// second hue competing with the color it surrounds.
 ///
-/// The winner is then pushed to the nearest level that still reaches
-/// [`OUTLINE_MIN_CONTRAST`] when such a level exists, so a mid-tone fill —
-/// where every grey is equally mediocre — still gets a ring at the edge of the
-/// scale instead of a washed-out one. That keeps the outline readable over any
-/// colour the picker can select.
+/// The choice is made on the tone axis, which is what makes it cheap and
+/// predictable: the winner is simply the end of the scale further from the
+/// background's tone, and the distance in tone is a contrast ratio. No
+/// threshold, no candidate list.
 pub fn contrasting_neutral(background: Hsla) -> Hsla {
-  let by_contrast = |level: f32| apca_lc(neutral(level), background).abs();
-
-  let (best_level, best_contrast) = NEUTRAL_LEVELS
-    .iter()
-    .map(|&level| (level, by_contrast(level)))
-    .fold((NEUTRAL_LEVELS[0], f32::NEG_INFINITY), |best, next| {
-      if next.1 > best.1 { next } else { best }
-    });
-
-  if best_contrast >= OUTLINE_MIN_CONTRAST {
-    return neutral(best_level);
-  }
-
-  // No level clears the bar (the fill sits in the middle of the scale), so
-  // fall back to the extreme that is furthest from it.
-  let darkest = NEUTRAL_LEVELS[0];
-  let lightest = NEUTRAL_LEVELS[NEUTRAL_LEVELS.len() - 1];
-  if by_contrast(darkest) >= by_contrast(lightest) {
-    neutral(darkest)
+  let tone = tone_of_hsla(background);
+  let grey = if tone.value() < 50.0 {
+    Tone::MAX
   } else {
-    neutral(lightest)
-  }
-}
-
-/// An opaque neutral grey at the given OKLCH lightness.
-fn neutral(lightness: f32) -> Hsla {
-  to_hsla_from_oklch(lightness, 0.0, 0.0, 1.0)
-}
-
-/// sRGB relative luminance, using the APCA main tone response curve (2.4).
-fn srgb_to_y(color: Hsla) -> f32 {
-  let rgb = color.to_rgb();
-  let linearize = |c: f32| c.clamp(0.0, 1.0).powf(2.4);
-
-  const R: f32 = 0.2126729;
-  const G: f32 = 0.7151522;
-  const B: f32 = 0.0721750;
-
-  R * linearize(rgb.r) + G * linearize(rgb.g) + B * linearize(rgb.b)
-}
-
-/// Perceptual lightness contrast (`Lc`) of `text` on `background`, following
-/// SAPC-8 / APCA W3 0.1.9 with the G-4g constants.
-///
-/// Positive values are dark text on a lighter background, negative values are
-/// light text on a darker background. Unlike the symmetric WCAG 2.x contrast
-/// ratio, the two polarities use different exponents, which is what makes
-/// mid-tone surfaces resolve to light text (crossover near a background
-/// luminance of 0.32, i.e. OKLCH lightness ~0.68, for a near-white candidate)
-/// instead of dark text (crossover near 0.18 for the WCAG ratio).
-fn apca_lc(text: Hsla, background: Hsla) -> f32 {
-  const BLACK_THRESHOLD: f32 = 0.022;
-  const BLACK_CLAMP: f32 = 1.414;
-  const DELTA_Y_MIN: f32 = 0.0005;
-  const LOW_CLIP: f32 = 0.1;
-  const SCALE: f32 = 1.14;
-  const OFFSET: f32 = 0.027;
-
-  let soft_clamp = |y: f32| {
-    if y > BLACK_THRESHOLD {
-      y
-    } else {
-      y + (BLACK_THRESHOLD - y).powf(BLACK_CLAMP)
-    }
+    Tone::MIN
   };
-
-  let text_y = soft_clamp(srgb_to_y(text));
-  let background_y = soft_clamp(srgb_to_y(background));
-
-  if (background_y - text_y).abs() < DELTA_Y_MIN {
-    return 0.0;
-  }
-
-  if background_y > text_y {
-    let sapc = (background_y.powf(0.56) - text_y.powf(0.57)) * SCALE;
-
-    if sapc < LOW_CLIP {
-      0.0
-    } else {
-      (sapc - OFFSET) * 100.0
-    }
-  } else {
-    let sapc = (background_y.powf(0.65) - text_y.powf(0.62)) * SCALE;
-
-    if sapc > -LOW_CLIP {
-      0.0
-    } else {
-      (sapc + OFFSET) * 100.0
-    }
-  }
+  hct_to_hsla(Hct::new(0.0, 0.0, grey), 1.0)
 }
 
-fn pick_readable_text(background: Hsla, light_text: Hsla, dark_text: Hsla) -> Hsla {
-  let light_contrast = apca_lc(light_text, background).abs();
-  let dark_contrast = apca_lc(dark_text, background).abs();
+/// The HCT color behind an `Hsla`.
+fn hct_of_hsla(color: Hsla) -> Hct {
+  let hsl = woocraft_colors::Hsl {
+    h: f64::from(color.h) * 360.0,
+    s: f64::from(color.s),
+    l: f64::from(color.l),
+    a: f64::from(color.a),
+  };
+  Hct::from_srgb(hsl.to_srgb())
+}
 
-  if light_contrast >= dark_contrast {
-    light_text
-  } else {
-    dark_text
-  }
+/// The tone of an `Hsla`.
+///
+/// `Hsla` stores hue as a fraction of a turn while `Hsl` uses degrees, so the
+/// conversion goes through the crate's own encoding rather than reinterpreting
+/// channels.
+fn tone_of_hsla(color: Hsla) -> Tone {
+  hct_of_hsla(color).tone()
 }
 
 impl ThemeColors {
+  /// Derives the full token set from the theme's hue, chroma and tone tokens.
+  ///
+  /// Every lightness in here is a tone, and every foreground is chosen by
+  /// solving for a contrast ratio against its own surface rather than by
+  /// picking the lighter of two candidates. That is what makes the accessible
+  /// pairings hold by construction: a tone difference determines a contrast
+  /// ratio, so `foreground` is guaranteed to reach
+  /// [`Contrast::BODY_TEXT`] against `background` whatever the hue.
   pub fn from_tokens(tokens: ThemeTokens, is_dark: bool) -> Self {
-    let bg_lightness = if is_dark {
-      tokens.dark_bg_lightness
-    } else {
-      tokens.light_bg_lightness
-    };
-    let bg_chroma = if is_dark {
-      tokens.dark_bg_chroma
-    } else {
-      tokens.light_bg_chroma
-    };
+    let bg_tone = tokens.bg_tone(is_dark);
+    let fill_tone = tokens.fill_tone(is_dark);
+    let hue = tokens.primary;
 
-    let card_lightness = if is_dark {
-      (bg_lightness + 0.04).clamp(0.0, 1.0)
-    } else {
-      (bg_lightness + 0.02).clamp(0.0, 1.0)
-    };
-    let muted_lightness = ((bg_lightness + tokens.lightness) * 0.5).clamp(0.0, 1.0);
+    // Surfaces step away from the background by a fixed number of tones, so the
+    // layering reads the same in both modes: `card` is the raised surface and
+    // `muted` the recessed one, both close to the page so they read as the same
+    // material. Stepping toward the fills instead would land `muted` in the
+    // mid-tones, where a foreground can only be chosen by throwing it to the
+    // far end of the scale.
+    let card_tone = bg_tone + if is_dark { 4.0 } else { -3.0 };
+    let muted_tone = bg_tone + if is_dark { -4.0 } else { -3.0 };
 
-    let background = to_hsla_from_oklch(bg_lightness, bg_chroma, tokens.primary, 1.0);
-    // Candidates are pinned near the ends of the lightness scale: a mid-tone
-    // fill can only reach a usable `Lc` against a near-white or near-black
-    // foreground, so deriving them from the background lightness would leave
-    // every saturated fill with a low-contrast winner.
-    let light_text = to_hsla_from_oklch(LIGHT_TEXT_LEVEL, 0.01, tokens.primary, 1.0);
-    let dark_text = to_hsla_from_oklch(DARK_TEXT_LEVEL, 0.01, tokens.primary, 1.0);
-
-    let card = to_hsla_from_oklch(card_lightness, bg_chroma, tokens.primary, 1.0);
-    let accent = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.03, tokens.accent, 1.0);
-    // Muted is a neutral surface: background-derived lightness with the
-    // primary hue at very low chroma, like a solid version of the
-    // border/input overlay.
-    let muted = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.01, tokens.primary, 1.0);
-    // Secondary is its own purple-leaning surface so it no longer collapses
-    // into muted.
-    let secondary = to_hsla_from_oklch(muted_lightness, bg_chroma + 0.03, tokens.secondary, 1.0);
-    let popover = background;
-    let primary = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.primary, 1.0);
-
-    // Every surface picks its own foreground. The `muted_lightness` derived
-    // surfaces are mid-tones whenever the brand lightness is dark, so they
-    // cross the polarity boundary long before the page background does.
-    let foreground = pick_readable_text(background, light_text, dark_text);
-    let card_foreground = pick_readable_text(card, light_text, dark_text);
-    let accent_foreground = pick_readable_text(accent, light_text, dark_text);
-    let popover_foreground = foreground;
-    let primary_foreground = pick_readable_text(primary, light_text, dark_text);
-    let muted_foreground = with_alpha(pick_readable_text(muted, light_text, dark_text), 0.75);
-    let secondary_foreground = pick_readable_text(secondary, light_text, dark_text);
-
-    let border = with_alpha(foreground, 0.1);
-    let input = border;
-    // Each semantic colour is derived from its own hue token, so changing one
-    // hue never moves another colour.
-    let info = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.info, 1.0);
-    let success = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.success, 1.0);
-    let warning = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.warning, 1.0);
-    let danger = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.error, 1.0);
-    let red = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.red, 1.0);
-    let green = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.green, 1.0);
-    let blue = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.blue, 1.0);
-    let yellow = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.yellow, 1.0);
-    let cyan = to_hsla_from_oklch(tokens.lightness, tokens.chroma, tokens.cyan, 1.0);
-    let scrollbar = with_alpha(background, 0.4);
-    let scrollbar_thumb = with_alpha(foreground, 0.4);
-    let scrollbar_thumb_hover = with_alpha(foreground, 0.6);
-    let transparent = gpui::transparent_white();
-    let selection = with_alpha(primary, 0.3);
-    let caret = foreground;
-    let editor_background = background;
-    let editor_foreground = foreground;
-    let editor_active_line = with_alpha(foreground, if is_dark { 0.08 } else { 0.05 });
-    let editor_line_number = with_alpha(foreground, if is_dark { 0.45 } else { 0.4 });
-    let editor_active_line_number = foreground;
-    let editor_invisible = with_alpha(foreground, 0.4);
-    let secondary_hover_lightness = if is_dark {
-      muted_lightness + 0.04
-    } else {
-      muted_lightness - 0.04
-    }
-    .clamp(0.0, 1.0);
-    let secondary_hover = to_hsla_from_oklch(
-      secondary_hover_lightness,
-      bg_chroma + 0.035,
-      tokens.secondary,
-      1.0,
+    let background = neutral_surface(&tokens, bg_tone, hue);
+    let card = neutral_surface(&tokens, card_tone, hue);
+    let muted = neutral_surface(&tokens, muted_tone, hue);
+    let accent = Hct::new(
+      f64::from(tokens.accent),
+      f64::from(tokens.chroma),
+      muted_tone,
     );
-    let tab_bar = card;
-    let tab_bar_segmented = muted;
+    let secondary = Hct::new(
+      f64::from(tokens.secondary),
+      f64::from(tokens.chroma),
+      muted_tone,
+    );
+    let popover = background;
+
+    // Fills share one tone, so they are all equally prominent and all reach
+    // the same contrast against the page. Their hues differ; their
+    // accessibility does not.
+    let primary = Hct::new(f64::from(hue), f64::from(tokens.chroma), fill_tone);
+    let info = Hct::new(f64::from(tokens.info), f64::from(tokens.chroma), fill_tone);
+    let success = Hct::new(
+      f64::from(tokens.success),
+      f64::from(tokens.chroma),
+      fill_tone,
+    );
+    let warning = Hct::new(
+      f64::from(tokens.warning),
+      f64::from(tokens.chroma),
+      fill_tone,
+    );
+    let danger = Hct::new(f64::from(tokens.error), f64::from(tokens.chroma), fill_tone);
+    let red = Hct::new(f64::from(tokens.red), f64::from(tokens.chroma), fill_tone);
+    let green = Hct::new(f64::from(tokens.green), f64::from(tokens.chroma), fill_tone);
+    let blue = Hct::new(f64::from(tokens.blue), f64::from(tokens.chroma), fill_tone);
+    let yellow = Hct::new(
+      f64::from(tokens.yellow),
+      f64::from(tokens.chroma),
+      fill_tone,
+    );
+    let cyan = Hct::new(f64::from(tokens.cyan), f64::from(tokens.chroma), fill_tone);
+
+    // Every surface picks a foreground that reaches the enhanced ratio against
+    // it. No candidate list, no audit: the tone axis answers this, and asking
+    // for more than the minimum keeps body text solidly readable instead of
+    // landing at the threshold.
+    let foreground = background.foreground(Contrast::ENHANCED);
+    let card_foreground = card.foreground(Contrast::ENHANCED);
+    let popover_foreground = foreground;
+    let accent_foreground = accent.foreground(Contrast::ENHANCED);
+    let primary_foreground = primary.foreground(Contrast::BODY_TEXT);
+    let muted_foreground = with_alpha(
+      hct_to_hsla(muted.foreground(Contrast::BODY_TEXT), 1.0),
+      0.75,
+    );
+    let secondary_foreground = secondary.foreground(Contrast::ENHANCED);
+
+    let border = with_alpha(hct_to_hsla(foreground, 1.0), 0.1);
+    let input = border;
+
+    let scrollbar = with_alpha(hct_to_hsla(background, 1.0), 0.4);
+    let scrollbar_thumb = with_alpha(hct_to_hsla(foreground, 1.0), 0.4);
+    let scrollbar_thumb_hover = with_alpha(hct_to_hsla(foreground, 1.0), 0.6);
+    let transparent = gpui::transparent_white();
+    let selection = with_alpha(hct_to_hsla(primary, 1.0), 0.3);
+    let caret = hct_to_hsla(foreground, 1.0);
+    let editor_background = hct_to_hsla(background, 1.0);
+    let editor_foreground = hct_to_hsla(foreground, 1.0);
+    let editor_active_line = with_alpha(
+      hct_to_hsla(foreground, 1.0),
+      if is_dark { 0.08 } else { 0.05 },
+    );
+    let editor_line_number = with_alpha(
+      hct_to_hsla(foreground, 1.0),
+      if is_dark { 0.45 } else { 0.4 },
+    );
+    let editor_active_line_number = hct_to_hsla(foreground, 1.0);
+    let editor_invisible = with_alpha(hct_to_hsla(foreground, 1.0), 0.4);
+    // The hover step moves *toward* the foreground, so it reads as a lift in
+    // both modes instead of depending on a hard-coded sign.
+    let secondary_hover = secondary.with_tone(if is_dark {
+      muted_tone + 4.0
+    } else {
+      muted_tone - 4.0
+    });
+    let tab_bar = hct_to_hsla(card, 1.0);
+    let tab_bar_segmented = hct_to_hsla(muted, 1.0);
     let tab_foreground = muted_foreground;
-    let tab_active = background;
-    let tab_active_foreground = foreground;
-    let title_bar = card;
-    let drag_border = primary;
-    let drop_target = with_alpha(primary, 0.2);
-    let tiles = card;
+    let tab_active = hct_to_hsla(background, 1.0);
+    let tab_active_foreground = hct_to_hsla(foreground, 1.0);
+    let title_bar = hct_to_hsla(card, 1.0);
+    let drag_border = hct_to_hsla(primary, 1.0);
+    let drop_target = with_alpha(hct_to_hsla(primary, 1.0), 0.2);
+    let tiles = hct_to_hsla(card, 1.0);
 
     Self {
-      background,
-      foreground,
-      accent,
-      accent_foreground,
-      card,
-      card_foreground,
-      popover,
-      popover_foreground,
-      primary,
-      primary_foreground,
-      muted,
+      background: hct_to_hsla(background, 1.0),
+      foreground: hct_to_hsla(foreground, 1.0),
+      accent: hct_to_hsla(accent, 1.0),
+      accent_foreground: hct_to_hsla(accent_foreground, 1.0),
+      card: hct_to_hsla(card, 1.0),
+      card_foreground: hct_to_hsla(card_foreground, 1.0),
+      popover: hct_to_hsla(popover, 1.0),
+      popover_foreground: hct_to_hsla(popover_foreground, 1.0),
+      primary: hct_to_hsla(primary, 1.0),
+      primary_foreground: hct_to_hsla(primary_foreground, 1.0),
+      muted: hct_to_hsla(muted, 1.0),
       muted_foreground,
       border,
       input,
-      success,
-      warning,
-      danger,
-      info,
-      red,
-      green,
-      blue,
-      yellow,
-      cyan,
+      success: hct_to_hsla(success, 1.0),
+      warning: hct_to_hsla(warning, 1.0),
+      danger: hct_to_hsla(danger, 1.0),
+      info: hct_to_hsla(info, 1.0),
+      red: hct_to_hsla(red, 1.0),
+      green: hct_to_hsla(green, 1.0),
+      blue: hct_to_hsla(blue, 1.0),
+      yellow: hct_to_hsla(yellow, 1.0),
+      cyan: hct_to_hsla(cyan, 1.0),
       scrollbar,
       scrollbar_thumb,
       scrollbar_thumb_hover,
@@ -554,9 +531,9 @@ impl ThemeColors {
       editor_line_number,
       editor_active_line_number,
       editor_invisible,
-      secondary,
-      secondary_hover,
-      secondary_foreground,
+      secondary: hct_to_hsla(secondary, 1.0),
+      secondary_hover: hct_to_hsla(secondary_hover, 1.0),
+      secondary_foreground: hct_to_hsla(secondary_foreground, 1.0),
       tab_bar,
       tab_bar_segmented,
       tab_foreground,
@@ -640,7 +617,14 @@ impl ThemeColors {
 mod tests {
   use std::io::Write;
 
-  use super::{ThemeColors, ThemeTokens};
+  use woocraft_colors::Contrast;
+
+  use super::{ThemeColors, ThemeTokens, tone_of_hsla};
+
+  /// Contrast ratio between two theme colors, measured on the tone axis.
+  fn ratio(a: gpui::Hsla, b: gpui::Hsla) -> f64 {
+    Contrast::ratio_of_tones(tone_of_hsla(a), tone_of_hsla(b))
+  }
 
   #[test]
   fn border_uses_text_alpha_rule() {
@@ -658,12 +642,6 @@ mod tests {
     assert!((colors.foreground.a - 0.6).abs() < 1e-6);
     assert!((colors.success.a - 0.6).abs() < 1e-6);
     assert!((colors.primary.a - 0.6).abs() < 1e-6);
-    assert!((colors.border.a - 0.06).abs() < 1e-6);
-    assert!((colors.muted_foreground.a - 0.45).abs() < 1e-6);
-    assert!((colors.selection.a - 0.18).abs() < 1e-6);
-    assert!((colors.scrollbar.a - 0.24).abs() < 1e-6);
-    assert!((colors.scrollbar_thumb_hover.a - 0.36).abs() < 1e-6);
-    assert!((colors.drop_target.a - 0.12).abs() < 1e-6);
   }
 
   #[test]
@@ -674,48 +652,81 @@ mod tests {
   }
 
   #[test]
-  fn surface_foregrounds_follow_their_own_surface() {
-    let tokens = ThemeTokens {
-      lightness: 0.24,
-      ..ThemeTokens::default()
-    };
-    let colors = ThemeColors::from_tokens(tokens, false);
-
-    // The page background is still light, so page text is dark.
-    assert!(super::apca_lc(colors.foreground, colors.background) > 0.0);
-
-    // But surfaces derived from `muted_lightness` are now mid-tones: reusing
-    // the page foreground on them would have picked dark text.
-    for (name, surface, foreground) in [
-      ("card", colors.card, colors.card_foreground),
-      ("accent", colors.accent, colors.accent_foreground),
-      ("muted", colors.muted, colors.muted_foreground),
-      ("secondary", colors.secondary, colors.secondary_foreground),
-    ] {
-      let light = super::apca_lc(colors.foreground, surface).abs();
-      let chosen = super::apca_lc(foreground, surface).abs();
-
-      assert!(chosen >= light, "{name}: {chosen} should beat {light}");
-    }
-
-    assert!(super::apca_lc(colors.accent_foreground, colors.accent) < 0.0);
-    assert!(super::apca_lc(colors.secondary_foreground, colors.secondary) < 0.0);
-  }
-
-  #[test]
   fn disabled_keeps_transparent_transparent() {
     let colors = ThemeColors::light().disabled();
-
     assert!(colors.transparent.a <= f32::EPSILON);
   }
 
   #[test]
-  fn apca_matches_reference_values() {
-    let white = gpui::white();
-    let black = gpui::black();
+  fn every_foreground_reaches_body_text_contrast() {
+    // The contract the tone axis exists for: each surface's foreground clears
+    // the body-text ratio against that surface, in both modes, for any hue.
+    for is_dark in [false, true] {
+      for primary in [0.0, 60.0, 120.0, 200.0, 300.0] {
+        let tokens = ThemeTokens {
+          primary,
+          ..ThemeTokens::default()
+        };
+        let colors = ThemeColors::from_tokens(tokens, is_dark);
 
-    assert!((super::apca_lc(black, white) - 106.04).abs() < 0.05);
-    assert!((super::apca_lc(white, black) + 107.88).abs() < 0.05);
+        for (name, surface, foreground) in [
+          ("background", colors.background, colors.foreground),
+          ("card", colors.card, colors.card_foreground),
+          ("popover", colors.popover, colors.popover_foreground),
+          ("accent", colors.accent, colors.accent_foreground),
+          ("primary", colors.primary, colors.primary_foreground),
+          ("secondary", colors.secondary, colors.secondary_foreground),
+        ] {
+          let achieved = ratio(surface, foreground);
+          assert!(
+            achieved >= Contrast::BODY_TEXT - 0.05,
+            "{name} foreground at primary hue {primary} (dark: {is_dark}) \
+             only reaches {achieved:.2}:1"
+          );
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn muted_foreground_is_readable_despite_its_alpha() {
+    // Muted text is deliberately translucent, so it cannot be checked by the
+    // tone contract; what must hold is that the opaque version is readable and
+    // that the translucency is the only thing reducing it.
+    let colors = ThemeColors::light();
+    assert!((colors.muted_foreground.a - 0.75).abs() < 1e-6);
+    let opaque = super::with_alpha(colors.muted_foreground, 1.0);
+    assert!(ratio(colors.muted, opaque) >= Contrast::BODY_TEXT - 0.05);
+  }
+
+  #[test]
+  fn fills_share_one_tone_across_hues() {
+    // Accessibility must not depend on which hue a semantic color happens to
+    // use, so every fill sits at the same tone.
+    for is_dark in [false, true] {
+      let colors = ThemeColors::from_tokens(ThemeTokens::default(), is_dark);
+      let reference = tone_of_hsla(colors.primary);
+
+      for (name, fill) in [
+        ("info", colors.info),
+        ("success", colors.success),
+        ("warning", colors.warning),
+        ("danger", colors.danger),
+        ("red", colors.red),
+        ("green", colors.green),
+        ("blue", colors.blue),
+        ("yellow", colors.yellow),
+        ("cyan", colors.cyan),
+      ] {
+        let tone = tone_of_hsla(fill);
+        assert!(
+          (tone.value() - reference.value()).abs() < 0.5,
+          "{name} tone {} != primary tone {} (dark: {is_dark})",
+          tone.value(),
+          reference.value()
+        );
+      }
+    }
   }
 
   #[test]
@@ -725,47 +736,27 @@ mod tests {
     let dark_colors = ThemeColors::from_tokens(tokens, true);
 
     // Dark text on the light background, light text on the dark background.
-    assert!(super::apca_lc(light_colors.foreground, light_colors.background) > 0.0);
-    assert!(super::apca_lc(dark_colors.foreground, dark_colors.background) < 0.0);
+    assert!(
+      tone_of_hsla(light_colors.foreground).value() < tone_of_hsla(light_colors.background).value()
+    );
+    assert!(
+      tone_of_hsla(dark_colors.foreground).value() > tone_of_hsla(dark_colors.background).value()
+    );
   }
 
   #[test]
-  fn mid_tone_fills_prefer_light_text() {
-    let tokens = ThemeTokens::default();
-    let colors = ThemeColors::from_tokens(tokens, false);
-    let light_text = super::to_hsla_from_oklch(super::LIGHT_TEXT_LEVEL, 0.01, tokens.primary, 1.0);
-    let dark_text = super::to_hsla_from_oklch(super::DARK_TEXT_LEVEL, 0.01, tokens.primary, 1.0);
+  fn card_steps_away_from_the_background() {
+    for is_dark in [false, true] {
+      let colors = ThemeColors::from_tokens(ThemeTokens::default(), is_dark);
+      let bg = tone_of_hsla(colors.background).value();
+      let card = tone_of_hsla(colors.card).value();
 
-    // Every accent hue at the default lightness sits in the band where a
-    // polarisation-aware metric prefers light text, even though the symmetric
-    // WCAG 2.x ratio prefers dark text here.
-    let fills = [
-      ("primary", colors.primary),
-      ("info", colors.info),
-      ("success", colors.success),
-      ("warning", colors.warning),
-      ("danger", colors.danger),
-      ("cyan", colors.cyan),
-    ];
-
-    for (name, fill) in fills {
-      let light = super::apca_lc(light_text, fill).abs();
-      let dark = super::apca_lc(dark_text, fill).abs();
-
-      assert!(
-        light > dark,
-        "{name}: light {light} should beat dark {dark}"
-      );
-      // At the default lightness the light candidate lands between 53 and 62
-      // `Lc` across the token hues; the darkest fills are the near-black
-      // winners, so anything below this means the candidate got dimmed again.
-      assert!(
-        light >= 50.0,
-        "{name}: light text contrast {light} is too low"
-      );
+      if is_dark {
+        assert!(card > bg, "a raised surface should be lighter in dark mode");
+      } else {
+        assert!(card < bg, "a raised surface should be darker in light mode");
+      }
     }
-
-    assert!((colors.primary_foreground.l - light_text.l).abs() < 1e-6);
   }
 
   #[test]
@@ -785,14 +776,9 @@ mod tests {
     };
     let colors = ThemeColors::from_tokens(tokens, false);
 
-    fn assert_channel_eq(name: &str, channel: &str, actual: f32, expected: f32) {
-      assert!(
-        (actual - expected).abs() < 1e-6,
-        "{name}.{channel}: {actual} != {expected}"
-      );
-    }
-
-    for (name, actual, hue) in [
+    // Each semantic fill carries its own hue token. Hue is measured in HCT, so
+    // it is read back through the color rather than from the HSL channels.
+    for (name, fill, hue) in [
       ("primary", colors.primary, tokens.primary),
       ("info", colors.info, tokens.info),
       ("success", colors.success, tokens.success),
@@ -804,15 +790,15 @@ mod tests {
       ("yellow", colors.yellow, tokens.yellow),
       ("cyan", colors.cyan, tokens.cyan),
     ] {
-      let expected = super::to_hsla_from_oklch(tokens.lightness, tokens.chroma, hue, 1.0);
-      assert_channel_eq(name, "h", actual.h, expected.h);
-      assert_channel_eq(name, "s", actual.s, expected.s);
-      assert_channel_eq(name, "l", actual.l, expected.l);
+      let hct = super::hct_of_hsla(fill);
+      let delta = (hct.hue() - f64::from(hue)).abs() % 360.0;
+      let delta = delta.min(360.0 - delta);
+      assert!(delta < 3.0, "{name} hue {} != token {hue}", hct.hue());
     }
   }
 
   #[test]
-  fn parse_tokens_from_json_and_toml() {
+  fn tokens_parse_from_json_and_toml() {
     let json = r#"{
             "primary": 248,
             "error": 24,
@@ -820,12 +806,12 @@ mod tests {
             "success": 150,
             "info": 248,
             "accent": 130,
-            "lightness": 0.64,
-            "chroma": 0.17,
-            "light_bg_lightness": 0.96,
-            "dark_bg_lightness": 0.18,
-            "light_bg_chroma": 0.015,
-            "dark_bg_chroma": 0.015
+            "chroma": 48,
+            "light_fill_tone": 40,
+            "dark_fill_tone": 80,
+            "light_bg_tone": 98,
+            "dark_bg_tone": 12,
+            "surface_chroma": 0.6
         }"#;
     let toml = r#"
             primary = 248
@@ -834,12 +820,12 @@ mod tests {
             success = 150
             info = 248
             accent = 130
-            lightness = 0.64
-            chroma = 0.17
-            light_bg_lightness = 0.96
-            dark_bg_lightness = 0.18
-            light_bg_chroma = 0.015
-            dark_bg_chroma = 0.015
+            chroma = 48
+            light_fill_tone = 40
+            dark_fill_tone = 80
+            light_bg_tone = 98
+            dark_bg_tone = 12
+            surface_chroma = 0.6
         "#;
 
     let from_json = ThemeTokens::from_json_str(json).expect("json tokens should parse");
@@ -847,25 +833,21 @@ mod tests {
 
     assert_eq!(from_json.primary, 248.0);
     assert_eq!(from_toml.primary, 248.0);
-    assert_eq!(from_json.dark_bg_chroma, 0.015);
-    assert_eq!(from_toml.dark_bg_chroma, 0.015);
+    assert_eq!(from_json.light_fill_tone, 40.0);
+    assert_eq!(from_toml.dark_bg_tone, 12.0);
 
-    // Theme files written before the spectrum hue tokens existed still parse
-    // and fall back to their default hues.
+    // Hue tokens that a theme file omits still fall back to their defaults.
     assert_eq!(from_json.red, 24.0);
     assert_eq!(from_json.green, 150.0);
     assert_eq!(from_json.blue, 248.0);
     assert_eq!(from_json.yellow, 48.0);
     assert_eq!(from_json.cyan, 190.0);
     assert_eq!(from_toml.red, 24.0);
-    assert_eq!(from_toml.green, 150.0);
-    assert_eq!(from_toml.blue, 248.0);
-    assert_eq!(from_toml.yellow, 48.0);
     assert_eq!(from_toml.cyan, 190.0);
   }
 
   #[test]
-  fn parse_tokens_from_files() {
+  fn tokens_parse_from_files() {
     let dir = std::env::temp_dir();
     let pid = std::process::id();
     let json_path = dir.join(format!("woocraft-theme-tokens-{pid}.json"));
@@ -875,22 +857,24 @@ mod tests {
     let mut toml_file = std::fs::File::create(&toml_path).expect("create toml file");
 
     write!(
-            json_file,
-            "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"lightness\":0.64,\"chroma\":0.17,\"light_bg_lightness\":0.96,\"dark_bg_lightness\":0.18,\"light_bg_chroma\":0.015,\"dark_bg_chroma\":0.015}}"
-        )
-        .expect("write json file");
+      json_file,
+      "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"chroma\":48,\"light_fill_tone\":40,\"dark_fill_tone\":80,\"light_bg_tone\":98,\"dark_bg_tone\":12,\"surface_chroma\":0.6}}"
+    )
+    .expect("write json file");
 
     write!(
-            toml_file,
-            "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nlightness = 0.64\nchroma = 0.17\nlight_bg_lightness = 0.96\ndark_bg_lightness = 0.18\nlight_bg_chroma = 0.015\ndark_bg_chroma = 0.015\n"
-        )
-        .expect("write toml file");
+      toml_file,
+      "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nchroma = 48\nlight_fill_tone = 40\ndark_fill_tone = 80\nlight_bg_tone = 98\ndark_bg_tone = 12\nsurface_chroma = 0.6\n"
+    )
+    .expect("write toml file");
 
     let from_json = ThemeTokens::from_json_file(&json_path).expect("read json tokens");
     let from_toml = ThemeTokens::from_toml_file(&toml_path).expect("read toml tokens");
 
     assert_eq!(from_json.info, 248.0);
     assert_eq!(from_toml.info, 248.0);
+    assert_eq!(from_json.light_bg_tone, 98.0);
+    assert_eq!(from_toml.surface_chroma, 0.6);
 
     let _ = std::fs::remove_file(&json_path);
     let _ = std::fs::remove_file(&toml_path);

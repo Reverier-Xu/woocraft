@@ -8,7 +8,6 @@ use gpui::{
   App, AppContext, Bounds, Context, Entity, Hsla, IntoElement, ParentElement, Render,
   Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, black, div, px, white,
 };
-use palette::{FromColor, Oklch, Srgb};
 use woocraft::{
   ActiveTheme, Button, ScrollableElement as _, Selectable, Sizable, StyledExt, SyntaxTokenHues,
   Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
@@ -34,14 +33,30 @@ fn hex(color: Hsla) -> String {
   }
 }
 
-/// Picks black or white text for readability on `background`, using the same
-/// OKLCH lightness scale the theme tokens are defined in.
+/// Picks black or white text for readability on `background`.
+///
+/// The theme reasons in HCT, so this does too: black and white are the ends of
+/// the tone scale, and the contrast ratio against the background follows from
+/// the background's own tone. No threshold to tune.
 fn readable_on(background: Hsla) -> Hsla {
-  let rgb = background.to_rgb();
-  let oklch = Oklch::from_color(Srgb::new(rgb.r, rgb.g, rgb.b));
-  // OKLCH lightness is perceptually uniform; ~0.6 is where black text starts
-  // winning against white on mid-tone backgrounds.
-  if oklch.l > 0.6 { black() } else { white() }
+  let tone = woocraft_colors::Hct::from_srgb(
+    woocraft_colors::Hsl {
+      h: f64::from(background.h) * 360.0,
+      s: f64::from(background.s),
+      l: f64::from(background.l),
+      a: 1.0,
+    }
+    .to_srgb(),
+  )
+  .tone();
+
+  let white_ratio = woocraft_colors::Contrast::ratio_of_tones(tone, woocraft_colors::Tone::MAX);
+  let black_ratio = woocraft_colors::Contrast::ratio_of_tones(tone, woocraft_colors::Tone::MIN);
+  if white_ratio >= black_ratio {
+    white()
+  } else {
+    black()
+  }
 }
 
 /// One swatch card: filled block with the color name and hex value.
@@ -287,17 +302,18 @@ impl Render for PaletteWindow {
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child(format!(
-                  "tokens: primary={}° accent={}° secondary={}° lightness={} chroma={} \
-                   bg(l)={}/c={} bg(d)={}/c={} | hues: error={}° warning={}° success={}° info={}°",
+                  "tokens: primary={}° accent={}° secondary={}° chroma={} \
+                   fill tone(l/d)={}/{} bg tone(l/d)={}/{} surface chroma={} \
+                   | hues: error={}° warning={}° success={}° info={}°",
                   tokens.primary,
                   tokens.accent,
                   tokens.secondary,
-                  tokens.lightness,
                   tokens.chroma,
-                  tokens.light_bg_lightness,
-                  tokens.light_bg_chroma,
-                  tokens.dark_bg_lightness,
-                  tokens.dark_bg_chroma,
+                  tokens.light_fill_tone,
+                  tokens.dark_fill_tone,
+                  tokens.light_bg_tone,
+                  tokens.dark_bg_tone,
+                  tokens.surface_chroma,
                   tokens.error,
                   tokens.warning,
                   tokens.success,

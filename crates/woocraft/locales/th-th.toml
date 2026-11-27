@@ -44,7 +44,7 @@ chroma          = "ความอิ่มสี"
 hex_placeholder = "#RRGGBBAA"
 hue             = "เฉดสี"
 hue_unit        = "°"
-lightness       = "ความสว่าง"
+tone            = "โทน"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "ศ"

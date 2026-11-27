@@ -211,7 +211,7 @@ impl Theme {
   }
 
   /// Returns a fully opaque color for `hue` using the active theme primary
-  /// OKLCH lightness and chroma.
+  /// HCT tone and chroma.
   ///
   /// # Example
   /// ```rust,ignore
@@ -245,10 +245,12 @@ mod tests {
   }
 
   #[test]
-  fn color_for_hue_uses_theme_primary_lightness_and_chroma() {
+  fn color_for_hue_uses_the_theme_fill_tone_and_chroma() {
     let theme = Theme::default();
     let hue = 130.0;
 
+    // `color_for_hue` is the theme-level shortcut for a syntax color, so it
+    // must agree with the token-level derivation exactly.
     assert!(same_color(
       theme.color_for_hue(hue),
       theme.tokens.syntax_color(hue)

@@ -36,7 +36,6 @@ libmpv2                       = { version = "7.0.1", optional = true, default-fe
 libmpv2-sys                   = { version = "4.0.1", optional = true }
 lsp-types                     = { workspace = true }
 num-traits                    = { workspace = true }
-palette                       = { workspace = true }
 pulldown-cmark                = { workspace = true, optional = true }
 regex                         = { workspace = true }
 ropey                         = { workspace = true }
@@ -94,7 +93,8 @@ tree-sitter-yaml              = { workspace = true, optional = true }
 tree-sitter-zig               = { workspace = true, optional = true }
 unicode-segmentation          = { workspace = true }
 
-woocraft-terminal = { path = "../terminal", version = "0.8.0", optional = true }
+woocraft-colors = { path = "../colors", version = "0.9.0" }
+woocraft-terminal = { path = "../terminal", version = "0.9.0", optional = true }
 
 # For assets embedding, optional and workspace to avoid unnecessary dependency for users who don't need it.
 gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }

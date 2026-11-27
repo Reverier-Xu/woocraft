@@ -134,8 +134,9 @@ impl PartialEq for HighlightThemeSource {
       && self.tokens.success == other.tokens.success
       && self.tokens.info == other.tokens.info
       && self.tokens.accent == other.tokens.accent
-      && self.tokens.lightness == other.tokens.lightness
       && self.tokens.chroma == other.tokens.chroma
+      && self.tokens.light_fill_tone == other.tokens.light_fill_tone
+      && self.tokens.dark_fill_tone == other.tokens.dark_fill_tone
   }
 }
 

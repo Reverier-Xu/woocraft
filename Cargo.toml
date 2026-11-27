@@ -11,7 +11,7 @@ publish      = true
 readme       = "README.md"
 repository   = "https://github.com/Reverier-Xu/woocraft"
 rust-version = "1.100.0"
-version      = "0.8.0"
+version      = "0.9.0"
 
 [profile.release]
 codegen-units = 1
@@ -32,7 +32,6 @@ crossbeam-channel             = "0.5"
 enum-iterator                 = "2.3"
 lsp-types                     = { version = "0.97", features = ["proposed"] }
 num-traits                    = "0.2"
-palette                       = "0.7"
 # Markdown parsing for the `markdown` component. Default features are off: the
 # HTML renderer is not needed, the component builds gpui elements instead.
 pulldown-cmark                = { version = "0.13", default-features = false }

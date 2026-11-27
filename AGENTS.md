@@ -17,8 +17,10 @@
 - 本仓库是一个 Rust workspace，内容为 **woocraft 设计系统的 GPUI 组件库**（`woocraft` crate），并非应用程序。
 - 子 crate：
   - `crates/woocraft`：组件库本体。`src/widgets/` 下按组件分模块（`button`、`editor`、`dock`、`terminal` 等），`src/base/` 为主题（`theme`）与样式工具（`style`、`layout` 等），`src/actions.rs` 定义跨组件 action 与键位；`examples/` 提供各组件的可运行示例。
+  - `crates/colors`（包名 `woocraft-colors`）：色彩核心层——自维护的 HCT 实现（CAM16 色相/彩度 + CIE L\* tone）、HCT 色域映射求解器、WCAG 对比度换算、sRGB/HSL 编码。不依赖 gpui，也不依赖任何色彩库。主题（`crates/woocraft/src/base/theme/`）在此之上派生全部 token。
   - `crates/terminal`（包名 `woocraft-terminal`）：终端核心层——跨平台 PTY 会话（Linux/macOS openpty、Windows ConPTY）、基于 alacritty_terminal 的终端模拟与 headless 外部控制 API，不依赖 gpui、不依赖任何 async 运行时；视图组件在 `crates/woocraft/src/widgets/terminal/`。
 - 文档：
+  - `crates/colors/README.md`：色彩核心层——为什么用 HCT、对外 API、以及它如何与上游参考实现对拍。
   - `crates/terminal/README.md`：terminal 核心层的使用文档（headless 外部控制与示例）。
   - `crates/terminal/src/lib.rs`、`crates/terminal/src/backend.rs`：terminal 核心层的模块级架构说明（会话、PTY 事件循环、生命周期事件）。
   - `docs/media.md`、`docs/media-gpu.md`：media 组件的使用与 GPU 传输说明。
@@ -27,6 +29,7 @@
 ## 关键技术约束
 
 - **gpui 依赖来自 zed 的 git 仓库**（`gpui` / `gpui_platform` 等，见根 `Cargo.toml` 的 workspace dependencies）；`alacritty_terminal` 同样使用 zed 维护的 fork（固定 rev）。升级这些依赖时注意 API 变化。
+- **色彩一律走 HCT**：主题与组件内的明度/对比度语义用 `woocraft_colors::{Hct, Tone, Contrast}`，只在交给 gpui 的边界处转成 `Hsla`（`hct_to_hsla`）。不要用 HSL 的 `l` 当明度轴，也不要再引入 OKLCH/`palette`：HCT 的 tone 是相对亮度的固定函数，对比度因此可由 tone 差直接保证。
 - **禁止引入 tokio / smol 等外部 async 运行时**：
   - 视图层只用 gpui 原生原语（`cx.spawn` / `Task` / `BackgroundExecutor` 等）；
   - 核心层只用 `async-channel`（runtime-agnostic）+ 自管理线程。

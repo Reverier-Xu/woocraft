@@ -44,7 +44,7 @@ chroma          = "Cromă"
 hex_placeholder = "#RRGGBBAA"
 hue             = "Nuanță"
 hue_unit        = "°"
-lightness       = "Luminozitate"
+tone            = "Ton"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "Vi"

@@ -44,7 +44,7 @@ chroma          = "Độ bão hòa"
 hex_placeholder = "#RRGGBBAA"
 hue             = "Sắc độ"
 hue_unit        = "°"
-lightness       = "Độ sáng"
+tone            = "Tông"
 
 [tech.woooo.woocraft.calendar.week]
 friday    = "T6"
