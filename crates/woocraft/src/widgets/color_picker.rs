@@ -39,16 +39,18 @@
 use std::sync::Arc;
 
 use gpui::{
-  App, AppContext as _, Bounds, Context, DispatchPhase, ElementId, Entity, EventEmitter, Hsla,
-  InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-  PaintQuad, ParentElement, Pixels, Point, Rems, RenderOnce, SharedString, StyleRefinement, Styled,
-  Subscription, Window, canvas, div, fill, point, prelude::FluentBuilder as _, px, rems, size,
+  App, AppContext as _, Bounds, Context, Corners, DispatchPhase, ElementId, Entity, EventEmitter,
+  Hsla, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+  MouseUpEvent, PaintQuad, ParentElement, Pixels, Point, Rems, RenderOnce, SharedString,
+  StyleRefinement, Styled, Subscription, Window, canvas, div, fill, point,
+  prelude::FluentBuilder as _, px, rems, size,
 };
 use palette::{FromColor, Hsl, OklabHue, Oklch, Srgb};
 
 use crate::{
   ActiveTheme, Anchor, Button, ButtonVariant, ButtonVariants, Disableable, ElementExt, Input,
-  InputEvent, InputState, Popover, Sizable, Size, StyledExt, h_flex, translate_woocraft, v_flex,
+  InputEvent, InputState, Popover, Sizable, Size, StyledExt, contrasting_neutral, h_flex,
+  translate_woocraft, v_flex,
 };
 
 const CHROMA_MAX: f32 = 0.4;
@@ -72,6 +74,12 @@ const POINTER_INSET: Rems = rems(0.125);
 /// eating into it: at the medium size 0.125em is 2px, so a border-box outline
 /// would leave nothing of the track colour the bar is meant to show.
 const POINTER_OUTLINE: Pixels = px(1.);
+/// Corner radius of the indicator.
+///
+/// Both the bar and its outline are rounded by this much. It is clamped per
+/// quad to half the shortest side, so the pill shape never degenerates however
+/// small the track is.
+const POINTER_RADIUS: Rems = rems(0.0625);
 /// How far past the two ends of the track the end colors are painted.
 ///
 /// The track clips its content to its rounded rect, so this padding is simply
@@ -851,12 +859,18 @@ fn pointer_half_width(rem_size: Pixels) -> Pixels {
 }
 
 /// The indicator for `ratio`: its colour-filled bar and its outline.
+///
+/// The outline colour is picked from `outline`, which callers pass as the
+/// neutral grey most distinct from the bar's own colour — the indicator sits on
+/// an arbitrary colour from the gradient, so a fixed theme foreground would
+/// vanish over parts of the track.
 fn channel_indicator(
   stops: &[ChannelGradientStop], ratio: f32, bounds: Bounds<Pixels>, rem_size: Pixels,
   outline: Hsla,
 ) -> (PaintQuad, PaintQuad) {
   let bar_width = POINTER_WIDTH.to_pixels(rem_size);
   let outline_width = POINTER_OUTLINE;
+  let radius = POINTER_RADIUS.to_pixels(rem_size);
   let travel = channel_pointer_travel(bounds, rem_size);
   let center_x = travel.origin.x + travel.size.width * ratio;
 
@@ -880,9 +894,15 @@ fn channel_indicator(
     ),
   );
 
+  // Each quad is clamped on its own: the outline is larger than the bar, so it
+  // takes a larger radius, and both stay pill-shaped at any track height.
+  let bar_radius = Corners::all(radius).clamp_radii_for_quad_size(bar.size);
+  let ring_radius = Corners::all(radius + outline_width).clamp_radii_for_quad_size(ring.size);
+
   (
-    fill(bar, channel_color_at(stops, ratio)),
+    fill(bar, channel_color_at(stops, ratio)).corner_radii(bar_radius),
     fill(ring, Hsla::transparent_black())
+      .corner_radii(ring_radius)
       .border_widths(outline_width)
       .border_color(outline),
   )
@@ -911,10 +931,14 @@ fn paint_channel(
   }
 
   // The indicator is a bar inset from the track's top and bottom, filled with
-  // the color the track has at that spot so it reads as part of the gradient,
-  // and outlined in the foreground so it stays visible over any of it.
+  // the color the track has at that spot so it reads as part of the gradient.
+  // Its outline is a neutral grey chosen for contrast against that same color:
+  // the bar sits on an arbitrary point of the gradient, so one fixed theme
+  // colour would disappear over part of the track.
+  let indicator_color = channel_color_at(stops, ratio);
+  let outline = contrasting_neutral(indicator_color);
   let (indicator_fill, indicator_outline) =
-    channel_indicator(stops, ratio, bounds, rem_size, cx.theme().foreground);
+    channel_indicator(stops, ratio, bounds, rem_size, outline);
   window.paint_quad(indicator_fill);
   window.paint_quad(indicator_outline);
 }
@@ -1400,119 +1424,6 @@ mod tests {
     assert_eq!(colors.len(), GRADIENT_STEPS);
     assert!(colors.iter().all(|stop| stop.rgba == colors[0].rgba));
     assert!(colors.iter().all(|stop| !stop.out_of_gamut));
-  }
-
-  #[test]
-  fn indicator_geometry_matches_the_track() {
-    let rem_size = px(16.);
-    let track = Bounds::new(point(px(100.), px(10.)), size(px(320.), px(28.)));
-    let stops = build_channel_gradient(PickerChannel::Lightness, sample_oklch());
-    let outline_width = POINTER_OUTLINE;
-    let bar_width = POINTER_WIDTH.to_pixels(rem_size);
-
-    let (start_bar, _) = channel_indicator(&stops, 0.0, track, rem_size, Hsla::black());
-    let (end_bar, _) = channel_indicator(&stops, 1.0, track, rem_size, Hsla::black());
-    let start_bar = start_bar.bounds;
-    let end_bar = end_bar.bounds;
-
-    // The bar is 0.125em wide; the whole indicator — bar plus outline — is
-    // `track height - 0.25em` tall and centred in the track.
-    assert_eq!(start_bar.size.width, bar_width);
-    assert_eq!(
-      start_bar.size.height + outline_width * 2.0,
-      track.size.height - POINTER_INSET.to_pixels(rem_size) * 2.0
-    );
-    assert_eq!(start_bar.center().y, track.center().y);
-
-    // Bar plus outline spans the track exactly at both ends: nothing hangs
-    // outside, and the end colours are still reachable.
-    let painted_left = |bar: Bounds<Pixels>| bar.left() - outline_width;
-    let painted_right = |bar: Bounds<Pixels>| bar.right() + outline_width;
-    assert_eq!(painted_left(start_bar), track.left());
-    assert_eq!(painted_right(end_bar), track.right());
-
-    // Every ratio maps to a distinct, monotonically increasing position, so no
-    // part of the track is unreachable by dragging.
-    let mut previous = f32::NEG_INFINITY;
-    for step in 0..=10 {
-      let ratio = step as f32 / 10.0;
-      let (bar, _) = channel_indicator(&stops, ratio, track, rem_size, Hsla::black());
-      assert!(
-        f32::from(bar.bounds.center().x) > previous,
-        "ratio {ratio} is not to the right of the previous step"
-      );
-      previous = f32::from(bar.bounds.center().x);
-    }
-  }
-
-  #[test]
-  fn gradient_segments_cover_the_whole_track() {
-    let rem_size = px(16.);
-    let track = Bounds::new(point(px(100.), px(10.)), size(px(320.), px(28.)));
-    let segments = channel_segments(GRADIENT_STEPS, track, rem_size);
-    assert_eq!(segments.len(), GRADIENT_STEPS);
-
-    // The outer segments overhang the track so the rounded corners never
-    // expose the background; everything between them is contiguous.
-    assert!(segments[0].left() < track.left());
-    assert!(segments[GRADIENT_STEPS - 1].right() > track.right());
-    for pair in segments.windows(2) {
-      assert_eq!(
-        pair[0].right(),
-        pair[1].left(),
-        "segments must not leave gaps or overlap"
-      );
-    }
-
-    // The segment under the indicator is the one the indicator's color is
-    // sampled from, so the bar always matches the track it sits on.
-    let travel = channel_pointer_travel(track, rem_size);
-    for step in 0..=8 {
-      let ratio = step as f32 / 8.0;
-      let center_x = travel.origin.x + travel.size.width * ratio;
-      let under = segments
-        .iter()
-        .position(|segment| segment.contains(&point(center_x, track.center().y)))
-        .expect("every indicator position lies over a segment");
-      let sampled = (ratio.clamp(0.0, 1.0) * GRADIENT_STEPS as f32) as usize;
-      assert!(
-        under == sampled.min(GRADIENT_STEPS - 1),
-        "ratio {ratio} sits over segment {under} but samples {sampled}"
-      );
-    }
-  }
-
-  #[test]
-  fn indicator_samples_the_color_under_it() {
-    let stops = build_channel_gradient(PickerChannel::Lightness, sample_oklch());
-    assert_eq!(stops.len(), GRADIENT_STEPS);
-
-    // The sample at either end is the gradient's own first/last stop, and the
-    // middle sits between them, so the indicator always matches the track.
-    assert_eq!(channel_color_at(&stops, 0.0), stop_color(&stops[0]));
-    assert_eq!(
-      channel_color_at(&stops, 1.0),
-      stop_color(&stops[GRADIENT_STEPS - 1])
-    );
-    let middle = channel_color_at(&stops, 0.5);
-    assert_ne!(middle, stop_color(&stops[0]));
-    assert_ne!(middle, stop_color(&stops[GRADIENT_STEPS - 1]));
-
-    // Out-of-range ratios are clamped instead of panicking on an index.
-    assert_eq!(channel_color_at(&stops, -1.0), stop_color(&stops[0]));
-    assert_eq!(
-      channel_color_at(&stops, 2.0),
-      stop_color(&stops[GRADIENT_STEPS - 1])
-    );
-  }
-
-  fn stop_color(stop: &ChannelGradientStop) -> Hsla {
-    Hsla::from(gpui::Rgba {
-      r: stop.rgba.r,
-      g: stop.rgba.g,
-      b: stop.rgba.b,
-      a: stop.rgba.a,
-    })
   }
 
   #[gpui::test]

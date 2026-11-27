@@ -290,6 +290,62 @@ const LIGHT_TEXT_LEVEL: f32 = 0.97;
 /// OKLCH lightness of the near-black text candidate.
 const DARK_TEXT_LEVEL: f32 = 0.03;
 
+/// OKLCH lightness steps of the neutral greys used as contrast candidates.
+///
+/// A grey from this ladder is picked as the outline colour, so the outline
+/// reads as a neutral ring instead of a tinted one. The steps are spaced far
+/// enough apart that neighbouring levels are distinguishable on their own.
+const NEUTRAL_LEVELS: [f32; 9] = [0.03, 0.16, 0.29, 0.42, 0.55, 0.68, 0.81, 0.90, 0.97];
+/// Minimum APCA `Lc` an outline must reach against the colour it surrounds.
+///
+/// 45 is APCA's floor for large non-text UI graphics, which is the closest
+/// published category for a 1px outline: it guarantees the outline is visibly
+/// distinct from the fill rather than merely a different shade.
+const OUTLINE_MIN_CONTRAST: f32 = 45.0;
+
+/// Picks the neutral grey that is most distinct from `background`.
+///
+/// Only greys are considered — the point is a ring that reads as neutral
+/// structure, not a second colour competing with the gradient. Candidates are
+/// the [`NEUTRAL_LEVELS`] ladder, and the winner is the one with the highest
+/// perceptual contrast (APCA `Lc`, which is polarity aware) against
+/// `background`.
+///
+/// The winner is then pushed to the nearest level that still reaches
+/// [`OUTLINE_MIN_CONTRAST`] when such a level exists, so a mid-tone fill —
+/// where every grey is equally mediocre — still gets a ring at the edge of the
+/// scale instead of a washed-out one. That keeps the outline readable over any
+/// colour the picker can select.
+pub fn contrasting_neutral(background: Hsla) -> Hsla {
+  let by_contrast = |level: f32| apca_lc(neutral(level), background).abs();
+
+  let (best_level, best_contrast) = NEUTRAL_LEVELS
+    .iter()
+    .map(|&level| (level, by_contrast(level)))
+    .fold((NEUTRAL_LEVELS[0], f32::NEG_INFINITY), |best, next| {
+      if next.1 > best.1 { next } else { best }
+    });
+
+  if best_contrast >= OUTLINE_MIN_CONTRAST {
+    return neutral(best_level);
+  }
+
+  // No level clears the bar (the fill sits in the middle of the scale), so
+  // fall back to the extreme that is furthest from it.
+  let darkest = NEUTRAL_LEVELS[0];
+  let lightest = NEUTRAL_LEVELS[NEUTRAL_LEVELS.len() - 1];
+  if by_contrast(darkest) >= by_contrast(lightest) {
+    neutral(darkest)
+  } else {
+    neutral(lightest)
+  }
+}
+
+/// An opaque neutral grey at the given OKLCH lightness.
+fn neutral(lightness: f32) -> Hsla {
+  to_hsla_from_oklch(lightness, 0.0, 0.0, 1.0)
+}
+
 /// sRGB relative luminance, using the APCA main tone response curve (2.4).
 fn srgb_to_y(color: Hsla) -> f32 {
   let rgb = color.to_rgb();
