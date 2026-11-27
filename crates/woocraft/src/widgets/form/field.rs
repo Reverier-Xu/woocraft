@@ -199,11 +199,7 @@ impl Field {
   }
 }
 
-impl ParentElement for Field {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_parent_element!(Field);
 
 impl RenderOnce for Field {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

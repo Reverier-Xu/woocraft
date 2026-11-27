@@ -16,7 +16,7 @@ use super::{
 use crate::{
   ActiveTheme, Disableable, ElementExt, Icon, IconName, Selectable, Sizable, Size, StyleSized as _,
   actions::SelectUp,
-  h_flex, translate_woocraft, v_flex,
+  h_flex, translate, v_flex,
   widgets::{
     button::{Button, ButtonVariants as _},
     input::{
@@ -555,7 +555,7 @@ impl Render for SearchPanel {
             )
             .child(
               Button::new("replace-one")
-                .label(translate_woocraft("editor.search.replace"))
+                .label(translate("editor.search.replace"))
                 .disabled(!has_matches)
                 .on_click(cx.listener(|this, _, window, cx| {
                   this.replace_next(window, cx);
@@ -563,7 +563,7 @@ impl Render for SearchPanel {
             )
             .child(
               Button::new("replace-all")
-                .label(translate_woocraft("editor.search.replace_all"))
+                .label(translate("editor.search.replace_all"))
                 .disabled(!has_matches)
                 .on_click(cx.listener(|this, _, window, cx| {
                   this.replace_all(window, cx);

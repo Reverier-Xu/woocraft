@@ -49,7 +49,7 @@ impl LoadingRow {
 
 impl RenderOnce for LoadingRow {
   fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl IntoElement {
-    let paddings = self.size.table_cell_padding();
+    let paddings = self.size.container_padding();
     let height = self.size.table_row_height() * 0.5;
     let placeholder_color = if self.header {
       cx.theme().foreground.opacity(0.08)

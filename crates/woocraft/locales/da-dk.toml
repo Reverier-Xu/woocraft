@@ -3,7 +3,6 @@ loading = "Indlæser..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Unavngivet"
-zoom_reset = "Nulstil zoom"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Søg..."
@@ -23,10 +22,8 @@ zoom_out = "Zoom ud"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Kopiér"
 cut               = "Klip"
-go_to_definition  = "Gå til definition"
 paste             = "Sæt ind"
 select_all        = "Vælg alt"
-show_code_actions = "Vis kodehandlinger"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Erstat"

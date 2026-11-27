@@ -83,12 +83,12 @@ fn interactive_echo_round_trip() {
 
   // Wait until the child is attached: `cat` echoes the pty's line discipline
   // feedback, so typed characters show up as cells.
-  session.input(b"hi\r".as_slice());
+  session.write_pty(b"hi\r".as_slice());
   let text = wait_for_text_blocking(&events, &session, "hi", TIMEOUT).expect("echo");
   assert!(text.contains("hi"));
 
   // Send EOF (ctrl-d) to terminate `cat`.
-  session.input(b"\x04".as_slice());
+  session.write_pty(b"\x04".as_slice());
   let code = wait_for_exit_blocking(&events, &session, TIMEOUT).expect("exit");
   assert_eq!(code, 0);
 }
@@ -211,8 +211,8 @@ fn paste_respects_line_endings() {
   assert!(text.contains('a') && text.contains('b') && text.contains('c'));
 
   // Finish the current line, then send EOF (ctrl-d) to terminate `cat`.
-  session.input(b"\r".as_slice());
-  session.input(b"\x04".as_slice());
+  session.write_pty(b"\r".as_slice());
+  session.write_pty(b"\x04".as_slice());
   wait_for_exit_blocking(&events, &session, TIMEOUT).expect("exit");
 }
 

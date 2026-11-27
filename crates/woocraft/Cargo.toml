@@ -41,7 +41,6 @@ serde_json                    = { workspace = true }
 serde_repr                    = { workspace = true }
 smallvec                      = { workspace = true }
 thiserror                     = { workspace = true }
-toml                          = { workspace = true }
 tracing                       = { workspace = true }
 tree-sitter                   = { workspace = true }
 tree-sitter-agda              = { workspace = true, optional = true }
@@ -99,6 +98,7 @@ rust-i18n     = { workspace = true }
 zstd          = { workspace = true, optional = true }
 
 [dev-dependencies]
+toml = { workspace = true }
 gpui = { workspace = true, features = ["test-support"] }
 # Native file chooser for the media example; the portal backend keeps it
 # consistent with the rest of the desktop integration on Linux.
@@ -171,12 +171,108 @@ windows = { version = "0.62", features = [
 
 
 [[example]]
-name              = "player"
-required-features = ["media"]
+name              = "button"
+required-features = ["resources"]
+
+[[example]]
+name              = "chart_bar_candlestick"
+required-features = ["resources"]
+
+[[example]]
+name              = "chart_line_area"
+required-features = ["resources"]
+
+[[example]]
+name              = "chart_pie"
+required-features = ["resources"]
+
+[[example]]
+name              = "code_editor"
+required-features = ["resources"]
+
+[[example]]
+name              = "color_picker"
+required-features = ["resources"]
+
+[[example]]
+name              = "controls"
+required-features = ["resources"]
+
+[[example]]
+name              = "dialog"
+required-features = ["resources"]
+
+[[example]]
+name              = "dock"
+required-features = ["resources"]
+
+[[example]]
+name              = "editor"
+required-features = ["resources"]
+
+[[example]]
+name              = "form"
+required-features = ["resources"]
+
+[[example]]
+name              = "icon_external"
+required-features = ["resources"]
+
+[[example]]
+name              = "loading"
+required-features = ["resources"]
 
 [[example]]
 name              = "markdown"
-required-features = ["markdown"]
+required-features = ["resources", "markdown"]
+
+[[example]]
+name              = "menu"
+required-features = ["resources"]
+
+[[example]]
+name              = "motion"
+required-features = ["resources"]
+
+[[example]]
+name              = "pagination"
+required-features = ["resources"]
+
+[[example]]
+name              = "palette"
+required-features = ["resources"]
+
+[[example]]
+name              = "player"
+required-features = ["resources", "media"]
+
+[[example]]
+name              = "resizable"
+required-features = ["resources"]
+
+[[example]]
+name              = "slider"
+required-features = ["resources"]
+
+[[example]]
+name              = "table"
+required-features = ["resources"]
+
+[[example]]
+name              = "terminal_dock"
+required-features = ["resources", "terminal"]
+
+[[example]]
+name              = "terminal_headless"
+required-features = ["terminal"]
+
+[[example]]
+name              = "terminal"
+required-features = ["resources", "terminal"]
+
+[[example]]
+name              = "tree"
+required-features = ["resources"]
 
 [features]
 default = ["resources", "tree-sitter-languages", "terminal", "markdown"]

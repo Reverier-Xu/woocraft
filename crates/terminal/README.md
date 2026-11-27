@@ -20,7 +20,7 @@ The GPUI view components built on top of this crate live in the [`woocraft`](htt
 
 ```toml
 [dependencies]
-woocraft-terminal = "0.8"
+woocraft-terminal = "0.9"
 ```
 
 ## Quick Start
@@ -59,7 +59,7 @@ Example sources are located in `crates/woocraft/examples/`.
 ## Development
 
 ```bash
-cargo fmt --all
+cargo +nightly fmt --all
 cargo clippy --workspace --all-targets
 cargo test --workspace
 ```

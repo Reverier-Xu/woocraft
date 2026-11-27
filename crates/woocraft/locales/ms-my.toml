@@ -3,7 +3,6 @@ loading = "Memuatkan..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Tanpa tajuk"
-zoom_reset = "Set semula zum"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Cari..."
@@ -23,10 +22,8 @@ zoom_out = "Kecilkan"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Salin"
 cut               = "Potong"
-go_to_definition  = "Pergi ke definisi"
 paste             = "Tampal"
 select_all        = "Pilih semua"
-show_code_actions = "Tunjuk tindakan kod"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Ganti"

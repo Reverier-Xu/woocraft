@@ -1,8 +1,15 @@
 use gpui::Axis;
 use serde::{Deserialize, Serialize};
 
+/// Where something sits inside a container.
+///
+/// One type for every placement decision in the layout system — a dock slot,
+/// a split direction, a tab-bar edge — so callers never convert between
+/// per-widget direction enums. [`Self::Center`] is the no-side case: a dock
+/// pinned to the middle of the window, or a drop that joins the target tab
+/// group instead of splitting it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TabBarDirection {
+pub enum Placement {
   #[default]
   #[serde(rename = "top")]
   Top,
@@ -12,106 +19,21 @@ pub enum TabBarDirection {
   Left,
   #[serde(rename = "right")]
   Right,
-}
-
-impl TabBarDirection {
-  #[inline]
-  pub fn is_horizontal(self) -> bool {
-    matches!(self, Self::Top | Self::Bottom)
-  }
-
-  #[inline]
-  pub fn is_vertical(self) -> bool {
-    matches!(self, Self::Left | Self::Right)
-  }
-
-  #[inline]
-  pub fn is_top(self) -> bool {
-    matches!(self, Self::Top)
-  }
-
-  #[inline]
-  pub fn is_bottom(self) -> bool {
-    matches!(self, Self::Bottom)
-  }
-
-  #[inline]
-  pub fn is_left(self) -> bool {
-    matches!(self, Self::Left)
-  }
-
-  #[inline]
-  pub fn is_right(self) -> bool {
-    matches!(self, Self::Right)
-  }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DockPlacement {
   #[serde(rename = "center")]
   Center,
-  #[serde(rename = "left")]
-  Left,
-  #[serde(rename = "bottom")]
-  Bottom,
-  #[serde(rename = "right")]
-  Right,
-}
-
-impl DockPlacement {
-  #[inline]
-  pub fn axis(self) -> Axis {
-    match self {
-      Self::Left | Self::Right => Axis::Horizontal,
-      Self::Bottom => Axis::Vertical,
-      Self::Center => Axis::Horizontal,
-    }
-  }
-
-  #[inline]
-  pub fn is_left(self) -> bool {
-    matches!(self, Self::Left)
-  }
-
-  #[inline]
-  pub fn is_bottom(self) -> bool {
-    matches!(self, Self::Bottom)
-  }
-
-  #[inline]
-  pub fn is_right(self) -> bool {
-    matches!(self, Self::Right)
-  }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Placement {
-  #[serde(rename = "top")]
-  Top,
-  #[serde(rename = "bottom")]
-  Bottom,
-  #[serde(rename = "left")]
-  Left,
-  #[serde(rename = "right")]
-  Right,
 }
 
 impl Placement {
-  #[inline]
-  pub fn is_horizontal(self) -> bool {
-    matches!(self, Self::Left | Self::Right)
-  }
-
-  #[inline]
-  pub fn is_vertical(self) -> bool {
-    matches!(self, Self::Top | Self::Bottom)
-  }
-
+  /// The axis a container splits along to place something on this side.
+  ///
+  /// [`Self::Center`] never splits; it reports the horizontal axis so callers
+  /// that only need a stable default (a resize handle, a stack direction) do
+  /// not have to special-case it.
   #[inline]
   pub fn axis(self) -> Axis {
     match self {
       Self::Top | Self::Bottom => Axis::Vertical,
-      Self::Left | Self::Right => Axis::Horizontal,
+      Self::Left | Self::Right | Self::Center => Axis::Horizontal,
     }
   }
 }

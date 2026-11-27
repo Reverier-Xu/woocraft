@@ -1,12 +1,10 @@
 mod band;
 mod linear;
-mod ordinal;
 mod point;
 mod sealed;
 
 pub use band::ScaleBand;
 pub use linear::ScaleLinear;
-pub use ordinal::ScaleOrdinal;
 pub use point::ScalePoint;
 pub(crate) use sealed::Sealed;
 

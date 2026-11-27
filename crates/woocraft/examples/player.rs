@@ -89,13 +89,13 @@ use gpui::{
   WindowOptions, deferred, div, prelude::FluentBuilder as _, px, relative, rems,
 };
 use woocraft::{
-  ActiveTheme as _, Button, ButtonVariants as _, Disableable, Divider, DropdownMenu, Icon,
-  IconLabel, IconName, Input, InputEvent, InputState, Player, PlayerEvent, PlayerOptions,
-  PlayerPlaylist, PlayerTrackMenu, PlayerTransport, PlayerView, PopupMenuItem, Presence,
-  PropertyValue, ScrollableElement, ScrollbarShow, SeekPreview, Sizable, Size, Slider, SliderEvent,
-  SliderOrigin, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track,
-  TrackKind, Transition, TransportControl, VideoTransport, h_flex, init, track_color,
-  translate_woocraft, v_flex, window_border,
+  ActiveTheme as _, Button, ButtonVariants as _, Disableable, Divider, Icon, IconLabel, IconName,
+  Input, InputEvent, InputState, Player, PlayerEvent, PlayerOptions, PlayerPlaylist,
+  PlayerTrackMenu, PlayerTransport, PlayerView, PopupMenuItem, Presence, PropertyValue,
+  ScrollableElement, ScrollbarShow, SeekPreview, Sizable, Size, Slider, SliderEvent, SliderOrigin,
+  SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track, TrackKind,
+  Transition, TransportControl, VideoTransport, h_flex, init, track_color, translate, v_flex,
+  window_border,
 };
 
 /// The decoder menu entries, as mpv `hwdec` values: the four generic modes
@@ -1724,7 +1724,7 @@ impl PlayerApp {
         t("media.speed"),
         (speed * 100.0).round() / 100.0
       ))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let current = app.read(cx).player.read(cx).state().speed;
         for speed in SPEEDS {
           let app = app.clone();
@@ -1750,7 +1750,7 @@ impl PlayerApp {
     Button::new("menu-chapters")
       .with_size(size)
       .label(t("media.chapters"))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let chapters = player.read(cx).chapters();
         let position = player.read(cx).state().position;
         if chapters.is_empty() {
@@ -1796,7 +1796,7 @@ impl PlayerApp {
     Button::new("menu-decoder")
       .with_size(size)
       .label(label)
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let active = app.read(cx).live.hwdec.clone();
         for mode in DECODERS {
           let app = app.clone();
@@ -1832,7 +1832,7 @@ impl PlayerApp {
         t("media.transport"),
         transport_label(self.transport)
       ))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let requested = app.read(cx).transport;
         for (transport, label) in [
           (VideoTransport::Composition, t("media.transport_gpu")),
@@ -1861,7 +1861,7 @@ impl PlayerApp {
     Button::new("menu-size")
       .with_size(size)
       .label(format!("{}: {}", t("media.size"), self.size.as_str()))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let current = app.read(cx).size;
         for (tier, label) in [
           (Size::Small, t("media.size_small")),
@@ -1889,7 +1889,7 @@ impl PlayerApp {
     Button::new("menu-deinterlace")
       .with_size(size)
       .label(format!("{}: {}", t("media.deinterlace"), current))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let active = app.read(cx).live.deinterlace.clone();
         for mode in ["no", "auto", "yes"] {
           let app = app.clone();
@@ -1918,7 +1918,7 @@ impl PlayerApp {
     Button::new("menu-rotation")
       .with_size(size)
       .label(format!("{}: {current}°", t("media.rotation")))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let active = app.read(cx).live.rotation;
         for degrees in [0, 90, 180, 270] {
           let app = app.clone();
@@ -1947,7 +1947,7 @@ impl PlayerApp {
     Button::new("menu-replaygain")
       .with_size(size)
       .label(format!("{}: {}", t("media.replaygain"), current))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let active = app.read(cx).live.replaygain.clone();
         for mode in ["no", "track", "album"] {
           let app = app.clone();
@@ -1975,7 +1975,7 @@ impl PlayerApp {
     Button::new("menu-sub-track")
       .with_size(size)
       .label(format!("{}: {}", t("media.subtitles"), self.subtitle_label))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let (tracks, selected) = subtitle_tracks(&player, cx);
         menu = menu.item(
           PopupMenuItem::new(t("media.off"))
@@ -2018,7 +2018,7 @@ impl PlayerApp {
         t("media.subtitle_secondary"),
         self.secondary_label
       ))
-      .dropdown_menu(move |mut menu, _, cx| {
+      .menu(move |mut menu, _, cx| {
         let (tracks, _) = subtitle_tracks(&player, cx);
         let selected = player.read(cx).get_property::<i64>("secondary-sid").ok();
         menu = menu.item(
@@ -2305,7 +2305,7 @@ fn with_tooltip(button: Button, tooltip: String) -> Button {
 
 /// Translates one `media.*` string of this example.
 fn t(key: &str) -> String {
-  translate_woocraft(key)
+  translate(key)
 }
 
 /// A transport's display name.

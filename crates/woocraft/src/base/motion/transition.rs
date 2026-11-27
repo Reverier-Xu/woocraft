@@ -9,8 +9,10 @@ use std::{rc::Rc, time::Duration};
 
 use gpui::{App, ElementId, SharedString, Window};
 
-use super::{Easing, Interpolate, MotionPhase, SignedDuration, Timing, keyframes::Keyframes};
-use crate::base::animation::ease_out_cubic;
+use super::{
+  Easing, Interpolate, MotionStatus, SignedDuration, Timing, easing::ease_out_cubic,
+  keyframes::Keyframes,
+};
 
 #[derive(Clone)]
 pub struct Transition {
@@ -143,14 +145,6 @@ struct ValueTransition<T> {
   duration: Duration,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MotionStatus {
-  Idle,
-  Delayed,
-  Running,
-  Finished,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MotionValue<T> {
   pub value: T,
@@ -281,11 +275,7 @@ where
   }
 
   let sample = timing.sample(now.saturating_duration_since(started_at));
-  let status = match sample.phase {
-    MotionPhase::Before => MotionStatus::Delayed,
-    MotionPhase::Active => MotionStatus::Running,
-    MotionPhase::After => MotionStatus::Finished,
-  };
+  let status = sample.phase;
   if matches!(status, MotionStatus::Delayed | MotionStatus::Running) {
     window.request_animation_frame();
   }

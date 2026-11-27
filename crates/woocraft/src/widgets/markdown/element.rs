@@ -76,9 +76,9 @@ use super::{
   table::render_table,
 };
 use crate::{
-  ActiveTheme, Button, ButtonVariants as _, Checkbox, ContextMenuExt as _, Disableable as _,
-  Divider, HighlightTheme, PopupMenu, PopupMenuItem, Sizable as _, StyledExt as _,
-  SyntaxHighlighter, h_flex, translate_woocraft, v_flex,
+  ActiveTheme, Button, ButtonVariants as _, Checkbox, Disableable as _, Divider, HighlightTheme,
+  MenuExt as _, PopupMenu, PopupMenuItem, Sizable as _, StyledExt as _, SyntaxHighlighter, h_flex,
+  translate, v_flex,
 };
 
 /// Callback type used by [`Markdown::on_link_click`].
@@ -421,7 +421,7 @@ pub(super) fn render_code_block(
       ctx.id_prefix.clone(),
       id as u64 + 1,
     ))
-    .label(translate_woocraft("markdown.copy_code"))
+    .label(translate("markdown.copy_code"))
     .small()
     .flat()
     .on_click(move |_, _, cx| {
@@ -795,7 +795,7 @@ fn render_image_placeholder(url: &str, title: &str, ctx: &RenderContext<'_>) -> 
             .rounded_sm()
             .bg(ctx.palette.border)
             .text_color(ctx.palette.muted_foreground)
-            .child(translate_woocraft("markdown.image")),
+            .child(translate("markdown.image")),
         )
         .child(div().font_semibold().child(title.to_string())),
     )
@@ -1018,9 +1018,9 @@ impl Markdown {
   /// the built-in actions intact while letting an application add its own.
   ///
   /// ```rust,ignore
-  /// Markdown::new(source).context_menu(|menu, selected, _window, _cx| {
+  /// Markdown::new(source).menu(|menu, selected, _window, _cx| {
   ///   menu.separator().item(PopupMenuItem::new("Search selection"))
-  /// });
+  /// }).at_pointer();
   /// ```
   pub fn context_menu(
     mut self,
@@ -1209,12 +1209,12 @@ impl RenderOnce for Markdown {
       ))
       .map(|this| match menu_selection {
         Some(selection) => this
-          .context_menu(move |menu, window, cx| {
+          .menu(move |menu, window, cx| {
             let has_selection = !selection.is_empty();
 
             let copy = {
               let selection = selection.clone();
-              PopupMenuItem::new(translate_woocraft("markdown.copy"))
+              PopupMenuItem::new(translate("markdown.copy"))
                 .disabled(!has_selection)
                 .on_click(move |_, _, cx| {
                   if let Some(text) = selection.selected_text() {
@@ -1226,21 +1226,17 @@ impl RenderOnce for Markdown {
             // A link under the pointer gets its own copy action, matching what
             // readers expect from a right-click on a hyperlink.
             let copy_link = selection.hovered_link().map(|url| {
-              PopupMenuItem::new(translate_woocraft("markdown.copy_link")).on_click(
-                move |_, _, cx| {
-                  cx.write_to_clipboard(ClipboardItem::new_string(url.to_string()));
-                },
-              )
+              PopupMenuItem::new(translate("markdown.copy_link")).on_click(move |_, _, cx| {
+                cx.write_to_clipboard(ClipboardItem::new_string(url.to_string()));
+              })
             });
 
             let select_all = {
               let selection = selection.clone();
-              PopupMenuItem::new(translate_woocraft("markdown.select_all")).on_click(
-                move |_, _, cx| {
-                  selection.select_all();
-                  cx.refresh_windows();
-                },
-              )
+              PopupMenuItem::new(translate("markdown.select_all")).on_click(move |_, _, cx| {
+                selection.select_all();
+                cx.refresh_windows();
+              })
             };
 
             let menu = menu.item(copy);
@@ -1257,6 +1253,7 @@ impl RenderOnce for Markdown {
               None => menu,
             }
           })
+          .at_pointer()
           .into_any_element(),
         None => this.into_any_element(),
       })

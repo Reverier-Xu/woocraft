@@ -21,8 +21,8 @@
 //!   from `rem` changes.
 
 use gpui::{
-  AbsoluteLength, BoxShadow, Corners, DefiniteLength, Div, Edges, Hsla, Pixels, Refineable, Rems,
-  StyleRefinement, Styled, div, point, rems,
+  AbsoluteLength, Corners, DefiniteLength, Div, Edges, Pixels, Refineable, Rems, StyleRefinement,
+  Styled, div, rems,
 };
 use serde::{Deserialize, Serialize};
 
@@ -102,21 +102,6 @@ pub fn h_flex() -> Div {
 #[inline(always)]
 pub fn v_flex() -> Div {
   div().v_flex().font(default_font())
-}
-
-/// Create a [`BoxShadow`] like CSS.
-#[inline(always)]
-pub fn box_shadow(
-  x: impl Into<Pixels>, y: impl Into<Pixels>, blur: impl Into<Pixels>, spread: impl Into<Pixels>,
-  color: Hsla,
-) -> BoxShadow {
-  BoxShadow {
-    offset: point(x.into(), y.into()),
-    blur_radius: blur.into(),
-    spread_radius: spread.into(),
-    color,
-    inset: false,
-  }
 }
 
 macro_rules! font_weight {
@@ -326,17 +311,6 @@ impl Size {
     self.component_height()
   }
 
-  #[inline]
-  pub fn table_cell_padding(&self) -> Edges<Rems> {
-    let padding = self.container_px();
-    Edges {
-      top: self.container_py(),
-      bottom: self.container_py(),
-      left: padding,
-      right: padding,
-    }
-  }
-
   pub fn smaller(&self) -> Self {
     match self {
       Size::Small => Size::Small,
@@ -478,11 +452,6 @@ pub trait Sizable: Sized {
   }
 }
 
-pub trait Collapsible {
-  fn collapsed(self, collapsed: bool) -> Self;
-  fn is_collapsed(&self) -> bool;
-}
-
 pub trait StyleSized<T: Styled> {
   fn component_size(self, size: Size) -> Self;
   fn component_pl(self, size: Size) -> Self;
@@ -504,8 +473,6 @@ pub trait StyleSized<T: Styled> {
   fn container_gap_y(self, size: Size) -> Self;
   fn component_gap(self, size: Size) -> Self;
   fn list_size(self, size: Size) -> Self;
-  fn list_px(self, size: Size) -> Self;
-  fn list_py(self, size: Size) -> Self;
   fn size_with(self, size: Size) -> Self;
   fn component_padding(self, size: Size) -> Self;
   fn container_padding(self, size: Size) -> Self;
@@ -620,20 +587,10 @@ impl<T: Styled> StyleSized<T> for T {
   #[inline]
   fn list_size(self, size: Size) -> Self {
     self
-      .list_px(size)
-      .list_py(size)
+      .px(size.component_px())
+      .py(size.component_py())
       .container_h(size)
       .text_size(size.text_size())
-  }
-
-  #[inline]
-  fn list_px(self, size: Size) -> Self {
-    self.px(size.component_px())
-  }
-
-  #[inline]
-  fn list_py(self, size: Size) -> Self {
-    self.py(size.component_py())
   }
 
   #[inline]

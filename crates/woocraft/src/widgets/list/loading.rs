@@ -1,7 +1,7 @@
 use gpui::{IntoElement, ParentElement as _, RenderOnce, Styled};
 
 use super::ListItem;
-use crate::{Spinner, h_flex};
+use crate::{Disableable, Spinner, h_flex};
 
 #[derive(IntoElement)]
 pub struct Loading;

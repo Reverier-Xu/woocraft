@@ -3,7 +3,6 @@ loading = "Betöltés..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Névtelen"
-zoom_reset = "Nagyítás visszaállítása"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Keresés..."
@@ -23,10 +22,8 @@ zoom_out = "Kicsinyítés"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Másolás"
 cut               = "Kivágás"
-go_to_definition  = "Ugrás a definícióra"
 paste             = "Beillesztés"
 select_all        = "Összes kijelölése"
-show_code_actions = "Kódműveletek megjelenítése"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Csere"

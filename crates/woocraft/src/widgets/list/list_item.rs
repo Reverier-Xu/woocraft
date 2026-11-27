@@ -79,20 +79,9 @@ impl ListItem {
     self
   }
 
-  /// Set ListItem as selected style.
-  pub fn selected(mut self, selected: bool) -> Self {
-    self.selected = selected;
-    self
-  }
-
   /// Set ListItem as confirmed style.
   pub fn confirmed(mut self, confirmed: bool) -> Self {
     self.confirmed = confirmed;
-    self
-  }
-
-  pub fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
     self
   }
 
@@ -128,6 +117,7 @@ impl ListItem {
 }
 
 impl_sizable!(ListItem);
+impl_disableable!(ListItem);
 
 impl Selectable for ListItem {
   fn selected(mut self, selected: bool) -> Self {
@@ -147,11 +137,7 @@ impl Selectable for ListItem {
 
 impl_styled!(ListItem);
 
-impl ParentElement for ListItem {
-  fn extend(&mut self, elements: impl IntoIterator<Item = gpui::AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_parent_element!(ListItem);
 
 impl RenderOnce for ListItem {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

@@ -8,10 +8,10 @@ use gpui::{
   Render, SharedString, Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, CodeEditor, DockArea, DockPlacement, EditorActionSink,
-  EditorBackend, EditorBackendCapabilities, EditorContextMenuProvider, EditorHighlighterProvider,
-  EditorSnapshot, EditorState, IconName, Panel, PanelEvent, Rope, RopeEditorSnapshot, RopeExt,
-  Sizable, Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
+  ActiveTheme, Button, ButtonVariants as _, CodeEditor, DockArea, EditorActionSink, EditorBackend,
+  EditorBackendCapabilities, EditorContextMenuProvider, EditorHighlighterProvider, EditorSnapshot,
+  EditorState, IconName, Panel, PanelEvent, Placement, Rope, RopeEditorSnapshot, RopeExt, Sizable,
+  Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
 
 const RUST_SAMPLE: &str = r#"use std::collections::HashMap;
@@ -507,9 +507,9 @@ impl EditorDockExample {
       dock.add_to_right_dock(Arc::new(yaml.clone()), window, cx);
 
       // Configure dock sizes
-      dock.set_dock_size(DockPlacement::Left, px(320.), window, cx);
-      dock.set_dock_size(DockPlacement::Bottom, px(250.), window, cx);
-      dock.set_dock_size(DockPlacement::Right, px(340.), window, cx);
+      dock.set_dock_size(Placement::Left, px(320.), window, cx);
+      dock.set_dock_size(Placement::Bottom, px(250.), window, cx);
+      dock.set_dock_size(Placement::Right, px(340.), window, cx);
     });
 
     cx.new(|_| Self { dock_area })
@@ -554,7 +554,7 @@ impl Render for EditorDockExample {
               move |_, window, cx| {
                 view.update(cx, |this, cx| {
                   this.dock_area.update(cx, |dock, cx| {
-                    dock.toggle_dock(DockPlacement::Left, window, cx);
+                    dock.toggle_dock(Placement::Left, window, cx);
                   });
                 });
               }
@@ -568,7 +568,7 @@ impl Render for EditorDockExample {
                   move |_, window, cx| {
                     view.update(cx, |this, cx| {
                       this.dock_area.update(cx, |dock, cx| {
-                        dock.toggle_dock(DockPlacement::Bottom, window, cx);
+                        dock.toggle_dock(Placement::Bottom, window, cx);
                       });
                     });
                   }
@@ -578,7 +578,7 @@ impl Render for EditorDockExample {
               move |_, window, cx| {
                 view.update(cx, |this, cx| {
                   this.dock_area.update(cx, |dock, cx| {
-                    dock.toggle_dock(DockPlacement::Right, window, cx);
+                    dock.toggle_dock(Placement::Right, window, cx);
                   });
                 });
               },

@@ -1,7 +1,6 @@
 #[macro_use]
 mod macros;
 
-mod anchor;
 mod animation;
 mod caret;
 mod element_ext;
@@ -18,7 +17,6 @@ mod theme;
 mod time;
 mod tree;
 
-pub use anchor::*;
 pub use animation::*;
 pub use caret::*;
 pub use element_ext::*;

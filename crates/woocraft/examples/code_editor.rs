@@ -6,8 +6,8 @@ use gpui::{
   Styled, Subscription, Window, WindowBounds, WindowOptions, actions, div, px,
 };
 use woocraft::{
-  ActiveTheme, AppMenuBar, CodeEditor, DockArea, DockPlacement, EditorEvent, EditorState, IconName,
-  Panel, PanelEvent, PopupMenuItem, Size, StyleSized, TitleBar, TreeEvent, TreeItem, TreeState,
+  ActiveTheme, AppMenuBar, CodeEditor, DockArea, EditorEvent, EditorState, IconName, Panel,
+  PanelEvent, Placement, PopupMenuItem, Size, StyleSized, TitleBar, TreeEvent, TreeItem, TreeState,
   h_flex, init, tree, v_flex, window_border,
 };
 #[cfg(debug_assertions)]
@@ -621,7 +621,7 @@ impl CodeEditorApp {
       dock.add_to_center(Arc::new(main_rs_panel.clone()), window, cx);
       dock.add_to_center(Arc::new(lib_rs_panel.clone()), window, cx);
 
-      dock.set_dock_size(DockPlacement::Left, px(240.), window, cx);
+      dock.set_dock_size(Placement::Left, px(240.), window, cx);
     });
 
     // Register open editors
@@ -742,7 +742,7 @@ impl CodeEditorApp {
     &mut self, _: &ToggleLeftDock, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.dock_area.update(cx, |dock, cx| {
-      dock.toggle_dock(DockPlacement::Left, window, cx);
+      dock.toggle_dock(Placement::Left, window, cx);
     });
   }
 
@@ -821,53 +821,50 @@ fn main() {
       // Set up application menus (use i18n keys for AppMenuBar translation)
       cx.set_menus(vec![
         Menu {
-          name: "tech.woooo.woocraft.menu.file".into(),
+          name: "menu.file".into(),
           disabled: false,
           items: vec![
-            MenuItem::action("tech.woooo.woocraft.menu.new_file", NewFile),
-            MenuItem::action("tech.woooo.woocraft.menu.open_folder", OpenFolder),
+            MenuItem::action("menu.new_file", NewFile),
+            MenuItem::action("menu.open_folder", OpenFolder),
             MenuItem::separator(),
-            MenuItem::action("tech.woooo.woocraft.menu.save", Save),
-            MenuItem::action("tech.woooo.woocraft.menu.save_as", SaveAs),
+            MenuItem::action("menu.save", Save),
+            MenuItem::action("menu.save_as", SaveAs),
             MenuItem::separator(),
-            MenuItem::action("tech.woooo.woocraft.menu.close_file", CloseFile),
+            MenuItem::action("menu.close_file", CloseFile),
             MenuItem::separator(),
-            MenuItem::action("tech.woooo.woocraft.menu.quit", Quit),
+            MenuItem::action("menu.quit", Quit),
           ],
         },
         Menu {
-          name: "tech.woooo.woocraft.menu.edit".into(),
+          name: "menu.edit".into(),
           disabled: false,
           items: vec![
-            MenuItem::action("tech.woooo.woocraft.menu.undo", Undo),
-            MenuItem::action("tech.woooo.woocraft.menu.redo", Redo),
+            MenuItem::action("menu.undo", Undo),
+            MenuItem::action("menu.redo", Redo),
             MenuItem::separator(),
-            MenuItem::action("tech.woooo.woocraft.menu.cut", Cut),
-            MenuItem::action("tech.woooo.woocraft.menu.copy", Copy),
-            MenuItem::action("tech.woooo.woocraft.menu.paste", Paste),
+            MenuItem::action("menu.cut", Cut),
+            MenuItem::action("menu.copy", Copy),
+            MenuItem::action("menu.paste", Paste),
             MenuItem::separator(),
-            MenuItem::action("tech.woooo.woocraft.menu.select_all", SelectAll),
-            MenuItem::action("tech.woooo.woocraft.menu.find", Find),
+            MenuItem::action("menu.select_all", SelectAll),
+            MenuItem::action("menu.find", Find),
           ],
         },
         Menu {
-          name: "tech.woooo.woocraft.menu.view".into(),
+          name: "menu.view".into(),
           disabled: false,
           items: vec![
-            MenuItem::action("tech.woooo.woocraft.menu.toggle_sidebar", ToggleLeftDock),
+            MenuItem::action("menu.toggle_sidebar", ToggleLeftDock),
             MenuItem::separator(),
-            MenuItem::action("tech.woooo.woocraft.menu.toggle_inspector", ToggleInspector),
+            MenuItem::action("menu.toggle_inspector", ToggleInspector),
             MenuItem::separator(),
-            MenuItem::action("tech.woooo.woocraft.menu.word_wrap", WordWrap),
+            MenuItem::action("menu.word_wrap", WordWrap),
           ],
         },
         Menu {
-          name: "tech.woooo.woocraft.menu.help".into(),
+          name: "menu.help".into(),
           disabled: false,
-          items: vec![MenuItem::action(
-            "tech.woooo.woocraft.menu.about",
-            ShowAbout,
-          )],
+          items: vec![MenuItem::action("menu.about", ShowAbout)],
         },
       ]);
 

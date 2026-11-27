@@ -201,8 +201,7 @@ pub fn terminal_font_fallbacks() -> Option<FontFallbacks> {
   // Linux, so elsewhere the symbol font stands alone.
   #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
   let mut families = vec![crate::SYMBOLS_FONT_FAMILY.to_owned()];
-  #[cfg(target_os = "linux")]
-  if let Some(platform_fallbacks) = fontconfig_fallbacks("monospace", &MONOSPACE_FAMILIES) {
+  if let Some(platform_fallbacks) = platform_monospace_font_fallbacks() {
     families.extend_from_slice(platform_fallbacks.fallback_list());
   }
   Some(FontFallbacks::from_fonts(families))

@@ -92,17 +92,9 @@ impl Srgb {
   }
 
   /// `#RRGGBB`, upper case. The alpha channel is not included; see
-  /// [`Srgb::to_hex_with_alpha`].
   pub fn to_hex(&self) -> String {
     let (r, g, b) = self.to_rgb8();
     format!("#{r:02X}{g:02X}{b:02X}")
-  }
-
-  /// `#RRGGBBAA`, upper case.
-  pub fn to_hex_with_alpha(&self) -> String {
-    let (r, g, b) = self.to_rgb8();
-    let a = (self.a.clamp(0.0, 1.0) * 255.0).round() as u8;
-    format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
   }
 
   /// The linear-light channels, `0.0..=1.0`.
@@ -121,13 +113,6 @@ impl Srgb {
       delinearize(linear[1]),
       delinearize(linear[2]),
     )
-  }
-
-  /// Whether every channel lies inside the sRGB cube.
-  pub fn in_gamut(&self) -> bool {
-    [self.r, self.g, self.b]
-      .iter()
-      .all(|c| (0.0..=1.0).contains(c))
   }
 
   /// This color as HSL, the form GPUI's `Hsla` is built from.

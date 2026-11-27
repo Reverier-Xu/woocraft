@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use super::{DockArea, PanelInfo, PanelState, TabPanel, invalid_panel::InvalidPanel};
-use crate::{Button, IconName, PopupMenu, translate_woocraft};
+use crate::{Button, IconName, PopupMenu, translate};
 
 type PanelBuilderFn = dyn Fn(
   WeakEntity<DockArea>,
@@ -86,7 +86,7 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 
   /// The title of the panel
   fn title(&self, cx: &App) -> SharedString {
-    translate_woocraft("dock.unnamed").into()
+    translate("dock.unnamed").into()
   }
 
   /// The icon of the panel, default is `IconName::Grid`
@@ -159,11 +159,11 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
   /// that must survive a re-parenting but not a close.
   fn on_removed(&mut self, window: &mut Window, cx: &mut Context<Self>) {}
 
-  /// The addition dropdown menu of the panel, default is `None`.
-  fn dropdown_menu(
-    &mut self, this: PopupMenu, window: &mut Window, cx: &mut Context<Self>,
+  /// Contributes items to the tab panel's menu, default is none.
+  fn extend_tab_menu(
+    &mut self, menu: PopupMenu, window: &mut Window, cx: &mut Context<Self>,
   ) -> PopupMenu {
-    this
+    menu
   }
 
   /// The addition toolbar buttons of the panel used to show in the right of the
@@ -204,7 +204,7 @@ pub trait PanelView: 'static + Send + Sync {
   fn set_zoomed(&self, zoomed: bool, window: &mut Window, cx: &mut App);
   fn on_added_to(&self, tab_panel: WeakEntity<TabPanel>, window: &mut Window, cx: &mut App);
   fn on_removed(&self, window: &mut Window, cx: &mut App);
-  fn dropdown_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu;
+  fn extend_tab_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu;
   fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>>;
   fn view(&self) -> AnyView;
   fn focus_handle(&self, cx: &App) -> FocusHandle;
@@ -281,8 +281,8 @@ impl<T: Panel> PanelView for Entity<T> {
     self.update(cx, |this, cx| this.on_removed(window, cx));
   }
 
-  fn dropdown_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu {
-    self.update(cx, |this, cx| this.dropdown_menu(menu, window, cx))
+  fn extend_tab_menu(&self, menu: PopupMenu, window: &mut Window, cx: &mut App) -> PopupMenu {
+    self.update(cx, |this, cx| this.extend_tab_menu(menu, window, cx))
   }
 
   fn toolbar_buttons(&self, window: &mut Window, cx: &mut App) -> Option<Vec<Button>> {

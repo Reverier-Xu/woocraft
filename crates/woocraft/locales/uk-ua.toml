@@ -3,7 +3,6 @@ loading = "Завантаження..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Без назви"
-zoom_reset = "Скинути масштаб"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Пошук..."
@@ -23,10 +22,8 @@ zoom_out = "Зменшити"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Копіювати"
 cut               = "Вирізати"
-go_to_definition  = "Перейти до визначення"
 paste             = "Вставити"
 select_all        = "Виділити все"
-show_code_actions = "Показати дії з кодом"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Замінити"

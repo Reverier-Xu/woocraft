@@ -444,6 +444,18 @@ impl PaneNode {
   fn apply_split_insert(
     &mut self, panel: PanelId, node: NodeId, placement: Placement, size: Option<Pixels>,
   ) -> bool {
+    // A centre placement has no side to split toward: it joins the target tab
+    // group, exactly like a centre drop.
+    if placement == Placement::Center {
+      return self.apply_insert(
+        panel,
+        InsertTarget::Tabs {
+          node,
+          ix: None,
+          activate: true,
+        },
+      );
+    }
     let Some(path) = self.path_of_node(node) else {
       return false;
     };
@@ -497,9 +509,10 @@ impl PaneNode {
       else {
         return false;
       };
-      let at = match placement {
-        Placement::Left | Placement::Top => ix,
-        Placement::Right | Placement::Bottom => ix + 1,
+      let at = if matches!(placement, Placement::Left | Placement::Top) {
+        ix
+      } else {
+        ix + 1
       }
       .min(children.len());
       children.insert(at, new_tabs);
@@ -510,10 +523,12 @@ impl PaneNode {
     // Different axis (or a root tab group): wrap the target in a fresh split
     // holding the new tab group on the placed side of the target.
     let target = self.node_at(&path).clone();
-    let (first, second, first_size, second_size) = match placement {
-      Placement::Left | Placement::Top => (new_tabs, target, size, None),
-      Placement::Right | Placement::Bottom => (target, new_tabs, None, size),
-    };
+    let (first, second, first_size, second_size) =
+      if matches!(placement, Placement::Left | Placement::Top) {
+        (new_tabs, target, size, None)
+      } else {
+        (target, new_tabs, None, size)
+      };
     let replacement = PaneNode::new(NodeKind::Split {
       axis: placement_axis,
       children: vec![first, second],

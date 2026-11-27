@@ -3,7 +3,6 @@ loading = "लोड हो रहा है..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "शीर्षकहीन"
-zoom_reset = "ज़ूम रीसेट करें"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "खोजें..."
@@ -23,10 +22,8 @@ zoom_out = "छोटा करें"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "कॉपी करें"
 cut               = "कट करें"
-go_to_definition  = "परिभाषा पर जाएँ"
 paste             = "पेस्ट करें"
 select_all        = "सभी चुनें"
-show_code_actions = "कोड क्रियाएँ दिखाएँ"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "बदलें"

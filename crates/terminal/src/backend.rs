@@ -44,9 +44,6 @@ use crate::{
 
 pub(crate) type TermLock = FairMutex<Term<BackendListener>>;
 
-/// The maximum number of scrollback lines retained by the emulator.
-const MAX_SCROLL_HISTORY: usize = 1_000_000;
-
 // ---------------------------------------------------------------------------
 // PTY handle
 // ---------------------------------------------------------------------------
@@ -308,7 +305,8 @@ impl EventListener for BackendListener {
 
 pub(crate) fn term_config(options: &SpawnOptions) -> AlacConfig {
   AlacConfig {
-    scrolling_history: options.history().min(MAX_SCROLL_HISTORY),
+    // `SpawnOptions::history` already clamps to the supported ceiling.
+    scrolling_history: options.history(),
     default_cursor_style: AlacCursorStyle {
       shape: alacritty_cursor_shape(options.cursor_shape),
       blinking: false,

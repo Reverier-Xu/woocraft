@@ -103,10 +103,10 @@ impl DiagnosticSeverity {
     let theme = cx.theme();
     let bg = theme.background;
     match self {
-      Self::Error => bg.blend(theme.red.alpha(0.2)),
-      Self::Warning => bg.blend(theme.yellow.alpha(0.2)),
-      Self::Info => bg.blend(theme.blue.alpha(0.2)),
-      Self::Hint => bg.blend(theme.cyan.alpha(0.2)),
+      Self::Error => bg.blend(theme.red.opacity(0.2)),
+      Self::Warning => bg.blend(theme.yellow.opacity(0.2)),
+      Self::Info => bg.blend(theme.blue.opacity(0.2)),
+      Self::Hint => bg.blend(theme.cyan.opacity(0.2)),
     }
   }
 

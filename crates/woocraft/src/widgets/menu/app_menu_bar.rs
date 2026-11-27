@@ -3,7 +3,7 @@ use gpui::{
   ParentElement, Render, StatefulInteractiveElement as _, Styled, Window,
 };
 
-use crate::{Button, ButtonVariants, DropdownMenu as _, Sizable, h_flex};
+use crate::{Button, ButtonVariants, Sizable, h_flex, translate};
 
 pub fn init(_: &mut App) {}
 
@@ -42,13 +42,15 @@ impl Render for AppMenuBar {
       .justify_start()
       .hover(|this| this.opacity(1.))
       .children(self.menus.iter().enumerate().map(|(ix, menu)| {
-        let menu_name = menu.name.as_ref().to_owned();
+        // `cx.set_menus` takes i18n keys, so the bar itself has to resolve
+        // them; otherwise every top-level title shows its raw key.
+        let menu_name = translate(menu.name.as_ref());
         let menu_items = menu.items.clone();
         Button::new(("app-menu", ix))
           .medium()
           .flat()
           .label(menu_name)
-          .dropdown_menu(move |menu, window, cx| {
+          .menu(move |menu, window, cx| {
             let mut menu = menu;
             if let Some(handle) = window.focused(cx) {
               menu = menu.action_context(handle);

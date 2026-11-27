@@ -3,30 +3,13 @@ use std::rc::Rc;
 use gpui::{App, Bounds, IntoElement, Pixels, RenderOnce, Styled, Window, canvas};
 
 use crate::{
-  ActiveTheme, Plot,
+  Plot,
   shape::{Arc, ArcData, Pie},
 };
 
 type ArcRadiusFn<T> = Rc<dyn Fn(&ArcData<T>) -> f32 + 'static>;
 type ValueFn<T> = Rc<dyn Fn(&T) -> f32>;
 type ColorFn<T> = Rc<dyn Fn(&T) -> gpui::Hsla>;
-
-#[inline]
-fn palette(index: usize, cx: &App) -> gpui::Hsla {
-  let colors = [
-    cx.theme().primary,
-    cx.theme().accent,
-    cx.theme().success,
-    cx.theme().warning,
-    cx.theme().danger,
-    cx.theme().blue,
-    cx.theme().cyan,
-    cx.theme().green,
-    cx.theme().yellow,
-    cx.theme().red,
-  ];
-  colors[index % colors.len()]
-}
 
 #[derive(IntoElement)]
 pub struct PieChart<T: 'static> {
@@ -141,7 +124,7 @@ impl<T> Plot for PieChart<T> {
       let color = if let Some(color_fn) = self.color.as_ref() {
         color_fn(arc_data.data)
       } else {
-        palette(i, cx)
+        super::palette(i, cx)
       };
 
       arc.paint(

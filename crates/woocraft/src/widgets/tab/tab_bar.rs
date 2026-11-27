@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 use super::{
   super::{
     button::{Button, ButtonVariants as _},
-    menu::{DropdownMenu as _, PopupMenuItem},
+    menu::PopupMenuItem,
   },
   Tab,
 };
@@ -225,7 +225,7 @@ impl RenderOnce for TabBar {
             Button::new("more")
               .flat()
               .icon(Icon::new(IconName::ChevronDown))
-              .dropdown_menu(move |mut this: crate::PopupMenu, _, _| {
+              .menu(move |mut this: crate::PopupMenu, _, _| {
                 for (ix, (label, disabled)) in item_labels.iter().enumerate() {
                   this = this.item(
                     PopupMenuItem::new(label.clone().unwrap_or_default())
@@ -239,7 +239,7 @@ impl RenderOnce for TabBar {
 
                 this
               })
-              .anchor(Anchor::TopRight),
+              .anchor(Anchor::BottomLeft),
           )
         })
         .when_some(self.suffix, |this, suffix| this.child(suffix))

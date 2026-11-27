@@ -448,7 +448,7 @@ pub struct InputState {
   diagnostic_popover: Option<Entity<DiagnosticPopover>>,
   /// Completion/CodeAction context menu
   pub(super) context_menu: Option<ContextMenu>,
-  /// Shared popup context menu (from `ContextMenuExt`) open state.
+  /// Shared popup context menu (from `MenuExt`) open state.
   pub(super) shared_context_menu_open: bool,
   /// A flag to indicate if we are currently inserting a completion item.
   pub(super) completion_inserting: bool,

@@ -17,9 +17,9 @@ use regex::Regex;
 use serde::Deserialize;
 
 use crate::{
-  ActiveTheme as _, Button, ButtonVariants as _, CARET_STEADY_DURATION, ContextMenuExt, ElementExt,
-  Icon, IconName, PopupMenu, PopupMenuItem, Selectable, Selection, Sizable, Size, StyleSized,
-  StyledExt, h_flex, render_caret, translate_woocraft,
+  ActiveTheme as _, Button, ButtonVariants as _, CARET_STEADY_DURATION, ElementExt, Icon, IconName,
+  MenuExt, PopupMenu, PopupMenuItem, Selection, Sizable, Size, StyleSized, StyledExt, h_flex,
+  render_caret, translate,
 };
 
 const CONTEXT: &str = "Input";
@@ -1287,11 +1287,6 @@ impl Input {
     self
   }
 
-  pub fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-
   pub fn tab_index(mut self, index: isize) -> Self {
     self.tab_index = index;
     self
@@ -1345,29 +1340,11 @@ impl Input {
 }
 
 impl_sizable!(Input);
+impl_disableable!(Input);
 
-impl Selectable for Input {
-  fn selected(mut self, selected: bool) -> Self {
-    self.selected = selected;
-    self
-  }
-
-  fn is_selected(&self) -> bool {
-    self.selected
-  }
-}
+impl_selectable!(Input);
 
 impl_styled!(Input);
-
-#[inline]
-fn clear_button(cx: &App, size: Size) -> Button {
-  Button::new("clean")
-    .icon(Icon::new(IconName::DismissCircle))
-    .flat()
-    .with_size(size)
-    .tab_stop(false)
-    .text_color(cx.theme().muted_foreground)
-}
 
 /// Paint-phase bindings for single-line input. These APIs must be called in
 /// paint, not prepaint.
@@ -1691,7 +1668,7 @@ impl RenderOnce for Input {
               ))
             })
             .when(show_clear_button, |this| {
-              this.child(clear_button(cx, self.size).on_click({
+              this.child(super::clear_button("clean", self.size, cx).on_click({
                 let state = self.state.clone();
                 move |_, window, cx| {
                   state.update(cx, |state, cx| {
@@ -1713,7 +1690,7 @@ impl RenderOnce for Input {
     let context_menu_builder = self.context_menu_builder.clone();
 
     input
-      .context_menu(move |menu, window, cx| {
+      .menu(move |menu, window, cx| {
         input_state.update(cx, |state, _| {
           state.shared_context_menu_open = true;
         });
@@ -1728,7 +1705,7 @@ impl RenderOnce for Input {
           )
         };
 
-        let mut menu = menu.small().action_context(focus_handle);
+        let mut menu = menu.with_size(self.size).action_context(focus_handle);
         if default_context_menu {
           let cut_state = input_state.clone();
           let copy_state = input_state.clone();
@@ -1736,7 +1713,7 @@ impl RenderOnce for Input {
           let select_all_state = input_state.clone();
           menu = menu
             .item(
-              PopupMenuItem::new(translate_woocraft("input.context_menu.cut"))
+              PopupMenuItem::new(translate("input.context_menu.cut"))
                 .icon(IconName::Cut)
                 .disabled(!(is_enabled && has_selection))
                 .action(Box::new(Cut))
@@ -1747,7 +1724,7 @@ impl RenderOnce for Input {
                 }),
             )
             .item(
-              PopupMenuItem::new(translate_woocraft("input.context_menu.copy"))
+              PopupMenuItem::new(translate("input.context_menu.copy"))
                 .icon(IconName::Copy)
                 .disabled(!has_selection)
                 .action(Box::new(Copy))
@@ -1758,7 +1735,7 @@ impl RenderOnce for Input {
                 }),
             )
             .item(
-              PopupMenuItem::new(translate_woocraft("input.context_menu.paste"))
+              PopupMenuItem::new(translate("input.context_menu.paste"))
                 .icon(IconName::ClipboardPaste)
                 .disabled(!has_paste)
                 .action(Box::new(Paste))
@@ -1770,7 +1747,7 @@ impl RenderOnce for Input {
             )
             .separator()
             .item(
-              PopupMenuItem::new(translate_woocraft("input.context_menu.select_all"))
+              PopupMenuItem::new(translate("input.context_menu.select_all"))
                 .icon(IconName::SelectAllOn)
                 .action(Box::new(SelectAll))
                 .on_click(move |_, window, cx| {
@@ -1787,6 +1764,7 @@ impl RenderOnce for Input {
 
         menu
       })
+      .at_pointer()
       .into_any_element()
   }
 }

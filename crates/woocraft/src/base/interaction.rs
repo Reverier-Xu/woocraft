@@ -97,41 +97,18 @@ impl InteractionColors {
 
 /// Extension trait for color manipulation on Hsla colors.
 ///
-/// Provides convenient methods for common color adjustments: opacity/alpha
-/// changes, saturation adjustment, blending, and lightness changes
-/// (darken/lighten).
+/// Convenience color operations used at the Hsla boundary.
 pub trait ColorExt: Sized {
-  /// Sets the opacity/alpha value (0.0 = transparent, 1.0 = opaque).
+  /// Sets the alpha value (0.0 = transparent, 1.0 = opaque).
   fn opacity(self, alpha: f32) -> Self;
-
-  /// Alias for opacity(). Sets the alpha/transparency value.
-  fn alpha(self, alpha: f32) -> Self;
-
-  /// Sets the saturation (0.0 = grayscale, 1.0 = fully saturated).
-  fn saturation(self, saturation: f32) -> Self;
 
   /// Blends this color with an overlay color using alpha compositing.
   fn blend(self, overlay: Self) -> Self;
-
-  /// Darkens the color by reducing lightness (amount 0.0..1.0).
-  fn darken(self, amount: f32) -> Self;
-
-  /// Lightens the color by increasing lightness (amount 0.0..1.0).
-  fn lighten(self, amount: f32) -> Self;
 }
 
 impl ColorExt for Hsla {
   fn opacity(mut self, alpha: f32) -> Self {
     self.a = alpha.clamp(0.0, 1.0);
-    self
-  }
-
-  fn alpha(self, alpha: f32) -> Self {
-    self.opacity(alpha)
-  }
-
-  fn saturation(mut self, saturation: f32) -> Self {
-    self.s = saturation.clamp(0.0, 1.0);
     self
   }
 
@@ -155,15 +132,5 @@ impl ColorExt for Hsla {
       a: out_a.clamp(0.0, 1.0),
     }
     .into()
-  }
-
-  fn darken(mut self, amount: f32) -> Self {
-    self.l = (self.l - amount).clamp(0.0, 1.0);
-    self
-  }
-
-  fn lighten(mut self, amount: f32) -> Self {
-    self.l = (self.l + amount).clamp(0.0, 1.0);
-    self
   }
 }

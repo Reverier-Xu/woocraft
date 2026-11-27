@@ -3,7 +3,6 @@ loading = "載入中..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "未命名"
-zoom_reset = "重置縮放"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "搜尋..."
@@ -23,10 +22,8 @@ zoom_out = "縮小"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "複製"
 cut               = "剪下"
-go_to_definition  = "前往定義"
 paste             = "貼上"
 select_all        = "全選"
-show_code_actions = "顯示程式碼操作"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "取代"
@@ -125,7 +122,6 @@ seek_forward             = "前進 10 秒"
 settings                 = "設定"
 size                     = "尺寸"
 playlist                 = "播放列表"
-source_placeholder       = "路徑或 URL"
 size_large               = "大"
 size_medium              = "中"
 size_small               = "小"
@@ -142,7 +138,6 @@ subtitle_scale           = "字幕大小"
 subtitle_secondary       = "第二字幕"
 subtitle_visibility      = "顯示字幕"
 subtitles                = "字幕"
-title                    = "播放器"
 track                    = "曲目"
 transport                = "渲染通道"
 transport_gpu            = "GPU"

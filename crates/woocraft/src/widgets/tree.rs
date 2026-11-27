@@ -9,8 +9,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, ContextMenuExt as _, Icon, IconName, ListItem, PopupMenu, ScrollableElement, Size,
-  StyleSized, StyledExt, TreeEntry, TreeItem, TreeModel,
+  ActiveTheme, Disableable, Icon, IconName, ListItem, MenuExt as _, PopupMenu, ScrollableElement,
+  Selectable, Size, StyleSized, StyledExt, TreeEntry, TreeItem, TreeModel,
   actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
   h_flex,
 };
@@ -118,15 +118,6 @@ pub(crate) fn init(cx: &mut App) {
 /// - vertical guide line for expanded folders
 pub fn tree(state: &Entity<TreeState>) -> Tree {
   Tree::new(state)
-}
-
-/// Create a tree and override center content rendering while keeping built-in
-/// affordances.
-pub fn tree_with<R, E>(state: &Entity<TreeState>, render_item: R) -> Tree
-where
-  R: Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> E + 'static,
-  E: IntoElement, {
-  Tree::new(state).render_item(render_item)
 }
 
 pub struct TreeState {
@@ -792,7 +783,7 @@ impl RenderOnce for Tree {
       .child(self.state)
       .refine_style(&self.style)
       .vertical_scrollbar(&scroll_handle)
-      .context_menu(move |menu, window, cx| {
+      .menu(move |menu, window, cx| {
         let state = tree_view.read(cx);
         let builder = state.context_menu_builder.clone();
         let blank_builder = state.blank_context_menu_builder.clone();
@@ -820,5 +811,6 @@ impl RenderOnce for Tree {
           menu
         }
       })
+      .at_pointer()
   }
 }

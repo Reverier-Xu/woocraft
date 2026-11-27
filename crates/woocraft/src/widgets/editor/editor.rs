@@ -8,8 +8,8 @@ use gpui::{
 
 use super::state::{CONTEXT, Copy, Cut, InputState, Paste, SelectAll};
 use crate::{
-  ActiveTheme, ContextMenuExt, IconName, PopupMenu, Selectable, Size, StyleSized as _, StyledExt,
-  translate_woocraft, v_flex,
+  ActiveTheme, IconName, MenuExt, PopupMenu, Sizable, Size, StyleSized as _, StyledExt, translate,
+  v_flex,
 };
 
 type ContextMenuBuilder =
@@ -35,17 +35,9 @@ pub struct Editor {
 }
 
 impl_sizable!(Editor);
+impl_disableable!(Editor);
 
-impl Selectable for Editor {
-  fn selected(mut self, selected: bool) -> Self {
-    self.selected = selected;
-    self
-  }
-
-  fn is_selected(&self) -> bool {
-    self.selected
-  }
-}
+impl_selectable!(Editor);
 
 impl Editor {
   /// Create a new [`Editor`] element bind to the [`InputState`].
@@ -105,11 +97,6 @@ impl Editor {
   }
 
   /// Set to disable the editor.
-  pub fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-
   /// Set the tab index for the editor, default is 0.
   pub fn tab_index(mut self, index: isize) -> Self {
     self.tab_index = index;
@@ -302,7 +289,7 @@ impl RenderOnce for Editor {
     let context_menu_builder = self.context_menu_builder.clone();
 
     input
-      .context_menu(move |menu, window, cx| {
+      .menu(move |menu, window, cx| {
         let (is_writable, has_selection, has_paste, focus_handle, suppress_editor_menu) = {
           let state = input_state.read(cx);
           let suppress_editor_menu = state
@@ -318,7 +305,7 @@ impl RenderOnce for Editor {
           )
         };
 
-        let mut menu = menu.small().action_context(focus_handle);
+        let mut menu = menu.with_size(self.size).action_context(focus_handle);
 
         if suppress_editor_menu {
           return menu;
@@ -331,26 +318,26 @@ impl RenderOnce for Editor {
         if default_context_menu {
           menu = menu
             .menu_with_icon_and_disabled(
-              translate_woocraft("editor.context_menu.cut"),
+              translate("editor.context_menu.cut"),
               IconName::Cut,
               Box::new(Cut),
               !(is_writable && has_selection),
             )
             .menu_with_icon_and_disabled(
-              translate_woocraft("editor.context_menu.copy"),
+              translate("editor.context_menu.copy"),
               IconName::Copy,
               Box::new(Copy),
               !has_selection,
             )
             .menu_with_icon_and_disabled(
-              translate_woocraft("editor.context_menu.paste"),
+              translate("editor.context_menu.paste"),
               IconName::ClipboardPaste,
               Box::new(Paste),
               !has_paste,
             )
             .separator()
             .menu_with_icon(
-              translate_woocraft("editor.context_menu.select_all"),
+              translate("editor.context_menu.select_all"),
               IconName::SelectAllOn,
               Box::new(SelectAll),
             );
@@ -367,6 +354,7 @@ impl RenderOnce for Editor {
 
         menu
       })
+      .at_pointer()
       .into_any_element()
   }
 }

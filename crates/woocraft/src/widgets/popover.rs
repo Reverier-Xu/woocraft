@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-  AnyElement, App, Bounds, Deferred, DismissEvent, ElementId, EventEmitter, FocusHandle, Focusable,
-  Half, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, Render,
-  RenderOnce, Stateful, StyleRefinement, Styled, Subscription, Window, anchored, deferred, div,
-  point, prelude::FluentBuilder as _, px, size,
+  Anchor, AnyElement, App, Bounds, Deferred, DismissEvent, ElementId, Entity, EventEmitter,
+  FocusHandle, Focusable, InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels,
+  Point, Render, RenderOnce, Stateful, StyleRefinement, Styled, Subscription, Window, anchored,
+  deferred, div, point, prelude::FluentBuilder as _, px, size,
 };
 
 use crate::{
-  ActiveTheme, Anchor, CardStyle, Easing, ElementExt, Presence, Selectable, Size, StyleSized,
-  StyledExt, Transition,
+  ActiveTheme, CardStyle, Easing, ElementExt, Presence, Selectable, Size, StyleSized, StyledExt,
+  Transition,
   actions::{Cancel, POPOVER_CONTEXT},
   duration, h_flex,
 };
@@ -19,6 +19,12 @@ type PopoverContentBuilder = Rc<
   dyn Fn(&mut PopoverState, &mut Window, &mut gpui::Context<PopoverState>) -> AnyElement + 'static,
 >;
 type OpenChangeHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
+
+/// Distance, in pixels, the popover content travels while entering.
+///
+/// Small enough to read as the content settling into place rather than flying
+/// in; the direction is always away from the trigger.
+const ENTER_SLIDE: f32 = 6.0;
 
 #[derive(IntoElement)]
 pub struct Popover {
@@ -44,7 +50,7 @@ impl Popover {
     Self {
       id: id.into(),
       style: StyleRefinement::default(),
-      anchor: Anchor::TopLeft,
+      anchor: Anchor::BottomLeft,
       default_open: false,
       open: None,
       tracked_focus_handle: None,
@@ -60,8 +66,14 @@ impl Popover {
     }
   }
 
-  pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
-    self.anchor = anchor.into();
+  /// The side of the trigger the popover opens toward, default
+  /// [`Anchor::BottomLeft`] (a dropdown).
+  ///
+  /// The anchor is a preference, not a guarantee: when the requested side has
+  /// no room, the popover opens on the opposite side instead, and when neither
+  /// side fits it is shifted to stay inside the window.
+  pub fn anchor(mut self, anchor: Anchor) -> Self {
+    self.anchor = anchor;
     self
   }
 
@@ -82,6 +94,17 @@ impl Popover {
       let selected = trigger.is_selected();
       trigger.selected(selected || is_open).into_any_element()
     }));
+    self
+  }
+
+  /// Trigger built from the popover's open state.
+  ///
+  /// For triggers with no selected state of their own: the closure receives
+  /// `is_open` and returns the element to render.
+  pub fn trigger_with(
+    mut self, trigger: impl FnOnce(bool, &Window, &App) -> AnyElement + 'static,
+  ) -> Self {
+    self.trigger = Some(Box::new(trigger));
     self
   }
 
@@ -127,41 +150,165 @@ impl Popover {
     self
   }
 
-  fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
-    let offset = if anchor.is_center() {
-      point(trigger_bounds.size.width.half(), px(0.))
-    } else {
-      Point::default()
+  /// Where the popover box goes relative to its trigger.
+  ///
+  /// `anchor` names the trigger corner the popover attaches to, so the popover
+  /// ends up on that side of the trigger: `Top*` above, `Bottom*` below, and
+  /// the two centre anchors beside it. The popover is positioned by the edge
+  /// facing the trigger, which is what keeps the two boxes flush instead of
+  /// overlapping — the previous version shifted the trigger corner by the
+  /// trigger's own height, so every popover covered its trigger.
+  ///
+  /// Returns the popover corner that lands on the trigger corner, and that
+  /// corner's position. This is the *requested* side;
+  /// [`Self::resolve_placement`] may flip it.
+  pub(crate) fn side_placement(anchor: Anchor, trigger: Bounds<Pixels>) -> (Anchor, Point<Pixels>) {
+    let corner = match anchor {
+      Anchor::TopLeft => Anchor::BottomLeft,
+      Anchor::TopCenter => Anchor::BottomCenter,
+      Anchor::TopRight => Anchor::BottomRight,
+      Anchor::BottomLeft => Anchor::TopLeft,
+      Anchor::BottomCenter => Anchor::TopCenter,
+      Anchor::BottomRight => Anchor::TopRight,
+      Anchor::LeftCenter => Anchor::RightCenter,
+      Anchor::RightCenter => Anchor::LeftCenter,
     };
-
-    trigger_bounds.corner(anchor.swap_vertical().into())
-      + offset
-      + Point {
-        x: px(0.),
-        y: -trigger_bounds.size.height,
-      }
+    (corner, trigger.corner(anchor))
   }
 
-  fn render_popover<E>(
-    anchor: Anchor, trigger_bounds: Bounds<Pixels>, content: E, _: &mut Window, _: &mut App,
-  ) -> Deferred
+  /// The opposite side of the trigger: `Top*` ↔ `Bottom*`, `Left*` ↔ `Right*`.
+  fn opposite_side(anchor: Anchor) -> Anchor {
+    match anchor {
+      Anchor::TopLeft => Anchor::BottomLeft,
+      Anchor::TopCenter => Anchor::BottomCenter,
+      Anchor::TopRight => Anchor::BottomRight,
+      Anchor::BottomLeft => Anchor::TopLeft,
+      Anchor::BottomCenter => Anchor::TopCenter,
+      Anchor::BottomRight => Anchor::TopRight,
+      Anchor::LeftCenter => Anchor::RightCenter,
+      Anchor::RightCenter => Anchor::LeftCenter,
+    }
+  }
+
+  /// Picks the side the popover actually opens on, and where to put it.
+  ///
+  /// Only the axis the anchor names decides the side: a `Bottom*` popover flips
+  /// above only when there is no vertical room below, and only then if there is
+  /// room above. Running out of room on the *other* axis never flips it — that
+  /// would leave the popover touching the trigger at a single corner — it
+  /// slides along that axis instead. So the popover always keeps one edge
+  /// coincident with the trigger's edge; sliding is the last resort, used only
+  /// when neither side of the chosen axis fits.
+  ///
+  /// `content` is the popover's measured size, `None` before its first layout.
+  pub(crate) fn resolve_placement(
+    anchor: Anchor, trigger: Bounds<Pixels>, content: Option<gpui::Size<Pixels>>,
+    viewport: gpui::Size<Pixels>,
+  ) -> (Anchor, Anchor, Point<Pixels>) {
+    let requested = Self::side_placement(anchor, trigger);
+    let opposite_anchor = Self::opposite_side(anchor);
+    let opposite = Self::side_placement(opposite_anchor, trigger);
+
+    let Some(content) = content else {
+      // No measurement yet: trust the request and let the next frame correct
+      // it.
+      let (corner, position) = requested;
+      return (anchor, corner, position);
+    };
+
+    // The axis the anchor places the popover along.
+    let vertical = matches!(
+      anchor,
+      Anchor::TopLeft
+        | Anchor::TopCenter
+        | Anchor::TopRight
+        | Anchor::BottomLeft
+        | Anchor::BottomCenter
+        | Anchor::BottomRight
+    );
+
+    let has_room = |(corner, position): (Anchor, Point<Pixels>)| {
+      let bounds = Bounds::from_anchor_and_size(corner, position, content);
+      if vertical {
+        bounds.origin.y >= Pixels::ZERO && bounds.origin.y + content.height <= viewport.height
+      } else {
+        bounds.origin.x >= Pixels::ZERO && bounds.origin.x + content.width <= viewport.width
+      }
+    };
+
+    let (side, (corner, position)) = if has_room(requested) {
+      (anchor, requested)
+    } else if has_room(opposite) {
+      (opposite_anchor, opposite)
+    } else {
+      (anchor, requested)
+    };
+
+    // Slide the box back inside the viewport, on whichever axis overflows. With
+    // one side fitting, this only moves along the cross axis, so the shared
+    // edge with the trigger survives.
+    let bounds = Bounds::from_anchor_and_size(corner, position, content);
+    let origin = Point {
+      x: bounds.origin.x.clamp(
+        Pixels::ZERO,
+        (viewport.width - content.width).max(Pixels::ZERO),
+      ),
+      y: bounds.origin.y.clamp(
+        Pixels::ZERO,
+        (viewport.height - content.height).max(Pixels::ZERO),
+      ),
+    };
+    (side, corner, position + (origin - bounds.origin))
+  }
+
+  /// Entrance offset for a popover anchored on `anchor`'s side.
+  ///
+  /// The content starts a few pixels toward the trigger and settles away from
+  /// it, so the motion reads as growing out of the trigger edge.
+  fn enter_slide(anchor: Anchor) -> Point<f32> {
+    match anchor {
+      Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => point(0., ENTER_SLIDE),
+      Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => point(0., -ENTER_SLIDE),
+      Anchor::LeftCenter => point(ENTER_SLIDE, 0.),
+      Anchor::RightCenter => point(-ENTER_SLIDE, 0.),
+    }
+  }
+
+  fn render_popover<E>(corner: Anchor, position: Point<Pixels>, content: E) -> Deferred
   where
     E: IntoElement + 'static, {
+    // The side was already chosen by `resolve_placement`; snapping is only a
+    // safety net for a viewport that shrank under a settled popover.
     deferred(
       anchored()
         .snap_to_window_with_margin(px(8.))
-        .anchor(anchor.into())
-        .position(Self::resolved_corner(anchor, trigger_bounds))
+        .anchor(corner)
+        .position(position)
         .child(div().relative().child(content)),
     )
     .with_priority(1)
   }
 
   fn render_popover_content(
-    anchor: Anchor, size: Size, _: &mut Window, cx: &mut App,
+    state: &Entity<PopoverState>, anchor: Anchor, size: Size, _: &mut Window, cx: &mut App,
   ) -> Stateful<gpui::Div> {
+    let state_for_size = state.clone();
     h_flex()
       .id("content")
+      .on_prepaint(move |bounds, window, cx| {
+        let measured = bounds.size;
+        let changed = state_for_size.update(cx, |state, _| {
+          let changed = state.content_size != Some(measured);
+          state.content_size = Some(measured);
+          changed
+        });
+        // The first frame of an open has no measurement, so the placement it
+        // used may be the wrong side. Ask for one more frame to correct it
+        // even when the entrance animation is disabled.
+        if changed {
+          window.request_animation_frame();
+        }
+      })
       .occlude()
       .tab_group()
       .popover_style(cx.theme())
@@ -171,6 +318,8 @@ impl Popover {
         Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => {
           this.bottom(size.container_py())
         }
+        Anchor::LeftCenter => this.left(size.container_px()),
+        Anchor::RightCenter => this.right(size.container_px()),
       })
   }
 }
@@ -183,6 +332,14 @@ pub struct PopoverState {
   focus_handle: FocusHandle,
   tracked_focus_handle: Option<FocusHandle>,
   trigger_bounds: Bounds<Pixels>,
+  /// The popover card's size as of the last frame it was laid out.
+  ///
+  /// The placement decision needs it to know whether a side has room, and the
+  /// size is only known after layout — so the first open frame places the
+  /// popover on the requested side and the next frame corrects it. The entrance
+  /// animation is still running at that point, which is what hides the
+  /// correction.
+  content_size: Option<gpui::Size<Pixels>>,
   open: bool,
   on_open_change: Option<OpenChangeHandler>,
   dismiss_subscription: Option<Subscription>,
@@ -194,6 +351,7 @@ impl PopoverState {
       focus_handle: cx.focus_handle(),
       tracked_focus_handle: None,
       trigger_bounds: Bounds::default(),
+      content_size: None,
       open: default_open,
       on_open_change: None,
       dismiss_subscription: None,
@@ -307,7 +465,20 @@ impl RenderOnce for Popover {
 
     let parent_view_id = window.current_view();
 
+    // The measurement lives on the trigger's own box: the outer box also holds
+    // the deferred overlay in its layout, so measuring it would report the
+    // popover's own space instead of the trigger's.
     let trigger_el = div()
+      .on_prepaint({
+        let state = state.clone();
+        move |bounds, _, cx| {
+          state.update(cx, |state, _| {
+            if !(position_at_mouse && state.open) {
+              state.trigger_bounds = bounds;
+            }
+          });
+        }
+      })
       .child((trigger)(open, window, cx))
       .when_some(self.trigger_style.clone(), |this, trigger_style| {
         this.refine_style(&trigger_style)
@@ -329,16 +500,6 @@ impl RenderOnce for Popover {
           });
           cx.notify(parent_view_id);
         }
-      })
-      .on_prepaint({
-        let state = state.clone();
-        move |bounds, _, cx| {
-          state.update(cx, |state, _| {
-            if !(position_at_mouse && state.open) {
-              state.trigger_bounds = bounds;
-            }
-          });
-        }
       });
 
     if !open {
@@ -355,20 +516,22 @@ impl RenderOnce for Popover {
       .transition(Transition::new(duration::POPOVER_ENTER).easing(Easing::EaseOut))
       .sample(window, cx)
       .progress;
-    // Anchored below the trigger, the content emerges from the trigger edge
-    // and slides down into place; anchored above, it starts tucked under the
-    // trigger and rises.
-    let slide = match self.anchor {
-      Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => (1.0 - enter) * -6.0,
-      Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => (1.0 - enter) * 6.0,
-    };
+    let content_size = state.read(cx).content_size;
+    let (side, corner, position) = Self::resolve_placement(
+      self.anchor,
+      trigger_bounds,
+      content_size,
+      window.viewport_size(),
+    );
+    let slide = Self::enter_slide(side);
 
-    let popover_content = Self::render_popover_content(self.anchor, self.size, window, cx)
+    let popover_content = Self::render_popover_content(&state, side, self.size, window, cx)
       .track_focus(&focus_handle)
       .key_context(POPOVER_CONTEXT)
       .opacity(enter)
       .relative()
-      .top(px(slide))
+      .top(px(slide.y * (1.0 - enter)))
+      .left(px(slide.x * (1.0 - enter)))
       .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
       .when_some(self.content, |this, content| {
         this.child(state.update(cx, |state, cx| (content)(state, window, cx)))
@@ -387,12 +550,194 @@ impl RenderOnce for Popover {
       })
       .refine_style(&self.style);
 
-    el.child(Self::render_popover(
-      self.anchor,
-      trigger_bounds,
-      popover_content,
-      window,
-      cx,
-    ))
+    el.child(Self::render_popover(corner, position, popover_content))
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use std::{cell::Cell, ops::Deref as _, rc::Rc};
+
+  use gpui::{
+    Anchor, Bounds, IntoElement, ParentElement as _, Point, Size, Styled as _, TestAppContext,
+    VisualTestContext, div, point, px, size,
+  };
+
+  use super::Popover;
+  use crate::{ElementExt as _, h_flex};
+
+  /// A 240×60 viewport with a 100×30 trigger sitting in it, in the shape the
+  /// callers use: `(trigger origin, trigger size, viewport)`.
+  fn scene(
+    trigger: Point<gpui::Pixels>, viewport: Size<gpui::Pixels>,
+  ) -> (Bounds<gpui::Pixels>, Size<gpui::Pixels>) {
+    (Bounds::new(trigger, size(px(100.), px(30.))), viewport)
+  }
+
+  fn resolve(
+    anchor: Anchor, trigger: Bounds<gpui::Pixels>, content: Size<gpui::Pixels>,
+    viewport: Size<gpui::Pixels>,
+  ) -> (Anchor, Bounds<gpui::Pixels>) {
+    let (side, corner, position) =
+      Popover::resolve_placement(anchor, trigger, Some(content), viewport);
+    (
+      side,
+      Bounds::from_anchor_and_size(corner, position, content),
+    )
+  }
+
+  /// The popover sits flush against the trigger edge on the requested side.
+  #[test]
+  fn popover_opens_on_the_requested_side() {
+    let (trigger, viewport) = scene(point(px(100.), px(100.)), size(px(240.), px(300.)));
+    let content = size(px(120.), px(80.));
+
+    let (side, bounds) = resolve(Anchor::BottomLeft, trigger, content, viewport);
+    assert_eq!(side, Anchor::BottomLeft);
+    assert_eq!(bounds.origin, point(px(100.), px(130.)));
+
+    let (side, bounds) = resolve(Anchor::TopLeft, trigger, content, viewport);
+    assert_eq!(side, Anchor::TopLeft);
+    assert_eq!(bounds.origin, point(px(100.), px(20.)));
+  }
+
+  /// No room on the requested side, room on the other: flip.
+  #[test]
+  fn popover_flips_when_the_requested_side_has_no_room() {
+    // Trigger near the bottom edge, room above.
+    let (trigger, viewport) = scene(point(px(100.), px(250.)), size(px(240.), px(300.)));
+    let content = size(px(120.), px(80.));
+
+    let (side, bounds) = resolve(Anchor::BottomLeft, trigger, content, viewport);
+    assert_eq!(side, Anchor::TopLeft, "should flip above the trigger");
+    assert_eq!(
+      bounds.origin,
+      point(px(100.), px(170.)),
+      "flipped popover sits flush on the trigger's top edge"
+    );
+  }
+
+  /// Neither side fits: stay on the requested side and slide back inside.
+  #[test]
+  fn popover_shifts_when_no_side_fits() {
+    // A popover taller than the room on either side of a centred trigger.
+    let (trigger, viewport) = scene(point(px(100.), px(90.)), size(px(240.), px(200.)));
+    let content = size(px(120.), px(180.));
+
+    let (side, bounds) = resolve(Anchor::BottomLeft, trigger, content, viewport);
+    assert_eq!(side, Anchor::BottomLeft, "no flip when neither side fits");
+    assert_eq!(bounds.origin.y, px(20.), "slid up to stay inside");
+    assert_eq!(bounds.top(), px(20.));
+    assert_eq!(bounds.bottom(), px(200.));
+    assert_eq!(bounds.origin.x, px(100.), "horizontal position unchanged");
+  }
+
+  /// Running out of room sideways slides the popover, it never flips it: the
+  /// edge shared with the trigger has to survive.
+  #[test]
+  fn sideways_overflow_slides_instead_of_flipping() {
+    // A wide popover on a trigger near the right edge, with plenty of room
+    // below: it stays below and slides left.
+    let (trigger, viewport) = scene(point(px(200.), px(100.)), size(px(240.), px(300.)));
+    let content = size(px(120.), px(60.));
+
+    let (side, bounds) = resolve(Anchor::BottomLeft, trigger, content, viewport);
+    assert_eq!(
+      side,
+      Anchor::BottomLeft,
+      "no vertical flip for an x overflow"
+    );
+    assert_eq!(
+      bounds.top(),
+      px(130.),
+      "top edge still on the trigger bottom"
+    );
+    assert_eq!(bounds.right(), px(240.), "slid left to stay inside");
+  }
+
+  /// The horizontal edge follows the requested corner and slides only when it
+  /// would leave the viewport.
+  #[test]
+  fn horizontal_edge_follows_the_anchor() {
+    let (trigger, viewport) = scene(point(px(20.), px(100.)), size(px(240.), px(300.)));
+    let content = size(px(120.), px(60.));
+
+    let (_, bounds) = resolve(Anchor::BottomRight, trigger, content, viewport);
+    assert_eq!(bounds.right(), px(120.), "right edges line up");
+
+    // The same popover on the left edge slides right instead of leaving it.
+    let (trigger, viewport) = scene(point(px(0.), px(100.)), size(px(240.), px(300.)));
+    let (_, bounds) = resolve(Anchor::BottomRight, trigger, content, viewport);
+    assert_eq!(bounds.left(), px(0.), "slid to stay inside");
+  }
+
+  /// A trigger inside a full-height row, the shape that used to open menus a
+  /// whole trigger-height away from their button.
+  struct EdgeProbe {
+    trigger: Rc<Cell<Bounds<gpui::Pixels>>>,
+    content: Rc<Cell<Bounds<gpui::Pixels>>>,
+  }
+
+  impl gpui::Render for EdgeProbe {
+    fn render(&mut self, _: &mut gpui::Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+      let content_bounds = self.content.clone();
+      let trigger_bounds = self.trigger.clone();
+      h_flex().size_full().child(
+        Popover::new("probe")
+          .open(true)
+          .anchor(Anchor::BottomLeft)
+          .trigger_with(move |_, _, _| {
+            let trigger_bounds = trigger_bounds.clone();
+            div()
+              .w(px(120.))
+              .h(px(40.))
+              .on_prepaint(move |bounds, _, _| trigger_bounds.set(bounds))
+              .into_any_element()
+          })
+          .content(move |_, _, _| {
+            let content_bounds = content_bounds.clone();
+            div()
+              .w(px(100.))
+              .h(px(80.))
+              .on_prepaint(move |bounds, _, _| content_bounds.set(bounds))
+          }),
+      )
+    }
+  }
+
+  /// The card starts on the trigger's edge. Measuring the box around the
+  /// trigger instead of the trigger itself put the menu a whole trigger-height
+  /// below its button, which reads as a detached menu.
+  #[gpui::test]
+  fn popover_hugs_its_trigger(cx: &mut TestAppContext) {
+    cx.set_global(crate::Theme::default());
+    let trigger = Rc::new(Cell::new(Bounds::default()));
+    let content = Rc::new(Cell::new(Bounds::default()));
+    let probe = EdgeProbe {
+      trigger: trigger.clone(),
+      content: content.clone(),
+    };
+    let window = cx.open_window(size(px(400.), px(300.)), |_, _| probe);
+
+    let mut visual = VisualTestContext::from_window(*window.deref(), cx);
+    visual.run_until_parked();
+    // Bounds are captured in prepaint, so readings land a frame later.
+    visual.update(|_, cx| cx.refresh_windows());
+    visual.run_until_parked();
+
+    let gap = content.get().top() - trigger.get().bottom();
+    assert!(
+      gap.abs() <= px(8.),
+      "the card sits on the trigger's bottom edge, not a trigger-height away \
+       (trigger={:?} content={:?})",
+      trigger.get(),
+      content.get()
+    );
+    let inset = content.get().left() - trigger.get().left();
+    assert!(
+      (px(0.)..=px(8.)).contains(&inset),
+      "the card's left edge lines up with the trigger's, inset only by its own \
+       padding (inset={inset:?})"
+    );
   }
 }

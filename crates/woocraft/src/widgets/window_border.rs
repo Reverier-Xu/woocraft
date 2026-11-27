@@ -50,11 +50,7 @@ pub fn window_paddings(window: &Window) -> Edges<Pixels> {
   }
 }
 
-impl ParentElement for WindowBorder {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_parent_element!(WindowBorder);
 
 impl RenderOnce for WindowBorder {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

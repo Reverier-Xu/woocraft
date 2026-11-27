@@ -185,11 +185,7 @@ impl Tag {
 
 impl_sizable!(Tag);
 
-impl ParentElement for Tag {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_parent_element!(Tag);
 
 impl_styled!(Tag);
 

@@ -21,9 +21,7 @@ use gpui::{
   StyleRefinement, Styled, Window, canvas, div, point, relative, rems,
 };
 
-use crate::{
-  ActiveTheme, RemsExt, Size, StyleSized, StyledExt, h_flex, translate_woocraft, v_flex,
-};
+use crate::{ActiveTheme, RemsExt, Size, StyleSized, StyledExt, h_flex, translate, v_flex};
 
 #[derive(IntoElement)]
 /// Linear progress bar showing completion percentage.
@@ -56,7 +54,7 @@ impl Progress {
       color: None,
       track_color: None,
       text_color: None,
-      label: translate_woocraft("common.loading").into(),
+      label: translate("common.loading").into(),
       style: StyleRefinement::default(),
       size: Size::default(),
     }

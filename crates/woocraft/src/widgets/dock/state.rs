@@ -2,7 +2,7 @@ use gpui::{App, AppContext, Axis, Bounds, Entity, Pixels, WeakEntity, Window, po
 use serde::{Deserialize, Serialize};
 
 use super::{Dock, DockArea, Panel};
-use crate::DockPlacement;
+use crate::Placement;
 
 /// Used to serialize and deserialize the DockArea
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
@@ -33,7 +33,7 @@ fn default_center_enabled() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DockState {
   panel: PanelState,
-  placement: DockPlacement,
+  placement: Placement,
   size: Pixels,
   #[serde(default)]
   collapsed: bool,

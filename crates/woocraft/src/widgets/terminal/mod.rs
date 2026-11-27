@@ -1,10 +1,9 @@
 //! Terminal widget: an embedded terminal emulator view backed by a
 //! cross-platform PTY session.
 //!
-//! See `docs/terminal-design.md` for the architecture. The rendering and
-//! input layers live here; the session/emulator core lives in the
-//! `woocraft-terminal` crate, which can also be used headlessly for external
-//! control.
+//! The rendering and input layers live here; the session/emulator core lives
+//! in the `woocraft-terminal` crate, which can also be used headlessly for
+//! external control.
 
 mod colors;
 mod element;

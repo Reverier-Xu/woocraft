@@ -5,25 +5,58 @@
 //! transforms a component applies while animating so a single sampled value
 //! drives translation, scale and opacity together.
 
-use gpui::{Bounds, Pixels, Size};
+use gpui::{Bounds, Hsla, Pixels, Point, Size, point};
 
-use crate::base::animation::Lerp;
-
+/// Blends between two application-owned values.
+///
+/// This is what every motion primitive animates. The scalar, pixel, point and
+/// colour impls cover the values components animate; anything else implements
+/// the trait for itself.
 pub trait Interpolate: Clone {
   fn interpolate(&self, target: &Self, progress: f32) -> Self;
 }
 
-impl<T: Lerp> Interpolate for T {
+impl Interpolate for f32 {
   fn interpolate(&self, target: &Self, progress: f32) -> Self {
-    self.lerp(target, progress)
+    self + (target - self) * progress
+  }
+}
+
+impl Interpolate for Pixels {
+  fn interpolate(&self, target: &Self, progress: f32) -> Self {
+    let from: f32 = (*self).into();
+    let to: f32 = (*target).into();
+    gpui::px(from.interpolate(&to, progress))
+  }
+}
+
+impl Interpolate for Point<Pixels> {
+  fn interpolate(&self, target: &Self, progress: f32) -> Self {
+    point(
+      self.x.interpolate(&target.x, progress),
+      self.y.interpolate(&target.y, progress),
+    )
+  }
+}
+
+impl Interpolate for Hsla {
+  /// Interpolates each channel linearly. Intended for transitions between
+  /// near-grayscale UI colours, where hue interpolation is irrelevant.
+  fn interpolate(&self, target: &Self, progress: f32) -> Self {
+    Hsla {
+      h: self.h.interpolate(&target.h, progress),
+      s: self.s.interpolate(&target.s, progress),
+      l: self.l.interpolate(&target.l, progress),
+      a: self.a.interpolate(&target.a, progress),
+    }
   }
 }
 
 impl Interpolate for Size<Pixels> {
   fn interpolate(&self, target: &Self, progress: f32) -> Self {
     Size::new(
-      self.width.lerp(&target.width, progress),
-      self.height.lerp(&target.height, progress),
+      self.width.interpolate(&target.width, progress),
+      self.height.interpolate(&target.height, progress),
     )
   }
 }
@@ -31,7 +64,7 @@ impl Interpolate for Size<Pixels> {
 impl Interpolate for Bounds<Pixels> {
   fn interpolate(&self, target: &Self, progress: f32) -> Self {
     Bounds::new(
-      self.origin.lerp(&target.origin, progress),
+      self.origin.interpolate(&target.origin, progress),
       self.size.interpolate(&target.size, progress),
     )
   }
@@ -66,15 +99,15 @@ impl Default for MotionTransform {
 impl Interpolate for MotionTransform {
   fn interpolate(&self, target: &Self, progress: f32) -> Self {
     Self {
-      translation: self.translation.lerp(&target.translation, progress),
+      translation: self.translation.interpolate(&target.translation, progress),
       scale: gpui::point(
-        self.scale.x.lerp(&target.scale.x, progress),
-        self.scale.y.lerp(&target.scale.y, progress),
+        self.scale.x.interpolate(&target.scale.x, progress),
+        self.scale.y.interpolate(&target.scale.y, progress),
       ),
       rotation_radians: self
         .rotation_radians
-        .lerp(&target.rotation_radians, progress),
-      opacity: self.opacity.lerp(&target.opacity, progress),
+        .interpolate(&target.rotation_radians, progress),
+      opacity: self.opacity.interpolate(&target.opacity, progress),
     }
   }
 }

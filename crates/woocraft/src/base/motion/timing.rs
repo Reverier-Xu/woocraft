@@ -56,20 +56,23 @@ pub enum PlaybackDirection {
   AlternateReverse,
 }
 
+/// Where a sampled animation is in its lifecycle.
+///
+/// `Idle` is reported by the transition helpers when a value already sits on
+/// its target, so a caller can skip requesting an animation frame.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MotionPhase {
-  Before,
-  Active,
-  After,
+pub enum MotionStatus {
+  Idle,
+  Delayed,
+  Running,
+  Finished,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TimingSample {
-  pub phase: MotionPhase,
+  pub phase: MotionStatus,
   pub directed_progress: f32,
   pub iteration: u64,
-  pub active: bool,
-  pub finished: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -115,11 +118,9 @@ impl Timing {
   pub fn sample(&self, elapsed: Duration) -> TimingSample {
     let Some(active_elapsed) = self.delay.active_elapsed(elapsed) else {
       return TimingSample {
-        phase: MotionPhase::Before,
+        phase: MotionStatus::Delayed,
         directed_progress: self.easing.sample(self.directed(0, 0.0)),
         iteration: 0,
-        active: false,
-        finished: false,
       };
     };
 
@@ -143,24 +144,20 @@ impl Timing {
     let iteration_nanos = elapsed_nanos % duration_nanos;
     let progress = iteration_nanos as f64 / duration_nanos as f64;
     TimingSample {
-      phase: MotionPhase::Active,
+      phase: MotionStatus::Running,
       directed_progress: self
         .easing
         .sample(self.directed(iteration, progress as f32)),
       iteration,
-      active: true,
-      finished: false,
     }
   }
 
   fn after_sample(&self, count: u64) -> TimingSample {
     let iteration = count.saturating_sub(1);
     TimingSample {
-      phase: MotionPhase::After,
+      phase: MotionStatus::Finished,
       directed_progress: self.easing.sample(self.directed(iteration, 1.0)),
       iteration,
-      active: false,
-      finished: true,
     }
   }
 

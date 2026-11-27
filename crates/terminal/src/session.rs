@@ -132,28 +132,18 @@ impl TerminalSession {
     self.inner.events_rx.clone()
   }
 
-  /// Writes raw bytes into the PTY.
-  ///
-  /// This is the single write path: [`Self::write_pty`], [`Self::input`] and
-  /// [`Self::input_str`] are aliases of each other and differ only in how
-  /// callers spell the intent (keyboard input vs. a protocol reply). The PTY
-  /// cannot tell them apart.
-  pub fn input(&self, bytes: impl Into<Cow<'static, [u8]>>) {
-    self.write_pty(bytes);
-  }
-
   /// Writes a string into the PTY.
   ///
-  /// Alias of [`Self::write_pty`] for string callers.
+  /// String form of [`Self::write_pty`], for callers that hold text rather
+  /// than bytes.
   pub fn input_str(&self, text: &str) {
     self.write_pty(Cow::Owned(text.as_bytes().to_vec()));
   }
 
   /// Writes raw bytes into the PTY.
   ///
-  /// Hosts use this to answer [`TerminalEvent::ClipboardLoad`] and
-  /// [`TerminalEvent::ColorRequest`]; it is byte-for-byte the same operation
-  /// as [`Self::input`].
+  /// The single write path for keyboard input, pastes and protocol replies
+  /// ([`TerminalEvent::ClipboardLoad`], [`TerminalEvent::ColorRequest`]).
   pub fn write_pty(&self, bytes: impl Into<Cow<'static, [u8]>>) {
     if let SessionKind::Pty { pty_tx, .. } = &self.inner.kind {
       pty_tx.notify(bytes);
@@ -172,7 +162,7 @@ impl TerminalSession {
     } else {
       text.replace("\r\n", "\r").replace('\n', "\r")
     };
-    self.input(Cow::Owned(paste_text.into_bytes()));
+    self.write_pty(Cow::Owned(paste_text.into_bytes()));
   }
 
   /// Resizes the terminal viewport, updating the emulator and the PTY.

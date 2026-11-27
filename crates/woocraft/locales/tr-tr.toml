@@ -3,7 +3,6 @@ loading = "Yükleniyor..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Adsız"
-zoom_reset = "Yakınlaştırmayı sıfırla"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Ara..."
@@ -23,10 +22,8 @@ zoom_out = "Küçült"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Kopyala"
 cut               = "Kes"
-go_to_definition  = "Tanıma Git"
 paste             = "Yapıştır"
 select_all        = "Tümünü seç"
-show_code_actions = "Kod eylemlerini göster"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Değiştir"

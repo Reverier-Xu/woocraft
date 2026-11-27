@@ -104,7 +104,6 @@ fn playlist_row(
     .id(("player-playlist-entry", row_id))
     .w_full()
     .list_size(size)
-    .list_px(size)
     .flex()
     .items_center()
     .component_gap(size)

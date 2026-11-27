@@ -85,6 +85,7 @@ impl Breadcrumb {
 
 impl_styled!(Breadcrumb);
 impl_sizable!(Breadcrumb);
+impl_disableable!(BreadcrumbItem);
 
 impl RenderOnce for Breadcrumb {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -96,7 +97,7 @@ impl RenderOnce for Breadcrumb {
 
       children.push(item.id(index).with_last(is_last).into_any_element());
       if !is_last {
-        children.push(BreadcrumbSeparator.into_any_element());
+        children.push(BreadcrumbSeparator { size: self.size }.into_any_element());
       }
     }
 
@@ -131,11 +132,6 @@ impl BreadcrumbItem {
   }
 
   /// Disables the breadcrumb item, making it non-clickable and visually faded.
-  pub fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-
   fn id(mut self, id: impl Into<ElementId>) -> Self {
     self.id = id.into();
     self
@@ -192,12 +188,14 @@ impl From<SharedString> for BreadcrumbItem {
 }
 
 #[derive(IntoElement)]
-struct BreadcrumbSeparator;
+struct BreadcrumbSeparator {
+  size: Size,
+}
 
 impl RenderOnce for BreadcrumbSeparator {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
     Icon::new(IconName::ChevronRight)
-      .small()
+      .with_size(self.size)
       .text_color(cx.theme().muted_foreground)
       .into_any_element()
   }

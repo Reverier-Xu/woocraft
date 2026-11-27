@@ -247,11 +247,7 @@ impl ResizablePanel {
   }
 }
 
-impl ParentElement for ResizablePanel {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_parent_element!(ResizablePanel);
 
 impl RenderOnce for ResizablePanel {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {

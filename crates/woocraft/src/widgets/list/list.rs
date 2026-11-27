@@ -10,11 +10,11 @@ use gpui::{
 
 use super::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::{
-  ActiveTheme as _, ContextMenuExt as _, Icon, IconName, IndexPath, Input, InputEvent, InputState,
-  ListDelegate, PopupMenu, Scrollbar, Selectable, Sizable, Size, StyledExt,
+  ActiveTheme as _, Icon, IconName, IndexPath, Input, InputEvent, InputState, ListDelegate,
+  MenuExt as _, PopupMenu, Scrollbar, Selectable, Sizable, Size, StyledExt,
   VirtualListScrollHandle, WidgetGroup, WidgetGroupChild,
   actions::{Cancel, Confirm, SelectDown, SelectUp},
-  translate_woocraft, v_flex, v_virtual_list,
+  translate, v_flex, v_virtual_list,
 };
 
 pub(crate) fn init(cx: &mut App) {
@@ -106,7 +106,7 @@ where
 {
   pub fn new(delegate: D, _window: &mut Window, cx: &mut Context<Self>) -> Self {
     let query_input =
-      cx.new(|cx| InputState::new(cx).placeholder(translate_woocraft("list.search_placeholder")));
+      cx.new(|cx| InputState::new(cx).placeholder(translate("list.search_placeholder")));
 
     let _query_input_subscription =
       cx.subscribe_in(&query_input, _window, Self::on_query_input_event);
@@ -438,7 +438,7 @@ where
     &mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<Self>,
   ) -> impl IntoElement {
     let selectable = self.selectable;
-    let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
+    let selected = self.selected_index.map(|s| s.eq_row(&ix)).unwrap_or(false);
     // Pack (section, row) into one integer to avoid a per-row String
     // allocation on every render; entries always live at column 0.
     let id = ("list-item", ((ix.section as u64) << 32) | ix.row as u64);
@@ -675,7 +675,7 @@ where
     if let Some(builder) = self.context_menu_builder.clone() {
       let list_state = cx.entity().clone();
       list
-        .context_menu(move |menu, window, cx| {
+        .menu(move |menu, window, cx| {
           let (target, has_target) = {
             let state = list_state.read(cx);
             if state.mouse_right_clicked_blank {
@@ -694,6 +694,7 @@ where
             menu
           }
         })
+        .at_pointer()
         .into_any_element()
     } else {
       list.into_any_element()

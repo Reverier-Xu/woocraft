@@ -138,7 +138,7 @@ impl Render for TooltipView {
             .text_size(self.size.text_size())
             .flex_shrink_0()
             .text_color(cx.theme().muted_foreground)
-            .child(kbd.outline()),
+            .child(kbd),
         )
       })
   }

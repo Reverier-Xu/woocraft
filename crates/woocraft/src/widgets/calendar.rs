@@ -49,8 +49,7 @@ use gpui::{
 
 use crate::{
   ActiveTheme, Button, ButtonVariants as _, Date, Disableable as _, Icon, IconName, Matcher,
-  Selectable, Sizable, Size, StyledExt as _, h_flex, local_today, month_days, translate_woocraft,
-  v_flex,
+  Selectable, Sizable, Size, StyledExt as _, h_flex, local_today, month_days, translate, v_flex,
 };
 
 /// i18n keys of the twelve month names, January first.
@@ -71,7 +70,7 @@ const MONTH_KEYS: [&str; 12] = [
 
 /// Single-entry per-locale cache for render-path translations.
 ///
-/// `translate_woocraft` normalizes the locale and allocates a fresh `String`
+/// `translate` normalizes the locale and allocates a fresh `String`
 /// on every call, which adds up on widgets that translate labels every frame
 /// (calendar and date picker). Cached values are rebuilt automatically when
 /// the active locale changes.
@@ -110,7 +109,7 @@ static MONTH_NAMES: LocaleCache<[SharedString; 12]> = LocaleCache::new();
 
 /// Translated month names for the active locale, cached per locale.
 fn month_names() -> [SharedString; 12] {
-  MONTH_NAMES.get(|| MONTH_KEYS.map(|key| SharedString::from(translate_woocraft(key))))
+  MONTH_NAMES.get(|| MONTH_KEYS.map(|key| SharedString::from(translate(key))))
 }
 
 /// Cached month day matrices for the calendar day grid.
@@ -616,6 +615,9 @@ impl Calendar {
                 // Gap between the month and year names tracks the size tier
                 // (0.75em) instead of hard-coded rem steps.
                 .gap(self.size.em(0.75))
+                // Raw text does not inherit the button's size the way the
+                // single-month variant does, so set it explicitly.
+                .text_size(self.size.text_size())
                 .child(state.month_name(n))
                 .child(state.year_name(n))
             })),
@@ -729,7 +731,7 @@ impl Calendar {
             h_flex().gap_0p5().justify_between().children(
               week_keys
                 .iter()
-                .map(|week| self.render_week(translate_woocraft(*week), window, cx)),
+                .map(|week| self.render_week(translate(*week), window, cx)),
             ),
           )
           .children(days.iter().map(|week| {

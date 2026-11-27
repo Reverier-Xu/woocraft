@@ -10,8 +10,8 @@ use gpui::{
 
 use super::*;
 use crate::{
-  ActiveTheme, Button, ButtonVariants as _, ContextMenuExt, ElementExt, Icon, IconName, PopupMenu,
-  ScrollableMask, Scrollbar, Selectable, Sizable, Size, StyleSized as _, StyledExt, TableThemeExt,
+  ActiveTheme, Button, ButtonVariants as _, ElementExt, Icon, IconName, MenuExt as _, PopupMenu,
+  ScrollableMask, Scrollbar, Selectable, Sizable, StyleSized as _, StyledExt, TableThemeExt,
   VirtualListScrollHandle,
   actions::{
     Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown, SelectPageUp,
@@ -751,18 +751,14 @@ where
       .as_ref()
       .map(|edges| edges.left + edges.right)
       .unwrap_or_else(|| {
-        let default_padding = self.options.size.table_cell_padding();
+        let default_padding = self.options.size.container_padding();
         rems(default_padding.left.0 + default_padding.right.0).to_pixels(window.rem_size())
       });
 
+    let size = self.options.size;
     let sort_icon_width = if self.sortable && column.sort.is_some() {
-      // Header labels are IconLabel (default Medium), while sort icon uses a
-      // Small icon-only Button. Reserve the delta over the baseline label
-      // paddings to prevent header text clipping.
-      let delta = Size::Small.component_height().0 + Size::Medium.component_gap().0
-        - Size::Medium.component_px().0
-        + Size::Medium.container_px().0;
-      rems(delta).to_pixels(window.rem_size())
+      // Icon-only button: its full edge plus the header's inner gap.
+      rems(size.component_height().0 + size.component_gap().0).to_pixels(window.rem_size())
     } else {
       px(0.)
     };
@@ -1553,7 +1549,7 @@ where
     Some(
       Button::new(("icon-sort", col_ix))
         .flat()
-        .small()
+        .with_size(self.options.size)
         .tab_stop(false)
         .selected(is_on)
         .icon(Icon::new(icon))
@@ -2036,45 +2032,6 @@ where
         }),
       )
       .child(self.render_table_header(left_columns_count, window, cx))
-      .context_menu({
-        let view = cx.entity().clone();
-        move |menu, window: &mut Window, cx: &mut Context<PopupMenu>| {
-          let (
-            right_clicked_row,
-            right_clicked_cell,
-            right_clicked_blank,
-            blank_context_menu_builder,
-          ) = {
-            let state = view.read(cx);
-            (
-              state.right_clicked_row,
-              state.right_clicked_cell,
-              state.right_clicked_blank,
-              state.blank_context_menu_builder.clone(),
-            )
-          };
-
-          if let Some((row_ix, col_ix)) = right_clicked_cell {
-            view.update(cx, |state, cx| {
-              state
-                .delegate_mut()
-                .cell_context_menu(row_ix, col_ix, menu, window, cx)
-            })
-          } else if let Some(row_ix) = right_clicked_row {
-            view.update(cx, |state, cx| {
-              state.delegate_mut().context_menu(row_ix, menu, window, cx)
-            })
-          } else if right_clicked_blank {
-            if let Some(builder) = blank_context_menu_builder {
-              view.update(cx, |_, cx| builder(menu, window, cx))
-            } else {
-              menu
-            }
-          } else {
-            menu
-          }
-        }
-      })
       .map(|this| {
         if rows_count == 0 {
           this.children(empty_view)
@@ -2144,7 +2101,47 @@ where
             .into_any_element(),
           )
         }
-      });
+      })
+      .menu({
+        let view = cx.entity().clone();
+        move |menu, window: &mut Window, cx: &mut Context<PopupMenu>| {
+          let (
+            right_clicked_row,
+            right_clicked_cell,
+            right_clicked_blank,
+            blank_context_menu_builder,
+          ) = {
+            let state = view.read(cx);
+            (
+              state.right_clicked_row,
+              state.right_clicked_cell,
+              state.right_clicked_blank,
+              state.blank_context_menu_builder.clone(),
+            )
+          };
+
+          if let Some((row_ix, col_ix)) = right_clicked_cell {
+            view.update(cx, |state, cx| {
+              state
+                .delegate_mut()
+                .cell_context_menu(row_ix, col_ix, menu, window, cx)
+            })
+          } else if let Some(row_ix) = right_clicked_row {
+            view.update(cx, |state, cx| {
+              state.delegate_mut().context_menu(row_ix, menu, window, cx)
+            })
+          } else if right_clicked_blank {
+            if let Some(builder) = blank_context_menu_builder {
+              view.update(cx, |_, cx| builder(menu, window, cx))
+            } else {
+              menu
+            }
+          } else {
+            menu
+          }
+        }
+      })
+      .at_pointer();
 
     div()
       .id("table")

@@ -7,35 +7,6 @@
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use gpui::SharedString;
 
-#[cfg(test)]
-trait NaiveDateExt {
-  fn days_in_month(&self) -> i32;
-  fn is_leap_year(&self) -> bool;
-}
-
-#[cfg(test)]
-impl NaiveDateExt for NaiveDate {
-  fn days_in_month(&self) -> i32 {
-    match self.month() {
-      1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-      4 | 6 | 9 | 11 => 30,
-      2 => {
-        if self.is_leap_year() {
-          29
-        } else {
-          28
-        }
-      }
-      month => panic!("invalid month: {month}"),
-    }
-  }
-
-  fn is_leap_year(&self) -> bool {
-    let year = self.year();
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
-  }
-}
-
 /// Selected date value for calendar and date picker widgets.
 ///
 /// Can represent a single date or a date range. Each variant can be empty (None
@@ -140,18 +111,6 @@ impl Date {
   }
 }
 
-/// Date matcher for disabling dates before and after an interval.
-pub struct IntervalMatcher {
-  before: Option<NaiveDate>,
-  after: Option<NaiveDate>,
-}
-
-/// Date matcher for disabling/highlighting dates within a range.
-pub struct RangeMatcher {
-  from: Option<NaiveDate>,
-  to: Option<NaiveDate>,
-}
-
 /// Matcher rule for determining which dates should be disabled or highlighted.
 ///
 /// Provides multiple matching strategies:
@@ -163,9 +122,15 @@ pub enum Matcher {
   /// Match weekdays by index from Sunday (0..=6).
   DayOfWeek(Vec<u32>),
   /// Match values outside of `[before, after]`.
-  Interval(IntervalMatcher),
+  Interval {
+    before: Option<NaiveDate>,
+    after: Option<NaiveDate>,
+  },
   /// Match values inside of `[from, to]`.
-  Range(RangeMatcher),
+  Range {
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+  },
   /// Match values via custom predicate.
   Custom(Box<dyn Fn(&NaiveDate) -> bool + Send + Sync>),
 }
@@ -187,11 +152,11 @@ where
 
 impl Matcher {
   pub fn interval(before: Option<NaiveDate>, after: Option<NaiveDate>) -> Self {
-    Self::Interval(IntervalMatcher { before, after })
+    Self::Interval { before, after }
   }
 
   pub fn range(from: Option<NaiveDate>, to: Option<NaiveDate>) -> Self {
-    Self::Range(RangeMatcher { from, to })
+    Self::Range { from, to }
   }
 
   pub fn custom<F>(f: F) -> Self
@@ -211,14 +176,14 @@ impl Matcher {
   pub fn matched(&self, date: &NaiveDate) -> bool {
     match self {
       Self::DayOfWeek(days) => days.contains(&date.weekday().num_days_from_sunday()),
-      Self::Interval(interval) => {
-        let before_check = interval.before.is_some_and(|before| date < &before);
-        let after_check = interval.after.is_some_and(|after| date > &after);
+      Self::Interval { before, after } => {
+        let before_check = before.is_some_and(|before| date < &before);
+        let after_check = after.is_some_and(|after| date > &after);
         before_check || after_check
       }
-      Self::Range(range) => {
-        let from_check = range.from.is_some_and(|from| date < &from);
-        let to_check = range.to.is_some_and(|to| date > &to);
+      Self::Range { from, to } => {
+        let from_check = from.is_some_and(|from| date < &from);
+        let to_check = to.is_some_and(|to| date > &to);
         !from_check && !to_check
       }
       Self::Custom(f) => f(date),
@@ -289,7 +254,7 @@ pub fn month_days(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 mod tests {
   use chrono::{Datelike, NaiveDate};
 
-  use super::{Date, NaiveDateExt, month_days};
+  use super::{Date, days_in_month, month_days};
 
   #[test]
   fn test_date_to_string() {
@@ -317,22 +282,10 @@ mod tests {
 
   #[test]
   fn test_days_in_month() {
-    assert_eq!(
-      NaiveDate::from_ymd_opt(2024, 2, 1).unwrap().days_in_month(),
-      29
-    );
-    assert_eq!(
-      NaiveDate::from_ymd_opt(2023, 2, 1).unwrap().days_in_month(),
-      28
-    );
-    assert_eq!(
-      NaiveDate::from_ymd_opt(2023, 1, 1).unwrap().days_in_month(),
-      31
-    );
-    assert_eq!(
-      NaiveDate::from_ymd_opt(2023, 4, 1).unwrap().days_in_month(),
-      30
-    );
+    assert_eq!(days_in_month(2024, 2), 29);
+    assert_eq!(days_in_month(2023, 2), 28);
+    assert_eq!(days_in_month(2023, 1), 31);
+    assert_eq!(days_in_month(2023, 4), 30);
   }
 
   /// Render a month matrix the same way the calendar widget lays it out, one

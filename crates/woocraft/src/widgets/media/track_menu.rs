@@ -9,7 +9,7 @@ use gpui::{
 use super::player::{Player, Track, TrackKind};
 use crate::{
   ActiveTheme as _, Icon, IconLabel, IconName, Label, Sizable, Size, StyleSized, StyledExt,
-  TableThemeExt, Theme, h_flex, translate_woocraft, v_flex,
+  TableThemeExt, Theme, h_flex, translate, v_flex,
 };
 
 /// Width of the reserved leading marker slot of each row, in ems of the
@@ -85,7 +85,7 @@ impl RenderOnce for PlayerTrackMenu {
           .child(section_header(
             ("player-tracks-audio-header", id),
             IconName::Speaker2,
-            translate_woocraft("media.audio").into(),
+            translate("media.audio").into(),
             size,
             &theme,
           ))
@@ -94,7 +94,7 @@ impl RenderOnce for PlayerTrackMenu {
             size,
             &theme,
             audio_selected.is_none(),
-            translate_woocraft("media.off").into(),
+            translate("media.off").into(),
             None,
             {
               let player = player.clone();
@@ -128,7 +128,7 @@ impl RenderOnce for PlayerTrackMenu {
           .child(section_header(
             ("player-tracks-subtitle-header", id),
             IconName::ClosedCaption,
-            translate_woocraft("media.subtitles").into(),
+            translate("media.subtitles").into(),
             size,
             &theme,
           ))
@@ -137,7 +137,7 @@ impl RenderOnce for PlayerTrackMenu {
             size,
             &theme,
             subtitle_selected.is_none(),
-            translate_woocraft("media.off").into(),
+            translate("media.off").into(),
             None,
             {
               let player = player.clone();
@@ -181,7 +181,7 @@ fn track_label(track: &Track) -> SharedString {
     .clone()
     .or_else(|| track.lang.clone())
     .map(SharedString::from)
-    .unwrap_or_else(|| format!("{} {}", translate_woocraft("media.track"), track.id).into())
+    .unwrap_or_else(|| format!("{} {}", translate("media.track"), track.id).into())
 }
 
 /// The secondary text a track row shows: the language when the title is the
@@ -217,7 +217,6 @@ fn track_row(
     .id(element_id)
     .w_full()
     .list_size(size)
-    .list_px(size)
     .flex()
     .items_center()
     .component_gap(size)

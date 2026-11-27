@@ -50,7 +50,7 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui::{
-  AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity, IntoElement,
+  Anchor, AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity, IntoElement,
   ParentElement as _, Render, SharedString, Styled as _, Subscription, Window, div,
   prelude::FluentBuilder as _,
 };
@@ -61,9 +61,9 @@ use super::{
   snapshot::PlayerSnapshot,
 };
 use crate::{
-  ActiveTheme as _, Anchor, Button, ButtonVariants as _, DropdownMenu as _, Icon, IconLabel,
-  IconName, PopupMenu, PopupMenuItem, Sizable, Size, Slider, SliderEvent, SliderState, StyleSized,
-  Theme, Tooltip, h_flex, translate_woocraft, v_flex,
+  ActiveTheme as _, Button, ButtonVariants as _, Icon, IconLabel, IconName, PopupMenu,
+  PopupMenuItem, Sizable, Size, Slider, SliderEvent, SliderState, StyleSized, Theme, Tooltip,
+  h_flex, translate, v_flex,
 };
 
 /// Playback speeds the default settings menu offers, ascending.
@@ -670,12 +670,11 @@ impl PlayerTransport {
             button
               // Above the trigger: the bar sits at the bottom of the player,
               // so a menu opening downwards would leave the window.
-              .dropdown_menu_with_anchor(Anchor::BottomLeft, move |menu, window, cx| match builder
-                .as_ref()
-              {
+              .menu(move |menu, window, cx| match builder.as_ref() {
                 Some(build) => build(menu, window, cx),
                 None => speed_menu(menu, &player, cx),
               })
+              .anchor(Anchor::BottomLeft)
               .into_any_element()
           }
         }
@@ -838,7 +837,7 @@ fn control_button(
 
 /// A translated tooltip label.
 fn tooltip(key: &str) -> SharedString {
-  translate_woocraft(key).into()
+  translate(key).into()
 }
 
 /// The default settings menu: playback speed, checked against the live

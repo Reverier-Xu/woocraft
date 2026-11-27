@@ -3,7 +3,6 @@ loading = "Se încarcă..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Fără titlu"
-zoom_reset = "Resetează zoom-ul"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Caută..."
@@ -23,10 +22,8 @@ zoom_out = "Micșorează"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Copiază"
 cut               = "Taie"
-go_to_definition  = "Mergi la definiție"
 paste             = "Lipește"
 select_all        = "Selectează tot"
-show_code_actions = "Afișează acțiuni de cod"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Înlocuiește"

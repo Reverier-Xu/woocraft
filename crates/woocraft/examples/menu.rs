@@ -3,8 +3,8 @@ use gpui::{
   Styled, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ContextMenuExt as _, DropdownMenu as _, IconName, PopupMenuItem,
-  StyledExt as _, ThemeMode, h_flex, v_flex, window_border,
+  ActiveTheme, Button, IconName, MenuExt as _, PopupMenuItem, StyledExt as _, ThemeMode, h_flex,
+  v_flex, window_border,
 };
 
 #[derive(Default)]
@@ -28,7 +28,7 @@ impl Render for MenuWindow {
 
     let menu_trigger = Button::new("menu-trigger")
       .label("Open Menu")
-      .dropdown_menu(move |menu, _, _| {
+      .menu(move |menu, _, _| {
         let view = view.clone();
         let view_refresh = view.clone();
         let view_pin = view.clone();
@@ -74,7 +74,7 @@ impl Render for MenuWindow {
       .items_center()
       .justify_center()
       .child("Right click this area")
-      .context_menu(move |menu, _, _| {
+      .menu(move |menu, _, _| {
         let view = view_for_context.clone();
         let view_copy = view.clone();
         let view_inspect = view.clone();
@@ -91,7 +91,8 @@ impl Render for MenuWindow {
               cx.notify();
             });
           }))
-      });
+      })
+      .at_pointer();
 
     window_border().child(
       v_flex()

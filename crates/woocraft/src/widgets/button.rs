@@ -67,7 +67,7 @@ use gpui::{
 
 use crate::{
   ActiveTheme, ColorExt, Icon, IconName, InteractionColors, RemsExt, Sizable, Size, StyleSized,
-  StyledExt, h_flex, opacity, spinner_animation,
+  StyledExt, darken_tone, h_flex, opacity, spinner_animation,
 };
 
 type ButtonClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -509,8 +509,8 @@ fn compute_button_colors(
     )
   };
 
-  let background_hover = theme.background.darken(0.04);
-  let background_active = theme.background.darken(0.08);
+  let background_hover = darken_tone(theme.background, 4.0);
+  let background_active = darken_tone(theme.background, 8.0);
 
   let hover_bg = if outline {
     background_hover

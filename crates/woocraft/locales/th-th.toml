@@ -3,7 +3,6 @@ loading = "กำลังโหลด..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "ไม่มีชื่อ"
-zoom_reset = "รีเซ็ตการซูม"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "ค้นหา..."
@@ -23,10 +22,8 @@ zoom_out = "ซูมออก"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "คัดลอก"
 cut               = "ตัด"
-go_to_definition  = "ไปยังคำนิยาม"
 paste             = "วาง"
 select_all        = "เลือกทั้งหมด"
-show_code_actions = "แสดงการกระทำของโค้ด"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "แทนที่"

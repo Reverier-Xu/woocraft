@@ -13,11 +13,15 @@ use crate::{
   ActiveTheme, CardStyle, Disableable, Divider, ElementExt, Icon, IconLabel, IconName, Kbd,
   Selectable, Size, StyleSized,
   actions::{Cancel, Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
-  h_flex, v_flex,
+  h_flex, translate, v_flex,
   widgets::{Button, ButtonVariants, Scrollbar, ScrollbarAxis},
 };
 
 const CONTEXT: &str = "PopupMenu";
+
+/// Every menu is at least this wide, so short labels never produce a cramped
+/// sliver of a menu next to its trigger.
+const MENU_MIN_WIDTH_EM: f32 = 16.;
 
 type ClickHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
 type ElementRenderer = dyn Fn(&mut Window, &mut App) -> AnyElement;
@@ -303,7 +307,7 @@ pub struct PopupMenu {
   min_width: Option<Pixels>,
   max_width: Option<Rems>,
   max_height: Option<Pixels>,
-  bounds: Bounds<Pixels>,
+  pub(crate) bounds: Bounds<Pixels>,
   size: Size,
   check_side: Side,
   self_entity: WeakEntity<Self>,
@@ -366,7 +370,7 @@ impl PopupMenu {
     self
   }
 
-  /// Set min width of the popup menu, default is 120px
+  /// Set min width of the popup menu, default is 16em.
   pub fn min_w(mut self, width: impl Into<Pixels>) -> Self {
     self.min_width = Some(width.into());
     self
@@ -616,12 +620,6 @@ impl PopupMenu {
     self
   }
 
-  /// Use small size, the menu item will have smaller height.
-  pub fn small(mut self) -> Self {
-    self.size = Size::Small;
-    self
-  }
-
   fn add_menu_item(
     &mut self, label: impl Into<SharedString>, icon: Option<Icon>, action: Box<dyn Action>,
     disabled: bool, checked: bool,
@@ -644,13 +642,17 @@ impl PopupMenu {
     for item in items {
       match item.into() {
         OwnedMenuItem::Action { name, action, .. } => {
-          self = self.menu(name.as_str().to_owned(), action.boxed_clone())
+          // Application menus are declared with i18n keys (`cx.set_menus`),
+          // but `PopupMenu` itself takes literal labels. Resolve them here so
+          // the app menu never shows a raw key, while literal labels (custom
+          // context menus) pass through untouched.
+          self = self.menu(translate(name.as_str()), action.boxed_clone())
         }
         OwnedMenuItem::Separator => {
           self = self.separator();
         }
         OwnedMenuItem::Submenu(submenu) => {
-          let translated_name = submenu.name.as_str().to_owned();
+          let translated_name = translate(submenu.name.as_str());
           self = self.submenu(translated_name, window, cx, move |menu, window, cx| {
             menu.with_menu_items(submenu.items.clone(), window, cx)
           })
@@ -1073,12 +1075,7 @@ impl PopupMenu {
         let show_link_icon = *is_link && self.external_link_icon;
         // The resolved binding is cached per item on the menu, see
         // `PopupMenu::key_bindings`.
-        let key = self
-          .key_bindings
-          .get(ix)
-          .cloned()
-          .flatten()
-          .map(|stroke| Kbd::new(stroke).appearance(false));
+        let key = self.key_bindings.get(ix).cloned().flatten().map(Kbd::new);
         let has_key = key.is_some();
         let has_right_check = right_check_icon.is_some();
         let label = label.clone();
@@ -1231,6 +1228,7 @@ impl PopupMenu {
 
 impl FluentBuilder for PopupMenu {}
 impl EventEmitter<DismissEvent> for PopupMenu {}
+impl_sizable!(PopupMenu);
 impl Focusable for PopupMenu {
   fn focus_handle(&self, _: &App) -> FocusHandle {
     self.focus_handle.clone()
@@ -1287,7 +1285,7 @@ impl Render for PopupMenu {
     // content still fits.
     let items = v_flex()
       .id("items")
-      .min_w(rems(8.))
+      .min_w(rems(MENU_MIN_WIDTH_EM))
       .when_some(self.min_width, |this, min_width| this.min_w(min_width))
       .max_w(max_width)
       .max_h(max_height)
@@ -1361,7 +1359,7 @@ mod tests {
 
   use gpui::{
     Modifiers, ScrollDelta, ScrollEvent, ScrollSource, Size, TestAppContext, TouchPhase,
-    VisualTestContext, WindowHandle, point, px, size,
+    VisualTestContext, WindowHandle, point, px, rems, size,
   };
 
   use super::*;
@@ -1413,6 +1411,19 @@ mod tests {
     // most 28rem): the menu chrome must stay capped, not grow with content.
     visual.update(|_, cx| {
       assert_eq!(menu.read(cx).bounds.size.height, px(300.));
+    });
+  }
+
+  #[gpui::test]
+  fn short_menu_is_at_least_16em_wide(cx: &mut TestAppContext) {
+    let (menu, _, mut visual) = open_menu_window(cx, size(px(800.), px(600.)), 2);
+
+    visual.update(|window, cx| {
+      assert_eq!(
+        menu.read(cx).bounds.size.width,
+        rems(16.).to_pixels(window.rem_size()),
+        "a two-item menu is not narrower than the minimum menu width"
+      );
     });
   }
 

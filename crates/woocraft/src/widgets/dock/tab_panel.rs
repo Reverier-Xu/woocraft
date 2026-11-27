@@ -10,17 +10,25 @@ use gpui::{
 use super::{
   super::{
     button::{Button, ButtonVariants as _},
-    menu::{DropdownMenu, PopupMenu},
+    menu::PopupMenu,
     tab::{Tab, TabBar},
   },
   ClosePanel, DockArea, InsertTarget, NodeId, Panel, PanelControl, PanelEvent, PanelInfo,
   PanelState, PanelStyle, PanelView, StackPanel, ToggleZoom,
 };
 use crate::{
-  ActiveTheme, Disableable, Divider, DockPlacement, ElementExt, Icon, IconLabel, IconName,
-  Placement, Selectable, Size, StyleSized, TabBarDirection, Tooltip, h_flex, translate_woocraft,
-  v_flex,
+  ActiveTheme, Disableable, Divider, ElementExt, Icon, IconLabel, IconName, Placement, Selectable,
+  Size, StyleSized, Tooltip, h_flex, translate, v_flex,
 };
+
+/// Whether the tab rail stacks vertically.
+///
+/// The rail runs perpendicular to the bar: a bar on the left or right edge
+/// stacks its tabs top-to-bottom, a bar on the top or bottom edge lays them
+/// out left-to-right.
+fn is_vertical_rail(direction: Placement) -> bool {
+  matches!(direction, Placement::Left | Placement::Right)
+}
 
 #[derive(Clone)]
 struct TabState {
@@ -163,11 +171,11 @@ impl Panel for TabPanel {
     self.visible_panel_indices(cx).next().is_some()
   }
 
-  fn dropdown_menu(
+  fn extend_tab_menu(
     &mut self, menu: PopupMenu, window: &mut Window, cx: &mut Context<Self>,
   ) -> PopupMenu {
     if let Some(panel) = self.active_panel(cx) {
-      panel.dropdown_menu(menu, window, cx)
+      panel.extend_tab_menu(menu, window, cx)
     } else {
       menu
     }
@@ -232,7 +240,7 @@ impl TabPanel {
   }
 
   /// The placement of the dock this panel sits in, if any.
-  pub(crate) fn dock_placement(&self, cx: &App) -> Option<DockPlacement> {
+  pub(crate) fn dock_placement(&self, cx: &App) -> Option<Placement> {
     self
       .dock
       .as_ref()?
@@ -240,7 +248,7 @@ impl TabPanel {
       .map(|dock| dock.read(cx).placement)
   }
 
-  fn get_tab_bar_direction(&self, cx: &App) -> TabBarDirection {
+  fn get_tab_bar_direction(&self, cx: &App) -> Placement {
     if let Some(dock) = self.dock.as_ref().and_then(|d| d.upgrade()) {
       return dock.read(cx).tab_bar_direction;
     }
@@ -838,14 +846,10 @@ impl TabPanel {
           Some((
             "zoom-out",
             IconName::ArrowMinimize,
-            translate_woocraft("dock.zoom_out"),
+            translate("dock.zoom_out"),
           ))
         } else if zoomable_toolbar_visible {
-          Some((
-            "zoom-in",
-            IconName::Maximize,
-            translate_woocraft("dock.zoom_in"),
-          ))
+          Some(("zoom-in", IconName::Maximize, translate("dock.zoom_in")))
         } else {
           None
         };
@@ -872,20 +876,20 @@ impl TabPanel {
           .icon(Icon::new(IconName::MoreHorizontal))
           .flat()
           .tab_stop(false)
-          .dropdown_menu({
+          .menu({
             let zoomable = state.zoomable.is_some_and(|v| v.menu_visible());
             let closable = state.closable;
 
             move |menu, window, cx| {
               view.update(cx, |this, cx| {
                 this
-                  .dropdown_menu(menu, window, cx)
+                  .extend_tab_menu(menu, window, cx)
                   .separator()
                   .menu_with_icon_and_disabled(
                     if zoomed {
-                      translate_woocraft("dock.zoom_out")
+                      translate("dock.zoom_out")
                     } else {
-                      translate_woocraft("dock.zoom_in")
+                      translate("dock.zoom_in")
                     },
                     if zoomed {
                       IconName::ArrowMinimize
@@ -897,7 +901,7 @@ impl TabPanel {
                   )
                   .when(closable, |this| {
                     this.separator().menu_with_icon(
-                      translate_woocraft("dock.close"),
+                      translate("dock.close"),
                       IconName::Dismiss,
                       Box::new(ClosePanel),
                     )
@@ -905,19 +909,19 @@ impl TabPanel {
               })
             }
           })
-          .anchor(Anchor::TopRight),
+          .anchor(Anchor::BottomLeft),
       )
   }
 
   fn render_dock_toggle_button(
-    &self, placement: DockPlacement, _: &mut Window, cx: &mut Context<Self>,
+    &self, placement: Placement, _: &mut Window, cx: &mut Context<Self>,
   ) -> Option<Button> {
     if self.zoomed {
       return None;
     }
 
     // Only bottom dock toggle button for center panels
-    if matches!(placement, DockPlacement::Left | DockPlacement::Right) {
+    if matches!(placement, Placement::Left | Placement::Right) {
       return None;
     }
 
@@ -932,10 +936,10 @@ impl TabPanel {
     // Check if current TabPanel's entity_id matches the one stored in DockArea
     // for this placement
     if !match placement {
-      DockPlacement::Left => toggle_button_panels.left == Some(view_entity_id),
-      DockPlacement::Right => toggle_button_panels.right == Some(view_entity_id),
-      DockPlacement::Bottom => toggle_button_panels.bottom == Some(view_entity_id),
-      DockPlacement::Center => unreachable!(),
+      Placement::Left => toggle_button_panels.left == Some(view_entity_id),
+      Placement::Right => toggle_button_panels.right == Some(view_entity_id),
+      Placement::Bottom => toggle_button_panels.bottom == Some(view_entity_id),
+      Placement::Top | Placement::Center => unreachable!(),
     } {
       return None;
     }
@@ -948,28 +952,28 @@ impl TabPanel {
     let dock_has_panels = !self.panels.is_empty();
 
     let icon = match placement {
-      DockPlacement::Left => {
+      Placement::Left => {
         if is_collapsed {
           IconName::PanelLeftExpand
         } else {
           IconName::PanelLeft
         }
       }
-      DockPlacement::Right => {
+      Placement::Right => {
         if is_collapsed {
           IconName::PanelRightContract
         } else {
           IconName::PanelRight
         }
       }
-      DockPlacement::Bottom => {
+      Placement::Bottom => {
         if is_collapsed {
           IconName::ArrowMaximize
         } else {
           IconName::ArrowMinimize
         }
       }
-      DockPlacement::Center => unreachable!(),
+      Placement::Top | Placement::Center => unreachable!(),
     };
 
     Some(
@@ -981,9 +985,9 @@ impl TabPanel {
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
-              translate_woocraft("dock.expand")
+              translate("dock.expand")
             } else {
-              translate_woocraft("dock.collapse")
+              translate("dock.collapse")
             }
             .to_string(),
           );
@@ -1010,7 +1014,7 @@ impl TabPanel {
     let dock = self.dock.as_ref()?.upgrade()?;
     let dock_ref = dock.read(cx);
     let placement = dock_ref.placement;
-    if !matches!(placement, DockPlacement::Left | DockPlacement::Right) {
+    if !matches!(placement, Placement::Left | Placement::Right) {
       return None;
     }
 
@@ -1034,9 +1038,9 @@ impl TabPanel {
         .tooltip({
           let label = SharedString::from(
             if is_collapsed {
-              translate_woocraft("dock.expand")
+              translate("dock.expand")
             } else {
-              translate_woocraft("dock.collapse")
+              translate("dock.collapse")
             }
             .to_string(),
           );
@@ -1066,20 +1070,18 @@ impl TabPanel {
       return div().into_any_element();
     };
 
-    let bottom_dock_button = self.render_dock_toggle_button(DockPlacement::Bottom, window, cx);
-    let is_bottom_dock_collapsed = bottom_dock_button.is_some()
-      && dock_area
-        .read(cx)
-        .is_dock_collapsed(DockPlacement::Bottom, cx);
+    let bottom_dock_button = self.render_dock_toggle_button(Placement::Bottom, window, cx);
+    let is_bottom_dock_collapsed =
+      bottom_dock_button.is_some() && dock_area.read(cx).is_dock_collapsed(Placement::Bottom, cx);
 
     let panel_style = dock_area.read(cx).panel_style;
     let tab_bar_direction = self.get_tab_bar_direction(cx);
     let visible_panel_count = state.visible_count;
 
-    let show_single_title = tab_bar_direction.is_vertical()
+    let show_single_title = is_vertical_rail(tab_bar_direction)
       || (visible_panel_count <= 1 && panel_style == PanelStyle::default());
 
-    let show_bottom_divider = !is_bottom_dock_collapsed || tab_bar_direction.is_bottom();
+    let show_bottom_divider = !is_bottom_dock_collapsed || tab_bar_direction == Placement::Bottom;
 
     if show_single_title {
       let Some(panel) = state.active_panel.clone() else {
@@ -1374,13 +1376,13 @@ impl TabPanel {
       })
       .into_any_element();
 
-    if self.get_tab_bar_direction(cx).is_left() {
+    if self.get_tab_bar_direction(cx) == Placement::Left {
       h_flex()
         .h_full()
         .child(tab_bar)
         .child(Divider::vertical())
         .into_any_element()
-    } else if self.get_tab_bar_direction(cx).is_right() {
+    } else if self.get_tab_bar_direction(cx) == Placement::Right {
       h_flex()
         .h_full()
         .child(Divider::vertical())
@@ -1399,6 +1401,7 @@ impl TabPanel {
       Placement::Right => div().top_0().right_0().bottom_0().w_1_2(),
       Placement::Top => div().top_0().left_0().right_0().h_1_2(),
       Placement::Bottom => div().bottom_0().left_0().right_0().h_1_2(),
+      Placement::Center => div(),
     };
 
     Some(overlay.absolute().bg(cx.theme().drop_target))
@@ -1410,7 +1413,7 @@ impl TabPanel {
     self.panel_content_bounds = None;
     let view = cx.entity().clone();
     let is_dock_collapsed = state.is_dock_collapsed;
-    let is_vertical = self.get_tab_bar_direction(cx).is_vertical();
+    let is_vertical = is_vertical_rail(self.get_tab_bar_direction(cx));
     let allows_split_drop = self.allows_split_drop();
 
     if is_dock_collapsed && is_vertical {
@@ -1834,7 +1837,7 @@ impl Render for TabPanel {
 
     let direction = self.get_tab_bar_direction(cx);
 
-    if direction.is_vertical() {
+    if is_vertical_rail(direction) {
       let is_dock_collapsed = state.is_dock_collapsed;
       let vertical_tab_bar = self.render_vertical_tab_bar(&state, window, cx);
 
@@ -1861,7 +1864,7 @@ impl Render for TabPanel {
         .child(title_bar)
         .child(active_panel_content);
 
-      let main_content = if direction.is_left() {
+      let main_content = if direction == Placement::Left {
         h_flex()
           .size_full()
           .min_w_0()
@@ -1892,7 +1895,7 @@ impl Render for TabPanel {
     let title_bar = self.render_title_bar(&state, window, cx);
     let active_panel_content = self.render_active_panel(&state, window, cx);
 
-    let main_content = if direction.is_bottom() {
+    let main_content = if direction == Placement::Bottom {
       v_flex()
         .size_full()
         .min_w_0()
@@ -1918,5 +1921,21 @@ impl Render for TabPanel {
       .bg(cx.theme().background)
       .child(main_content)
       .into_any_element()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::is_vertical_rail;
+  use crate::Placement;
+
+  /// Regression guard: the rail runs perpendicular to the bar, so side
+  /// placements stack vertically and top/bottom placements run horizontally.
+  #[test]
+  fn vertical_rail_follows_side_placement() {
+    assert!(is_vertical_rail(Placement::Left));
+    assert!(is_vertical_rail(Placement::Right));
+    assert!(!is_vertical_rail(Placement::Top));
+    assert!(!is_vertical_rail(Placement::Bottom));
   }
 }

@@ -5,7 +5,7 @@ use gpui::{
   Styled, Subscription, Window, WindowBounds, WindowOptions, div, px,
 };
 use woocraft::{
-  ActiveTheme, Button, ButtonVariants as _, ContextMenuExt as _, IconName, ListItem, PopupMenuItem,
+  ActiveTheme, Button, ButtonVariants as _, IconName, ListItem, MenuExt as _, PopupMenuItem,
   Selectable, Sizable, StyledExt, Theme, ThemeMode, TitleBar, TreeEvent, TreeItem, TreeState,
   h_flex, init, tree, v_flex, window_border,
 };
@@ -436,13 +436,14 @@ impl LoadingWindow {
                 ListItem::new(item.id)
                   .loading(item.loading)
                   .child(item.label)
-                  .context_menu(move |menu, _, _| {
+                  .menu(move |menu, _, _| {
                     menu
                       .item(PopupMenuItem::label(label))
                       .separator()
                       .item(PopupMenuItem::new("Action 1"))
                       .item(PopupMenuItem::new("Action 2"))
                   })
+                  .at_pointer()
               })),
           ),
       )

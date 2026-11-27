@@ -1,14 +1,11 @@
 use gpui::App;
 
 mod app_menu_bar;
-mod context_menu;
-mod dropdown_menu;
-mod popover_menu;
+mod menu_ext;
 mod popup_menu;
 
 pub use app_menu_bar::AppMenuBar;
-pub use context_menu::{ContextMenu, ContextMenuExt, ContextMenuState};
-pub use dropdown_menu::DropdownMenu;
+pub use menu_ext::{MenuExt, MenuPopover};
 pub use popup_menu::{PopupMenu, PopupMenuItem, Side};
 
 pub(crate) fn init(cx: &mut App) {

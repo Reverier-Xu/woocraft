@@ -53,6 +53,20 @@ mod number_input;
 mod otp;
 mod state;
 
+use gpui::{App, ElementId, Styled as _};
 pub use number_input::*;
 pub use otp::*;
 pub use state::*;
+
+use crate::{ActiveTheme as _, Button, ButtonVariants as _, Icon, IconName, Sizable, Size};
+
+/// The trailing "clear the field" affordance shared by `Input` and
+/// `DatePicker`: flat, muted, and sized with its owner.
+pub(crate) fn clear_button(id: impl Into<ElementId>, size: Size, cx: &App) -> Button {
+  Button::new(id)
+    .icon(Icon::new(IconName::DismissCircle))
+    .flat()
+    .with_size(size)
+    .tab_stop(false)
+    .text_color(cx.theme().muted_foreground)
+}

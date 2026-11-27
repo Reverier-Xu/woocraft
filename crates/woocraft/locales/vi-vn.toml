@@ -3,7 +3,6 @@ loading = "Đang tải..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Không có tiêu đề"
-zoom_reset = "Đặt lại thu phóng"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Tìm kiếm..."
@@ -23,10 +22,8 @@ zoom_out = "Thu nhỏ"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Sao chép"
 cut               = "Cắt"
-go_to_definition  = "Đi tới định nghĩa"
 paste             = "Dán"
 select_all        = "Chọn tất cả"
-show_code_actions = "Hiện thao tác mã"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Thay thế"

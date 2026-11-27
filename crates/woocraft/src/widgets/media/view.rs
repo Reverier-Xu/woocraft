@@ -24,7 +24,8 @@ use super::{
   video::MIN_RENDER_SIZE,
 };
 use crate::{
-  ActiveTheme as _, Icon, IconLabel, IconName, Sizable, Size, StyleSized, Theme, h_flex, v_flex,
+  ActiveTheme as _, Icon, IconLabel, IconName, Sizable, Size, StyleSized, Theme, h_flex, translate,
+  v_flex,
 };
 
 /// What a [`PlayerView`] slot builds: an element from a fresh
@@ -297,7 +298,7 @@ fn placeholder_stage(
               snapshot
                 .title
                 .clone()
-                .unwrap_or_else(|| "Nothing playing".into()),
+                .unwrap_or_else(|| translate("media.nothing_playing")),
             ),
         )
         // The artist reads as secondary information: muted colour at the

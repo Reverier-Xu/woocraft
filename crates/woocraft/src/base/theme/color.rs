@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use gpui::Hsla;
 use serde::{Deserialize, Serialize};
 use woocraft_colors::{Contrast, Hct, Tone};
@@ -307,24 +305,6 @@ impl ThemeTokens {
       self.light_bg_tone
     } as f64)
   }
-
-  pub fn from_json_str(input: &str) -> anyhow::Result<Self> {
-    Ok(serde_json::from_str(input)?)
-  }
-
-  pub fn from_toml_str(input: &str) -> anyhow::Result<Self> {
-    Ok(toml::from_str(input)?)
-  }
-
-  pub fn from_json_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-    let content = std::fs::read_to_string(path)?;
-    Self::from_json_str(&content)
-  }
-
-  pub fn from_toml_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-    let content = std::fs::read_to_string(path)?;
-    Self::from_toml_str(&content)
-  }
 }
 
 /// Converts an HCT color to the `Hsla` the view layer consumes.
@@ -410,6 +390,19 @@ fn hct_of_hsla(color: Hsla) -> Hct {
     a: f64::from(color.a),
   };
   Hct::from_srgb(hsl.to_srgb())
+}
+
+/// `color` moved `steps` down the HCT tone scale.
+///
+/// Interaction feedback is expressed in tone, not HSL lightness: tone is the
+/// design system's lightness axis, so a pressed or hovered surface keeps the
+/// hue and chroma the palette was built from instead of drifting toward grey.
+pub fn darken_tone(color: Hsla, steps: f64) -> Hsla {
+  let hct = hct_of_hsla(color);
+  hct_to_hsla(
+    hct.with_tone(Tone::new(hct.tone().value() - steps)),
+    f64::from(color.a) as f32,
+  )
 }
 
 /// The text color to use on `fill`.
@@ -611,7 +604,7 @@ impl ThemeColors {
   }
 
   pub fn disabled(&self) -> Self {
-    self.with_alpha(0.6)
+    self.with_alpha(super::tokens::opacity::DISABLED)
   }
 
   /// Multiplies the alpha of every token, so already-translucent tokens
@@ -687,11 +680,10 @@ impl ThemeColors {
 
 #[cfg(test)]
 mod tests {
-  use std::io::Write;
 
   use woocraft_colors::Contrast;
 
-  use super::{ThemeColors, ThemeTokens, tone_of_hsla};
+  use super::{ThemeColors, ThemeTokens, darken_tone, hct_of_hsla, tone_of_hsla};
 
   /// Contrast ratio between two theme colors, measured on the tone axis.
   fn ratio(a: gpui::Hsla, b: gpui::Hsla) -> f64 {
@@ -911,86 +903,42 @@ mod tests {
     }
   }
 
+  /// The token format is `serde` itself; the crate ships no wrapper around it,
+  /// so this pins the field names a token file may use.
+  /// Interaction feedback moves tone, so hue and chroma survive a hover or
+  /// press instead of drifting toward grey the way an HSL lightness nudge does.
   #[test]
-  fn tokens_parse_from_json_and_toml() {
-    let json = r#"{
-            "primary": 248,
-            "error": 24,
-            "warning": 48,
-            "success": 150,
-            "info": 248,
-            "accent": 130,
-            "chroma": 34,
-            "light_fill_tone": 40,
-            "dark_fill_tone": 70,
-            "light_bg_tone": 98,
-            "dark_bg_tone": 12,
-            "surface_chroma": 0.6
-        }"#;
-    let toml = r#"
-            primary = 248
-            error = 24
-            warning = 48
-            success = 150
-            info = 248
-            accent = 130
-            chroma = 34
-            light_fill_tone = 40
-            dark_fill_tone = 70
-            light_bg_tone = 98
-            dark_bg_tone = 12
-            surface_chroma = 0.6
-        "#;
+  fn darken_tone_moves_tone_only() {
+    let base = gpui::Hsla {
+      h: 0.55,
+      s: 0.6,
+      l: 0.5,
+      a: 0.8,
+    };
+    let darker = darken_tone(base, 8.0);
 
-    let from_json = ThemeTokens::from_json_str(json).expect("json tokens should parse");
-    let from_toml = ThemeTokens::from_toml_str(toml).expect("toml tokens should parse");
-
-    assert_eq!(from_json.primary, 248.0);
-    assert_eq!(from_toml.primary, 248.0);
-    assert_eq!(from_json.light_fill_tone, 40.0);
-    assert_eq!(from_toml.dark_bg_tone, 12.0);
-
-    // Hue tokens that a theme file omits still fall back to their defaults.
-    assert_eq!(from_json.red, 20.0);
-    assert_eq!(from_json.green, 150.0);
-    assert_eq!(from_json.blue, 258.0);
-    assert_eq!(from_json.yellow, 70.0);
-    assert_eq!(from_json.cyan, 190.0);
-    assert_eq!(from_toml.red, 20.0);
-    assert_eq!(from_toml.cyan, 190.0);
+    let before = hct_of_hsla(base);
+    let after = hct_of_hsla(darker);
+    assert!(after.tone().value() < before.tone().value() - 7.0);
+    assert!((after.hue() - before.hue()).abs() < 1.0);
+    assert!((f64::from(darker.a) - 0.8).abs() < 1e-6);
   }
 
   #[test]
-  fn tokens_parse_from_files() {
-    let dir = std::env::temp_dir();
-    let pid = std::process::id();
-    let json_path = dir.join(format!("woocraft-theme-tokens-{pid}.json"));
-    let toml_path = dir.join(format!("woocraft-theme-tokens-{pid}.toml"));
+  fn tokens_parse_from_serde() {
+    let json = r#"{
+      "primary": 248, "error": 24, "warning": 48, "success": 150, "info": 248,
+      "accent": 130, "chroma": 34, "light_fill_tone": 40, "dark_fill_tone": 70,
+      "light_bg_tone": 98, "dark_bg_tone": 12, "surface_chroma": 0.6
+    }"#;
+    let toml = "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nchroma = 34\nlight_fill_tone = 40\ndark_fill_tone = 70\nlight_bg_tone = 98\ndark_bg_tone = 12\nsurface_chroma = 0.6\n";
 
-    let mut json_file = std::fs::File::create(&json_path).expect("create json file");
-    let mut toml_file = std::fs::File::create(&toml_path).expect("create toml file");
+    let from_json: ThemeTokens = serde_json::from_str(json).expect("json tokens should parse");
+    let from_toml: ThemeTokens = toml::from_str(toml).expect("toml tokens should parse");
 
-    write!(
-      json_file,
-      "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"chroma\":34,\"light_fill_tone\":40,\"dark_fill_tone\":70,\"light_bg_tone\":98,\"dark_bg_tone\":12,\"surface_chroma\":0.6}}"
-    )
-    .expect("write json file");
-
-    write!(
-      toml_file,
-      "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nchroma = 34\nlight_fill_tone = 40\ndark_fill_tone = 70\nlight_bg_tone = 98\ndark_bg_tone = 12\nsurface_chroma = 0.6\n"
-    )
-    .expect("write toml file");
-
-    let from_json = ThemeTokens::from_json_file(&json_path).expect("read json tokens");
-    let from_toml = ThemeTokens::from_toml_file(&toml_path).expect("read toml tokens");
-
-    assert_eq!(from_json.info, 248.0);
-    assert_eq!(from_toml.info, 248.0);
+    assert_eq!(from_json.primary, 248.0);
+    assert_eq!(from_toml.primary, 248.0);
     assert_eq!(from_json.light_bg_tone, 98.0);
-    assert_eq!(from_toml.surface_chroma, 0.6);
-
-    let _ = std::fs::remove_file(&json_path);
-    let _ = std::fs::remove_file(&toml_path);
+    assert_eq!(from_toml.chroma, 34.0);
   }
 }

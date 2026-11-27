@@ -7,8 +7,8 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants as _, Disableable, Icon, IconName, Selectable, Sizable, Size,
-  Tooltip, WidgetGroup, h_flex, opacity,
+  ActiveTheme, Button, ButtonVariants as _, Disableable, Icon, IconName, Sizable, Size, Tooltip,
+  WidgetGroup, h_flex, opacity,
 };
 
 type TabClickHandler = dyn Fn(&ClickEvent, &mut Window, &mut App);
@@ -118,12 +118,6 @@ impl Tab {
     self
   }
 
-  /// Set disabled state to the tab, default false.
-  pub fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
-  }
-
   /// Set the click handler for the tab.
   pub fn on_click(
     mut self, on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -166,22 +160,9 @@ impl Tab {
   }
 }
 
-impl ParentElement for Tab {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_parent_element!(Tab);
 
-impl Selectable for Tab {
-  fn selected(mut self, selected: bool) -> Self {
-    self.selected = selected;
-    self
-  }
-
-  fn is_selected(&self) -> bool {
-    self.selected
-  }
-}
+impl_selectable!(Tab);
 
 impl InteractiveElement for Tab {
   fn interactivity(&mut self) -> &mut gpui::Interactivity {
@@ -198,6 +179,7 @@ impl Styled for Tab {
 }
 
 impl_sizable!(Tab);
+impl_disableable!(Tab);
 
 impl RenderOnce for Tab {
   fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {

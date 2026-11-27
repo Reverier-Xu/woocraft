@@ -6,7 +6,7 @@ use gpui::{
   Window, WindowBounds, WindowOptions, actions, div, px,
 };
 use woocraft::{
-  ActiveTheme, AppMenuBar, DockArea, DockPlacement, IconName, Panel, PanelEvent, PopupMenuItem,
+  ActiveTheme, AppMenuBar, DockArea, IconName, Panel, PanelEvent, Placement, PopupMenuItem,
   StyledExt as _, TitleBar, v_flex, window_border,
 };
 
@@ -144,9 +144,9 @@ impl DockExample {
       dock.add_to_right_dock(Arc::new(references.clone()), window, cx);
 
       // Configure dock sizes
-      dock.set_dock_size(DockPlacement::Left, px(260.), window, cx);
-      dock.set_dock_size(DockPlacement::Bottom, px(220.), window, cx);
-      dock.set_dock_size(DockPlacement::Right, px(280.), window, cx);
+      dock.set_dock_size(Placement::Left, px(260.), window, cx);
+      dock.set_dock_size(Placement::Bottom, px(220.), window, cx);
+      dock.set_dock_size(Placement::Right, px(280.), window, cx);
     });
 
     cx.new(|_| Self {
@@ -155,7 +155,7 @@ impl DockExample {
     })
   }
 
-  fn toggle_dock(&mut self, placement: DockPlacement, window: &mut Window, cx: &mut Context<Self>) {
+  fn toggle_dock(&mut self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
     self.dock_area.update(cx, |dock, cx| {
       dock.toggle_dock(placement, window, cx);
     });
@@ -164,28 +164,28 @@ impl DockExample {
   fn on_toggle_left_dock(
     &mut self, _: &ToggleLeftDock, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    self.toggle_dock(DockPlacement::Left, window, cx);
+    self.toggle_dock(Placement::Left, window, cx);
   }
 
   fn on_toggle_bottom_dock(
     &mut self, _: &ToggleBottomDock, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    self.toggle_dock(DockPlacement::Bottom, window, cx);
+    self.toggle_dock(Placement::Bottom, window, cx);
   }
 
   fn on_toggle_right_dock(
     &mut self, _: &ToggleRightDock, window: &mut Window, cx: &mut Context<Self>,
   ) {
-    self.toggle_dock(DockPlacement::Right, window, cx);
+    self.toggle_dock(Placement::Right, window, cx);
   }
 
   fn on_expand_all_docks(
     &mut self, _: &ExpandAllDocks, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.dock_area.update(cx, |dock, cx| {
-      dock.set_dock_collapsed(DockPlacement::Left, false, window, cx);
-      dock.set_dock_collapsed(DockPlacement::Bottom, false, window, cx);
-      dock.set_dock_collapsed(DockPlacement::Right, false, window, cx);
+      dock.set_dock_collapsed(Placement::Left, false, window, cx);
+      dock.set_dock_collapsed(Placement::Bottom, false, window, cx);
+      dock.set_dock_collapsed(Placement::Right, false, window, cx);
     });
   }
 
@@ -193,9 +193,9 @@ impl DockExample {
     &mut self, _: &CollapseAllDocks, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.dock_area.update(cx, |dock, cx| {
-      dock.set_dock_collapsed(DockPlacement::Left, true, window, cx);
-      dock.set_dock_collapsed(DockPlacement::Bottom, true, window, cx);
-      dock.set_dock_collapsed(DockPlacement::Right, true, window, cx);
+      dock.set_dock_collapsed(Placement::Left, true, window, cx);
+      dock.set_dock_collapsed(Placement::Bottom, true, window, cx);
+      dock.set_dock_collapsed(Placement::Right, true, window, cx);
     });
   }
 
@@ -203,12 +203,12 @@ impl DockExample {
     &mut self, _: &ResetDockSizes, window: &mut Window, cx: &mut Context<Self>,
   ) {
     self.dock_area.update(cx, |dock, cx| {
-      dock.set_dock_size(DockPlacement::Left, px(260.), window, cx);
-      dock.set_dock_collapsed(DockPlacement::Left, false, window, cx);
-      dock.set_dock_size(DockPlacement::Bottom, px(220.), window, cx);
-      dock.set_dock_collapsed(DockPlacement::Bottom, false, window, cx);
-      dock.set_dock_size(DockPlacement::Right, px(280.), window, cx);
-      dock.set_dock_collapsed(DockPlacement::Right, false, window, cx);
+      dock.set_dock_size(Placement::Left, px(260.), window, cx);
+      dock.set_dock_collapsed(Placement::Left, false, window, cx);
+      dock.set_dock_size(Placement::Bottom, px(220.), window, cx);
+      dock.set_dock_collapsed(Placement::Bottom, false, window, cx);
+      dock.set_dock_size(Placement::Right, px(280.), window, cx);
+      dock.set_dock_collapsed(Placement::Right, false, window, cx);
     });
   }
 

@@ -417,7 +417,7 @@ impl StatusColors {
     let bg = cx.theme().background;
     self
       .error_background
-      .unwrap_or(bg.blend(self.error(cx).alpha(0.2)))
+      .unwrap_or(bg.blend(self.error(cx).opacity(0.2)))
   }
 
   #[inline]
@@ -435,7 +435,7 @@ impl StatusColors {
     let bg = cx.theme().background;
     self
       .warning_background
-      .unwrap_or(bg.blend(self.warning(cx).alpha(0.2)))
+      .unwrap_or(bg.blend(self.warning(cx).opacity(0.2)))
   }
 
   #[inline]
@@ -453,7 +453,7 @@ impl StatusColors {
     let bg = cx.theme().background;
     self
       .info_background
-      .unwrap_or(bg.blend(self.info(cx).alpha(0.2)))
+      .unwrap_or(bg.blend(self.info(cx).opacity(0.2)))
   }
 
   #[inline]
@@ -471,7 +471,7 @@ impl StatusColors {
     let bg = cx.theme().background;
     self
       .success_background
-      .unwrap_or(bg.blend(self.success(cx).alpha(0.2)))
+      .unwrap_or(bg.blend(self.success(cx).opacity(0.2)))
   }
 
   #[inline]
@@ -489,7 +489,7 @@ impl StatusColors {
     let bg = cx.theme().background;
     self
       .hint_background
-      .unwrap_or(bg.blend(self.hint(cx).alpha(0.2)))
+      .unwrap_or(bg.blend(self.hint(cx).opacity(0.2)))
   }
 
   #[inline]

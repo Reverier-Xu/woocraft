@@ -31,18 +31,18 @@ use std::rc::Rc;
 
 use chrono::NaiveDate;
 use gpui::{
-  AnyElement, App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter,
+  Anchor, AnyElement, App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter,
   FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
   ParentElement as _, Render, RenderOnce, SharedString, StyleRefinement, Styled, Subscription,
   Window, div, prelude::FluentBuilder as _, rems,
 };
 
 use crate::{
-  ActiveTheme, Anchor, Button, ButtonVariants as _, Calendar, CalendarEvent, CalendarState, Date,
-  Delete, Disableable, Icon, IconName, LocaleCache, Matcher, Popover, Selectable, Sizable, Size,
+  ActiveTheme, Button, ButtonVariants as _, Calendar, CalendarEvent, CalendarState, Date, Delete,
+  Disableable, Icon, IconName, LocaleCache, Matcher, Popover, Selectable, Sizable, Size,
   StyledExt as _,
   actions::{Cancel, Confirm},
-  h_flex, translate_woocraft, v_flex,
+  h_flex, translate, v_flex,
 };
 
 const CONTEXT: &str = "DatePicker";
@@ -52,7 +52,7 @@ static PLACEHOLDER: LocaleCache<SharedString> = LocaleCache::new();
 /// Translated default placeholder for the active locale, cached per locale so
 /// the per-frame render path avoids translation lookups and allocations.
 fn placeholder_text() -> SharedString {
-  PLACEHOLDER.get(|| SharedString::from(translate_woocraft("date_picker.placeholder")))
+  PLACEHOLDER.get(|| SharedString::from(translate("date_picker.placeholder")))
 }
 
 pub(crate) fn init(cx: &mut App) {
@@ -404,15 +404,6 @@ impl DatePicker {
   }
 }
 
-fn clear_button(id: impl Into<ElementId>, size: Size, cx: &App) -> Button {
-  Button::new(id)
-    .icon(Icon::new(IconName::DismissCircle))
-    .flat()
-    .with_size(size)
-    .tab_stop(false)
-    .text_color(cx.theme().muted_foreground)
-}
-
 impl RenderOnce for DatePicker {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
     let number_of_months = self.number_of_months.max(1);
@@ -458,9 +449,11 @@ impl RenderOnce for DatePicker {
           .min_w_0()
           // The clear button lives in an absolute overlay pinned to the right
           // edge, so it cannot stretch the trigger's layout height. Reserve
-          // its width plus a gap so the title never runs underneath it.
+          // its width plus a gap so the title never runs underneath it. The
+          // button is rendered at `self.size`, so the reservation must use the
+          // same tier's `component_height` (not the smaller one).
           .when(show_clean, |this| {
-            this.pr(self.size.smaller().component_height() + rems(0.25))
+            this.pr(self.size.component_height() + rems(0.25))
           })
           .child(
             div()
@@ -491,16 +484,20 @@ impl RenderOnce for DatePicker {
                   cx.stop_propagation();
                 })
                 .child(
-                  clear_button(("date-picker-clean", self.state.entity_id()), self.size, cx)
-                    .on_click({
-                      let state = self.state.clone();
-                      move |_, window, cx| {
-                        state.update(cx, |state, cx| {
-                          state.clean(&ClickEvent::default(), window, cx);
-                          state.focus_handle.focus(window, cx);
-                        });
-                      }
-                    }),
+                  crate::widgets::input::clear_button(
+                    ("date-picker-clean", self.state.entity_id()),
+                    self.size,
+                    cx,
+                  )
+                  .on_click({
+                    let state = self.state.clone();
+                    move |_, window, cx| {
+                      state.update(cx, |state, cx| {
+                        state.clean(&ClickEvent::default(), window, cx);
+                        state.focus_handle.focus(window, cx);
+                      });
+                    }
+                  }),
                 ),
             )
           }),
@@ -514,7 +511,7 @@ impl RenderOnce for DatePicker {
       trigger.into_any_element()
     } else {
       Popover::new(("date-picker-popover", self.state.entity_id()))
-        .anchor(Anchor::TopLeft)
+        .anchor(Anchor::BottomLeft)
         .open(open)
         .track_focus(&self.focus_handle(cx))
         .overlay_closable(true)
@@ -535,7 +532,9 @@ impl RenderOnce for DatePicker {
               this.child(v_flex().my_1().gap_2().justify_end().children(
                 presets.into_iter().enumerate().map(|(ix, preset)| {
                   Button::new(("preset", ix))
-                    .small()
+                    // Presets are part of the picker popover, so they follow
+                    // the picker's size tier like the trigger and calendar.
+                    .with_size(size)
                     .flat()
                     .tab_stop(false)
                     .label(preset.label.clone())

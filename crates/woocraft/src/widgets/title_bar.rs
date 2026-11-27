@@ -11,10 +11,9 @@ use gpui::{
 };
 
 use crate::{
-  ActiveTheme, Button, ButtonVariants, DropdownMenu as _, Icon, IconLabel, IconName, PopupMenu,
-  PopupMenuItem, Sizable as _, Size, Slider, SliderEvent, SliderState, StyleSized, StyledExt,
-  Theme, ThemeMode, available_locales, h_flex, locale, locale_display_name, normalize_locale,
-  set_locale, translate_woocraft,
+  ActiveTheme, Button, ButtonVariants, Icon, IconLabel, IconName, PopupMenu, PopupMenuItem,
+  Sizable as _, Size, Slider, SliderEvent, SliderState, StyleSized, StyledExt, Theme, ThemeMode,
+  available_locales, h_flex, locale, locale_display_name, normalize_locale, set_locale, translate,
 };
 
 type CloseWindowHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
@@ -530,11 +529,7 @@ impl RenderOnce for WindowControls {
 
 impl_styled!(TitleBar);
 
-impl ParentElement for TitleBar {
-  fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-    self.children.extend(elements);
-  }
-}
+impl_parent_element!(TitleBar);
 
 /// Drag-gesture flag for the title bar.
 ///
@@ -594,7 +589,7 @@ impl RenderOnce for TitleBar {
     let title = title.unwrap_or_else(|| {
       let window_title = window.window_title();
       if window_title.is_empty() {
-        translate_woocraft("title_bar.untitled").into()
+        translate("title_bar.untitled").into()
       } else {
         window_title.into()
       }
@@ -611,7 +606,7 @@ impl RenderOnce for TitleBar {
         .medium()
         .icon(icon)
         .label(title.clone())
-        .dropdown_menu(move |menu, window, cx| title_menu_builder(menu, window, cx))
+        .menu(move |menu, window, cx| title_menu_builder(menu, window, cx))
         .into_any_element()
     } else {
       IconLabel::new("title-bar-label")
@@ -736,7 +731,7 @@ impl RenderOnce for TitleBar {
                   .flat()
                   .medium()
                   .icon(Icon::new(IconName::Translate))
-                  .dropdown_menu(move |menu, _, _| {
+                  .menu(move |menu, _, _| {
                     // The menu bounds its own height and scrolls (with a
                     // built-in scrollbar) whenever the language list outgrows
                     // the bound — no scroll setup at the call site.
@@ -768,7 +763,7 @@ impl RenderOnce for TitleBar {
                   .flat()
                   .medium()
                   .icon(Icon::new(IconName::ZoomIn))
-                  .dropdown_menu(move |menu, window, cx| {
+                  .menu(move |menu, window, cx| {
                     let menu = menu;
                     let menu_handle = cx.entity();
 

@@ -128,14 +128,6 @@ impl CellFlags {
   pub const DOTTED_UNDERLINE: Self = Self(1 << 13);
   pub const DASHED_UNDERLINE: Self = Self(1 << 14);
 
-  pub const UNDERLINE_KINDS: Self = Self(
-    Self::UNDERLINE.0
-      | Self::DOUBLE_UNDERLINE.0
-      | Self::UNDERCURL.0
-      | Self::DOTTED_UNDERLINE.0
-      | Self::DASHED_UNDERLINE.0,
-  );
-
   pub const fn empty() -> Self {
     Self(0)
   }

@@ -3,7 +3,6 @@ loading = "Laden..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Naamloos"
-zoom_reset = "Zoom herstellen"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Zoeken..."
@@ -23,10 +22,8 @@ zoom_out = "Uitzoomen"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Kopiëren"
 cut               = "Knippen"
-go_to_definition  = "Ga naar definitie"
 paste             = "Plakken"
 select_all        = "Alles selecteren"
-show_code_actions = "Codeacties tonen"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Vervangen"

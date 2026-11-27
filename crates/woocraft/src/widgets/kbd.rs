@@ -1,6 +1,6 @@
 //! Visual representation of keyboard keys and keyboard shortcuts.
 //!
-//! Kbd displays a keystroke or key combination in a styled box, useful for
+//! Displays a keystroke or key combination in a bordered box, useful for
 //! documenting keyboard shortcuts in help text, tooltips, or instructions.
 //! Automatically formats modifier keys (Ctrl, Shift, Alt, Cmd) and special keys
 //! (Enter, Escape, etc.) with platform-specific symbols (e.g., ⌘ on macOS, Ctrl
@@ -8,8 +8,7 @@
 
 use gpui::{
   Action, AsKeystroke, FocusHandle, IntoElement, KeyBinding, KeyContext, Keystroke,
-  ParentElement as _, RenderOnce, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _, relative,
+  ParentElement as _, RenderOnce, StyleRefinement, Styled, Window, div, relative,
 };
 
 use crate::{ActiveTheme, Size, StyledExt};
@@ -82,14 +81,11 @@ fn capitalize_first(key: &str) -> String {
 #[derive(IntoElement, Clone, Debug)]
 /// Visual keyboard key or shortcut display.
 ///
-/// Renders a keystroke in a styled box with platform-appropriate formatting.
-/// Default appearance applies theme styling; `appearance(false)` removes
-/// styling.
+/// Renders a keystroke in a box with platform-appropriate formatting. Use
+/// [`Kbd::format`] for the bare text, without the box.
 pub struct Kbd {
   style: StyleRefinement,
   stroke: Keystroke,
-  appearance: bool,
-  outline: bool,
 }
 
 impl From<Keystroke> for Kbd {
@@ -97,8 +93,6 @@ impl From<Keystroke> for Kbd {
     Self {
       style: StyleRefinement::default(),
       stroke,
-      appearance: true,
-      outline: false,
     }
   }
 }
@@ -106,28 +100,12 @@ impl From<Keystroke> for Kbd {
 impl Kbd {
   /// Creates a new keyboard key display for the given keystroke.
   ///
-  /// Default uses theme styling and platform-appropriate key symbols.
+  /// Uses theme styling and platform-appropriate key symbols.
   pub fn new(stroke: Keystroke) -> Self {
     Self {
       style: StyleRefinement::default(),
       stroke,
-      appearance: true,
-      outline: false,
     }
-  }
-
-  /// Toggles the themed appearance (rounded box with background).
-  ///
-  /// When `false`, renders plain undecorated text with no styling.
-  pub fn appearance(mut self, appearance: bool) -> Self {
-    self.appearance = appearance;
-    self
-  }
-
-  /// Switches to outline appearance (transparent background, bordered).
-  pub fn outline(mut self) -> Self {
-    self.outline = true;
-    self
   }
 
   /// Looks up the highest-precedence keybinding for an action and creates a Kbd
@@ -203,29 +181,25 @@ impl_styled!(Kbd);
 
 impl RenderOnce for Kbd {
   fn render(self, _: &mut gpui::Window, cx: &mut gpui::App) -> impl gpui::IntoElement {
-    if !self.appearance {
-      return Self::format(&self.stroke).into_any_element();
-    }
-
+    // The key is the whole box: no padding, so a shortcut never widens the row
+    // it sits in. The border is drawn as an overlay inside those bounds rather
+    // than as a box border, so it costs no layout space either.
     div()
+      .relative()
       .text_color(cx.theme().foreground)
-      .bg(crate::track_color(cx.theme()))
-      .when(self.outline, |this| {
-        this
-          .border_1()
-          .border_color(cx.theme().border)
-          .bg(cx.theme().background)
-      })
-      .py_0p5()
-      .px_1()
-      .min_w_5()
-      .text_center()
-      .rounded_sm()
-      .line_height(relative(1.))
       .text_size(Size::Medium.text_size())
+      .line_height(relative(1.))
       .whitespace_normal()
       .flex_shrink_0()
       .refine_style(&self.style)
+      .child(
+        div()
+          .absolute()
+          .inset_0()
+          .rounded_sm()
+          .border_1()
+          .border_color(cx.theme().border),
+      )
       .child(Self::format(&self.stroke))
       .into_any_element()
   }

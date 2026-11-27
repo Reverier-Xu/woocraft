@@ -247,7 +247,7 @@ impl ListDelegate for DemoListDelegate {
     let title = item.title;
     let subtitle = item.subtitle;
     let tag = item.tag;
-    let confirmed = self.confirmed.map(|v| v.eq_row(ix)).unwrap_or(false);
+    let confirmed = self.confirmed.map(|v| v.eq_row(&ix)).unwrap_or(false);
 
     Some(
       ListItem::new(("controls-list-item", ix.section * 1000 + ix.row))
@@ -733,10 +733,9 @@ impl ControlsWindow {
             .gap_2()
             .child(div().text_sm().child("Shortcut:"))
             .child(Kbd::new(gpui::Keystroke::parse("ctrl-k").expect("valid keystroke")))
-            .child(
-              Kbd::new(gpui::Keystroke::parse("shift-enter").expect("valid keystroke"))
-                .outline(),
-            ),
+            .child(Kbd::new(
+              gpui::Keystroke::parse("shift-enter").expect("valid keystroke"),
+            )),
         ),
     )
     .child(

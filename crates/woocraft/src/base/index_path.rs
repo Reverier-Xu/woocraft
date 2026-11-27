@@ -63,8 +63,8 @@ impl IndexPath {
   }
 
   /// Check whether two index paths are on the same row in the same section.
-  pub fn eq_row(&self, index: IndexPath) -> bool {
-    self.section == index.section && self.row == index.row
+  pub fn eq_row(&self, other: &IndexPath) -> bool {
+    self.section == other.section && self.row == other.row
   }
 }
 

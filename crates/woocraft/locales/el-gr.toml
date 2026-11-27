@@ -3,7 +3,6 @@ loading = "Φόρτωση..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Χωρίς τίτλο"
-zoom_reset = "Επαναφορά ζουμ"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Αναζήτηση..."
@@ -23,10 +22,8 @@ zoom_out = "Σμίκρυνση"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Αντιγραφή"
 cut               = "Αποκοπή"
-go_to_definition  = "Μετάβαση στον ορισμό"
 paste             = "Επικόλληση"
 select_all        = "Επιλογή όλων"
-show_code_actions = "Εμφάνιση ενεργειών κώδικα"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Αντικατάσταση"

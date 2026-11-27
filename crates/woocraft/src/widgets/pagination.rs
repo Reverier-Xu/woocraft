@@ -6,8 +6,8 @@ use gpui::{
 };
 
 use crate::{
-  Button, ButtonVariants as _, Disableable, DropdownMenu as _, Icon, IconName, PopupMenuItem,
-  Sizable, Size, StyleSized, StyledExt, Tooltip, h_flex, translate_woocraft,
+  Button, ButtonVariants as _, Disableable, Icon, IconName, PopupMenuItem, Sizable, Size,
+  StyleSized, StyledExt, Tooltip, h_flex, translate,
 };
 
 type PageClickHandler = dyn Fn(&usize, &mut Window, &mut App);
@@ -78,14 +78,14 @@ impl Pagination {
     let (id, label, icon, disabled) = if is_prev {
       (
         "prev",
-        SharedString::from(translate_woocraft("pagination.previous")),
+        SharedString::from(translate("pagination.previous")),
         IconName::ChevronLeft,
         current_page <= 1,
       )
     } else {
       (
         "next",
-        SharedString::from(translate_woocraft("pagination.next")),
+        SharedString::from(translate("pagination.next")),
         IconName::ChevronRight,
         current_page >= total_pages,
       )
@@ -181,7 +181,7 @@ impl RenderOnce for Pagination {
               .with_size(size)
               .disabled(is_disabled)
               .icon(Icon::new(IconName::MoreHorizontal))
-              .dropdown_menu(move |mut menu, _, _| {
+              .menu(move |mut menu, _, _| {
                 let on_click_for_page = on_click_for_popover.clone();
 
                 for page in range.clone() {

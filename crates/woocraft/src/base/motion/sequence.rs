@@ -41,10 +41,6 @@ impl<T> SequenceSample<T> {
     &self.value
   }
 
-  pub fn into_value(self) -> T {
-    self.value
-  }
-
   /// The index of the step being played. A finished sequence reports its
   /// last step; an empty one reports `0`.
   pub fn step(&self) -> usize {

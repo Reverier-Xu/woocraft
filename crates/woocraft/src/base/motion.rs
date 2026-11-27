@@ -66,11 +66,10 @@ pub use sequence::{Sequence, SequenceSample, SequenceStep};
 pub use spring::{Spring, SpringError, spring};
 pub use stagger::{Stagger, StaggerOrigin};
 pub use timing::{
-  IterationCount, MotionPhase, PlaybackDirection, SignedDuration, Timing, TimingSample,
+  IterationCount, MotionStatus, PlaybackDirection, SignedDuration, Timing, TimingSample,
 };
 pub use transition::{
-  MotionStatus, MotionValue, Transition, TransitionId, animate_keyframes, transition,
-  transition_with_status,
+  MotionValue, Transition, TransitionId, animate_keyframes, transition, transition_with_status,
 };
 
 /// Reads the operating system's reduced-motion preference into GPUI's
@@ -84,7 +83,7 @@ mod css_timing_tests {
   use std::time::Duration;
 
   use super::{
-    Easing, IterationCount, LinearStop, MotionPhase, PlaybackDirection, SignedDuration,
+    Easing, IterationCount, LinearStop, MotionStatus, PlaybackDirection, SignedDuration,
     StepPosition, Timing,
   };
 
@@ -150,10 +149,8 @@ mod css_timing_tests {
       .delay(SignedDuration::negative(Duration::from_millis(25)));
     let sample = timing.sample(Duration::ZERO);
 
-    assert_eq!(sample.phase, MotionPhase::Active);
+    assert_eq!(sample.phase, MotionStatus::Running);
     assert!((sample.directed_progress - 0.25).abs() < f32::EPSILON);
-    assert!(sample.active);
-    assert!(!sample.finished);
   }
 
   #[test]
@@ -171,9 +168,8 @@ mod css_timing_tests {
     assert_eq!(first.directed_progress, 0.25);
     assert_eq!(second.iteration, 1);
     assert_eq!(second.directed_progress, 0.75);
-    assert_eq!(finished.phase, MotionPhase::After);
+    assert_eq!(finished.phase, MotionStatus::Finished);
     assert_eq!(finished.directed_progress, 0.0);
-    assert!(finished.finished);
   }
 }
 

@@ -29,7 +29,7 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::{AnyDrag, DragDrop, DragMoving, DragResizing, TileItem, Tiles};
 
-use crate::{ActiveTheme as _, DockPlacement, ElementExt, TabBarDirection};
+use crate::{ActiveTheme as _, ElementExt, Placement};
 
 pub(crate) fn init(cx: &mut App) {
   PanelRegistry::init(cx);
@@ -85,8 +85,8 @@ pub struct DockArea {
   pub(crate) panel_style: PanelStyle,
 
   /// The tab bar direction, default is
-  /// [`TabBarDirection::Top`](TabBarDirection::Top).
-  pub(crate) tab_bar_direction: TabBarDirection,
+  /// [`Placement::Top`](Placement::Top).
+  pub(crate) tab_bar_direction: Placement,
 
   /// The custom placeholder content for the center area when it has no panels.
   pub(crate) center_placeholder: Option<AnyView>,
@@ -153,7 +153,7 @@ impl DockArea {
       toggle_button_visible: true,
       locked: false,
       panel_style: PanelStyle::default(),
-      tab_bar_direction: TabBarDirection::default(),
+      tab_bar_direction: Placement::default(),
       center_placeholder: None,
       _subscriptions: vec![],
       subscribed_panel_ids: HashSet::new(),
@@ -196,14 +196,14 @@ impl DockArea {
   }
 
   /// Set the tab bar direction of the dock area.
-  pub fn tab_bar_direction(mut self, direction: TabBarDirection) -> Self {
+  pub fn tab_bar_direction(mut self, direction: Placement) -> Self {
     self.tab_bar_direction = direction;
     self
   }
 
   /// Set the tab bar direction of the dock area.
   pub fn set_tab_bar_direction(
-    &mut self, direction: TabBarDirection, _: &mut Window, cx: &mut Context<Self>,
+    &mut self, direction: Placement, _: &mut Window, cx: &mut Context<Self>,
   ) {
     self.tab_bar_direction = direction;
     cx.notify();
@@ -331,13 +331,13 @@ impl DockArea {
 
   /// Set the size of a dock at the given placement.
   pub fn set_dock_size(
-    &mut self, placement: DockPlacement, size: Pixels, window: &mut Window, cx: &mut Context<Self>,
+    &mut self, placement: Placement, size: Pixels, window: &mut Window, cx: &mut Context<Self>,
   ) {
     let dock = match placement {
-      DockPlacement::Left => &self.left_dock,
-      DockPlacement::Right => &self.right_dock,
-      DockPlacement::Bottom => &self.bottom_dock,
-      DockPlacement::Center => return,
+      Placement::Left => &self.left_dock,
+      Placement::Right => &self.right_dock,
+      Placement::Bottom => &self.bottom_dock,
+      Placement::Top | Placement::Center => return,
     };
     dock.update(cx, |dock, cx| {
       dock.set_size(size, window, cx);
@@ -346,14 +346,13 @@ impl DockArea {
 
   /// Set the collapsed state of a dock at the given placement.
   pub fn set_dock_collapsed(
-    &mut self, placement: DockPlacement, collapsed: bool, window: &mut Window,
-    cx: &mut Context<Self>,
+    &mut self, placement: Placement, collapsed: bool, window: &mut Window, cx: &mut Context<Self>,
   ) {
     let dock = match placement {
-      DockPlacement::Left => &self.left_dock,
-      DockPlacement::Right => &self.right_dock,
-      DockPlacement::Bottom => &self.bottom_dock,
-      DockPlacement::Center => return,
+      Placement::Left => &self.left_dock,
+      Placement::Right => &self.right_dock,
+      Placement::Bottom => &self.bottom_dock,
+      Placement::Top | Placement::Center => return,
     };
     dock.update(cx, |dock, cx| {
       dock.set_collapsed(collapsed, window, cx);
@@ -375,27 +374,27 @@ impl DockArea {
   /// Determine if the dock area has a dock at the given placement.
   ///
   /// Always returns true since all docks are permanently present.
-  pub fn has_dock(&self, _placement: DockPlacement) -> bool {
+  pub fn has_dock(&self, _placement: Placement) -> bool {
     true
   }
 
   /// Determine if the dock at the given placement is collapsed.
-  pub fn is_dock_collapsed(&self, placement: DockPlacement, cx: &App) -> bool {
+  pub fn is_dock_collapsed(&self, placement: Placement, cx: &App) -> bool {
     match placement {
-      DockPlacement::Left => self.left_dock.read(cx).is_collapsed(),
-      DockPlacement::Bottom => self.bottom_dock.read(cx).is_collapsed(),
-      DockPlacement::Right => self.right_dock.read(cx).is_collapsed(),
-      DockPlacement::Center => false,
+      Placement::Left => self.left_dock.read(cx).is_collapsed(),
+      Placement::Bottom => self.bottom_dock.read(cx).is_collapsed(),
+      Placement::Right => self.right_dock.read(cx).is_collapsed(),
+      Placement::Top | Placement::Center => false,
     }
   }
 
   /// Toggle the dock at the given placement.
-  pub fn toggle_dock(&self, placement: DockPlacement, window: &mut Window, cx: &mut Context<Self>) {
+  pub fn toggle_dock(&self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
     let dock = match placement {
-      DockPlacement::Left => &self.left_dock,
-      DockPlacement::Bottom => &self.bottom_dock,
-      DockPlacement::Right => &self.right_dock,
-      DockPlacement::Center => return,
+      Placement::Left => &self.left_dock,
+      Placement::Bottom => &self.bottom_dock,
+      Placement::Right => &self.right_dock,
+      Placement::Top | Placement::Center => return,
     };
     dock.update(cx, |view, cx| {
       view.toggle_collapsed(window, cx);
@@ -412,12 +411,12 @@ impl DockArea {
   ///
   /// `bounds` only applies to tiles containers, which stay entity-managed.
   pub fn add_panel(
-    &mut self, panel: Arc<dyn PanelView>, placement: DockPlacement, bounds: Option<Bounds<Pixels>>,
+    &mut self, panel: Arc<dyn PanelView>, placement: Placement, bounds: Option<Bounds<Pixels>>,
     window: &mut Window, cx: &mut Context<Self>,
   ) {
     let _ = bounds;
     match placement {
-      DockPlacement::Center => self.add_to_center(panel, window, cx),
+      Placement::Center => self.add_to_center(panel, window, cx),
       _ => {
         let region = Self::region_of_placement(placement);
         let node = self.dock(region).read(cx).region.first_tab_group();
@@ -438,18 +437,18 @@ impl DockArea {
     }
   }
 
-  fn region_of_placement(placement: DockPlacement) -> RegionKind {
+  fn region_of_placement(placement: Placement) -> RegionKind {
     match placement {
-      DockPlacement::Left => RegionKind::Left,
-      DockPlacement::Right => RegionKind::Right,
-      DockPlacement::Bottom => RegionKind::Bottom,
-      DockPlacement::Center => RegionKind::Center,
+      Placement::Left => RegionKind::Left,
+      Placement::Right => RegionKind::Right,
+      Placement::Bottom => RegionKind::Bottom,
+      Placement::Top | Placement::Center => RegionKind::Center,
     }
   }
 
   /// Remove panel from the DockArea at the given placement.
   pub fn remove_panel(
-    &mut self, panel: Arc<dyn PanelView>, placement: DockPlacement, window: &mut Window,
+    &mut self, panel: Arc<dyn PanelView>, placement: Placement, window: &mut Window,
     cx: &mut Context<Self>,
   ) {
     let region = Self::region_of_placement(placement);
@@ -869,10 +868,10 @@ impl DockArea {
   /// a side dock, otherwise the center.
   pub(crate) fn region_of(tab_panel: &TabPanel, cx: &App) -> RegionKind {
     match tab_panel.dock_placement(cx) {
-      Some(DockPlacement::Left) => RegionKind::Left,
-      Some(DockPlacement::Right) => RegionKind::Right,
-      Some(DockPlacement::Bottom) => RegionKind::Bottom,
-      Some(DockPlacement::Center) | None => RegionKind::Center,
+      Some(Placement::Left) => RegionKind::Left,
+      Some(Placement::Right) => RegionKind::Right,
+      Some(Placement::Bottom) => RegionKind::Bottom,
+      Some(Placement::Top | Placement::Center) | None => RegionKind::Center,
     }
   }
 
@@ -1229,8 +1228,7 @@ mod tests {
 
   // Regression anchors for the dock layout convergence: UI-driven changes
   // (dropping a panel into a tab group, closing it from its ✕) mutate only
-  // the entities, so all structural reads must see the live entity graph
-  // (see `docs/dock-layout-refactor.md`).
+  // the entities, so all structural reads must see the live entity graph.
   //
   // The window hosts a bare root: the test asset source is empty, so letting
   // `DockArea` render would panic on icon validation. Its construction and

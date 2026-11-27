@@ -3,7 +3,6 @@ loading = "Loading..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Untitled"
-zoom_reset = "Reset Zoom"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Search..."
@@ -23,10 +22,8 @@ zoom_out = "Zoom Out"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Copy"
 cut               = "Cut"
-go_to_definition  = "Go to Definition"
 paste             = "Paste"
 select_all        = "Select All"
-show_code_actions = "Show Code Actions"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Replace"
@@ -125,7 +122,6 @@ seek_forward             = "Forward 10 seconds"
 settings                 = "Settings"
 size                     = "Size"
 playlist                 = "Playlist"
-source_placeholder       = "Path or URL"
 size_large               = "Large"
 size_medium              = "Medium"
 size_small               = "Small"
@@ -142,7 +138,6 @@ subtitle_scale           = "Subtitle size"
 subtitle_secondary       = "Secondary subtitles"
 subtitle_visibility      = "Show subtitles"
 subtitles                = "Subtitles"
-title                    = "Player"
 track                    = "Track"
 transport                = "Transport"
 transport_gpu            = "GPU"

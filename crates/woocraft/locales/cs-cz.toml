@@ -3,7 +3,6 @@ loading = "Načítání..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Bez názvu"
-zoom_reset = "Obnovit přiblížení"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Hledat..."
@@ -23,10 +22,8 @@ zoom_out = "Oddálit"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Kopírovat"
 cut               = "Vyjmout"
-go_to_definition  = "Přejít na definici"
 paste             = "Vložit"
 select_all        = "Vybrat vše"
-show_code_actions = "Zobrazit akce kódu"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Nahradit"

@@ -65,12 +65,6 @@ impl PlotAxis {
     self
   }
 
-  /// Hide the x-axis of the Axis.
-  pub fn hide_x_axis(mut self) -> Self {
-    self.show_x_axis = false;
-    self
-  }
-
   /// Set the x-label of the Axis.
   pub fn x_label(mut self, label: impl IntoIterator<Item = AxisText>, rem_size: Pixels) -> Self {
     if let Some(x) = self.x {
@@ -93,12 +87,6 @@ impl PlotAxis {
   /// Set the y-axis of the Axis.
   pub fn y(mut self, y: impl Into<Pixels>) -> Self {
     self.y = Some(y.into());
-    self
-  }
-
-  /// Hide the y-axis of the Axis.
-  pub fn hide_y_axis(mut self) -> Self {
-    self.show_y_axis = false;
     self
   }
 

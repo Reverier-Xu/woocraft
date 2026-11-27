@@ -7,28 +7,13 @@ use num_traits::{Num, ToPrimitive};
 
 use super::axes::{XTickAlign, paint_axes};
 use crate::{
-  AXIS_GAP, ActiveTheme, Plot, StrokeStyle,
+  AXIS_GAP, Plot, StrokeStyle,
   scale::{Scale, ScaleLinear, ScalePoint, Sealed},
   shape::Area,
 };
 
 type XAccessor<T, X> = Rc<dyn Fn(&T) -> X>;
 type YAccessor<T, Y> = Rc<dyn Fn(&T) -> Y>;
-
-#[inline]
-fn palette(index: usize, cx: &App) -> gpui::Hsla {
-  let colors = [
-    cx.theme().primary,
-    cx.theme().accent,
-    cx.theme().success,
-    cx.theme().warning,
-    cx.theme().danger,
-    cx.theme().blue,
-    cx.theme().cyan,
-    cx.theme().green,
-  ];
-  colors[index % colors.len()]
-}
 
 #[derive(IntoElement)]
 pub struct AreaChart<T, X, Y>
@@ -152,7 +137,7 @@ where
       let x_fn = x_fn.clone();
       let y_fn = y_fn.clone();
 
-      let stroke = *self.strokes.get(i).unwrap_or(&palette(i, cx));
+      let stroke = *self.strokes.get(i).unwrap_or(&super::palette(i, cx));
       let fill = *self.fills.get(i).unwrap_or(&stroke.opacity(0.28).into());
       let stroke_style = *self.stroke_styles.get(i).unwrap_or(
         self

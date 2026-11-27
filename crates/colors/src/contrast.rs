@@ -34,7 +34,7 @@ impl Contrast {
   }
 
   /// The WCAG contrast ratio between two relative luminances, `0..=100` each.
-  pub fn ratio_of_luminance(a: f64, b: f64) -> f64 {
+  fn ratio_of_luminance(a: f64, b: f64) -> f64 {
     let lighter = a.max(b);
     let darker = a.min(b);
     (lighter + 5.0) / (darker + 5.0)

@@ -536,7 +536,7 @@ impl TerminalView {
 
   fn focus_in(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
     if self.content.mode.contains(Modes::FOCUS_IN_OUT) {
-      self.session.input(b"\x1b[I");
+      self.session.write_pty(b"\x1b[I");
     }
     self.start_blink();
     cx.notify();
@@ -546,7 +546,7 @@ impl TerminalView {
     &mut self, _event: gpui::FocusOutEvent, _window: &mut Window, cx: &mut Context<Self>,
   ) {
     if self.content.mode.contains(Modes::FOCUS_IN_OUT) {
-      self.session.input(b"\x1b[O");
+      self.session.write_pty(b"\x1b[O");
     }
     // Disarm the blink loop; the cursor stays visible while unfocused.
     self.cursor_visible = true;
@@ -565,7 +565,7 @@ impl TerminalView {
       return false;
     };
     let esc = esc.into_owned();
-    self.session.input(esc.into_bytes());
+    self.session.write_pty(esc.into_bytes());
     self.input_scroll_to_bottom(cx);
     self.pause_blink();
     cx.notify();
@@ -687,7 +687,7 @@ impl TerminalView {
       .contains(Modes::ALT_SCREEN | Modes::ALTERNATE_SCROLL)
       && !shift
     {
-      self.session.input(alt_scroll(scroll_lines));
+      self.session.write_pty(alt_scroll(scroll_lines));
       cx.notify();
     } else {
       self.session.scroll(ScrollKind::Delta(scroll_lines));

@@ -139,7 +139,9 @@ impl Language {
     }
   }
 
-  pub fn from_name(s: &str) -> Self {
+  pub fn from_name(
+    #[cfg_attr(not(feature = "tree-sitter-languages"), allow(unused))] s: &str,
+  ) -> Self {
     #[cfg(not(feature = "tree-sitter-languages"))]
     return Self::Json;
 

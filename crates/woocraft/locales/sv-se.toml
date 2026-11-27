@@ -3,7 +3,6 @@ loading = "Läser in..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Namnlös"
-zoom_reset = "Återställ zoom"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Sök..."
@@ -23,10 +22,8 @@ zoom_out = "Zooma ut"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Kopiera"
 cut               = "Klipp ut"
-go_to_definition  = "Gå till definition"
 paste             = "Klistra in"
 select_all        = "Markera allt"
-show_code_actions = "Visa kodåtgärder"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Ersätt"

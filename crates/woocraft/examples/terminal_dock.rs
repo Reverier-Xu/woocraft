@@ -19,7 +19,7 @@ use gpui::{
   WindowOptions, actions, div, px,
 };
 use woocraft::{
-  ActiveTheme, AppMenuBar, DockArea, DockPlacement, IconName, Panel, PanelEvent, StyledExt as _,
+  ActiveTheme, AppMenuBar, DockArea, IconName, Panel, PanelEvent, Placement, StyledExt as _,
   TerminalView, TerminalViewEvent, TitleBar, init, v_flex, window_border,
 };
 use woocraft_terminal::{SpawnOptions, TerminalBounds, TerminalSession};
@@ -209,7 +209,7 @@ impl TerminalDockDemo {
 
     self.dock_area.update(cx, |dock, cx| {
       dock.add_to_bottom_dock(Arc::new(panel.clone()), window, cx);
-      dock.set_dock_collapsed(DockPlacement::Bottom, false, window, cx);
+      dock.set_dock_collapsed(Placement::Bottom, false, window, cx);
     });
   }
 
@@ -256,8 +256,8 @@ impl TerminalDockDemo {
       dock_area.update(cx, |dock, cx| {
         dock.add_to_left_dock(Arc::new(explorer.clone()), window, cx);
         dock.add_to_center(Arc::new(editor.clone()), window, cx);
-        dock.set_dock_size(DockPlacement::Left, px(240.), window, cx);
-        dock.set_dock_size(DockPlacement::Bottom, px(260.), window, cx);
+        dock.set_dock_size(Placement::Left, px(240.), window, cx);
+        dock.set_dock_size(Placement::Bottom, px(260.), window, cx);
       });
 
       let mut demo = Self {

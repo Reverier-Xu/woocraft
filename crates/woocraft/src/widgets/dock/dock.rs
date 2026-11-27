@@ -13,7 +13,7 @@ use super::{
   super::resizable::{PANEL_MIN_SIZE, resize_handle},
   DockArea, DockRegion, InsertTarget, PaneTree, PanelId, PanelView, RootKind, TabPanel,
 };
-use crate::{DockPlacement, Size, StyledExt, TabBarDirection};
+use crate::{Placement, Size, StyledExt};
 
 /// Side docks (left/right) include a vertical tab rail plus title-bar controls.
 /// They need a larger minimum width than the generic panel minimum to prevent
@@ -34,7 +34,7 @@ impl Render for ResizePanel {
 ///
 /// This is unlike Panel, it can't be move or add any other panel.
 pub struct Dock {
-  pub(super) placement: DockPlacement,
+  pub(super) placement: Placement,
   dock_area: WeakEntity<DockArea>,
   /// The dock's layout tree: the single source of truth for what lives in
   /// this dock.
@@ -44,7 +44,7 @@ pub struct Dock {
   pub(super) size: Pixels,
   pub(super) collapsed: bool,
   /// The tab bar direction for this dock
-  pub(super) tab_bar_direction: TabBarDirection,
+  pub(super) tab_bar_direction: Placement,
   preview_size: Option<Pixels>,
 
   // Runtime state
@@ -65,10 +65,10 @@ pub struct Dock {
 
 impl Dock {
   #[inline]
-  fn min_size_for_placement(placement: DockPlacement, rem_size: Pixels) -> Pixels {
+  fn min_size_for_placement(placement: Placement, rem_size: Pixels) -> Pixels {
     match placement {
-      DockPlacement::Left | DockPlacement::Right => SIDE_DOCK_MIN_SIZE.to_pixels(rem_size),
-      DockPlacement::Bottom | DockPlacement::Center => PANEL_MIN_SIZE.to_pixels(rem_size),
+      Placement::Left | Placement::Right => SIDE_DOCK_MIN_SIZE.to_pixels(rem_size),
+      Placement::Top | Placement::Bottom | Placement::Center => PANEL_MIN_SIZE.to_pixels(rem_size),
     }
   }
 
@@ -83,14 +83,15 @@ impl Dock {
   }
 
   pub(crate) fn new(
-    dock_area: WeakEntity<DockArea>, placement: DockPlacement, window: &mut Window,
+    dock_area: WeakEntity<DockArea>, placement: Placement, window: &mut Window,
     cx: &mut Context<Self>,
   ) -> Self {
     let tab_bar_direction = match placement {
-      DockPlacement::Left => TabBarDirection::Left,
-      DockPlacement::Right => TabBarDirection::Right,
-      DockPlacement::Bottom => TabBarDirection::default(),
-      DockPlacement::Center => TabBarDirection::default(),
+      Placement::Left => Placement::Left,
+      Placement::Right => Placement::Right,
+      Placement::Bottom => Placement::Top,
+      Placement::Top => Placement::Bottom,
+      Placement::Center => Placement::Top,
     };
 
     let mut region = DockRegion::new(RootKind::Any);
@@ -116,19 +117,19 @@ impl Dock {
   pub fn left(
     dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self {
-    Self::new(dock_area, DockPlacement::Left, window, cx)
+    Self::new(dock_area, Placement::Left, window, cx)
   }
 
   pub fn bottom(
     dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self {
-    Self::new(dock_area, DockPlacement::Bottom, window, cx)
+    Self::new(dock_area, Placement::Bottom, window, cx)
   }
 
   pub fn right(
     dock_area: WeakEntity<DockArea>, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self {
-    Self::new(dock_area, DockPlacement::Right, window, cx)
+    Self::new(dock_area, Placement::Right, window, cx)
   }
 
   /// Return true if the dock has any real panels (not just empty placeholders).
@@ -193,14 +194,15 @@ impl Dock {
   }
 
   pub(super) fn from_state(
-    dock_area: WeakEntity<DockArea>, placement: DockPlacement, size: Pixels,
-    panel: &super::PanelState, collapsed: bool, window: &mut Window, cx: &mut Context<Self>,
+    dock_area: WeakEntity<DockArea>, placement: Placement, size: Pixels, panel: &super::PanelState,
+    collapsed: bool, window: &mut Window, cx: &mut Context<Self>,
   ) -> Self {
     let tab_bar_direction = match placement {
-      DockPlacement::Left => TabBarDirection::Left,
-      DockPlacement::Right => TabBarDirection::Right,
-      DockPlacement::Bottom => TabBarDirection::default(),
-      DockPlacement::Center => TabBarDirection::default(),
+      Placement::Left => Placement::Left,
+      Placement::Right => Placement::Right,
+      Placement::Bottom => Placement::Top,
+      Placement::Top => Placement::Bottom,
+      Placement::Center => Placement::Top,
     };
     let min_size = Self::min_size_for_placement(placement, window.rem_size());
 
@@ -375,17 +377,19 @@ impl Dock {
     }
 
     let size = match self.placement {
-      DockPlacement::Left => mouse_position.x - area_bounds.left(),
-      DockPlacement::Right => area_bounds.right() - mouse_position.x,
-      DockPlacement::Bottom => area_bounds.bottom() - mouse_position.y,
-      DockPlacement::Center => unreachable!(),
+      Placement::Left => mouse_position.x - area_bounds.left(),
+      Placement::Right => area_bounds.right() - mouse_position.x,
+      Placement::Bottom => area_bounds.bottom() - mouse_position.y,
+      Placement::Top => unreachable!("docks occupy the left, bottom, right or centre"),
+      Placement::Center => unreachable!(),
     };
     let panel_min = PANEL_MIN_SIZE.to_pixels(window.rem_size());
     let max_size = match self.placement {
-      DockPlacement::Left => area_bounds.size.width - panel_min - right_dock_size,
-      DockPlacement::Right => area_bounds.size.width - panel_min - left_dock_size,
-      DockPlacement::Bottom => area_bounds.size.height - panel_min,
-      DockPlacement::Center => unreachable!(),
+      Placement::Left => area_bounds.size.width - panel_min - right_dock_size,
+      Placement::Right => area_bounds.size.width - panel_min - left_dock_size,
+      Placement::Bottom => area_bounds.size.height - panel_min,
+      Placement::Top => unreachable!("docks occupy the left, bottom, right or centre"),
+      Placement::Center => unreachable!(),
     };
     self.preview_size = Some(
       size
@@ -429,7 +433,7 @@ impl Render for Dock {
         });
 
       match self.placement {
-        DockPlacement::Left => deferred(
+        Placement::Left => deferred(
           div()
             .absolute()
             .right(px(0.))
@@ -439,7 +443,7 @@ impl Render for Dock {
             .child(handle)
             .occlude(),
         ),
-        DockPlacement::Right => deferred(
+        Placement::Right => deferred(
           div()
             .absolute()
             .left(px(0.))
@@ -449,7 +453,7 @@ impl Render for Dock {
             .child(handle)
             .occlude(),
         ),
-        DockPlacement::Bottom => deferred(
+        Placement::Bottom => deferred(
           div()
             .absolute()
             .top(px(0.))
@@ -459,30 +463,40 @@ impl Render for Dock {
             .child(handle)
             .occlude(),
         ),
-        DockPlacement::Center => unreachable!(),
+        Placement::Top => deferred(
+          div()
+            .absolute()
+            .bottom(px(0.))
+            .left_0()
+            .right_0()
+            .h(px(0.))
+            .child(handle)
+            .occlude(),
+        ),
+        Placement::Center => unreachable!(),
       }
     };
 
     div()
       .relative()
       .map(|this| match self.placement {
-        DockPlacement::Left | DockPlacement::Right => this.h_flex().h_full().w(self.display_size()),
-        DockPlacement::Bottom => this.v_flex().w_full().h(self.display_size()),
-        DockPlacement::Center => unreachable!(),
+        Placement::Left | Placement::Right => this.h_flex().h_full().w(self.display_size()),
+        Placement::Top | Placement::Bottom => this.v_flex().w_full().h(self.display_size()),
+        Placement::Center => unreachable!(),
       })
       .when(self.collapsed, |this| match self.placement {
-        DockPlacement::Left | DockPlacement::Right => this.w(collapsed_width),
-        DockPlacement::Bottom => this.h(collapsed_height),
-        DockPlacement::Center => this,
+        Placement::Left | Placement::Right => this.w(collapsed_width),
+        Placement::Top | Placement::Bottom => this.h(collapsed_height),
+        Placement::Center => this,
       })
       .map(|this| {
         let panel = div()
           .flex_1()
           .overflow_hidden()
           .map(|this| match self.placement {
-            DockPlacement::Left | DockPlacement::Right => this.h_full(),
-            DockPlacement::Bottom => this.w_full(),
-            DockPlacement::Center => this,
+            Placement::Left | Placement::Right => this.h_full(),
+            Placement::Top | Placement::Bottom => this.w_full(),
+            Placement::Center => this,
           })
           .map(|this| match self.region.root_view() {
             Some(view) => this.child(view.view().cached(self.panel_cache_style.clone())),

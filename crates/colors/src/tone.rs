@@ -57,11 +57,6 @@ impl Tone {
   pub fn from_luminance(y: f64) -> Self {
     Self::new(tone_from_y(y))
   }
-
-  /// The signed distance to `other`, in tone units.
-  pub fn distance_to(self, other: Self) -> f64 {
-    other.0 - self.0
-  }
 }
 
 impl Default for Tone {

@@ -16,7 +16,7 @@ This repository is organized as a Cargo workspace, with the main maintained crat
 
 `woocraft` currently exports the following components/modules:
 
-- Core primitives: Theme, Icon, style extensions, IndexPath, Anchor
+- Core primitives: Theme, Icon, style extensions, IndexPath
 - Common widgets: Button, Input, Checkbox, Switch, Slider, Spinner, Tag
 - Navigation/info: Breadcrumb, Pagination, Tooltip, Popover, Notification
 - Layout/structure: Divider, TitleBar, WindowBorder, WidgetGroup
@@ -85,14 +85,18 @@ Example sources are located in `crates/woocraft/examples/`.
 
 ## Internationalization (i18n)
 
-Built-in locales:
+Built-in locales: the 28 entries of `woocraft::SUPPORTED_LOCALES` (East
+Asian, major European and major South-East Asian languages). Applications
+narrow that list or add their own with `load_locale` / `extend_locale`.
 
-- `zh-hans`
-- `zh-hant`
-- `en-us`
-- `ja-jp`
+By default, locale is detected from `LC_ALL` / `LANG` and normalized to one of
+the supported values above.
 
-By default, locale is detected from `LC_ALL` / `LANG` and normalized to one of the supported values above.
+Component strings are looked up with `woocraft::translate`. It accepts a bare
+key (`menu.file`), a fully qualified key, or an application key registered
+through `load_locale` / `extend_locale`, and returns anything it cannot resolve
+unchanged — so widgets that take a label can be handed either a key or literal
+text.
 
 You can also switch locale at runtime:
 
@@ -116,7 +120,6 @@ woocraft::extend_locale(
 );
 ```
 
-Translation interfaces from `rust-i18n` are re-exported (for example `woocraft::translate()`).
 
 ## Feature Flags
 
@@ -126,7 +129,7 @@ Translation interfaces from `rust-i18n` are re-exported (for example `woocraft::
   - Automatically registers embedded fonts (inside `woocraft::init`)
 - `terminal` (enabled by default): terminal widget and `woocraft-terminal`
 - `markdown` (enabled by default): `Markdown` renderer on top of
-  `pulldown-cmark`; see [`docs/markdown.md`](docs/markdown.md)
+  `pulldown-cmark`
 - `tray`: system tray support
 - `media` (disabled by default): [`Player`]/[`PlayerView`] on top of libmpv —
   one player for audio and video, with audio filters/equalizer, subtitles and
@@ -146,22 +149,19 @@ woocraft = { version = "0.1.0", default-features = false }
 .
 ├─ crates/
 │  └─ woocraft/        # Main crate
+├─ docs/               # media transport and GPU notes
 ├─ packages/
 │  └─ woocraft/        # npm package metadata (version alignment)
-└─ deprecated/         # Legacy/migrating code
-  ├─ ui/
-  ├─ story/
-  ├─ assets/
-  ├─ webview/
-  ├─ reqwest_client/
-  └─ macros/
+└─ crates/
+   ├─ colors/          # HCT colour core (`woocraft-colors`)
+   └─ terminal/        # PTY + emulator core (`woocraft-terminal`)
 ```
 
 ## Development
 
 ```bash
-cargo fmt --all
-cargo clippy --workspace --all-targets
+cargo +nightly fmt
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 

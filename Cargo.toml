@@ -93,17 +93,17 @@ vte                           = { version = "0.15", features = ["ansi"] }
 zstd                          = "0.14"
 
 # GPUI comes from Longbridge's `gpui-fast` fork (crates.io), not from the plain
-# `gpui-pre-*` snapshots: v0.1.12 is built on zed@08cbb88, the same revision as
-# `gpui-pre` 0.3.10, and adds incremental (retained) rendering plus native window
+# `gpui-pre-*` snapshots: v0.1.13 tracks the same zed revision as `gpui-pre`
+# 0.3.11 and adds incremental (retained) rendering plus native window
 # composition (zed-industries/zed#62379) without changing upstream's public API.
 # The fork keeps its additions in `crates/gpui/src/fast/` behind one-line hooks
 # into upstream files and enforces that with a diff budget, which is what makes
-# syncing to newer zed revisions mechanical; see docs/gpui.md.
+# syncing to newer zed revisions mechanical.
 #
 # Exact pins are required: every 0.1.x release moves the zed revision it tracks
 # and may contain breaking API changes. The helper crates (`collections`,
 # `sum-tree`, `util`, `scheduler`, `refineable`, `shared-string`, `http-client`)
-# stay on the `gpui-pre-*` 0.3.10 snapshots that gpui-fast itself depends on.
+# stay on the `gpui-pre-*` 0.3.11 snapshots that gpui-fast itself depends on.
 gpui          = { version = "=0.1.13", package = "gpui-fast" }
 gpui-macros   = { version = "=0.1.13", package = "gpui-fast-macros" }
 gpui_platform = { version = "=0.1.13", package = "gpui-fast-platform" }

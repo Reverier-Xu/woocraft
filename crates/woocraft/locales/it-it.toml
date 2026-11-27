@@ -3,7 +3,6 @@ loading = "Caricamento..."
 
 [tech.woooo.woocraft.title_bar]
 untitled   = "Senza titolo"
-zoom_reset = "Reimposta zoom"
 
 [tech.woooo.woocraft.list]
 search_placeholder = "Cerca..."
@@ -23,10 +22,8 @@ zoom_out = "Riduci"
 [tech.woooo.woocraft.editor.context_menu]
 copy              = "Copia"
 cut               = "Taglia"
-go_to_definition  = "Vai alla definizione"
 paste             = "Incolla"
 select_all        = "Seleziona tutto"
-show_code_actions = "Mostra azioni codice"
 
 [tech.woooo.woocraft.editor.search]
 replace     = "Sostituisci"
