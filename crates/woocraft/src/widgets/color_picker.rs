@@ -13,6 +13,8 @@
 //! - **2D gradient picker**: Visual lightness/chroma selection with interactive
 //!   gradient
 //! - **1D sliders**: Dedicated sliders for hue and alpha channels
+//! - **Unbounded dragging**: A channel keeps following the pointer once a drag
+//!   starts, including outside the track and outside the window
 //! - **Intelligent conversion**: Seamless conversion between color spaces
 //!   preserving hue on RGB changes
 //! - **Popover trigger**: Integrated popover button for space-efficient UI
@@ -37,10 +39,10 @@
 use std::sync::Arc;
 
 use gpui::{
-  App, AppContext as _, Bounds, Context, ElementId, Entity, EventEmitter, Hsla,
-  InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement,
-  Pixels, Point, Rems, RenderOnce, SharedString, StyleRefinement, Styled, Subscription, Window,
-  canvas, div, fill, point, prelude::FluentBuilder as _, px, rems, size,
+  App, AppContext as _, Bounds, Context, DispatchPhase, ElementId, Entity, EventEmitter, Hsla,
+  InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+  PaintQuad, ParentElement, Pixels, Point, Rems, RenderOnce, SharedString, StyleRefinement, Styled,
+  Subscription, Window, canvas, div, fill, point, prelude::FluentBuilder as _, px, rems, size,
 };
 use palette::{FromColor, Hsl, OklabHue, Oklch, Srgb};
 
@@ -56,8 +58,27 @@ const WARNING_LINE_THICKNESS: Rems = rems(0.125);
 /// visually indistinguishable from per-pixel segmentation (gpui-kit uses the
 /// same fixed step count) and keep the cached color table size constant.
 const GRADIENT_STEPS: usize = 96;
-const POINTER_OUTER_WIDTH: Rems = rems(0.25);
-const POINTER_INNER_WIDTH: Rems = rems(0.125);
+/// Width of the indicator's coloured bar.
+const POINTER_WIDTH: Rems = rems(0.125);
+/// Inset of the indicator from the track's top and bottom.
+///
+/// The indicator as a whole — bar plus outline — is `track height - 0.25em`
+/// tall and vertically centred, so it clears the track's edges by this much on
+/// both sides.
+const POINTER_INSET: Rems = rems(0.125);
+/// Width of the indicator's outline.
+///
+/// The outline is drawn just outside the [`POINTER_WIDTH`] bar rather than
+/// eating into it: at the medium size 0.125em is 2px, so a border-box outline
+/// would leave nothing of the track colour the bar is meant to show.
+const POINTER_OUTLINE: Pixels = px(1.);
+/// How far past the two ends of the track the end colors are painted.
+///
+/// The track clips its content to its rounded rect, so this padding is simply
+/// cut away; it exists so the first and last gradient segments still paint a
+/// full-width sliver instead of being eaten by the rounding, which would leave
+/// a sliver of background between the indicator and the end color.
+const TRACK_EDGE_PADDING: Rems = rems(0.25);
 
 /// RGBA color representation for the color picker.
 ///
@@ -252,6 +273,8 @@ pub struct ColorPickerState {
   /// `default_value` so renders never re-run color space conversions.
   resolved: ColorPickerValue,
   channel_bounds: [Bounds<Pixels>; 4],
+  /// Channel currently following a pressed pointer, if any.
+  dragging: Option<PickerChannel>,
   /// Per-channel gradient color tables (see [`Self::channel_gradient`]).
   gradient_cache: [Option<ChannelGradient>; 4],
   hex_input: Option<Entity<InputState>>,
@@ -275,6 +298,7 @@ impl ColorPickerState {
       value,
       resolved: resolve_value(value),
       channel_bounds: [Bounds::default(); 4],
+      dragging: None,
       gradient_cache: [None, None, None, None],
       hex_input: None,
       hex_input_dirty: false,
@@ -397,15 +421,55 @@ impl ColorPickerState {
     cx: &mut Context<Self>,
   ) {
     let bounds = self.channel_bounds[channel.index()];
-    if bounds.size.width <= px(0.) {
+    let rem_size = window.rem_size();
+    let travel = channel_pointer_travel(bounds, rem_size);
+    if travel.size.width <= px(0.) {
       return;
     }
 
-    let ratio = ((position.x - bounds.left()) / bounds.size.width).clamp(0.0, 1.0);
+    let ratio = ((position.x - travel.left()) / travel.size.width).clamp(0.0, 1.0);
     let mut next = self.value;
     channel.assign(&mut next, channel.value_from_ratio(ratio));
     self.set_oklch(next, cx);
     self.sync_hex_input_display(window, cx);
+  }
+
+  /// Starts a channel gesture: the channel takes the pressed pointer at
+  /// `position` and keeps following it until the button is released, wherever
+  /// the pointer goes.
+  fn begin_channel_drag(
+    &mut self, channel: PickerChannel, position: Point<Pixels>, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    self.dragging = Some(channel);
+    self.set_channel_by_position(channel, position, window, cx);
+    // Notify unconditionally: the rebuilt track must know it owns the gesture
+    // even when the value itself did not change.
+    cx.notify();
+  }
+
+  /// Steers the dragged channel to `position`.
+  ///
+  /// The position may lie outside the track — including outside the window —
+  /// in which case the value saturates at the corresponding end of the range.
+  /// Moves for a channel that does not own the gesture are ignored, so a stale
+  /// drag can never steer another channel.
+  fn drag_channel_to(
+    &mut self, channel: PickerChannel, position: Point<Pixels>, window: &mut Window,
+    cx: &mut Context<Self>,
+  ) {
+    if self.dragging != Some(channel) {
+      return;
+    }
+
+    self.set_channel_by_position(channel, position, window, cx);
+  }
+
+  /// Ends the channel gesture, if one is in flight.
+  fn end_channel_drag(&mut self, cx: &mut Context<Self>) {
+    if self.dragging.take().is_some() {
+      cx.notify();
+    }
   }
 
   fn on_hex_input_event(
@@ -614,8 +678,10 @@ fn render_channel_row(
 
   let state_for_bounds = state.clone();
   let state_for_down = state.clone();
-  let state_for_move = state.clone();
-  let channel_id = ElementId::from(("color-picker-channel", state.entity_id()));
+  let state_for_idle_move = state.clone();
+  let state_for_paint = state.clone();
+  let entity_id = state.entity_id();
+  let channel_id = ElementId::from(("color-picker-channel", entity_id));
   let ratio = channel.normalized_value(current_oklch);
 
   v_flex()
@@ -669,17 +735,17 @@ fn render_channel_row(
           MouseButton::Left,
           move |event: &MouseDownEvent, window, cx| {
             state_for_down.update(cx, |state, cx| {
-              state.set_channel_by_position(channel, event.position, window, cx);
+              state.begin_channel_drag(channel, event.position, window, cx);
             });
             cx.stop_propagation();
           },
         )
-        .on_mouse_move(move |event: &MouseMoveEvent, window, cx| {
-          if event.pressed_button == Some(MouseButton::Left) {
-            state_for_move.update(cx, |state, cx| {
-              state.set_channel_by_position(channel, event.position, window, cx);
-            });
-            cx.stop_propagation();
+        // Safety net: if the release itself was missed (e.g. it happened
+        // outside the window), clear the gesture on the next unpressed move
+        // over the track.
+        .on_mouse_move(move |event: &MouseMoveEvent, _, cx| {
+          if event.pressed_button.is_none() {
+            state_for_idle_move.update(cx, |state, cx| state.end_channel_drag(cx));
           }
         })
         .child(
@@ -687,6 +753,7 @@ fn render_channel_row(
             move |_, _, _| {},
             move |bounds, _, window, cx| {
               paint_channel(&stops, ratio, bounds, window, cx);
+              paint_channel_drag_listeners(channel, &state_for_paint, window, cx);
             },
           )
           .absolute()
@@ -695,55 +762,211 @@ fn render_channel_row(
     )
 }
 
+/// Installs the window-level listeners that keep a channel gesture alive while
+/// the pointer is anywhere — outside the track, outside the popover, even
+/// outside the window.
+///
+/// An element's own `on_mouse_move` only fires while it is hovered, so a drag
+/// used to stop the moment the pointer left the track. These listeners are
+/// registered during paint and only while a gesture is in flight, so no cost is
+/// paid while the picker is idle, and they see every move the window receives
+/// for the rest of the gesture.
+fn paint_channel_drag_listeners(
+  channel: PickerChannel, state: &Entity<ColorPickerState>, window: &mut Window, cx: &mut App,
+) {
+  if state.read(cx).dragging != Some(channel) {
+    return;
+  }
+
+  window.on_mouse_event({
+    let state = state.clone();
+    move |event: &MouseMoveEvent, phase, window, cx| {
+      if phase != DispatchPhase::Bubble {
+        return;
+      }
+
+      if event.pressed_button == Some(MouseButton::Left) {
+        state.update(cx, |state, cx| {
+          state.drag_channel_to(channel, event.position, window, cx);
+        });
+        cx.stop_propagation();
+      } else {
+        // A release outside the window never reaches the track: the first
+        // move without a pressed button ends the gesture instead.
+        state.update(cx, |state, cx| state.end_channel_drag(cx));
+      }
+    }
+  });
+
+  window.on_mouse_event({
+    let state = state.clone();
+    move |_: &MouseUpEvent, phase, _, cx| {
+      if phase != DispatchPhase::Bubble {
+        return;
+      }
+
+      state.update(cx, |state, cx| state.end_channel_drag(cx));
+    }
+  });
+
+  // A gesture cannot survive a new press somewhere else. This also clears a
+  // gesture left behind when the popover closed mid-drag, so it cannot steer a
+  // channel from a later, unrelated drag. A press on the owning track is left
+  // alone: the track itself restarts the gesture there.
+  window.on_mouse_event({
+    let state = state.clone();
+    move |event: &MouseDownEvent, phase, _, cx| {
+      if phase != DispatchPhase::Bubble {
+        return;
+      }
+
+      let bounds = state.read(cx).channel_bounds[channel.index()];
+      if bounds.contains(&event.position) {
+        return;
+      }
+
+      state.update(cx, |state, cx| state.end_channel_drag(cx));
+    }
+  });
+}
+
+/// The x-range the indicator's centre travels over.
+///
+/// Inset by half the painted indicator width (bar plus outline) on each side,
+/// so the indicator never leaves the track at either end while the pointer can
+/// still reach both ends of the range.
+fn channel_pointer_travel(bounds: Bounds<Pixels>, rem_size: Pixels) -> Bounds<Pixels> {
+  let inset = pointer_half_width(rem_size);
+  let travel_width = bounds.size.width - inset * 2.0;
+  Bounds::new(
+    point(bounds.origin.x + inset, bounds.origin.y),
+    size(travel_width.max(px(0.)), bounds.size.height),
+  )
+}
+
+/// Half the painted width of the indicator: the bar plus its outline on either
+/// side.
+fn pointer_half_width(rem_size: Pixels) -> Pixels {
+  POINTER_WIDTH.to_pixels(rem_size) / 2.0 + POINTER_OUTLINE
+}
+
+/// The indicator for `ratio`: its colour-filled bar and its outline.
+fn channel_indicator(
+  stops: &[ChannelGradientStop], ratio: f32, bounds: Bounds<Pixels>, rem_size: Pixels,
+  outline: Hsla,
+) -> (PaintQuad, PaintQuad) {
+  let bar_width = POINTER_WIDTH.to_pixels(rem_size);
+  let outline_width = POINTER_OUTLINE;
+  let travel = channel_pointer_travel(bounds, rem_size);
+  let center_x = travel.origin.x + travel.size.width * ratio;
+
+  // The whole indicator — bar plus outline — is `track height - 0.25em` tall
+  // and vertically centred, so the bar itself is the outline width shorter at
+  // each end.
+  let total_height = (bounds.size.height - POINTER_INSET.to_pixels(rem_size) * 2.0).max(px(0.));
+  let bar_height = (total_height - outline_width * 2.0).max(px(0.));
+  let bar = Bounds::new(
+    point(
+      center_x - bar_width / 2.0,
+      bounds.center().y - bar_height / 2.0,
+    ),
+    size(bar_width, bar_height),
+  );
+  let ring = Bounds::new(
+    point(bar.origin.x - outline_width, bar.origin.y - outline_width),
+    size(
+      bar.size.width + outline_width * 2.0,
+      bar.size.height + outline_width * 2.0,
+    ),
+  );
+
+  (
+    fill(bar, channel_color_at(stops, ratio)),
+    fill(ring, Hsla::transparent_black())
+      .border_widths(outline_width)
+      .border_color(outline),
+  )
+}
+
 fn paint_channel(
   stops: &[ChannelGradientStop], ratio: f32, bounds: Bounds<Pixels>, window: &mut Window,
   cx: &mut App,
 ) {
-  let steps = stops.len();
   let rem_size = window.rem_size();
   let warning_line_thickness = WARNING_LINE_THICKNESS.to_pixels(rem_size);
-  let pointer_outer_width = POINTER_OUTER_WIDTH.to_pixels(rem_size);
-  let pointer_inner_width = POINTER_INNER_WIDTH.to_pixels(rem_size);
 
-  for (ix, stop) in stops.iter().enumerate() {
-    let start_ratio = ix as f32 / steps as f32;
-    let end_ratio = (ix + 1) as f32 / steps as f32;
-
-    let x = bounds.origin.x + bounds.size.width * start_ratio;
-    let next_x = bounds.origin.x + bounds.size.width * end_ratio;
-    let segment_width = (next_x - x).max(px(1.));
-    let segment = Bounds::new(
-      point(x, bounds.origin.y),
-      size(segment_width, bounds.size.height),
-    );
-
-    let color = Hsla::from(gpui::Rgba {
-      r: stop.rgba.r,
-      g: stop.rgba.g,
-      b: stop.rgba.b,
-      a: stop.rgba.a,
-    });
+  for (stop, segment) in stops
+    .iter()
+    .zip(channel_segments(stops.len(), bounds, rem_size))
+  {
+    let color = stop_color(stop);
     window.paint_quad(fill(segment, color));
     if stop.out_of_gamut {
       let warning_segment = Bounds::new(
-        point(x, bounds.bottom() - warning_line_thickness),
-        size(segment_width, warning_line_thickness),
+        point(segment.origin.x, bounds.bottom() - warning_line_thickness),
+        size(segment.size.width, warning_line_thickness),
       );
       window.paint_quad(fill(warning_segment, cx.theme().warning));
     }
   }
 
-  let center_x = bounds.origin.x + bounds.size.width * ratio;
-  let outer = Bounds::new(
-    point(center_x - pointer_outer_width / 2.0, bounds.origin.y),
-    size(pointer_outer_width, bounds.size.height),
-  );
-  let inner = Bounds::new(
-    point(center_x - pointer_inner_width / 2.0, bounds.origin.y),
-    size(pointer_inner_width, bounds.size.height),
-  );
-  window.paint_quad(fill(outer, cx.theme().background));
-  window.paint_quad(fill(inner, cx.theme().foreground));
+  // The indicator is a bar inset from the track's top and bottom, filled with
+  // the color the track has at that spot so it reads as part of the gradient,
+  // and outlined in the foreground so it stays visible over any of it.
+  let (indicator_fill, indicator_outline) =
+    channel_indicator(stops, ratio, bounds, rem_size, cx.theme().foreground);
+  window.paint_quad(indicator_fill);
+  window.paint_quad(indicator_outline);
+}
+
+/// The x-bounds of each gradient segment, laid out over the indicator's travel
+/// range so a ratio maps to the same x for the gradient and the indicator.
+///
+/// The two outer segments are stretched past the track's ends: the track clips
+/// that overhang, and the extra end color keeps its rounded corners from
+/// leaving a sliver of background next to the indicator when it sits at an end.
+fn channel_segments(steps: usize, bounds: Bounds<Pixels>, rem_size: Pixels) -> Vec<Bounds<Pixels>> {
+  let steps = steps.max(1);
+  let edge_padding = TRACK_EDGE_PADDING.to_pixels(rem_size);
+  let travel = channel_pointer_travel(bounds, rem_size);
+
+  (0..steps)
+    .map(|ix| {
+      let start_ratio = ix as f32 / steps as f32;
+      let end_ratio = (ix + 1) as f32 / steps as f32;
+
+      let mut x = travel.origin.x + travel.size.width * start_ratio;
+      let mut next_x = travel.origin.x + travel.size.width * end_ratio;
+      if ix == 0 {
+        x = bounds.left() - edge_padding;
+      }
+      if ix + 1 == steps {
+        next_x = bounds.right() + edge_padding;
+      }
+
+      Bounds::new(
+        point(x, bounds.origin.y),
+        size((next_x - x).max(px(1.)), bounds.size.height),
+      )
+    })
+    .collect()
+}
+
+/// The gradient color at `ratio`, sampled from the same table the track paints
+/// with, so the indicator matches the pixel under it.
+fn channel_color_at(stops: &[ChannelGradientStop], ratio: f32) -> Hsla {
+  let steps = stops.len().max(1);
+  let index = (ratio.clamp(0.0, 1.0) * steps as f32) as usize;
+  stop_color(&stops[index.min(steps - 1)])
+}
+
+fn stop_color(stop: &ChannelGradientStop) -> Hsla {
+  Hsla::from(gpui::Rgba {
+    r: stop.rgba.r,
+    g: stop.rgba.g,
+    b: stop.rgba.b,
+    a: stop.rgba.a,
+  })
 }
 
 /// Resolves one gradient segment: display color plus gamut warning flag.
@@ -1013,9 +1236,15 @@ fn rgba_to_hex(rgba: ColorPickerRgba) -> String {
 
 #[cfg(test)]
 mod tests {
-  use gpui::TestAppContext;
+  use std::ops::Deref as _;
+
+  use gpui::{
+    Context, IntoElement, Modifiers, MouseButton, Pixels, Render, TestAppContext,
+    VisualTestContext, Window, point, px,
+  };
 
   use super::*;
+  use crate::Theme;
 
   fn sample_oklch() -> ColorPickerOklch {
     ColorPickerOklch {
@@ -1173,6 +1402,119 @@ mod tests {
     assert!(colors.iter().all(|stop| !stop.out_of_gamut));
   }
 
+  #[test]
+  fn indicator_geometry_matches_the_track() {
+    let rem_size = px(16.);
+    let track = Bounds::new(point(px(100.), px(10.)), size(px(320.), px(28.)));
+    let stops = build_channel_gradient(PickerChannel::Lightness, sample_oklch());
+    let outline_width = POINTER_OUTLINE;
+    let bar_width = POINTER_WIDTH.to_pixels(rem_size);
+
+    let (start_bar, _) = channel_indicator(&stops, 0.0, track, rem_size, Hsla::black());
+    let (end_bar, _) = channel_indicator(&stops, 1.0, track, rem_size, Hsla::black());
+    let start_bar = start_bar.bounds;
+    let end_bar = end_bar.bounds;
+
+    // The bar is 0.125em wide; the whole indicator — bar plus outline — is
+    // `track height - 0.25em` tall and centred in the track.
+    assert_eq!(start_bar.size.width, bar_width);
+    assert_eq!(
+      start_bar.size.height + outline_width * 2.0,
+      track.size.height - POINTER_INSET.to_pixels(rem_size) * 2.0
+    );
+    assert_eq!(start_bar.center().y, track.center().y);
+
+    // Bar plus outline spans the track exactly at both ends: nothing hangs
+    // outside, and the end colours are still reachable.
+    let painted_left = |bar: Bounds<Pixels>| bar.left() - outline_width;
+    let painted_right = |bar: Bounds<Pixels>| bar.right() + outline_width;
+    assert_eq!(painted_left(start_bar), track.left());
+    assert_eq!(painted_right(end_bar), track.right());
+
+    // Every ratio maps to a distinct, monotonically increasing position, so no
+    // part of the track is unreachable by dragging.
+    let mut previous = f32::NEG_INFINITY;
+    for step in 0..=10 {
+      let ratio = step as f32 / 10.0;
+      let (bar, _) = channel_indicator(&stops, ratio, track, rem_size, Hsla::black());
+      assert!(
+        f32::from(bar.bounds.center().x) > previous,
+        "ratio {ratio} is not to the right of the previous step"
+      );
+      previous = f32::from(bar.bounds.center().x);
+    }
+  }
+
+  #[test]
+  fn gradient_segments_cover_the_whole_track() {
+    let rem_size = px(16.);
+    let track = Bounds::new(point(px(100.), px(10.)), size(px(320.), px(28.)));
+    let segments = channel_segments(GRADIENT_STEPS, track, rem_size);
+    assert_eq!(segments.len(), GRADIENT_STEPS);
+
+    // The outer segments overhang the track so the rounded corners never
+    // expose the background; everything between them is contiguous.
+    assert!(segments[0].left() < track.left());
+    assert!(segments[GRADIENT_STEPS - 1].right() > track.right());
+    for pair in segments.windows(2) {
+      assert_eq!(
+        pair[0].right(),
+        pair[1].left(),
+        "segments must not leave gaps or overlap"
+      );
+    }
+
+    // The segment under the indicator is the one the indicator's color is
+    // sampled from, so the bar always matches the track it sits on.
+    let travel = channel_pointer_travel(track, rem_size);
+    for step in 0..=8 {
+      let ratio = step as f32 / 8.0;
+      let center_x = travel.origin.x + travel.size.width * ratio;
+      let under = segments
+        .iter()
+        .position(|segment| segment.contains(&point(center_x, track.center().y)))
+        .expect("every indicator position lies over a segment");
+      let sampled = (ratio.clamp(0.0, 1.0) * GRADIENT_STEPS as f32) as usize;
+      assert!(
+        under == sampled.min(GRADIENT_STEPS - 1),
+        "ratio {ratio} sits over segment {under} but samples {sampled}"
+      );
+    }
+  }
+
+  #[test]
+  fn indicator_samples_the_color_under_it() {
+    let stops = build_channel_gradient(PickerChannel::Lightness, sample_oklch());
+    assert_eq!(stops.len(), GRADIENT_STEPS);
+
+    // The sample at either end is the gradient's own first/last stop, and the
+    // middle sits between them, so the indicator always matches the track.
+    assert_eq!(channel_color_at(&stops, 0.0), stop_color(&stops[0]));
+    assert_eq!(
+      channel_color_at(&stops, 1.0),
+      stop_color(&stops[GRADIENT_STEPS - 1])
+    );
+    let middle = channel_color_at(&stops, 0.5);
+    assert_ne!(middle, stop_color(&stops[0]));
+    assert_ne!(middle, stop_color(&stops[GRADIENT_STEPS - 1]));
+
+    // Out-of-range ratios are clamped instead of panicking on an index.
+    assert_eq!(channel_color_at(&stops, -1.0), stop_color(&stops[0]));
+    assert_eq!(
+      channel_color_at(&stops, 2.0),
+      stop_color(&stops[GRADIENT_STEPS - 1])
+    );
+  }
+
+  fn stop_color(stop: &ChannelGradientStop) -> Hsla {
+    Hsla::from(gpui::Rgba {
+      r: stop.rgba.r,
+      g: stop.rgba.g,
+      b: stop.rgba.b,
+      a: stop.rgba.a,
+    })
+  }
+
   #[gpui::test]
   fn set_oklch_keeps_resolved_cache_consistent(cx: &mut TestAppContext) {
     let state = cx.new(|_| ColorPickerState::new());
@@ -1195,5 +1537,164 @@ mod tests {
       // The cached value must stay consistent with a fresh resolve.
       assert_eq!(resolved, resolve_value(next));
     });
+  }
+
+  /// Host that renders the given channel tracks of a color picker and pins
+  /// them to known rectangles, so a test can drive the pointer in absolute
+  /// window coordinates.
+  struct TrackHost {
+    state: Entity<ColorPickerState>,
+    channels: &'static [PickerChannel],
+  }
+
+  impl Render for TrackHost {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+      let mut tracks = Vec::with_capacity(self.channels.len());
+      for channel in self.channels {
+        tracks.push(render_channel_row(*channel, &self.state, Size::Medium, cx).into_any_element());
+      }
+      div().size_full().p_4().children(tracks)
+    }
+  }
+
+  /// Opens a window with the given channel tracks and returns the window's
+  /// visual context, the picker state and the tracks' bounds in the same
+  /// order.
+  fn open_track_window(
+    cx: &mut TestAppContext, channels: &'static [PickerChannel],
+  ) -> (
+    VisualTestContext,
+    Entity<ColorPickerState>,
+    Vec<Bounds<Pixels>>,
+  ) {
+    cx.set_global(Theme::default());
+
+    let state = cx.new(|_| ColorPickerState::new());
+    let state_for_host = state.clone();
+    let window = cx.open_window(gpui::size(px(480.), px(320.)), move |_, _cx| TrackHost {
+      state: state_for_host,
+      channels,
+    });
+
+    let mut visual = VisualTestContext::from_window(*window.deref(), cx);
+    visual.run_until_parked();
+
+    let bounds: Vec<Bounds<Pixels>> = visual.update(|_, cx| {
+      let state = state.read(cx);
+      channels
+        .iter()
+        .map(|channel| state.channel_bounds[channel.index()])
+        .collect()
+    });
+    for (channel, bounds) in channels.iter().zip(&bounds) {
+      assert!(
+        bounds.size.width > px(0.),
+        "the {channel:?} track must be laid out before it is dragged"
+      );
+    }
+    (visual, state, bounds)
+  }
+
+  #[gpui::test]
+  fn drag_keeps_steering_the_channel_outside_the_track(cx: &mut TestAppContext) {
+    let (mut visual, state, bounds) = open_track_window(cx, &[PickerChannel::Lightness]);
+    let bounds = bounds[0];
+    let center = bounds.center();
+
+    visual.simulate_mouse_down(center, MouseButton::Left, Modifiers::default());
+    visual.run_until_parked();
+
+    // Dragging within the track moves the value as before.
+    visual.simulate_mouse_move(
+      point(bounds.origin.x + bounds.size.width * 0.75, center.y),
+      MouseButton::Left,
+      Modifiers::default(),
+    );
+    visual.run_until_parked();
+    let inside = visual.update(|_, cx| state.read(cx).oklch().lightness);
+    assert!(
+      (inside - 0.75).abs() < 0.05,
+      "pointer at 75% of the track selects {inside}"
+    );
+
+    // The pointer leaves the track but stays pressed: the value must keep
+    // following it and saturate at the track's end.
+    visual.simulate_mouse_move(
+      point(bounds.origin.x + bounds.size.width * 3.0, center.y),
+      MouseButton::Left,
+      Modifiers::default(),
+    );
+    visual.run_until_parked();
+    assert_eq!(
+      visual.update(|_, cx| state.read(cx).oklch().lightness),
+      1.0,
+      "dragging past the right edge must still reach the maximum"
+    );
+
+    visual.simulate_mouse_move(
+      point(bounds.origin.x - bounds.size.width * 3.0, center.y),
+      MouseButton::Left,
+      Modifiers::default(),
+    );
+    visual.run_until_parked();
+    assert_eq!(
+      visual.update(|_, cx| state.read(cx).oklch().lightness),
+      0.0,
+      "dragging past the left edge must still reach the minimum"
+    );
+
+    // Releasing ends the gesture: later moves must not steer the channel.
+    visual.simulate_mouse_up(
+      point(bounds.origin.x - bounds.size.width * 3.0, center.y),
+      MouseButton::Left,
+      Modifiers::default(),
+    );
+    visual.run_until_parked();
+
+    visual.simulate_mouse_move(
+      point(bounds.origin.x + bounds.size.width * 0.5, center.y),
+      None,
+      Modifiers::default(),
+    );
+    visual.run_until_parked();
+    assert_eq!(
+      visual.update(|_, cx| state.read(cx).oklch().lightness),
+      0.0,
+      "a released gesture must not keep following the pointer"
+    );
+  }
+
+  #[gpui::test]
+  fn drag_steers_only_the_channel_it_started_on(cx: &mut TestAppContext) {
+    let (mut visual, state, bounds) =
+      open_track_window(cx, &[PickerChannel::Hue, PickerChannel::Alpha]);
+    let (hue_track, alpha_track) = (bounds[0], bounds[1]);
+    let alpha_before = visual.update(|_, cx| state.read(cx).oklch().alpha);
+
+    visual.simulate_mouse_down(hue_track.center(), MouseButton::Left, Modifiers::default());
+    visual.run_until_parked();
+
+    // The pointer travels over the alpha track: the hue channel owns the
+    // gesture, so alpha must stay put while hue keeps following.
+    visual.simulate_mouse_move(
+      point(
+        hue_track.origin.x + hue_track.size.width * 0.25,
+        alpha_track.center().y,
+      ),
+      MouseButton::Left,
+      Modifiers::default(),
+    );
+    visual.run_until_parked();
+
+    let oklch = visual.update(|_, cx| state.read(cx).oklch());
+    assert!(
+      (oklch.hue - 90.0).abs() < 5.0,
+      "pointer at 25% of the hue track selects {}°",
+      oklch.hue
+    );
+    assert_eq!(
+      oklch.alpha, alpha_before,
+      "the alpha track must not pick up a drag that began on hue"
+    );
   }
 }
