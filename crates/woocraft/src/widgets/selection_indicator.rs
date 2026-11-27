@@ -141,7 +141,7 @@ impl RenderOnce for SelectionIndicator {
               .when_some(mark_opacity, |this, (mark, opacity)| {
                 this.child(
                   Icon::new(mark)
-                    .with_size(size.smaller())
+                    .with_size(size)
                     .text_color(cx.theme().background)
                     .opacity(opacity),
                 )

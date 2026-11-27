@@ -102,7 +102,7 @@ impl RenderOnce for Breadcrumb {
 
     h_flex()
       .component_gap(self.size)
-      .text_sm()
+      .text_size(self.size.text_size())
       .text_color(cx.theme().muted_foreground)
       .refine_style(&self.style)
       .children(children)

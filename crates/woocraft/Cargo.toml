@@ -14,14 +14,10 @@ rust-version = { workspace = true }
 version      = { workspace = true }
 
 [dependencies]
-# Optional: system tray icons (linux/windows) and video frame conversion for the
-# `media` feature. Declared once so both features can use it on every platform.
-image = { version = "0.25", default-features = false, features = [
-  "png",
-  "jpeg",
-  "ico",
-  "webp",
-], optional = true }
+# In-memory RGBA bitmaps. The color picker's 2-D plane is drawn as one image
+# rather than thousands of quads, so this is needed by the default build; the
+# `media` and `tray` features add the decoders they need on top.
+image = { version = "0.25", default-features = false }
 
 aho-corasick                  = { workspace = true }
 anyhow                        = { workspace = true }
@@ -189,7 +185,8 @@ default = ["resources", "tree-sitter-languages", "terminal", "markdown"]
 # checked task.
 markdown = ["dep:pulldown-cmark", "resources"]
 media = [
-  "dep:image",
+  "image/png",
+  "image/jpeg",
   "dep:libmpv2",
   "dep:libmpv2-sys",
   "dep:glutin",
@@ -199,7 +196,8 @@ resources = ["dep:rust-embed", "dep:zstd"]
 terminal = ["dep:woocraft-terminal"]
 tray = [
   "dep:crossbeam-channel",
-  "dep:image",
+  "image/png",
+  "image/ico",
   "dep:zbus",
   "dep:objc2",
   "dep:objc2-foundation",

@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use super::render_markdown;
-use crate::{CardStyle as _, StyledExt, Theme, widgets::editor::InputState};
+use crate::{CardStyle as _, Size, StyledExt, Theme, widgets::editor::InputState};
 
 type ContentBuilder = dyn Fn(&mut Window, &mut App) -> AnyElement;
 
@@ -179,7 +179,7 @@ impl Element for Popover {
         .flex_none()
         .occlude()
         .p_1()
-        .text_xs()
+        .text_size(Size::Medium.text_size())
         .popover_style(Theme::global(cx))
         .shadow_md()
         .max_w(max_width)

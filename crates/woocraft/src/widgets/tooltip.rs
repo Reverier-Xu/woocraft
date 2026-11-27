@@ -135,7 +135,7 @@ impl Render for TooltipView {
       .when_some(key_binding, |this, kbd| {
         this.child(
           div()
-            .text_sm()
+            .text_size(self.size.text_size())
             .flex_shrink_0()
             .text_color(cx.theme().muted_foreground)
             .child(kbd.outline()),

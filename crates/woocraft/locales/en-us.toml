@@ -39,6 +39,9 @@ paste      = "Paste"
 select_all = "Select All"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "Chroma / Tone"
+plane_hc        = "Hue / Chroma"
+plane_ht        = "Hue / Tone"
 alpha           = "Alpha"
 chroma          = "Chroma"
 hex_placeholder = "#RRGGBBAA"

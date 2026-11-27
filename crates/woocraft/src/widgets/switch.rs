@@ -31,7 +31,7 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
   AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement,
   RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-  prelude::FluentBuilder as _,
+  prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -197,7 +197,10 @@ impl RenderOnce for Switch {
     let thumb_inset = self.size.em(0.5).to_pixels(rem_size);
     let thumb_radius = self.size.em(0.125);
 
-    let track_bg = cx.theme().muted;
+    // The unfilled track follows the palette's one rule for recessed chrome:
+    // the foreground at reduced alpha, so it reads as structure rather than
+    // content and works on whatever surface the switch sits on.
+    let track_bg = crate::track_color(cx.theme());
     let active_color = match self.variant {
       SwitchVariant::Primary => cx.theme().primary,
       SwitchVariant::Success => cx.theme().success,
@@ -235,20 +238,30 @@ impl RenderOnce for Switch {
     );
 
     let thumb_x = thumb_inset + (track_w - thumb_inset * 2.) * progress - thumb_w / 2.;
-    let filled_w = (track_w - thumb_inset) * progress;
+    // The filled span runs between the thumb's travel endpoints, exactly like
+    // the slider's fill: half a thumb of padding at either end, and the rest
+    // split between the filled and unfilled parts. Expressing it as two flex
+    // shares means the layout does the arithmetic instead of an absolute width
+    // being recomputed here.
+    let filled_share = progress.max(0.0);
+    let unfilled_share = (1.0 - progress).max(0.0);
+    let fill_color = if self.disabled {
+      active_color.opacity(opacity::DISABLED)
+    } else {
+      active_color
+    };
 
     let filled_track: AnyElement = div()
-      .absolute()
-      .left_0()
-      .top((track_h - track_thickness) / 2.0)
-      .h(track_thickness)
-      .w(filled_w)
-      .rounded_full()
-      .bg(if self.disabled {
-        active_color.opacity(opacity::DISABLED)
-      } else {
-        active_color
-      })
+      .h_full()
+      .flex_grow(filled_share)
+      .flex_basis(px(0.))
+      .bg(fill_color)
+      .into_any_element();
+
+    let unfilled_track: AnyElement = div()
+      .h_full()
+      .flex_grow(unfilled_share)
+      .flex_basis(px(0.))
       .into_any_element();
 
     let thumb: AnyElement = div()
@@ -282,13 +295,40 @@ impl RenderOnce for Switch {
               .top((track_h - track_thickness) / 2.0)
               .h(track_thickness)
               .rounded_full()
+              .overflow_hidden()
               .bg(if self.disabled {
                 track_bg.opacity(opacity::DISABLED)
               } else {
                 track_bg
-              }),
+              })
+              // A flex row of three parts — padding, fill, remainder — so the
+              // fill's extent follows the toggle's progress without an absolute
+              // width being computed for it. The padding at each end is half the
+              // thumb's inset, which leaves the fill a travel of
+              // `track_w - thumb_inset` — the distance the thumb's centre moves.
+              .flex()
+              .flex_row()
+              .child(
+                div()
+                  .h_full()
+                  .w(thumb_inset / 2.0)
+                  .flex_shrink_0()
+                  // The leading stub continues the fill, so a toggle that is on
+                  // reads as filled to the edge instead of showing a notch.
+                  .when(progress > f32::EPSILON, |this| this.bg(fill_color)),
+              )
+              .child(filled_track)
+              .child(unfilled_track)
+              .child(
+                div()
+                  .h_full()
+                  .w(thumb_inset / 2.0)
+                  .flex_shrink_0()
+                  // Filled too once the thumb has run to the end, for the same
+                  // reason the leading stub is.
+                  .when(progress >= 1.0 - f32::EPSILON, |this| this.bg(fill_color)),
+              ),
           )
-          .child(filled_track)
           .child(thumb)
           .when(!self.disabled, |this| {
             this

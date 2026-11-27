@@ -475,11 +475,14 @@ fn compute_button_colors(
   let is_flat = matches!(variant, ButtonVariant::Flat | ButtonVariant::Link);
 
   let interaction_colors = match variant {
+    // Each variant pairs its own fill with that fill's foreground. Reusing
+    // `primary_foreground` happened to work while every fill shared one tone,
+    // but it couples a role's readability to a different role's tone.
     ButtonVariant::Primary => InteractionColors::solid(theme.primary, theme.primary_foreground),
-    ButtonVariant::Success => InteractionColors::solid(theme.success, theme.primary_foreground),
-    ButtonVariant::Warning => InteractionColors::solid(theme.warning, theme.primary_foreground),
-    ButtonVariant::Info => InteractionColors::solid(theme.info, theme.primary_foreground),
-    ButtonVariant::Danger => InteractionColors::solid(theme.danger, theme.primary_foreground),
+    ButtonVariant::Success => InteractionColors::solid(theme.success, theme.success_foreground),
+    ButtonVariant::Warning => InteractionColors::solid(theme.warning, theme.warning_foreground),
+    ButtonVariant::Info => InteractionColors::solid(theme.info, theme.info_foreground),
+    ButtonVariant::Danger => InteractionColors::solid(theme.danger, theme.danger_foreground),
     ButtonVariant::Default => {
       InteractionColors::transparent(theme.foreground).with_border(theme.border)
     }

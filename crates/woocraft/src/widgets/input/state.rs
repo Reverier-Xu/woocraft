@@ -1489,7 +1489,7 @@ impl RenderOnce for Input {
     let gap_x = self.size.component_gap();
 
     let bg = if state_view.disabled {
-      cx.theme().muted
+      cx.theme().background.opacity(0.6)
     } else {
       cx.theme().background
     };

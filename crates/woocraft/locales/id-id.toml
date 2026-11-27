@@ -39,6 +39,9 @@ paste      = "Tempel"
 select_all = "Pilih semua"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "Chroma / Tone"
+plane_hc        = "Hue / Chroma"
+plane_ht        = "Hue / Tone"
 alpha           = "Alfa"
 chroma          = "Saturasi"
 hex_placeholder = "#RRGGBBAA"

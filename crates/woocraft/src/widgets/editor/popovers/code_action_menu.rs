@@ -13,7 +13,7 @@ const MAX_MENU_HEIGHT: Rems = rems(30.);
 
 use super::editor_popover;
 use crate::{
-  ActiveTheme, IndexPath, Selectable, actions, h_flex,
+  ActiveTheme, IndexPath, Selectable, Size, actions, h_flex,
   widgets::{
     editor as input,
     editor::InputState,
@@ -89,7 +89,7 @@ impl RenderOnce for MenuItem {
       .id(self.ix)
       .gap_2()
       .p_1()
-      .text_xs()
+      .text_size(Size::Medium.text_size())
       .line_height(relative(1.))
       .rounded(cx.theme().radius.half())
       .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))

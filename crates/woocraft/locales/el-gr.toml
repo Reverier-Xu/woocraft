@@ -39,6 +39,9 @@ paste      = "Επικόλληση"
 select_all = "Επιλογή όλων"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "Chroma / Tone"
+plane_hc        = "Hue / Chroma"
+plane_ht        = "Hue / Tone"
 alpha           = "Άλφα"
 chroma          = "Χρωματικότητα"
 hex_placeholder = "#RRGGBBAA"

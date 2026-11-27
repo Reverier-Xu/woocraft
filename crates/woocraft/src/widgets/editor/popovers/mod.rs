@@ -12,7 +12,7 @@ use gpui::{
 };
 pub(crate) use hover_popover::*;
 
-use crate::{ActiveTheme, CardStyle as _, widgets::label::Label};
+use crate::{ActiveTheme, CardStyle as _, Size, widgets::label::Label};
 
 pub(crate) enum ContextMenu {
   Completion(Entity<CompletionMenu>),
@@ -54,6 +54,6 @@ pub(super) fn editor_popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div
     .occlude()
     .popover_style(cx.theme())
     .shadow_md()
-    .text_xs()
+    .text_size(Size::Medium.text_size())
     .p_1()
 }

@@ -39,6 +39,9 @@ paste      = "貼り付け"
 select_all = "すべて選択"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "彩度 / 明度"
+plane_hc        = "色相 / 彩度"
+plane_ht        = "色相 / 明度"
 alpha           = "不透明度"
 chroma          = "彩度"
 hex_placeholder = "#RRGGBBAA"

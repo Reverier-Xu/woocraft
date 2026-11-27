@@ -714,10 +714,7 @@ impl Calendar {
     ];
 
     h_flex()
-      .map(|this| match self.size {
-        Size::Large => this.text_base(),
-        _ => this.text_sm(),
-      })
+      .text_size(self.size.text_size())
       // Gap between the month grids equals the tier text size (0.75/1/1.25rem),
       // the same values the previous hard-coded gap_3/gap_4/gap_5 steps used.
       .gap(self.size.text_size())
@@ -753,7 +750,7 @@ impl Calendar {
       .rounded(cx.theme().radius)
       .justify_center()
       .text_color(cx.theme().muted_foreground)
-      .text_sm()
+      .text_size(self.size.text_size())
       .child(week.into())
   }
 
@@ -786,7 +783,7 @@ impl Calendar {
             cx,
           )
           .w(relative(0.3))
-          .text_sm()
+          .text_size(self.size.text_size())
           .on_click(
             window.listener_for(&self.state, move |state, _, window, cx| {
               state.current_month = (ix + 1) as u8;

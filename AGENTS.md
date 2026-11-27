@@ -30,6 +30,10 @@
 
 - **gpui 依赖来自 zed 的 git 仓库**（`gpui` / `gpui_platform` 等，见根 `Cargo.toml` 的 workspace dependencies）；`alacritty_terminal` 同样使用 zed 维护的 fork（固定 rev）。升级这些依赖时注意 API 变化。
 - **色彩一律走 HCT**：主题与组件内的明度/对比度语义用 `woocraft_colors::{Hct, Tone, Contrast}`，只在交给 gpui 的边界处转成 `Hsla`（`hct_to_hsla`）。不要用 HSL 的 `l` 当明度轴，也不要再引入 OKLCH/`palette`：HCT 的 tone 是相对亮度的固定函数，对比度因此可由 tone 差直接保证。
+- **字号只有一档（1em）**：组件库内部一律用 `size.text_size()`，不要用 gpui 的 `text_xs` / `text_sm` / `text_lg`，也不要用 `size.smaller().text_size()` 去缩字号。强调用 `font_semibold` / `font_bold`，弱化用 `muted_foreground` 或降低不透明度，层级差靠字重与颜色，不靠字号。
+  - `size.smaller()` 本身不违规：用于 padding、组件高度等**几何**尺寸是对的；只有拿它去算 `text_size()` 才是错的。
+  - 例外是渲染用户内容的地方（markdown 的 h1–h6、代码块标注），那里的字号是文档语义的一部分，不是 UI 层级。
+  - gpui 的 `text_xs` 等方法保留给库的使用者：规范约束的是组件库自身的实现，不剥夺外部用户自由使用 gpui 的权利。
 - **禁止引入 tokio / smol 等外部 async 运行时**：
   - 视图层只用 gpui 原生原语（`cx.spawn` / `Task` / `BackgroundExecutor` 等）；
   - 核心层只用 `async-channel`（runtime-agnostic）+ 自管理线程。

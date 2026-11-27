@@ -215,7 +215,7 @@ impl RenderOnce for ListItem {
                 .when(self.confirmed, |this| {
                   this.child(
                     icon
-                      .with_size(self.size.smaller())
+                      .with_size(self.size)
                       .text_color(cx.theme().muted_foreground),
                   )
                 }),

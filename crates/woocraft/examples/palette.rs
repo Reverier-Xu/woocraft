@@ -6,12 +6,14 @@
 
 use gpui::{
   App, AppContext, Bounds, Context, Entity, Hsla, IntoElement, ParentElement, Render,
-  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, black, div, px, white,
+  Size as GpuiSize, Styled, Window, WindowBounds, WindowOptions, black, canvas, div, fill, point,
+  px, size, white,
 };
 use woocraft::{
   ActiveTheme, Button, ScrollableElement as _, Selectable, Sizable, StyledExt, SyntaxTokenHues,
   Theme, ThemeMode, TitleBar, h_flex, v_flex, window_border,
 };
+use woocraft_colors::{Hct, Tone};
 
 struct PaletteWindow;
 
@@ -56,6 +58,178 @@ fn readable_on(background: Hsla) -> Hsla {
     white()
   } else {
     black()
+  }
+}
+
+/// One labeled position on the hue bar.
+struct HueMark {
+  name: &'static str,
+  hue: f64,
+}
+
+/// A 0..360° hue bar painted at the theme's fill chroma and tone, with the
+/// semantic hues marked on it.
+///
+/// This is the acceptance tool for palette work: it shows where each role's hue
+/// actually lands in CAM16, which is not where an evenly spaced hue wheel would
+/// put it, and it shows the gamut ceiling as a dimmed band so it is obvious
+/// which hues had to be gamut-mapped down.
+fn hue_bar(tokens: &woocraft::ThemeTokens, tone: Tone, cx: &App) -> impl IntoElement {
+  let chroma = f64::from(tokens.chroma);
+  let marks: Vec<HueMark> = vec![
+    HueMark {
+      name: "primary",
+      hue: f64::from(tokens.primary),
+    },
+    HueMark {
+      name: "info",
+      hue: f64::from(tokens.info),
+    },
+    HueMark {
+      name: "error",
+      hue: f64::from(tokens.error),
+    },
+    HueMark {
+      name: "warning",
+      hue: f64::from(tokens.warning),
+    },
+    HueMark {
+      name: "success",
+      hue: f64::from(tokens.success),
+    },
+    HueMark {
+      name: "accent",
+      hue: f64::from(tokens.accent),
+    },
+    HueMark {
+      name: "secondary",
+      hue: f64::from(tokens.secondary),
+    },
+    HueMark {
+      name: "red",
+      hue: f64::from(tokens.red),
+    },
+    HueMark {
+      name: "green",
+      hue: f64::from(tokens.green),
+    },
+    HueMark {
+      name: "blue",
+      hue: f64::from(tokens.blue),
+    },
+    HueMark {
+      name: "yellow",
+      hue: f64::from(tokens.yellow),
+    },
+    HueMark {
+      name: "cyan",
+      hue: f64::from(tokens.cyan),
+    },
+  ];
+
+  // Sample the bar once per degree: enough to read the gamut wall as a smooth
+  // edge rather than a staircase.
+  let samples: Vec<(Hsla, bool)> = (0..360)
+    .map(|hue| {
+      let requested = Hct::new(f64::from(hue), chroma, tone);
+      let clipped = requested.chroma() < chroma - 0.5;
+      let mut hsla = color_of(requested);
+      // Dim the clipped arcs so the gamut wall is visible at a glance.
+      if clipped {
+        hsla = hsla.opacity(0.45);
+      }
+      (hsla, clipped)
+    })
+    .collect();
+
+  let label_marks: Vec<(String, Hsla)> = marks
+    .iter()
+    .map(|mark| {
+      let color = color_of(Hct::new(mark.hue, chroma, tone));
+      (format!("{} {:.0}°", mark.name, mark.hue), color)
+    })
+    .collect();
+  let tick_marks: Vec<f64> = marks.iter().map(|mark| mark.hue).collect();
+
+  v_flex()
+    .gap_2()
+    .child(
+      h_flex()
+        .gap_2()
+        .items_center()
+        .child(div().text_sm().font_semibold().child("Hue bar"))
+        .child(
+          div()
+            .text_xs()
+            .text_color(cx.theme().muted_foreground)
+            .child(format!(
+              "chroma {:.0} · tone {:.0} · dimmed arcs are gamut-mapped",
+              chroma,
+              tone.value()
+            )),
+        ),
+    )
+    .child(
+      div()
+        .relative()
+        .h(px(56.0))
+        .w_full()
+        .rounded(cx.theme().radius)
+        .border_1()
+        .border_color(cx.theme().border)
+        .overflow_hidden()
+        .child(
+          canvas(
+            move |_, _, _| {},
+            move |bounds, _, window, cx| {
+              let width = bounds.size.width / 360.0;
+              for (hue, (color, _)) in samples.iter().enumerate() {
+                let segment = Bounds::new(
+                  point(bounds.origin.x + width * hue as f32, bounds.origin.y),
+                  size(width.max(px(1.)), bounds.size.height),
+                );
+                window.paint_quad(fill(segment, *color));
+              }
+
+              // Ticks for each marked hue, drawn from the top edge down.
+              let tick_color = cx.theme().foreground;
+              for hue in &tick_marks {
+                let x = bounds.origin.x + bounds.size.width * (*hue as f32 / 360.0);
+                let tick = Bounds::new(
+                  point(x - px(0.5), bounds.origin.y),
+                  size(px(1.), bounds.size.height * 0.45),
+                );
+                window.paint_quad(fill(tick, tick_color));
+              }
+            },
+          )
+          .absolute()
+          .size_full(),
+        ),
+    )
+    .child(
+      h_flex()
+        .flex_wrap()
+        .gap_x_3()
+        .gap_y_1()
+        .children(label_marks.into_iter().map(|(label, color)| {
+          h_flex()
+            .gap_1()
+            .items_center()
+            .child(div().size(px(8.0)).rounded_full().bg(color))
+            .child(div().text_xs().child(label))
+        })),
+    )
+}
+
+/// The theme's `Hsla` for an HCT color.
+fn color_of(color: Hct) -> Hsla {
+  let hsl = color.hsl();
+  Hsla {
+    h: hsl.h as f32 / 360.0,
+    s: hsl.s as f32,
+    l: hsl.l as f32,
+    a: 1.0,
   }
 }
 
@@ -182,7 +356,6 @@ impl Render for PaletteWindow {
           ("card_foreground", colors.card_foreground),
           ("popover", colors.popover),
           ("popover_foreground", colors.popover_foreground),
-          ("muted", colors.muted),
           ("muted_foreground", colors.muted_foreground),
           ("accent", colors.accent),
           ("accent_foreground", colors.accent_foreground),
@@ -198,7 +371,7 @@ impl Render for PaletteWindow {
           ("secondary_foreground", colors.secondary_foreground),
           ("border", colors.border),
           ("input", colors.input),
-          ("info", colors.info),
+          ("info_foreground", colors.info_foreground),
           ("selection", colors.selection),
           ("caret", colors.caret),
         ],
@@ -207,13 +380,23 @@ impl Render for PaletteWindow {
         "Semantic",
         vec![
           ("success", colors.success),
+          ("success_foreground", colors.success_foreground),
           ("warning", colors.warning),
+          ("warning_foreground", colors.warning_foreground),
           ("danger", colors.danger),
+          ("danger_foreground", colors.danger_foreground),
+          ("info", colors.info),
+          ("info_foreground", colors.info_foreground),
           ("red", colors.red),
+          ("red_foreground", colors.red_foreground),
           ("green", colors.green),
+          ("green_foreground", colors.green_foreground),
           ("blue", colors.blue),
+          ("blue_foreground", colors.blue_foreground),
           ("yellow", colors.yellow),
+          ("yellow_foreground", colors.yellow_foreground),
           ("cyan", colors.cyan),
+          ("cyan_foreground", colors.cyan_foreground),
         ],
       ),
       (
@@ -303,7 +486,7 @@ impl Render for PaletteWindow {
                 .text_color(cx.theme().muted_foreground)
                 .child(format!(
                   "tokens: primary={}° accent={}° secondary={}° chroma={} \
-                   fill tone(l/d)={}/{} warning step={} bg tone(l/d)={}/{} surface chroma={} \
+                   fill tone(l/d)={}/{} bg tone(l/d)={}/{} surface chroma={} \
                    | hues: error={}° warning={}° success={}° info={}°",
                   tokens.primary,
                   tokens.accent,
@@ -311,7 +494,6 @@ impl Render for PaletteWindow {
                   tokens.chroma,
                   tokens.light_fill_tone,
                   tokens.dark_fill_tone,
-                  tokens.warning_tone_step,
                   tokens.light_bg_tone,
                   tokens.dark_bg_tone,
                   tokens.surface_chroma,
@@ -321,6 +503,7 @@ impl Render for PaletteWindow {
                   tokens.info,
                 )),
             )
+            .child(hue_bar(&tokens, tokens.fill_tone(is_dark), cx))
             .children(
               sections
                 .into_iter()

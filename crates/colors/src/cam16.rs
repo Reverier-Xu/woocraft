@@ -49,6 +49,12 @@ pub struct ViewingConditions {
   fl: f64,
   fl_root: f64,
   z: f64,
+  /// `(1.64 - 0.29^n)^0.73`, the chroma-to-`t` denominator.
+  ///
+  /// Depends only on the conditions, but appears in every forward and inverse
+  /// conversion; a plane sweeps tens of thousands of those, so it is computed
+  /// once here instead of twice per sample.
+  t_denominator: f64,
 }
 
 impl Default for ViewingConditions {
@@ -148,6 +154,7 @@ impl ViewingConditions {
       fl,
       fl_root: fl.powf(0.25),
       z,
+      t_denominator: (1.64 - 0.29f64.powf(n)).powf(0.73),
     }
   }
 
@@ -199,6 +206,11 @@ impl ViewingConditions {
   /// Base for the lightness exponent.
   pub fn z(&self) -> f64 {
     self.z
+  }
+
+  /// `(1.64 - 0.29^n)^0.73`, the denominator that maps chroma to `t`.
+  pub fn t_denominator(&self) -> f64 {
+    self.t_denominator
   }
 }
 
@@ -289,7 +301,7 @@ impl Cam16 {
     let e_hue = 0.25 * ((hue_prime.to_radians() + 2.0).cos() + 3.8);
     let p1 = 50_000.0 / 13.0 * e_hue * conditions.nc() * conditions.ncb();
     let t = p1 * a.hypot(b) / (u + 0.305);
-    let alpha = (1.64 - 0.29f64.powf(conditions.n())).powf(0.73) * t.powf(0.9);
+    let alpha = conditions.t_denominator() * t.powf(0.9);
     let chroma = alpha * (j / 100.0).sqrt();
     let m = chroma * conditions.fl_root();
     let s = 50.0 * ((alpha * conditions.c()) / (conditions.aw() + 4.0)).sqrt();
@@ -313,40 +325,88 @@ impl Cam16 {
     }
   }
 
-  /// CAM16 coordinates from a lightness, chroma and hue.
-  pub fn from_jch(j: f64, chroma: f64, hue: f64, conditions: &ViewingConditions) -> Self {
-    let q =
-      4.0 / conditions.c() * (j / 100.0).sqrt() * (conditions.aw() + 4.0) * conditions.fl_root();
-    let m = chroma * conditions.fl_root();
-    let alpha = if j == 0.0 {
+  /// The XYZ colour for CAM16 coordinates, without building a [`Cam16`] first.
+  ///
+  /// [`Cam16::from_jch`] computes the UCS coordinates and its own `Y`, then
+  /// [`Cam16::to_xyz`] inverts the model again; a caller that only wants the
+  /// colour pays for both. This is the same inverse without the round trip,
+  /// which matters when a plane sweeps tens of thousands of coordinates.
+  ///
+  /// `j` is CAM16 lightness; use [`Cam16::xyz_from_hct`] for tone.
+  pub(crate) fn xyz_from_jch(
+    j: f64, chroma: f64, hue: f64, conditions: &ViewingConditions,
+  ) -> [f64; 3] {
+    let alpha = if chroma == 0.0 || j == 0.0 {
       0.0
     } else {
       chroma / (j / 100.0).sqrt()
     };
-    let s = 50.0 * ((alpha * conditions.c()) / (conditions.aw() + 4.0)).sqrt();
 
+    let t = (alpha / conditions.t_denominator()).powf(1.0 / 0.9);
     let hue_radians = hue.to_radians();
-    let jstar = (1.0 + 100.0 * 0.007) * j / (1.0 + 0.007 * j);
-    let mstar = 1.0 / 0.0228 * (0.0228 * m).ln_1p();
-    let astar = mstar * hue_radians.cos();
-    let bstar = mstar * hue_radians.sin();
+    let e_hue = 0.25 * ((hue_radians + 2.0).cos() + 3.8);
+    let ac = conditions.aw() * (j / 100.0).powf(1.0 / conditions.c() / conditions.z());
+    let p1 = e_hue * (50_000.0 / 13.0) * conditions.nc() * conditions.ncb();
+    let p2 = ac / conditions.nbb();
 
-    let mut cam = Self {
-      hue,
-      chroma,
-      j,
-      q,
-      m,
-      s,
-      jstar,
-      astar,
-      bstar,
-      y: 0.0,
+    let h_sin = hue_radians.sin();
+    let h_cos = hue_radians.cos();
+    let gamma = 23.0 * (p2 + 0.305) * t / (23.0 * p1 + 11.0 * t * h_cos + 108.0 * t * h_sin);
+    let a = gamma * h_cos;
+    let b = gamma * h_sin;
+
+    let r_a = (460.0 * p2 + 451.0 * a + 288.0 * b) / 1403.0;
+    let g_a = (460.0 * p2 - 891.0 * a - 261.0 * b) / 1403.0;
+    let b_a = (460.0 * p2 - 220.0 * a - 6300.0 * b) / 1403.0;
+
+    let inverse_adapt = |component: f64| {
+      let base = (27.13 * component.abs() / (400.0 - component.abs())).max(0.0);
+      signum(component) * (100.0 / conditions.fl()) * base.powf(1.0 / 0.42)
     };
-    // `Y` is not one of the CAM16 coordinates, so it comes from the inverse
-    // conversion rather than from the inputs.
-    cam.y = cam.to_xyz(conditions)[1];
-    cam
+    let rgb_d = conditions.rgb_d();
+    let r_f = inverse_adapt(r_a) / rgb_d[0];
+    let g_f = inverse_adapt(g_a) / rgb_d[1];
+    let b_f = inverse_adapt(b_a) / rgb_d[2];
+
+    [
+      r_f * CAM16RGB_TO_XYZ[0][0] + g_f * CAM16RGB_TO_XYZ[0][1] + b_f * CAM16RGB_TO_XYZ[0][2],
+      r_f * CAM16RGB_TO_XYZ[1][0] + g_f * CAM16RGB_TO_XYZ[1][1] + b_f * CAM16RGB_TO_XYZ[1][2],
+      r_f * CAM16RGB_TO_XYZ[2][0] + g_f * CAM16RGB_TO_XYZ[2][1] + b_f * CAM16RGB_TO_XYZ[2][2],
+    ]
+  }
+
+  /// The XYZ colour for HCT coordinates.
+  ///
+  /// This is the conversion callers outside this crate should use: the first
+  /// argument is **tone** (CIE L\*), the quantity HCT is defined on, and the
+  /// CAM16 lightness that produces it is solved for internally. Working in tone
+  /// directly is what keeps a sampled coordinate and the colour it denotes
+  /// inside the same gamut — passing a tone where a `J` was expected makes a
+  /// legal colour look like it lies outside sRGB.
+  pub fn xyz_from_hct(
+    tone: f64, chroma: f64, hue: f64, conditions: &ViewingConditions,
+  ) -> [f64; 3] {
+    // `Y` is what tone pins down; `J` is what the model inverts. Bisect on `J`
+    // until the produced colour's luminance matches the requested tone, which
+    // keeps this consistent with the forward conversion used to read a colour
+    // back into HCT.
+    let target_y = crate::tone::y_from_tone(tone);
+    let mut low = 0.0;
+    let mut high = 100.0;
+    let mut best = [0.0; 3];
+
+    for _ in 0..24 {
+      let mid = (low + high) / 2.0;
+      let xyz = Self::xyz_from_jch(mid, chroma, hue, conditions);
+      best = xyz;
+      if xyz[1] < target_y {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    best
   }
 
   /// Hue angle in degrees, `0.0..360.0`.
@@ -433,7 +493,7 @@ impl Cam16 {
       self.chroma / (self.j / 100.0).sqrt()
     };
 
-    let t = (alpha / (1.64 - 0.29f64.powf(conditions.n())).powf(0.73)).powf(1.0 / 0.9);
+    let t = (alpha / conditions.t_denominator()).powf(1.0 / 0.9);
     let hue_radians = self.hue.to_radians();
     let e_hue = 0.25 * ((hue_radians + 2.0).cos() + 3.8);
     let ac = conditions.aw() * (self.j / 100.0).powf(1.0 / conditions.c() / conditions.z());
@@ -479,6 +539,100 @@ impl Cam16 {
   pub fn luminance(&self) -> f64 {
     self.y
   }
+}
+
+/// XYZ (scaled so `Y = 100`) to linear Display-P3.
+///
+/// The D65 matrix from the Display-P3 specification. Used only to answer "is
+/// this colour inside P3", which is what a picker needs in order to draw the
+/// wider gamut's boundary — the crate itself still renders in sRGB.
+const XYZ_TO_LINEAR_P3: [[f64; 3]; 3] = [
+  [
+    2.493_496_940_635_514,
+    -0.931_383_633_151_705_9,
+    -0.402_710_794_935_793_6,
+  ],
+  [
+    -0.829_488_964_866_711_9,
+    1.762_664_102_462_009_5,
+    0.023_624_662_772_673_4,
+  ],
+  [
+    0.035_845_831_035_678_5,
+    -0.076_172_365_500_204_5,
+    0.956_884_562_340_483_1,
+  ],
+];
+
+/// XYZ (scaled so `Y = 100`) to linear sRGB.
+///
+/// The inverse of the matrix CAM16 uses on the way in, so a colour can be
+/// tested against sRGB without going through the HCT solver — which always
+/// returns an in-gamut result and therefore cannot answer "was this clamped".
+const XYZ_TO_LINEAR_SRGB: [[f64; 3]; 3] = [
+  [
+    3.240_969_941_904_864,
+    -1.537_383_177_570_094,
+    -0.498_610_760_293_003,
+  ],
+  [
+    -0.969_243_636_280_879,
+    1.875_967_501_507_72,
+    0.041_555_057_230_707,
+  ],
+  [
+    0.055_630_079_696_994,
+    -0.203_976_958_158_877,
+    1.056_971_514_213_459,
+  ],
+];
+
+/// Linear sRGB channels for an XYZ colour, on the 0..1 scale.
+///
+/// Values outside `0..=1` are kept as-is: the caller decides whether that means
+/// "out of gamut" or "clamp for display", and clamping here would hide the
+/// difference.
+pub fn linear_srgb(xyz: [f64; 3]) -> [f64; 3] {
+  [0, 1, 2].map(|row| {
+    (xyz[0] * XYZ_TO_LINEAR_SRGB[row][0]
+      + xyz[1] * XYZ_TO_LINEAR_SRGB[row][1]
+      + xyz[2] * XYZ_TO_LINEAR_SRGB[row][2])
+      / 100.0
+  })
+}
+
+/// Whether a colour lies inside the sRGB gamut.
+///
+/// Takes XYZ on the same 0..100 scale [`Cam16::to_xyz`] produces.
+pub fn in_srgb(xyz: [f64; 3]) -> bool {
+  const SLACK: f64 = 1e-3;
+  (0..3).all(|row| {
+    let linear = (xyz[0] * XYZ_TO_LINEAR_SRGB[row][0]
+      + xyz[1] * XYZ_TO_LINEAR_SRGB[row][1]
+      + xyz[2] * XYZ_TO_LINEAR_SRGB[row][2])
+      / 100.0;
+    (-SLACK..=1.0 + SLACK).contains(&linear)
+  })
+}
+
+/// Whether a colour lies inside the Display-P3 gamut.
+///
+/// P3 is a strict superset of sRGB, so anything in sRGB is in P3. A colour
+/// outside P3 cannot be shown on a wide-gamut display either, which is the
+/// interesting boundary for a picker: it separates "reduced to sRGB" from
+/// "not displayable at all".
+pub fn in_p3(xyz: [f64; 3]) -> bool {
+  // `to_xyz` yields the 0..100 scale while the matrix expects 0..1, so the
+  // product is scaled back down here. The slack absorbs floating-point noise in
+  // the matrix product, well below what a display can show.
+  const SLACK: f64 = 1e-3;
+  (0..3).all(|row| {
+    let linear = (xyz[0] * XYZ_TO_LINEAR_P3[row][0]
+      + xyz[1] * XYZ_TO_LINEAR_P3[row][1]
+      + xyz[2] * XYZ_TO_LINEAR_P3[row][2])
+      / 100.0;
+    (-SLACK..=1.0 + SLACK).contains(&linear)
+  })
 }
 
 /// Wraps an angle in degrees into `0.0..360.0`.
@@ -599,5 +753,77 @@ mod tests {
       (a.tone() - b.tone()).abs() < 1e-9,
       "tone must not move with the surround"
     );
+  }
+}
+
+#[cfg(test)]
+mod p3_tests {
+  use super::*;
+  use crate::srgb::Srgb;
+
+  #[test]
+  fn srgb_is_always_inside_p3() {
+    let conditions = ViewingConditions::default();
+    for hex in [
+      "#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff", "#6750a4", "#123456",
+    ] {
+      let cam = Cam16::from_srgb(Srgb::from_hex(hex).unwrap(), &conditions);
+      let xyz = cam.to_xyz(&conditions);
+      assert!(in_p3(xyz), "{hex} should be inside P3");
+    }
+  }
+
+  #[test]
+  fn a_very_saturated_color_can_leave_p3() {
+    // Beyond P3 the XYZ test must fail; the solver clamps into sRGB, so build
+    // the XYZ directly from an impossible HCT coordinate instead.
+    let conditions = ViewingConditions::default();
+    let xyz = Cam16::xyz_from_hct(60.0, 180.0, 140.0, &conditions);
+    assert!(!in_p3(xyz), "an out-of-gamut coordinate should leave P3");
+  }
+}
+
+#[cfg(test)]
+mod srgb_gamut_tests {
+  use super::*;
+  use crate::{Hct, Srgb, Tone};
+
+  #[test]
+  fn in_srgb_agrees_with_the_produced_color() {
+    // The plane draws its sRGB boundary from `in_srgb`, so it must agree with
+    // the color the solver actually produced: a produced color is by definition
+    // inside sRGB, and its own XYZ must test as such.
+    let conditions = ViewingConditions::default();
+    for tone in [30.0, 50.0, 70.0] {
+      for hue in (0..360).step_by(30) {
+        for chroma in [10.0, 30.0, 50.0, 70.0, 100.0] {
+          let solved = Hct::new(f64::from(hue), chroma, Tone::new(tone));
+          let cam = Cam16::from_srgb(solved.srgb(), &conditions);
+          assert!(
+            in_srgb(cam.to_xyz(&conditions)),
+            "hue {hue} chroma {chroma} tone {tone}: produced {} tests as out of sRGB",
+            solved.srgb()
+          );
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn an_impossible_request_tests_as_out_of_srgb() {
+    // Something the gamut cannot hold at all must be reported as outside.
+    let conditions = ViewingConditions::default();
+    let xyz = Cam16::xyz_from_hct(60.0, 120.0, 140.0, &conditions);
+    assert!(!in_srgb(xyz));
+  }
+
+  #[test]
+  fn p3_is_a_superset_of_srgb() {
+    let conditions = ViewingConditions::default();
+    for hex in ["#ff0000", "#00ff00", "#0000ff", "#6750a4"] {
+      let cam = Cam16::from_srgb(Srgb::from_hex(hex).unwrap(), &conditions);
+      let xyz = cam.to_xyz(&conditions);
+      assert!(in_srgb(xyz) && in_p3(xyz), "{hex} should be inside both");
+    }
   }
 }

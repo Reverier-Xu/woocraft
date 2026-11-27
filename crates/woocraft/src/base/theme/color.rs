@@ -16,19 +16,27 @@ pub struct ThemeColors {
   pub popover_foreground: Hsla,
   pub primary: Hsla,
   pub primary_foreground: Hsla,
-  pub muted: Hsla,
   pub muted_foreground: Hsla,
   pub border: Hsla,
   pub input: Hsla,
   pub success: Hsla,
+  pub success_foreground: Hsla,
   pub warning: Hsla,
+  pub warning_foreground: Hsla,
   pub danger: Hsla,
+  pub danger_foreground: Hsla,
   pub info: Hsla,
+  pub info_foreground: Hsla,
   pub red: Hsla,
+  pub red_foreground: Hsla,
   pub green: Hsla,
+  pub green_foreground: Hsla,
   pub blue: Hsla,
+  pub blue_foreground: Hsla,
   pub yellow: Hsla,
+  pub yellow_foreground: Hsla,
   pub cyan: Hsla,
+  pub cyan_foreground: Hsla,
   pub scrollbar: Hsla,
   pub scrollbar_thumb: Hsla,
   pub scrollbar_thumb_hover: Hsla,
@@ -185,26 +193,24 @@ pub struct ThemeTokens {
   pub accent: f32,
   #[serde(default = "default_secondary_hue")]
   pub secondary: f32,
-  /// Chroma of the semantic fills: primary, success, warning, danger and the
-  /// named accents. Shared, so a theme has one saturation level.
+  /// Chroma shared by every semantic fill.
   ///
-  /// This is HCT chroma, which is bounded by the sRGB gamut differently at
-  /// every hue and tone. A fill whose hue cannot hold this chroma at its tone
-  /// gets as much as the gamut allows, and the rest is dropped — hue and tone
-  /// are never sacrificed for it.
+  /// One value for every hue, so the palette reads as a single family and only
+  /// the hue axis varies between roles.
+  ///
+  /// It is not the value at which *every* hue fits: the sRGB gamut's ceiling
+  /// varies by more than 2x across the hue circle, and the tightest arcs (the
+  /// cyan-to-teal stretch around 180..230°, and amber around 85° in a light
+  /// theme) top out near 35 at the fill tone. Holding chroma down to that would
+  /// leave the reds and magentas, which can take 90, looking grey. The default
+  /// sits high enough for those to stay vivid and lets the narrow arcs be
+  /// gamut-mapped down, which is the trade the palette example visualises on
+  /// its hue bar.
   pub chroma: f32,
   /// Tone of the semantic fills in a light theme.
   pub light_fill_tone: f32,
   /// Tone of the semantic fills in a dark theme.
   pub dark_fill_tone: f32,
-  /// Tone of the warning fill, as a step away from the theme's fill tone.
-  ///
-  /// Warning is the one role whose hue cannot hold chroma at the fill tone: the
-  /// amber arc has no saturated sRGB color at tone 40, so a warning painted
-  /// there comes out olive and reads as a dull error rather than a caution.
-  /// Lifting it a few tones gives the hue room to keep its chroma, which is
-  /// also why warning is conventionally brighter than danger.
-  pub warning_tone_step: f32,
   /// Tone of the page background in a light theme.
   pub light_bg_tone: f32,
   /// Tone of the page background in a dark theme.
@@ -230,11 +236,11 @@ fn default_green_hue() -> f32 {
 }
 
 fn default_blue_hue() -> f32 {
-  248.0
+  258.0
 }
 
 fn default_yellow_hue() -> f32 {
-  85.0
+  70.0
 }
 
 fn default_cyan_hue() -> f32 {
@@ -244,22 +250,21 @@ fn default_cyan_hue() -> f32 {
 impl Default for ThemeTokens {
   fn default() -> Self {
     Self {
-      primary: 248.0,
+      primary: 258.0,
       error: 20.0,
-      warning: 85.0,
+      warning: 70.0,
       success: 150.0,
-      info: 248.0,
+      info: 258.0,
       red: 20.0,
       green: 150.0,
-      blue: 248.0,
-      yellow: 85.0,
+      blue: 258.0,
+      yellow: 70.0,
       cyan: 190.0,
       accent: 200.0,
       secondary: 290.0,
-      chroma: 48.0,
-      light_fill_tone: 40.0,
-      dark_fill_tone: 80.0,
-      warning_tone_step: 20.0,
+      chroma: 45.0,
+      light_fill_tone: 62.0,
+      dark_fill_tone: 66.0,
       light_bg_tone: 98.0,
       dark_bg_tone: 12.0,
       surface_chroma: 0.6,
@@ -336,6 +341,23 @@ fn hct_to_hsla(color: Hct, alpha: f32) -> Hsla {
   }
 }
 
+/// The color of an unfilled track, thumb or other recessed chrome.
+///
+/// Track surfaces are the page foreground at reduced alpha rather than a
+/// separate opaque color. That keeps one expression for "structure, but not
+/// content", lets the same value work on any surface the control sits on, and
+/// means a themed foreground (say, a warm palette) carries through to the
+/// controls instead of being mixed from a fixed black or white.
+pub fn track_color(theme: &super::Theme) -> Hsla {
+  theme.foreground.opacity(TRACK_ALPHA)
+}
+
+/// Alpha of [`track_color`].
+///
+/// Low enough that a track reads as a recess behind its content rather than as
+/// a filled control of its own.
+pub const TRACK_ALPHA: f32 = 0.3;
+
 /// Replaces a color's alpha, keeping its hue, saturation and lightness.
 fn with_alpha(color: Hsla, alpha: f32) -> Hsla {
   Hsla {
@@ -390,6 +412,17 @@ fn hct_of_hsla(color: Hsla) -> Hct {
   Hct::from_srgb(hsl.to_srgb())
 }
 
+/// The text color to use on `fill`.
+///
+/// The inverse of the palette's own pairing rule: solve for the tone that
+/// reaches the body-text ratio against `fill`, keeping the fill's hue and as
+/// much chroma as the gamut allows. Use this whenever a component accepts a
+/// caller-supplied fill color, so its text is derived from that color instead
+/// of borrowed from an unrelated role.
+pub fn foreground_for(fill: Hsla) -> Hsla {
+  hct_to_hsla(hct_of_hsla(fill).foreground(Contrast::BODY_TEXT), 1.0)
+}
+
 /// The tone of an `Hsla`.
 ///
 /// `Hsla` stores hue as a fraction of a turn while `Hsl` uses degrees, so the
@@ -420,57 +453,51 @@ impl ThemeColors {
     // mid-tones, where a foreground can only be chosen by throwing it to the
     // far end of the scale.
     let card_tone = bg_tone + if is_dark { 4.0 } else { -3.0 };
-    let muted_tone = bg_tone + if is_dark { -4.0 } else { -3.0 };
 
     let background = neutral_surface(&tokens, bg_tone, hue);
     let card = neutral_surface(&tokens, card_tone, hue);
-    let muted = neutral_surface(&tokens, muted_tone, hue);
-    let accent = Hct::new(
-      f64::from(tokens.accent),
-      f64::from(tokens.chroma),
-      muted_tone,
-    );
-    let secondary = Hct::new(
-      f64::from(tokens.secondary),
-      f64::from(tokens.chroma),
-      muted_tone,
-    );
+    // One chroma and one tone for every fill, in both modes: the only axis a
+    // role varies on is hue. Chroma is set high enough that the wide arcs (red,
+    // magenta, purple) stay vivid, which means the narrow ones — cyan-to-teal,
+    // and amber in a light theme — are gamut-mapped down. That is deliberate:
+    // holding chroma low enough for every hue would grey out the whole palette.
+    // The palette example draws the resulting wall on its hue bar.
+    let chroma = f64::from(tokens.chroma);
+    let fill = |hue: f32| Hct::new(f64::from(hue), chroma, fill_tone);
+
+    let accent = Hct::new(f64::from(tokens.accent), chroma, fill_tone);
+    let secondary = Hct::new(f64::from(tokens.secondary), chroma, fill_tone);
     let popover = background;
 
-    // Fills share one tone, so they are all equally prominent and all reach
-    // the same contrast against the page. Their hues differ; their
-    // accessibility does not.
-    let primary = Hct::new(f64::from(hue), f64::from(tokens.chroma), fill_tone);
-    let info = Hct::new(f64::from(tokens.info), f64::from(tokens.chroma), fill_tone);
-    let success = Hct::new(
-      f64::from(tokens.success),
-      f64::from(tokens.chroma),
-      fill_tone,
-    );
-    // Warning steps away from the fills *toward the background*, which is the
-    // direction with headroom in both modes: lighter in a light theme, darker
-    // in a dark one. Stepping up unconditionally would run a dark theme's
-    // warning off the top of the scale into white.
-    let warning_tone = if is_dark {
-      fill_tone - f64::from(tokens.warning_tone_step)
-    } else {
-      fill_tone + f64::from(tokens.warning_tone_step)
-    };
-    let warning = Hct::new(
-      f64::from(tokens.warning),
-      f64::from(tokens.chroma),
-      warning_tone,
-    );
-    let danger = Hct::new(f64::from(tokens.error), f64::from(tokens.chroma), fill_tone);
-    let red = Hct::new(f64::from(tokens.red), f64::from(tokens.chroma), fill_tone);
-    let green = Hct::new(f64::from(tokens.green), f64::from(tokens.chroma), fill_tone);
-    let blue = Hct::new(f64::from(tokens.blue), f64::from(tokens.chroma), fill_tone);
-    let yellow = Hct::new(
-      f64::from(tokens.yellow),
-      f64::from(tokens.chroma),
-      fill_tone,
-    );
-    let cyan = Hct::new(f64::from(tokens.cyan), f64::from(tokens.chroma), fill_tone);
+    // Fills share one tone, so they are all equally prominent and all reach the
+    // same contrast against the page. Their hues differ; their accessibility
+    // does not.
+    let primary = fill(hue);
+    let info = fill(tokens.info);
+    let success = fill(tokens.success);
+    let warning = fill(tokens.warning);
+    let danger = fill(tokens.error);
+    let red = fill(tokens.red);
+    let green = fill(tokens.green);
+    let blue = fill(tokens.blue);
+    let yellow = fill(tokens.yellow);
+    let cyan = fill(tokens.cyan);
+
+    // Every fill carries its own foreground. They all resolve to the same tone
+    // today because the fills share one tone, but deriving them from each fill
+    // rather than reusing `primary_foreground` is what keeps the pair correct
+    // once a theme gives a role its own tone — and it is the only way a caller
+    // that supplies a custom fill color can ask for its matching text.
+    let fill_foreground = |color: Hct| hct_to_hsla(color.foreground(Contrast::BODY_TEXT), 1.0);
+    let success_foreground = fill_foreground(success);
+    let warning_foreground = fill_foreground(warning);
+    let danger_foreground = fill_foreground(danger);
+    let info_foreground = fill_foreground(info);
+    let red_foreground = fill_foreground(red);
+    let green_foreground = fill_foreground(green);
+    let blue_foreground = fill_foreground(blue);
+    let yellow_foreground = fill_foreground(yellow);
+    let cyan_foreground = fill_foreground(cyan);
 
     // Every surface picks a foreground that reaches the enhanced ratio against
     // it. No candidate list, no audit: the tone axis answers this, and asking
@@ -479,13 +506,12 @@ impl ThemeColors {
     let foreground = background.foreground(Contrast::ENHANCED);
     let card_foreground = card.foreground(Contrast::ENHANCED);
     let popover_foreground = foreground;
-    let accent_foreground = accent.foreground(Contrast::ENHANCED);
+    let accent_foreground = fill_foreground(accent);
     let primary_foreground = primary.foreground(Contrast::BODY_TEXT);
-    let muted_foreground = with_alpha(
-      hct_to_hsla(muted.foreground(Contrast::BODY_TEXT), 1.0),
-      0.75,
-    );
-    let secondary_foreground = secondary.foreground(Contrast::ENHANCED);
+    // Secondary text is the page's own foreground at reduced weight, not a
+    // color derived from a separate surface.
+    let muted_foreground = with_alpha(hct_to_hsla(foreground, 1.0), 0.6);
+    let secondary_foreground = fill_foreground(secondary);
 
     let border = with_alpha(hct_to_hsla(foreground, 1.0), 0.1);
     let input = border;
@@ -508,15 +534,15 @@ impl ThemeColors {
     );
     let editor_active_line_number = hct_to_hsla(foreground, 1.0);
     let editor_invisible = with_alpha(hct_to_hsla(foreground, 1.0), 0.4);
-    // The hover step moves *toward* the foreground, so it reads as a lift in
-    // both modes instead of depending on a hard-coded sign.
+    // The hover step moves away from the page background, so it reads as a lift
+    // in both modes instead of depending on a hard-coded sign.
     let secondary_hover = secondary.with_tone(if is_dark {
-      muted_tone + 4.0
+      fill_tone + 4.0
     } else {
-      muted_tone - 4.0
+      fill_tone - 4.0
     });
+    let tab_bar_segmented = with_alpha(hct_to_hsla(foreground, 1.0), TRACK_ALPHA);
     let tab_bar = hct_to_hsla(card, 1.0);
-    let tab_bar_segmented = hct_to_hsla(muted, 1.0);
     let tab_foreground = muted_foreground;
     let tab_active = hct_to_hsla(background, 1.0);
     let tab_active_foreground = hct_to_hsla(foreground, 1.0);
@@ -529,26 +555,34 @@ impl ThemeColors {
       background: hct_to_hsla(background, 1.0),
       foreground: hct_to_hsla(foreground, 1.0),
       accent: hct_to_hsla(accent, 1.0),
-      accent_foreground: hct_to_hsla(accent_foreground, 1.0),
+      accent_foreground,
       card: hct_to_hsla(card, 1.0),
       card_foreground: hct_to_hsla(card_foreground, 1.0),
       popover: hct_to_hsla(popover, 1.0),
       popover_foreground: hct_to_hsla(popover_foreground, 1.0),
       primary: hct_to_hsla(primary, 1.0),
       primary_foreground: hct_to_hsla(primary_foreground, 1.0),
-      muted: hct_to_hsla(muted, 1.0),
       muted_foreground,
       border,
       input,
       success: hct_to_hsla(success, 1.0),
+      success_foreground,
       warning: hct_to_hsla(warning, 1.0),
+      warning_foreground,
       danger: hct_to_hsla(danger, 1.0),
+      danger_foreground,
       info: hct_to_hsla(info, 1.0),
+      info_foreground,
       red: hct_to_hsla(red, 1.0),
+      red_foreground,
       green: hct_to_hsla(green, 1.0),
+      green_foreground,
       blue: hct_to_hsla(blue, 1.0),
+      blue_foreground,
       yellow: hct_to_hsla(yellow, 1.0),
+      yellow_foreground,
       cyan: hct_to_hsla(cyan, 1.0),
+      cyan_foreground,
       scrollbar,
       scrollbar_thumb,
       scrollbar_thumb_hover,
@@ -563,7 +597,7 @@ impl ThemeColors {
       editor_invisible,
       secondary: hct_to_hsla(secondary, 1.0),
       secondary_hover: hct_to_hsla(secondary_hover, 1.0),
-      secondary_foreground: hct_to_hsla(secondary_foreground, 1.0),
+      secondary_foreground,
       tab_bar,
       tab_bar_segmented,
       tab_foreground,
@@ -594,19 +628,27 @@ impl ThemeColors {
       popover_foreground: scale_alpha(self.popover_foreground, alpha),
       primary: scale_alpha(self.primary, alpha),
       primary_foreground: scale_alpha(self.primary_foreground, alpha),
-      muted: scale_alpha(self.muted, alpha),
       muted_foreground: scale_alpha(self.muted_foreground, alpha),
       border: scale_alpha(self.border, alpha),
       input: scale_alpha(self.input, alpha),
       success: scale_alpha(self.success, alpha),
+      success_foreground: scale_alpha(self.success_foreground, alpha),
       warning: scale_alpha(self.warning, alpha),
+      warning_foreground: scale_alpha(self.warning_foreground, alpha),
       danger: scale_alpha(self.danger, alpha),
+      danger_foreground: scale_alpha(self.danger_foreground, alpha),
       info: scale_alpha(self.info, alpha),
+      info_foreground: scale_alpha(self.info_foreground, alpha),
       red: scale_alpha(self.red, alpha),
+      red_foreground: scale_alpha(self.red_foreground, alpha),
       green: scale_alpha(self.green, alpha),
+      green_foreground: scale_alpha(self.green_foreground, alpha),
       blue: scale_alpha(self.blue, alpha),
+      blue_foreground: scale_alpha(self.blue_foreground, alpha),
       yellow: scale_alpha(self.yellow, alpha),
+      yellow_foreground: scale_alpha(self.yellow_foreground, alpha),
       cyan: scale_alpha(self.cyan, alpha),
+      cyan_foreground: scale_alpha(self.cyan_foreground, alpha),
       scrollbar: scale_alpha(self.scrollbar, alpha),
       scrollbar_thumb: scale_alpha(self.scrollbar_thumb, alpha),
       scrollbar_thumb_hover: scale_alpha(self.scrollbar_thumb_hover, alpha),
@@ -719,14 +761,16 @@ mod tests {
   }
 
   #[test]
-  fn muted_foreground_is_readable_despite_its_alpha() {
-    // Muted text is deliberately translucent, so it cannot be checked by the
-    // tone contract; what must hold is that the opaque version is readable and
-    // that the translucency is the only thing reducing it.
+  fn muted_foreground_is_the_page_foreground_at_reduced_weight() {
+    // Secondary text is the page foreground, dimmed — not a colour of its own.
+    // So the opaque version must clear the body-text ratio against the page.
     let colors = ThemeColors::light();
-    assert!((colors.muted_foreground.a - 0.75).abs() < 1e-6);
+    assert!((colors.muted_foreground.a - 0.6).abs() < 1e-6);
+
     let opaque = super::with_alpha(colors.muted_foreground, 1.0);
-    assert!(ratio(colors.muted, opaque) >= Contrast::BODY_TEXT - 0.05);
+    assert!(ratio(colors.background, opaque) >= Contrast::BODY_TEXT - 0.05);
+    assert!((opaque.h - colors.foreground.h).abs() < 1e-6);
+    assert!((opaque.l - colors.foreground.l).abs() < 1e-6);
   }
 
   #[test]
@@ -759,50 +803,44 @@ mod tests {
   }
 
   #[test]
-  fn warning_and_danger_stay_distinguishable() {
-    // Both are red-adjacent states, so the theme has to keep them apart by more
-    // than a few degrees of hue. CAM16 distances are measured in UCS, where
-    // ~5 is one just-noticeable step for large fields; 10 keeps the two states
-    // clearly different at a glance rather than merely not identical.
+  fn every_fill_pairs_with_its_own_foreground() {
+    // Each fill carries the text color derived from *that* fill, not borrowed
+    // from another role. This is the invariant a component relies on when it
+    // renders `theme().danger` behind `theme().danger_foreground`.
     for is_dark in [false, true] {
       let colors = ThemeColors::from_tokens(ThemeTokens::default(), is_dark);
-      let warning = super::hct_of_hsla(colors.warning);
-      let danger = super::hct_of_hsla(colors.danger);
 
-      let distance = warning.distance(danger);
-      assert!(
-        distance >= 10.0,
-        "warning {} and danger {} are only {distance:.2} apart (dark: {is_dark})",
-        warning.srgb(),
-        danger.srgb()
-      );
+      for (name, fill, foreground) in [
+        ("primary", colors.primary, colors.primary_foreground),
+        ("accent", colors.accent, colors.accent_foreground),
+        ("secondary", colors.secondary, colors.secondary_foreground),
+        ("success", colors.success, colors.success_foreground),
+        ("warning", colors.warning, colors.warning_foreground),
+        ("danger", colors.danger, colors.danger_foreground),
+        ("info", colors.info, colors.info_foreground),
+        ("red", colors.red, colors.red_foreground),
+        ("green", colors.green, colors.green_foreground),
+        ("blue", colors.blue, colors.blue_foreground),
+        ("yellow", colors.yellow, colors.yellow_foreground),
+        ("cyan", colors.cyan, colors.cyan_foreground),
+      ] {
+        let achieved = ratio(fill, foreground);
+        assert!(
+          achieved >= Contrast::BODY_TEXT - 0.05,
+          "{name} foreground only reaches {achieved:.2}:1 (dark: {is_dark})"
+        );
 
-      // And they must not be told apart by tone alone: a warning and an error
-      // at the same lightness would still read as the same colour.
-      let hue_delta = (warning.hue() - danger.hue()).abs() % 360.0;
-      let hue_delta = hue_delta.min(360.0 - hue_delta);
-      assert!(
-        hue_delta >= 40.0,
-        "warning and danger are only {hue_delta:.1}° apart (dark: {is_dark})"
-      );
+        // And it must be derived from its own fill: a fill's foreground should
+        // agree with what `foreground_for` computes for it.
+        let expected = super::foreground_for(fill);
+        assert!(
+          (expected.h - foreground.h).abs() < 1e-3
+            && (expected.s - foreground.s).abs() < 1e-3
+            && (expected.l - foreground.l).abs() < 1e-3,
+          "{name} foreground was not derived from its own fill (dark: {is_dark})"
+        );
+      }
     }
-  }
-
-  #[test]
-  fn warning_keeps_its_chroma() {
-    // A warning painted at the shared fill tone comes out olive because the
-    // amber arc cannot hold chroma that low. The step exists to prevent that,
-    // so assert the result is actually saturated.
-    let colors = ThemeColors::light();
-    let warning = super::hct_of_hsla(colors.warning);
-    let danger = super::hct_of_hsla(colors.danger);
-
-    assert!(
-      warning.chroma() >= danger.chroma() * 0.9,
-      "warning chroma {:.1} should be comparable to danger's {:.1}",
-      warning.chroma(),
-      danger.chroma()
-    );
   }
 
   #[test]
@@ -882,12 +920,11 @@ mod tests {
             "success": 150,
             "info": 248,
             "accent": 130,
-            "chroma": 48,
+            "chroma": 34,
             "light_fill_tone": 40,
-            "dark_fill_tone": 80,
+            "dark_fill_tone": 70,
             "light_bg_tone": 98,
             "dark_bg_tone": 12,
-            "warning_tone_step": 20,
             "surface_chroma": 0.6
         }"#;
     let toml = r#"
@@ -897,12 +934,11 @@ mod tests {
             success = 150
             info = 248
             accent = 130
-            chroma = 48
+            chroma = 34
             light_fill_tone = 40
-            dark_fill_tone = 80
+            dark_fill_tone = 70
             light_bg_tone = 98
             dark_bg_tone = 12
-            warning_tone_step = 20
             surface_chroma = 0.6
         "#;
 
@@ -917,8 +953,8 @@ mod tests {
     // Hue tokens that a theme file omits still fall back to their defaults.
     assert_eq!(from_json.red, 20.0);
     assert_eq!(from_json.green, 150.0);
-    assert_eq!(from_json.blue, 248.0);
-    assert_eq!(from_json.yellow, 85.0);
+    assert_eq!(from_json.blue, 258.0);
+    assert_eq!(from_json.yellow, 70.0);
     assert_eq!(from_json.cyan, 190.0);
     assert_eq!(from_toml.red, 20.0);
     assert_eq!(from_toml.cyan, 190.0);
@@ -936,13 +972,13 @@ mod tests {
 
     write!(
       json_file,
-      "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"chroma\":48,\"light_fill_tone\":40,\"dark_fill_tone\":80,\"light_bg_tone\":98,\"dark_bg_tone\":12,\"warning_tone_step\":20,\"surface_chroma\":0.6}}"
+      "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"chroma\":34,\"light_fill_tone\":40,\"dark_fill_tone\":70,\"light_bg_tone\":98,\"dark_bg_tone\":12,\"surface_chroma\":0.6}}"
     )
     .expect("write json file");
 
     write!(
       toml_file,
-      "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nchroma = 48\nlight_fill_tone = 40\ndark_fill_tone = 80\nlight_bg_tone = 98\ndark_bg_tone = 12\nwarning_tone_step = 20\nsurface_chroma = 0.6\n"
+      "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nchroma = 34\nlight_fill_tone = 40\ndark_fill_tone = 70\nlight_bg_tone = 98\ndark_bg_tone = 12\nsurface_chroma = 0.6\n"
     )
     .expect("write toml file");
 

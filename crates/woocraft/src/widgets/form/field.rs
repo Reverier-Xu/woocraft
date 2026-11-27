@@ -240,7 +240,7 @@ impl RenderOnce for Field {
     } else {
       outer_gap / 4.0
     };
-    let default_label_text_size = self.props.size.smaller().text_size();
+    let default_label_text_size = self.props.size.text_size();
 
     v_flex()
       .flex_1()

@@ -408,7 +408,7 @@ fn clear_button(id: impl Into<ElementId>, size: Size, cx: &App) -> Button {
   Button::new(id)
     .icon(Icon::new(IconName::DismissCircle))
     .flat()
-    .with_size(size.smaller())
+    .with_size(size)
     .tab_stop(false)
     .text_color(cx.theme().muted_foreground)
 }
@@ -474,7 +474,7 @@ impl RenderOnce for DatePicker {
           .when(!show_clean, |this| {
             this.child(
               Icon::new(IconName::Calendar)
-                .with_size(self.size.smaller())
+                .with_size(self.size)
                 .text_color(cx.theme().muted_foreground),
             )
           })

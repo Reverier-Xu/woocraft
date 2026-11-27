@@ -41,10 +41,10 @@ use gpui::{
   App, AppContext as _, Bounds, Context, Corners, DispatchPhase, ElementId, Entity, EventEmitter,
   Hsla, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
   MouseUpEvent, PaintQuad, ParentElement, Pixels, Point, Rems, RenderOnce, SharedString,
-  StyleRefinement, Styled, Subscription, Window, canvas, div, fill, point,
-  prelude::FluentBuilder as _, px, rems, size,
+  StyleRefinement, Styled, Subscription, TextAlign, Window, canvas, div, fill, point, px, rems,
+  size,
 };
-use woocraft_colors::{Hct, Tone};
+use woocraft_colors::{Cam16, Hct, Tone, ViewingConditions};
 
 use crate::{
   ActiveTheme, Anchor, Button, ButtonVariant, ButtonVariants, Disableable, ElementExt, Input,
@@ -62,10 +62,14 @@ const HUE_MAX: f32 = 360.0;
 /// Upper bound of the tone slider: CIE L\* runs 0 (black) to 100 (white).
 const TONE_MAX: f32 = 100.0;
 const WARNING_LINE_THICKNESS: Rems = rems(0.125);
-/// Fixed number of gradient segments per channel slider. 96 segments are
-/// visually indistinguishable from per-pixel segmentation (gpui-kit uses the
-/// same fixed step count) and keep the cached color table size constant.
-const GRADIENT_STEPS: usize = 96;
+/// Gradient segments per channel slider.
+///
+/// A slider is a 1-D gradient, so its fidelity is bounded by how many segments
+/// it is cut into. The table is cached per (channel, value) and rebuilt only
+/// when the value changes, so a high count costs one-time work rather than
+/// per-frame work: 512 segments read as a continuous gradient at the popover's
+/// width, where the previous 96 showed visible banding once the picker grew.
+const GRADIENT_STEPS: usize = 512;
 /// Width of the indicator's coloured bar.
 const POINTER_WIDTH: Rems = rems(0.125);
 /// Inset of the indicator from the track's top and bottom.
@@ -291,8 +295,20 @@ pub struct ColorPickerState {
   channel_bounds: [Bounds<Pixels>; 4],
   /// Channel currently following a pressed pointer, if any.
   dragging: Option<PickerChannel>,
+  /// The plane on display.
+  ///
+  /// Follows whichever slider was dragged last and stays there once the drag
+  /// ends: resetting to hue/chroma would throw away the view the user just
+  /// navigated to, and would resample a bitmap they are still reading.
+  plane_kind: PlaneKind,
   /// Per-channel gradient color tables (see [`Self::channel_gradient`]).
   gradient_cache: [Option<ChannelGradient>; 4],
+  /// The 2-D planes (see [`Self::plane`]), one slot per kind.
+  ///
+  /// Keyed by the plane's fixed axis. A single shared slot would throw the
+  /// bitmap away every time a drag moved to a different slider, which is
+  /// exactly when the user is looking at it.
+  plane_cache: [Option<(u32, Arc<Plane>)>; 3],
   hex_input: Option<Entity<InputState>>,
   hex_input_dirty: bool,
   _hex_input_subscription: Option<Subscription>,
@@ -315,7 +331,9 @@ impl ColorPickerState {
       resolved: resolve_value(value),
       channel_bounds: [Bounds::default(); 4],
       dragging: None,
+      plane_kind: PlaneKind::HueChroma,
       gradient_cache: [None, None, None, None],
+      plane_cache: [None, None, None],
       hex_input: None,
       hex_input_dirty: false,
       _hex_input_subscription: None,
@@ -424,6 +442,52 @@ impl ColorPickerState {
           colors: colors.clone(),
         });
         colors
+      }
+    }
+  }
+
+  /// The 2-D plane to show, and the data for it.
+  ///
+  /// Which plane is shown follows the slider being dragged: the plane explains
+  /// the two axes that slider does *not* control, so it answers "where am I"
+  /// for the axis the user is currently moving. Between drags it falls back to
+  /// hue/chroma, which is the pair a colour picker is usually asked about.
+  ///
+  /// Sampling costs tens of thousands of CAM16 conversions, so the result is
+  /// cached against everything it depends on. A drag only changes one axis, and
+  /// that axis is one the plane holds fixed — so the cache survives the whole
+  /// gesture and the bitmap is built once.
+  fn plane(&mut self) -> (PlaneKind, Arc<Plane>) {
+    // A drag switches the view to the plane of the axes it is not changing; the
+    // view then stays put until another slider is dragged.
+    if let Some(channel) = self.dragging {
+      self.plane_kind = PlaneKind::for_channel(channel);
+    }
+    let kind = self.plane_kind;
+
+    // The bitmap is a slice through the colour space, so it depends only on the
+    // axis the plane holds *fixed*: that is the axis a drag would move which
+    // must invalidate it. The two drawn axes are swept by the plane itself, so
+    // dragging either of them reuses the bitmap.
+    let fixed = kind.fixed_axis();
+    let fixed_value = match fixed {
+      PlaneAxis::Hue => self.value.hue,
+      PlaneAxis::Chroma => self.value.chroma,
+      PlaneAxis::Tone => self.value.tone,
+    };
+    let key = fixed_value.to_bits();
+    let slot = match kind {
+      PlaneKind::HueChroma => 0,
+      PlaneKind::HueTone => 1,
+      PlaneKind::ChromaTone => 2,
+    };
+
+    match &self.plane_cache[slot] {
+      Some((cached, plane)) if *cached == key => (kind, plane.clone()),
+      _ => {
+        let plane: Arc<Plane> = Arc::new(Plane::sample(kind, self.value));
+        self.plane_cache[slot] = Some((key, plane.clone()));
+        (kind, plane)
       }
     }
   }
@@ -656,25 +720,436 @@ impl RenderOnce for ColorPicker {
           state.sync_hex_input_display(window, cx);
         });
         let hex_input = state.read(cx).hex_input();
-        let mut content = v_flex().w(rems(20.)).gap(rems(0.5));
+        let mut content = v_flex().gap(rems(0.5));
 
         if let Some(hex_input) = hex_input {
           content = content.child(Input::new(&hex_input));
         }
 
+        let (current, kind, plane) = state.update(cx, |state, _| {
+          let current = state.hct();
+          let (kind, plane) = state.plane();
+          (current, kind, plane)
+        });
+        let mut sliders = v_flex().flex_1().gap(rems(0.5));
         for channel in [
           PickerChannel::Tone,
           PickerChannel::Chroma,
           PickerChannel::Hue,
           PickerChannel::Alpha,
         ] {
-          content = content.child(render_channel_row(channel, &state, size, cx));
+          sliders = sliders.child(render_channel_row(channel, &state, size, cx));
         }
 
-        content
+        // The plane is a fixed square; the sliders take the rest of the width.
+        // `items_start` keeps the plane at its own height instead of letting
+        // the row stretch it into a sliver. The width is in em for the same
+        // reason the plane is: it has to scale with the component size.
+        content.w(size.em(29.)).child(
+          h_flex()
+            .w_full()
+            .items_start()
+            .gap(rems(0.75))
+            .child(sliders)
+            .child(render_plane(current, kind, plane, size, cx)),
+        )
       })
       .into_any_element()
   }
+}
+
+/// Which two axes a plane shows.
+///
+/// The picker has four sliders; each pair of them spans a plane. Showing one
+/// plane at a time keeps the popover readable — three 2-D charts next to four
+/// sliders is a wall of colour — while still answering "where am I" for
+/// whichever axis the user is currently moving.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PlaneKind {
+  /// Hue across, chroma up.
+  HueChroma,
+  /// Hue across, tone up.
+  HueTone,
+  /// Chroma across, tone up.
+  ChromaTone,
+}
+
+impl PlaneKind {
+  /// The plane to show while `channel` is being dragged.
+  ///
+  /// It is the plane that holds the dragged axis *fixed* and draws the other
+  /// two. Two reasons: it shows where the value sits within the dimensions the
+  /// drag is not changing, and — because the bitmap only depends on the fixed
+  /// axis — the whole gesture reuses one bitmap instead of rebuilding it on
+  /// every move.
+  fn for_channel(channel: PickerChannel) -> Self {
+    match channel {
+      PickerChannel::Tone => Self::HueChroma,
+      PickerChannel::Chroma => Self::HueTone,
+      PickerChannel::Hue => Self::ChromaTone,
+      // Alpha has no plane of its own; fall back to the default view.
+      PickerChannel::Alpha => Self::HueChroma,
+    }
+  }
+
+  /// The axis this plane holds constant.
+  fn fixed_axis(self) -> PlaneAxis {
+    match self {
+      Self::HueChroma => PlaneAxis::Tone,
+      Self::HueTone => PlaneAxis::Chroma,
+      Self::ChromaTone => PlaneAxis::Hue,
+    }
+  }
+
+  /// Axis ranges as `(horizontal, vertical)`.
+  fn axes(self) -> ((PlaneAxis, f32), (PlaneAxis, f32)) {
+    match self {
+      Self::HueChroma => ((PlaneAxis::Hue, HUE_MAX), (PlaneAxis::Chroma, CHROMA_MAX)),
+      Self::HueTone => ((PlaneAxis::Hue, HUE_MAX), (PlaneAxis::Tone, TONE_MAX)),
+      Self::ChromaTone => ((PlaneAxis::Chroma, CHROMA_MAX), (PlaneAxis::Tone, TONE_MAX)),
+    }
+  }
+}
+
+/// One axis of a plane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PlaneAxis {
+  Hue,
+  Chroma,
+  Tone,
+}
+
+/// A sampled plane: an RGBA bitmap plus the mask of which pixels are outside
+/// each gamut.
+///
+/// The bitmap exists so the plane costs one draw instead of one per sample.
+/// `PlaneResolution` pixels squared is a few hundred thousand conversions when
+/// the tone changes and nothing at all on every other frame, whereas painting
+/// per sample made a drag stutter.
+struct Plane {
+  width: usize,
+  height: usize,
+  /// Premultiplied RGBA, row-major, top row first.
+  rgba: Vec<u8>,
+  /// `1` where the sample is outside sRGB.
+  outside_srgb: Vec<u8>,
+  /// `1` where the sample is outside Display-P3.
+  outside_p3: Vec<u8>,
+}
+
+/// Pixels per side of a sampled plane.
+///
+/// This is the *data* resolution, not the on-screen size: the bitmap is scaled
+/// to the plot area, so a larger value buys smooth boundaries rather than a
+/// bigger chart. 192 is past the point where the sRGB edge reads as a curve at
+/// the sizes the popover uses.
+const PLANE_RESOLUTION: usize = 192;
+
+/// Side of the 2-D plane, in em.
+///
+/// Square, and equal to the height of the four slider rows beside it, so the
+/// two halves of the popover end level. Derived in em rather than hard-coded in
+/// pixels: the sliders are laid out in em, so the chart has to be too, or it
+/// stops matching them as soon as the component size changes.
+///
+/// Each row is a label at the system's type size (1em text, ~1.4em line box),
+/// a `0.25em` gap and a track of `track_height + 0.5em` (1.75em), so 3.4em;
+/// four rows plus three `0.5em` gaps between them is 15.1em.
+const PLANE_SIDE: Rems = rems(15.1);
+
+impl Plane {
+  /// Samples the plane at the picker's current position.
+  ///
+  /// `current` fills the axes this plane does not show, so the bitmap is a
+  /// slice through the actual colour space rather than through some fixed
+  /// origin.
+  fn sample(kind: PlaneKind, current: ColorPickerHct) -> Self {
+    let ((x_axis, x_max), (y_axis, y_max)) = kind.axes();
+    let n = PLANE_RESOLUTION;
+    let conditions = ViewingConditions::default();
+
+    let mut rgba = vec![0u8; n * n * 4];
+    let mut outside_srgb = vec![0u8; n * n];
+    let mut outside_p3 = vec![0u8; n * n];
+
+    for row in 0..n {
+      // Row 0 is the top of the bitmap, which is the *maximum* of the vertical
+      // axis.
+      let y_value = (1.0 - (row as f64 + 0.5) / n as f64) * f64::from(y_max);
+      for col in 0..n {
+        let x_value = (col as f64 + 0.5) / n as f64 * f64::from(x_max);
+
+        // Start from the fixed axis only: the two drawn axes are overwritten
+        // below, so seeding them from `current` would make the bitmap depend on
+        // values it does not show.
+        let (mut hue, mut chroma, mut tone) = match kind.fixed_axis() {
+          PlaneAxis::Hue => (f64::from(current.hue), 0.0, 0.0),
+          PlaneAxis::Chroma => (0.0, f64::from(current.chroma), 0.0),
+          PlaneAxis::Tone => (0.0, 0.0, f64::from(current.tone)),
+        };
+        match x_axis {
+          PlaneAxis::Hue => hue = x_value,
+          PlaneAxis::Chroma => chroma = x_value,
+          PlaneAxis::Tone => tone = x_value,
+        }
+        match y_axis {
+          PlaneAxis::Hue => hue = y_value,
+          PlaneAxis::Chroma => chroma = y_value,
+          PlaneAxis::Tone => tone = y_value,
+        }
+
+        // One CAM16 inverse, no HCT solve: the solve finds the nearest
+        // *displayable* colour, which is the one thing this view must not do —
+        // it has to show what was asked for, and separately whether that was
+        // displayable.
+        let xyz = Cam16::xyz_from_hct(tone, chroma, hue, &conditions);
+        let linear = woocraft_colors::linear_srgb(xyz);
+        let inside = linear.iter().all(|c| (-1e-3..=1.0 + 1e-3).contains(c));
+        let p3_inside = woocraft_colors::in_p3(xyz);
+
+        let index = row * n + col;
+        outside_srgb[index] = u8::from(!inside);
+        outside_p3[index] = u8::from(!p3_inside);
+
+        // Outside sRGB the sample is drawn clamped and dimmed, so the shape of
+        // what the display cannot show is visible rather than blank.
+        let alpha = if inside { 255u8 } else { 90 };
+        let offset = index * 4;
+        rgba[offset] = to_byte(delinearize(linear[0]));
+        rgba[offset + 1] = to_byte(delinearize(linear[1]));
+        rgba[offset + 2] = to_byte(delinearize(linear[2]));
+        rgba[offset + 3] = alpha;
+      }
+    }
+
+    Self {
+      width: n,
+      height: n,
+      rgba,
+      outside_srgb,
+      outside_p3,
+    }
+  }
+}
+
+/// A clamped `0..=1` channel as an 8-bit value.
+fn to_byte(value: f64) -> u8 {
+  (value.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+/// The sRGB transfer function, for turning linear channels back into display
+/// values. Clamped, because the plane paints clamped colours.
+fn delinearize(linear: f64) -> f64 {
+  let value = linear.clamp(0.0, 1.0);
+  if value <= 0.003_130_8 {
+    value * 12.92
+  } else {
+    1.055 * value.powf(1.0 / 2.4) - 0.055
+  }
+}
+
+/// Paints the hue/chroma plane, its axes and both gamut boundaries.
+fn paint_plane(
+  plane: &Plane, kind: PlaneKind, current: ColorPickerHct, tier: Size, bounds: Bounds<Pixels>,
+  window: &mut Window, cx: &mut App,
+) {
+  let rem_size = window.rem_size();
+  // Room for the axis labels, which are at the system's single type size.
+  let axis_inset = rems(1.5).to_pixels(rem_size);
+
+  let plot = Bounds::new(
+    point(bounds.origin.x + axis_inset, bounds.origin.y),
+    size(
+      (bounds.size.width - axis_inset).max(px(1.)),
+      (bounds.size.height - axis_inset).max(px(1.)),
+    ),
+  );
+
+  // One textured quad for the whole plane. gpui's `RenderImage` wants BGRA, and
+  // the bitmap is built RGBA, so the swap happens here rather than in the
+  // sampler.
+  let mut bgra = plane.rgba.clone();
+  for pixel in bgra.as_chunks_mut::<4>().0 {
+    pixel.swap(0, 2);
+  }
+  let buffer = image::RgbaImage::from_raw(plane.width as u32, plane.height as u32, bgra)
+    .expect("plane bitmap is width * height * 4 bytes");
+  let image = std::sync::Arc::new(gpui::RenderImage::new(vec![image::Frame::new(buffer)]));
+  window
+    .paint_image(plot, plot, gpui::Corners::default(), image, 0, false)
+    .ok();
+
+  // Gamut boundaries: only the edge pixels of each mask, so the interior is not
+  // overpainted.
+  let srgb_color = cx.theme().foreground.opacity(0.75);
+  let p3_color = cx.theme().info.opacity(0.85);
+  let cell_w = plot.size.width / plane.width as f32;
+  let cell_h = plot.size.height / plane.height as f32;
+
+  let draw_edge = |mask: &[u8], color: Hsla, window: &mut Window| {
+    for row in 0..plane.height {
+      for col in 0..plane.width {
+        let index = row * plane.width + col;
+        if mask[index] == 0 {
+          continue;
+        }
+        let edge = (col > 0 && mask[index - 1] == 0)
+          || (col + 1 < plane.width && mask[index + 1] == 0)
+          || (row > 0 && mask[index - plane.width] == 0)
+          || (row + 1 < plane.height && mask[index + plane.width] == 0);
+        if !edge {
+          continue;
+        }
+        let x = plot.origin.x + cell_w * col as f32;
+        let y = plot.origin.y + cell_h * row as f32;
+        window.paint_quad(fill(
+          Bounds::new(point(x, y), size(cell_w.max(px(1.)), cell_h.max(px(1.)))),
+          color,
+        ));
+      }
+    }
+  };
+  draw_edge(&plane.outside_srgb, srgb_color, window);
+  draw_edge(&plane.outside_p3, p3_color, window);
+
+  // Axes.
+  let axis = cx.theme().border;
+  window.paint_quad(fill(
+    Bounds::new(
+      point(plot.origin.x, plot.bottom()),
+      size(plot.size.width, px(1.)),
+    ),
+    axis,
+  ));
+  window.paint_quad(fill(
+    Bounds::new(plot.origin, size(px(1.), plot.size.height)),
+    axis,
+  ));
+
+  // Current position.
+  let ((x_axis, x_max), (y_axis, y_max)) = kind.axes();
+  let marker_x = plot.origin.x + plot.size.width * (axis_value(x_axis, current) / x_max);
+  let marker_y = plot.bottom() - plot.size.height * (axis_value(y_axis, current) / y_max);
+  let ring = Bounds::new(
+    point(marker_x - px(4.), marker_y - px(4.)),
+    size(px(8.), px(8.)),
+  );
+  window.paint_quad(
+    fill(ring, Hsla::transparent_black())
+      .border_widths(px(2.))
+      .border_color(cx.theme().foreground),
+  );
+
+  // Axis labels use the same size as every other label in the system; the room
+  // they need is taken out of the plot instead of out of the type scale.
+  let mut text_style = window.text_style();
+  text_style.color = cx.theme().muted_foreground;
+  text_style.font_size = tier.text_size().into();
+  let font_size = text_style.font_size.to_pixels(rem_size);
+  let draw_label = |window: &mut Window, text: &str, at: Point<Pixels>, cx: &mut App| {
+    let runs = [text_style.to_run(text.len())];
+    let shaped = window
+      .text_system()
+      .shape_line(text.to_string().into(), font_size, &runs, None);
+    shaped
+      .paint(at, font_size, TextAlign::Left, None, window, cx)
+      .ok();
+  };
+
+  draw_label(
+    window,
+    &axis_label(x_axis, 0.0),
+    point(plot.origin.x, plot.bottom() + px(1.)),
+    cx,
+  );
+  draw_label(
+    window,
+    &axis_label(x_axis, x_max),
+    point(plot.right() - px(28.), plot.bottom() + px(1.)),
+    cx,
+  );
+  draw_label(
+    window,
+    axis_name(y_axis),
+    point(plot.origin.x - axis_inset + px(1.), plot.origin.y),
+    cx,
+  );
+  draw_label(
+    window,
+    &axis_label(y_axis, y_max),
+    point(plot.origin.x - axis_inset + px(1.), plot.origin.y - px(6.)),
+    cx,
+  );
+}
+
+/// The current value of one plane axis.
+fn axis_value(axis: PlaneAxis, current: ColorPickerHct) -> f32 {
+  match axis {
+    PlaneAxis::Hue => current.hue,
+    PlaneAxis::Chroma => current.chroma,
+    PlaneAxis::Tone => current.tone,
+  }
+}
+
+/// The short name of an axis, for the vertical label.
+fn axis_name(axis: PlaneAxis) -> &'static str {
+  match axis {
+    PlaneAxis::Hue => "H",
+    PlaneAxis::Chroma => "C",
+    PlaneAxis::Tone => "T",
+  }
+}
+
+/// A tick label for one end of an axis.
+fn axis_label(axis: PlaneAxis, value: f32) -> String {
+  match axis {
+    PlaneAxis::Hue => format!("{value:.0}°"),
+    _ => format!("{value:.0}"),
+  }
+}
+
+fn render_plane(
+  current: ColorPickerHct, kind: PlaneKind, plane: Arc<Plane>, size: Size, cx: &mut App,
+) -> impl IntoElement {
+  let label = cx.theme().muted_foreground;
+  let title = match kind {
+    PlaneKind::HueChroma => "color_picker.plane_hc",
+    PlaneKind::HueTone => "color_picker.plane_ht",
+    PlaneKind::ChromaTone => "color_picker.plane_ct",
+  };
+
+  v_flex()
+    .flex_none()
+    .gap(rems(0.25))
+    .child(
+      div()
+        .text_size(size.text_size())
+        .text_color(label)
+        .child(SharedString::from(translate_woocraft(title))),
+    )
+    // Square: the plane is a chart of two equal-weight axes, so an oblong box
+    // would distort the shape of the gamut boundary. The side is fixed rather
+    // than derived from the column, because the popover's height follows the
+    // four slider rows and stretching to it is what made the chart a sliver.
+    .child(
+      div()
+        .size(PLANE_SIDE)
+        .relative()
+        .rounded(cx.theme().radius)
+        .overflow_hidden()
+        .border_1()
+        .border_color(cx.theme().border)
+        .child(
+          canvas(
+            move |_, _, _| {},
+            move |bounds, _, window, cx| {
+              paint_plane(&plane, kind, current, size, bounds, window, cx);
+            },
+          )
+          .absolute()
+          .size_full(),
+        ),
+    )
 }
 
 fn render_channel_row(
@@ -692,6 +1167,33 @@ fn render_channel_row(
   });
   let out_of_gamut = is_out_of_gamut(current_hct);
 
+  // Only the channel that was actually clamped says so. A channel whose value
+  // survived the gamut mapping keeps its single figure: showing an arrow with
+  // the same number on both sides would suggest a change that did not happen.
+  let achieved = out_of_gamut.then(|| {
+    // `to_hct` re-reads the produced color, so its chroma is what the display
+    // can actually show; hue and tone come through unchanged.
+    let produced = to_hct(current_hct);
+    channel.value(ColorPickerHct {
+      hue: produced.hue() as f32,
+      chroma: produced.chroma() as f32,
+      tone: produced.tone().value() as f32,
+      alpha: current_hct.alpha,
+    })
+  });
+  let clamped = achieved.filter(|achieved| (achieved - value).abs() > 0.5);
+
+  // One label per row: either the value, or `requested → achieved` when the
+  // gamut forced it down.
+  let label = match clamped {
+    Some(achieved) => format!(
+      "{} → {}",
+      format_channel_value(channel, value),
+      format_channel_value(channel, achieved),
+    ),
+    None => format_channel_value(channel, value),
+  };
+
   let state_for_bounds = state.clone();
   let state_for_down = state.clone();
   let state_for_idle_move = state.clone();
@@ -706,30 +1208,19 @@ fn render_channel_row(
       h_flex()
         .w_full()
         .justify_between()
-        .text_xs()
+        .text_size(size.text_size())
         .text_color(cx.theme().muted_foreground)
         .child(SharedString::from(translate_woocraft(channel.i18n_key())))
         .child(
-          h_flex()
-            .items_center()
-            .gap(rems(0.375))
-            .child(
-              div()
-                .text_color(if out_of_gamut {
-                  cx.theme().warning
-                } else {
-                  cx.theme().muted_foreground
-                })
-                .child(format_channel_value(channel, value)),
-            )
-            .when(out_of_gamut, |this| {
-              this.child(
-                div()
-                  .text_color(cx.theme().warning)
-                  .font_semibold()
-                  .child("!"),
-              )
-            }),
+          h_flex().items_center().gap(rems(0.375)).child(
+            div()
+              .text_color(if clamped.is_some() {
+                cx.theme().warning
+              } else {
+                cx.theme().muted_foreground
+              })
+              .child(SharedString::from(label)),
+          ),
         ),
     )
     .child(
@@ -1270,6 +1761,146 @@ mod tests {
       PickerChannel::Hue,
       PickerChannel::Alpha,
     ]
+  }
+
+  #[test]
+  fn plane_follows_the_dragged_slider() {
+    // The plane explains the two axes the dragged slider does not control.
+    assert_eq!(
+      PlaneKind::for_channel(PickerChannel::Tone),
+      PlaneKind::HueChroma
+    );
+    assert_eq!(
+      PlaneKind::for_channel(PickerChannel::Chroma),
+      PlaneKind::HueTone
+    );
+    assert_eq!(
+      PlaneKind::for_channel(PickerChannel::Hue),
+      PlaneKind::ChromaTone
+    );
+    // Alpha has no plane; it keeps the default view.
+    assert_eq!(
+      PlaneKind::for_channel(PickerChannel::Alpha),
+      PlaneKind::HueChroma
+    );
+  }
+
+  #[test]
+  fn the_plane_shown_during_a_drag_explains_the_other_two_axes() {
+    // Dragging an axis shows the plane of the two axes it is *not* setting, so
+    // the chart answers "where does this value sit" for the dimensions the drag
+    // leaves alone.
+    for (channel, kind) in [
+      (PickerChannel::Tone, PlaneKind::HueChroma),
+      (PickerChannel::Chroma, PlaneKind::HueTone),
+      (PickerChannel::Hue, PlaneKind::ChromaTone),
+      // Alpha has no plane of its own.
+      (PickerChannel::Alpha, PlaneKind::HueChroma),
+    ] {
+      assert_eq!(PlaneKind::for_channel(channel), kind);
+    }
+  }
+
+  #[test]
+  fn a_plane_is_reused_until_its_fixed_axis_moves() {
+    let mut state = ColorPickerState::new();
+
+    // Idle, the plane is hue/chroma and holds tone.
+    let (kind, first) = state.plane();
+    assert_eq!(kind, PlaneKind::HueChroma);
+    assert_eq!(kind.fixed_axis(), PlaneAxis::Tone);
+
+    // Moving a drawn axis leaves the bitmap valid: the plane sweeps it.
+    state.value.hue += 30.0;
+    state.value.chroma += 10.0;
+    let (_, after_drawn) = state.plane();
+    assert!(
+      Arc::ptr_eq(&first, &after_drawn),
+      "moving a drawn axis must not resample"
+    );
+
+    // Moving the fixed axis invalidates it: that is a different slice.
+    state.value.tone += 5.0;
+    let (_, after_fixed) = state.plane();
+    assert!(
+      !Arc::ptr_eq(&first, &after_fixed),
+      "moving the fixed axis must resample"
+    );
+  }
+
+  #[test]
+  fn the_plane_stays_after_a_drag_ends() {
+    let mut state = ColorPickerState::new();
+    assert_eq!(state.plane().0, PlaneKind::HueChroma);
+
+    // Dragging hue switches to chroma/tone...
+    state.dragging = Some(PickerChannel::Hue);
+    let (kind, dragged) = state.plane();
+    assert_eq!(kind, PlaneKind::ChromaTone);
+
+    // ...and releasing keeps it, so the user is not thrown back to the default
+    // view the moment they let go.
+    state.dragging = None;
+    let (kind, released) = state.plane();
+    assert_eq!(kind, PlaneKind::ChromaTone);
+    assert!(
+      Arc::ptr_eq(&dragged, &released),
+      "releasing must not rebuild the plane"
+    );
+
+    // A later drag of another slider moves the view again.
+    state.dragging = Some(PickerChannel::Chroma);
+    assert_eq!(state.plane().0, PlaneKind::HueTone);
+  }
+
+  #[test]
+  fn marker_matches_the_gamut_it_is_drawn_in() {
+    // The reported bug: #22F583 is a legal sRGB colour, but its marker sat
+    // outside the sRGB boundary because the plane sampled with tone passed as
+    // CAM16's J.
+    let conditions = ViewingConditions::default();
+    let srgb = woocraft_colors::Srgb::from_hex("#22F583FF").unwrap();
+    let hct = Hct::from_srgb(srgb);
+
+    // The colour itself is inside both gamuts.
+    let cam = Cam16::from_srgb(srgb, &conditions);
+    assert!(woocraft_colors::in_srgb(cam.to_xyz(&conditions)));
+
+    // And the same coordinates, sampled the way the plane samples them, land
+    // in the same place.
+    let xyz = Cam16::xyz_from_hct(hct.tone().value(), hct.chroma(), hct.hue(), &conditions);
+    assert!(
+      woocraft_colors::in_srgb(xyz),
+      "the plane's own sampling puts {} outside sRGB, so its marker would drift out",
+      srgb.to_hex()
+    );
+    assert!(woocraft_colors::in_p3(xyz));
+  }
+
+  #[test]
+  fn plane_marks_both_gamuts() {
+    let plane = Plane::sample(
+      PlaneKind::HueChroma,
+      ColorPickerHct {
+        hue: 0.0,
+        chroma: 0.0,
+        tone: 50.0,
+        alpha: 1.0,
+      },
+    );
+    let srgb_out = plane.outside_srgb.iter().filter(|v| **v == 1).count();
+    let p3_out = plane.outside_p3.iter().filter(|v| **v == 1).count();
+
+    assert!(
+      srgb_out > 0,
+      "the plane should show colours sRGB cannot hold"
+    );
+    assert!(
+      p3_out < srgb_out,
+      "P3 is wider than sRGB, so fewer samples may fall outside it"
+    );
+    assert!(p3_out > 0, "very saturated requests should still leave P3");
+    assert_eq!(plane.rgba.len(), plane.width * plane.height * 4);
   }
 
   #[test]

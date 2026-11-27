@@ -39,6 +39,9 @@ paste      = "วาง"
 select_all = "เลือกทั้งหมด"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "Chroma / Tone"
+plane_hc        = "Hue / Chroma"
+plane_ht        = "Hue / Tone"
 alpha           = "ความทึบ"
 chroma          = "ความอิ่มสี"
 hex_placeholder = "#RRGGBBAA"

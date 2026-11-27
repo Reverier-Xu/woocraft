@@ -63,7 +63,7 @@ mod tone;
 #[cfg(test)]
 mod reference;
 
-pub use cam16::{Cam16, ViewingConditions};
+pub use cam16::{Cam16, ViewingConditions, in_p3, in_srgb, linear_srgb};
 pub use contrast::Contrast;
 pub use hct::Hct;
 pub use solver::HctSolver;

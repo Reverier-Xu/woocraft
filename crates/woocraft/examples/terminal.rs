@@ -200,7 +200,7 @@ impl Render for TerminalDemo {
                     .px_2()
                     .py_0p5()
                     .rounded(theme.radius)
-                    .bg(theme.muted)
+                    .bg(woocraft::track_color(theme))
                     .text_color(theme.muted_foreground)
                     .child(flash),
                 )

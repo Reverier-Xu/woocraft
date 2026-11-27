@@ -12,7 +12,7 @@ use gpui::{
   prelude::FluentBuilder as _, relative,
 };
 
-use crate::{ActiveTheme, StyledExt};
+use crate::{ActiveTheme, Size, StyledExt};
 
 /// Platform-specific display symbols for special keys and modifier names,
 /// keyed by the lowercase gpui key name. The modifier pass in `format` looks
@@ -209,7 +209,7 @@ impl RenderOnce for Kbd {
 
     div()
       .text_color(cx.theme().muted_foreground)
-      .bg(cx.theme().muted)
+      .bg(crate::track_color(cx.theme()))
       .when(self.outline, |this| {
         this
           .border_1()
@@ -222,7 +222,7 @@ impl RenderOnce for Kbd {
       .text_center()
       .rounded_sm()
       .line_height(relative(1.))
-      .text_xs()
+      .text_size(Size::Medium.text_size())
       .whitespace_normal()
       .flex_shrink_0()
       .refine_style(&self.style)

@@ -138,7 +138,9 @@ impl RenderOnce for Badge {
     };
 
     let badge_color = self.color.unwrap_or(cx.theme().danger);
-    let text_color = cx.theme().primary_foreground;
+    // The badge accepts an arbitrary fill, so its text is derived from that
+    // fill rather than borrowed from another role's foreground.
+    let text_color = crate::foreground_for(badge_color);
 
     // Badge Medium = Small Input Size
     let size = self.size.smaller();
@@ -151,7 +153,7 @@ impl RenderOnce for Badge {
         .rounded_full()
         .bg(badge_color)
         .text_color(text_color)
-        .text_xs()
+        .text_size(self.size.text_size())
         .top_0()
         .right_0()
         .size(size.badge_dot_size())
@@ -170,7 +172,7 @@ impl RenderOnce for Badge {
           .rounded_full()
           .bg(badge_color)
           .text_color(text_color)
-          .text_xs()
+          .text_size(self.size.text_size())
           .top(-rems(0.375))
           .right(-rems(0.375))
           .component_padding(size)

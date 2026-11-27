@@ -277,7 +277,7 @@ impl ListDelegate for DemoListDelegate {
         .px_2()
         .py_1()
         .justify_between()
-        .bg(cx.theme().muted.opacity(0.3))
+        .bg(woocraft::track_color(cx.theme()))
         .child(div().font_semibold().child(self.section_titles[section]))
         .child(
           div()
@@ -1066,7 +1066,7 @@ impl ControlsWindow {
                 Progress::new()
                   .label("[registry] 欢迎使用进制回溯！")
                   .color(cx.theme().primary)
-                  .track_color(cx.theme().muted)
+                  .track_color(woocraft::track_color(cx.theme()))
                   .text_color(cx.theme().muted_foreground)
                   .value(slider_value),
               ),
@@ -1075,7 +1075,7 @@ impl ControlsWindow {
               ProgressCircle::new()
                 .value(slider_value)
                 .color(cx.theme().primary)
-                .track_color(cx.theme().muted)
+                .track_color(woocraft::track_color(cx.theme()))
                 .text_color(cx.theme().muted_foreground),
             ),
         ),

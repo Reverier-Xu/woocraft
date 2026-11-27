@@ -201,29 +201,31 @@ impl RenderOnce for Tag {
         cx.theme().primary_foreground,
         cx.theme().primary,
       ),
-      TagVariant::Secondary => (cx.theme().muted, cx.theme().foreground, cx.theme().border),
+      TagVariant::Secondary => (
+        crate::track_color(cx.theme()),
+        cx.theme().foreground,
+        cx.theme().border,
+      ),
       TagVariant::Danger => (
         cx.theme().danger,
-        cx.theme().primary_foreground,
+        cx.theme().danger_foreground,
         cx.theme().danger,
       ),
       TagVariant::Success => (
         cx.theme().success,
-        cx.theme().primary_foreground,
+        cx.theme().success_foreground,
         cx.theme().success,
       ),
       TagVariant::Warning => (
         cx.theme().warning,
-        cx.theme().primary_foreground,
+        cx.theme().warning_foreground,
         cx.theme().warning,
       ),
-      TagVariant::Info => (
-        cx.theme().info,
-        cx.theme().primary_foreground,
-        cx.theme().info,
-      ),
+      TagVariant::Info => (cx.theme().info, cx.theme().info_foreground, cx.theme().info),
       TagVariant::Custom => (
-        self.custom_bg.unwrap_or(cx.theme().muted),
+        self
+          .custom_bg
+          .unwrap_or_else(|| crate::track_color(cx.theme())),
         self.custom_fg.unwrap_or(cx.theme().foreground),
         self.custom_border.unwrap_or(cx.theme().border),
       ),
@@ -249,7 +251,7 @@ impl RenderOnce for Tag {
       .items_center()
       .border_1()
       .line_height(gpui::relative(1.0))
-      .text_xs()
+      .text_size(self.size.text_size())
       .component_padding(size)
       .bg(bg)
       .text_color(fg)

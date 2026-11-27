@@ -39,6 +39,9 @@ paste      = "Vložit"
 select_all = "Vybrat vše"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "Chroma / Tone"
+plane_hc        = "Hue / Chroma"
+plane_ht        = "Hue / Tone"
 alpha           = "Alfa"
 chroma          = "Chroma"
 hex_placeholder = "#RRGGBBAA"

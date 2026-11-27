@@ -39,6 +39,9 @@ paste      = "Lim inn"
 select_all = "Merk alt"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "Chroma / Tone"
+plane_hc        = "Hue / Chroma"
+plane_ht        = "Hue / Tone"
 alpha           = "Alfa"
 chroma          = "Kroma"
 hex_placeholder = "#RRGGBBAA"

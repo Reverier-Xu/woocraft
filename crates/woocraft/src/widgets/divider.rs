@@ -9,7 +9,7 @@ use gpui::{
   StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
 
-use crate::{ActiveTheme, StyledExt};
+use crate::{ActiveTheme, Size, StyledExt};
 
 /// Line style for divider rendering.
 #[derive(Clone, Copy, PartialEq, Default)]
@@ -151,7 +151,7 @@ impl RenderOnce for Divider {
             .px_2()
             .py_1()
             .mx_auto()
-            .text_xs()
+            .text_size(Size::Medium.text_size())
             .bg(cx.theme().background)
             .text_color(cx.theme().muted_foreground)
             .child(label),

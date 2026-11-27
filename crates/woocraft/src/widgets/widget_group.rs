@@ -437,7 +437,7 @@ impl RenderOnce for WidgetGroup {
                   .component_h(effective_size)
                   .px(effective_size.component_px())
                   .bg(if self.disabled {
-                    cx.theme().muted
+                    cx.theme().background.opacity(0.6)
                   } else {
                     cx.theme().background
                   })

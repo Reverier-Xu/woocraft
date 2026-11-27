@@ -330,7 +330,7 @@ impl RenderOnce for AvatarGroup {
         this.child(
           Avatar::new()
             .name("+")
-            .bg_color(cx.theme().muted)
+            .bg_color(crate::track_color(cx.theme()))
             .text_color(cx.theme().muted_foreground)
             .with_size(self.size)
             .ml(item_ml),

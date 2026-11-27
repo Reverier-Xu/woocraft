@@ -197,7 +197,7 @@ impl RenderOnce for OtpInput {
               cx.theme().input
             })
             .bg(if self.disabled {
-              cx.theme().muted
+              cx.theme().background.opacity(0.6)
             } else {
               cx.theme().background
             })

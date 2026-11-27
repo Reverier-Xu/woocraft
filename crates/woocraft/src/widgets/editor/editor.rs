@@ -168,7 +168,7 @@ impl RenderOnce for Editor {
     let gap_x = self.size.component_gap();
 
     let bg = if state.disabled {
-      cx.theme().muted
+      cx.theme().background.opacity(0.6)
     } else if state.mode.is_code_editor() {
       cx.theme().editor_background
     } else {

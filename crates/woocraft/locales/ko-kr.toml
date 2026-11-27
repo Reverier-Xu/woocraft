@@ -39,6 +39,9 @@ paste      = "붙여넣기"
 select_all = "모두 선택"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "채도 / 명도"
+plane_hc        = "색상 / 채도"
+plane_ht        = "색상 / 명도"
 alpha           = "불투명도"
 chroma          = "채도"
 hex_placeholder = "#RRGGBBAA"

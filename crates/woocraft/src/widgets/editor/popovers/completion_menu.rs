@@ -14,7 +14,7 @@ const POPOVER_GAP: Rems = rems(0.25);
 
 use super::{editor_popover, render_markdown};
 use crate::{
-  ActiveTheme, IndexPath, Selectable, actions, h_flex,
+  ActiveTheme, IndexPath, Selectable, Size, actions, h_flex,
   widgets::{
     editor as input,
     editor::{InputState, RopeExt},
@@ -106,7 +106,7 @@ impl RenderOnce for CompletionMenuItem {
       .id(self.ix)
       .gap_2()
       .p_1()
-      .text_xs()
+      .text_size(Size::Medium.text_size())
       .line_height(relative(1.))
       .rounded(cx.theme().radius.half())
       .when(item.deprecated.unwrap_or(false), |this| this.line_through())

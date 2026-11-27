@@ -39,6 +39,9 @@ paste      = "Вставить"
 select_all = "Выделить всё"
 
 [tech.woooo.woocraft.color_picker]
+plane_ct        = "Chroma / Tone"
+plane_hc        = "Hue / Chroma"
+plane_ht        = "Hue / Tone"
 alpha           = "Альфа"
 chroma          = "Хрома"
 hex_placeholder = "#RRGGBBAA"

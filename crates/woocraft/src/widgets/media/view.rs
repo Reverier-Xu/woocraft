@@ -263,7 +263,7 @@ fn video_stage_container(theme: &Theme) -> gpui::Div {
     .flex_1()
     .relative()
     .overflow_hidden()
-    .bg(theme.muted)
+    .bg(crate::track_color(theme))
 }
 
 /// The track placeholder: icon plus title and artist, for players without a
