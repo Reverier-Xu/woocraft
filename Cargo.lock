@@ -8155,6 +8155,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "woocraft-colors"
+version = "0.8.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "woocraft-terminal"
 version = "0.8.0"
 dependencies = [

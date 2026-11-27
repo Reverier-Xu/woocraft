@@ -1,0 +1,22 @@
+[package]
+name        = "woocraft-colors"
+description = "HCT color space and perceptual color utilities for the Woocraft design system."
+
+authors      = { workspace = true }
+edition      = { workspace = true }
+homepage     = { workspace = true }
+license      = { workspace = true }
+publish      = { workspace = true }
+readme       = { workspace = true }
+repository   = { workspace = true }
+rust-version = { workspace = true }
+version      = { workspace = true }
+
+[dependencies]
+serde = { workspace = true, optional = true }
+
+[features]
+default = []
+# `Serialize`/`Deserialize` for the public color types, so themes and palettes
+# can be persisted alongside the rest of a design system's tokens.
+serde = ["dep:serde"]
