@@ -153,12 +153,24 @@ impl Default for SyntaxTokenHues {
   }
 }
 
+/// Hue, chroma and tone tokens a theme is built from.
+///
+/// Every hue is a CAM16 hue angle. CAM16 does not distribute hues evenly: the
+/// arc that reads as orange-to-amber is wide (roughly 50..100) while red sits
+/// near 27 and yellow near 111, so hues chosen by eye in another space will
+/// land closer together here than expected. The defaults below are spaced by
+/// measured perceptual distance rather than by equal angles.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ThemeTokens {
+  /// Brand hue.
   pub primary: f32,
+  /// Hue for errors and destructive actions.
   pub error: f32,
+  /// Hue for warnings and caution states.
   pub warning: f32,
+  /// Hue for success and confirmation states.
   pub success: f32,
+  /// Hue for informational states.
   pub info: f32,
   #[serde(default = "default_red_hue")]
   pub red: f32,
@@ -185,6 +197,14 @@ pub struct ThemeTokens {
   pub light_fill_tone: f32,
   /// Tone of the semantic fills in a dark theme.
   pub dark_fill_tone: f32,
+  /// Tone of the warning fill, as a step away from the theme's fill tone.
+  ///
+  /// Warning is the one role whose hue cannot hold chroma at the fill tone: the
+  /// amber arc has no saturated sRGB color at tone 40, so a warning painted
+  /// there comes out olive and reads as a dull error rather than a caution.
+  /// Lifting it a few tones gives the hue room to keep its chroma, which is
+  /// also why warning is conventionally brighter than danger.
+  pub warning_tone_step: f32,
   /// Tone of the page background in a light theme.
   pub light_bg_tone: f32,
   /// Tone of the page background in a dark theme.
@@ -202,7 +222,7 @@ fn default_secondary_hue() -> f32 {
 }
 
 fn default_red_hue() -> f32 {
-  24.0
+  20.0
 }
 
 fn default_green_hue() -> f32 {
@@ -214,7 +234,7 @@ fn default_blue_hue() -> f32 {
 }
 
 fn default_yellow_hue() -> f32 {
-  48.0
+  85.0
 }
 
 fn default_cyan_hue() -> f32 {
@@ -225,20 +245,21 @@ impl Default for ThemeTokens {
   fn default() -> Self {
     Self {
       primary: 248.0,
-      error: 24.0,
-      warning: 48.0,
+      error: 20.0,
+      warning: 85.0,
       success: 150.0,
       info: 248.0,
-      red: 24.0,
+      red: 20.0,
       green: 150.0,
       blue: 248.0,
-      yellow: 48.0,
+      yellow: 85.0,
       cyan: 190.0,
       accent: 200.0,
       secondary: 290.0,
       chroma: 48.0,
       light_fill_tone: 40.0,
       dark_fill_tone: 80.0,
+      warning_tone_step: 20.0,
       light_bg_tone: 98.0,
       dark_bg_tone: 12.0,
       surface_chroma: 0.6,
@@ -426,10 +447,19 @@ impl ThemeColors {
       f64::from(tokens.chroma),
       fill_tone,
     );
+    // Warning steps away from the fills *toward the background*, which is the
+    // direction with headroom in both modes: lighter in a light theme, darker
+    // in a dark one. Stepping up unconditionally would run a dark theme's
+    // warning off the top of the scale into white.
+    let warning_tone = if is_dark {
+      fill_tone - f64::from(tokens.warning_tone_step)
+    } else {
+      fill_tone + f64::from(tokens.warning_tone_step)
+    };
     let warning = Hct::new(
       f64::from(tokens.warning),
       f64::from(tokens.chroma),
-      fill_tone,
+      warning_tone,
     );
     let danger = Hct::new(f64::from(tokens.error), f64::from(tokens.chroma), fill_tone);
     let red = Hct::new(f64::from(tokens.red), f64::from(tokens.chroma), fill_tone);
@@ -710,7 +740,6 @@ mod tests {
       for (name, fill) in [
         ("info", colors.info),
         ("success", colors.success),
-        ("warning", colors.warning),
         ("danger", colors.danger),
         ("red", colors.red),
         ("green", colors.green),
@@ -727,6 +756,53 @@ mod tests {
         );
       }
     }
+  }
+
+  #[test]
+  fn warning_and_danger_stay_distinguishable() {
+    // Both are red-adjacent states, so the theme has to keep them apart by more
+    // than a few degrees of hue. CAM16 distances are measured in UCS, where
+    // ~5 is one just-noticeable step for large fields; 10 keeps the two states
+    // clearly different at a glance rather than merely not identical.
+    for is_dark in [false, true] {
+      let colors = ThemeColors::from_tokens(ThemeTokens::default(), is_dark);
+      let warning = super::hct_of_hsla(colors.warning);
+      let danger = super::hct_of_hsla(colors.danger);
+
+      let distance = warning.distance(danger);
+      assert!(
+        distance >= 10.0,
+        "warning {} and danger {} are only {distance:.2} apart (dark: {is_dark})",
+        warning.srgb(),
+        danger.srgb()
+      );
+
+      // And they must not be told apart by tone alone: a warning and an error
+      // at the same lightness would still read as the same colour.
+      let hue_delta = (warning.hue() - danger.hue()).abs() % 360.0;
+      let hue_delta = hue_delta.min(360.0 - hue_delta);
+      assert!(
+        hue_delta >= 40.0,
+        "warning and danger are only {hue_delta:.1}° apart (dark: {is_dark})"
+      );
+    }
+  }
+
+  #[test]
+  fn warning_keeps_its_chroma() {
+    // A warning painted at the shared fill tone comes out olive because the
+    // amber arc cannot hold chroma that low. The step exists to prevent that,
+    // so assert the result is actually saturated.
+    let colors = ThemeColors::light();
+    let warning = super::hct_of_hsla(colors.warning);
+    let danger = super::hct_of_hsla(colors.danger);
+
+    assert!(
+      warning.chroma() >= danger.chroma() * 0.9,
+      "warning chroma {:.1} should be comparable to danger's {:.1}",
+      warning.chroma(),
+      danger.chroma()
+    );
   }
 
   #[test]
@@ -811,6 +887,7 @@ mod tests {
             "dark_fill_tone": 80,
             "light_bg_tone": 98,
             "dark_bg_tone": 12,
+            "warning_tone_step": 20,
             "surface_chroma": 0.6
         }"#;
     let toml = r#"
@@ -825,6 +902,7 @@ mod tests {
             dark_fill_tone = 80
             light_bg_tone = 98
             dark_bg_tone = 12
+            warning_tone_step = 20
             surface_chroma = 0.6
         "#;
 
@@ -837,12 +915,12 @@ mod tests {
     assert_eq!(from_toml.dark_bg_tone, 12.0);
 
     // Hue tokens that a theme file omits still fall back to their defaults.
-    assert_eq!(from_json.red, 24.0);
+    assert_eq!(from_json.red, 20.0);
     assert_eq!(from_json.green, 150.0);
     assert_eq!(from_json.blue, 248.0);
-    assert_eq!(from_json.yellow, 48.0);
+    assert_eq!(from_json.yellow, 85.0);
     assert_eq!(from_json.cyan, 190.0);
-    assert_eq!(from_toml.red, 24.0);
+    assert_eq!(from_toml.red, 20.0);
     assert_eq!(from_toml.cyan, 190.0);
   }
 
@@ -858,13 +936,13 @@ mod tests {
 
     write!(
       json_file,
-      "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"chroma\":48,\"light_fill_tone\":40,\"dark_fill_tone\":80,\"light_bg_tone\":98,\"dark_bg_tone\":12,\"surface_chroma\":0.6}}"
+      "{{\"primary\":248,\"error\":24,\"warning\":48,\"success\":150,\"info\":248,\"accent\":130,\"chroma\":48,\"light_fill_tone\":40,\"dark_fill_tone\":80,\"light_bg_tone\":98,\"dark_bg_tone\":12,\"warning_tone_step\":20,\"surface_chroma\":0.6}}"
     )
     .expect("write json file");
 
     write!(
       toml_file,
-      "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nchroma = 48\nlight_fill_tone = 40\ndark_fill_tone = 80\nlight_bg_tone = 98\ndark_bg_tone = 12\nsurface_chroma = 0.6\n"
+      "primary = 248\nerror = 24\nwarning = 48\nsuccess = 150\ninfo = 248\naccent = 130\nchroma = 48\nlight_fill_tone = 40\ndark_fill_tone = 80\nlight_bg_tone = 98\ndark_bg_tone = 12\nwarning_tone_step = 20\nsurface_chroma = 0.6\n"
     )
     .expect("write toml file");
 

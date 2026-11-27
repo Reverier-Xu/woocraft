@@ -303,7 +303,7 @@ impl Render for PaletteWindow {
                 .text_color(cx.theme().muted_foreground)
                 .child(format!(
                   "tokens: primary={}° accent={}° secondary={}° chroma={} \
-                   fill tone(l/d)={}/{} bg tone(l/d)={}/{} surface chroma={} \
+                   fill tone(l/d)={}/{} warning step={} bg tone(l/d)={}/{} surface chroma={} \
                    | hues: error={}° warning={}° success={}° info={}°",
                   tokens.primary,
                   tokens.accent,
@@ -311,6 +311,7 @@ impl Render for PaletteWindow {
                   tokens.chroma,
                   tokens.light_fill_tone,
                   tokens.dark_fill_tone,
+                  tokens.warning_tone_step,
                   tokens.light_bg_tone,
                   tokens.dark_bg_tone,
                   tokens.surface_chroma,
