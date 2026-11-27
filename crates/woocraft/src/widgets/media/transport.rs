@@ -39,6 +39,13 @@
 //! Every built-in button is flat ([`crate::ButtonVariant::Flat`]): the bar is
 //! chrome over content, so the controls carry no resting surface of their own
 //! and only show one on hover, active or focus.
+//!
+//! # Seek preview
+//!
+//! [`PlayerTransport::seek_preview`] hangs a host-built element off the seek
+//! slider — a frame thumbnail, a timecode card — the same way `leading` and
+//! `trailing` replace a control group. The host is handed the position the
+//! pointer or the drag names; a picture for that position is its to provide.
 
 use std::{rc::Rc, time::Duration};
 
@@ -158,8 +165,28 @@ type TransportHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 /// A host-built replacement for one side of the second row.
 type TransportSlot = Rc<dyn Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement>;
 
+/// A host-built preview hung off the seek slider.
+type SeekPreviewBuilder = Rc<dyn Fn(SeekPreview, &mut Window, &mut App) -> AnyElement>;
+
 /// A host-built settings menu, opened by the settings button.
 type SettingsMenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+
+/// What a seek preview asks the host to draw.
+///
+/// The transport knows where the pointer or the drag stands in the entry; a
+/// picture for that position — a decoded frame, a cached thumbnail — is the
+/// host's to provide, since only the host has a thumbnail source. The timecode
+/// is measured in seconds of the current entry, so a preview can format it with
+/// [`format_time`](super::format_time) like the bar's own labels do.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SeekPreview {
+  /// The position the preview stands for, in seconds.
+  pub position: f64,
+  /// The duration of the current entry, in seconds; zero with nothing loaded.
+  pub duration: f64,
+  /// Whether a drag rather than a hover is showing the preview.
+  pub dragging: bool,
+}
 
 /// The player and window state one render pass draws its controls from.
 #[derive(Clone, Copy)]
@@ -204,6 +231,8 @@ pub struct PlayerTransport {
   leading: Option<TransportSlot>,
   /// Host-built replacement for the second row's trailing group.
   trailing: Option<TransportSlot>,
+  /// Host-built preview on the seek slider; `None` leaves the slider plain.
+  seek_preview: Option<SeekPreviewBuilder>,
   _subscriptions: Vec<Subscription>,
 }
 
@@ -294,6 +323,7 @@ impl PlayerTransport {
       settings_menu: None,
       leading: None,
       trailing: None,
+      seek_preview: None,
       _subscriptions: subscriptions,
     };
     transport.volume.update(cx, |slider, cx| {
@@ -444,6 +474,23 @@ impl PlayerTransport {
     mut self, build: impl Fn(&PlayerSnapshot, &mut Window, &mut App) -> AnyElement + 'static,
   ) -> Self {
     self.trailing = Some(Rc::new(build));
+    self
+  }
+
+  /// Hangs a host-built preview off the seek slider.
+  ///
+  /// The content is any element, not only a text tooltip: a seek bar preview is
+  /// typically a frame thumbnail with the timecode beside it (see the `player`
+  /// example). The closure is asked on every render while the preview is
+  /// visible — so it follows a drag's live position — and receives the position
+  /// it stands for, the entry's duration and whether a drag is showing it.
+  ///
+  /// It shows on hover anywhere along the rail and during a drag; see
+  /// [`Slider::preview`] for the lower-level trigger.
+  pub fn seek_preview(
+    mut self, build: impl Fn(SeekPreview, &mut Window, &mut App) -> AnyElement + 'static,
+  ) -> Self {
+    self.seek_preview = Some(Rc::new(build));
     self
   }
 
@@ -683,17 +730,29 @@ impl Render for PlayerTransport {
 
     // Row one: the timeline. The slider takes whatever the two ticking
     // labels leave, so the bar fills its container at any width.
+    let mut seek = Slider::new(format!("player-seek-{id}"), &self.seek).with_size(size);
+    if let Some(build) = self.seek_preview.clone() {
+      // The slider speaks percentages of the entry; a preview speaks seconds,
+      // so the conversion lives here instead of in every host.
+      seek = seek.preview(move |preview, window, cx| {
+        build(
+          SeekPreview {
+            position: seek_target(duration, preview.value),
+            duration,
+            dragging: preview.dragging,
+          },
+          window,
+          cx,
+        )
+      });
+    }
+
     let timeline = h_flex()
       .w_full()
       .items_center()
       .container_gap(size)
       .child(time_label(("player-position", id), size, &theme, position))
-      .child(
-        div()
-          .min_w_0()
-          .flex_1()
-          .child(Slider::new(format!("player-seek-{id}"), &self.seek).with_size(size)),
-      )
+      .child(div().min_w_0().flex_1().child(seek))
       .child(time_label(("player-duration", id), size, &theme, duration));
 
     let mut rows = vec![timeline.into_any_element()];
@@ -835,8 +894,13 @@ fn should_seek(position: f64, duration: f64, slider_percentage: f32, player_driv
   if player_driven || duration <= 0.0 || duration.is_nan() {
     return false;
   }
-  let target = duration * f64::from(slider_percentage) / 100.0;
-  (target - position).abs() >= SEEK_EPSILON_SECS
+  (seek_target(duration, slider_percentage) - position).abs() >= SEEK_EPSILON_SECS
+}
+
+/// The position a percentage of the entry stands for: the seek slider speaks
+/// percentages, the player and its previews speak seconds.
+fn seek_target(duration: f64, percentage: f32) -> f64 {
+  duration * f64::from(percentage) / 100.0
 }
 
 #[cfg(test)]

@@ -1460,8 +1460,13 @@ fn render_image(frame: &VideoFrame) -> Arc<RenderImage> {
   Arc::new(RenderImage::new([image::Frame::new(buffer)]))
 }
 
-/// Exposed for views: `Duration` formatting that never shows a negative time.
-pub(crate) fn format_time(position: Duration) -> String {
+/// `Duration` formatting that never shows a negative time: `m:ss`, or
+/// `h:mm:ss` past the hour.
+///
+/// Shared with the bar's ticking labels and exported for hosts that render
+/// their own: a seek preview shows a timecode, and it should read exactly like
+/// the labels beside it.
+pub fn format_time(position: Duration) -> String {
   let total = position.as_secs();
   let (hours, minutes, seconds) = (total / 3600, (total % 3600) / 60, total % 60);
   if hours > 0 {

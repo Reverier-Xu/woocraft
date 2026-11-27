@@ -40,7 +40,12 @@
 //!   bottom of the stage ([`PlayerTransport::floating`]). It appears on mouse
 //!   activity over the stage, stays while the pointer rests on it, and goes
 //!   away once the pointer is idle or leaves — so the picture has the whole
-//!   window at rest.
+//!   window at rest. Its seek slider carries a host-built preview
+//!   ([`PlayerTransport::seek_preview`]): a timecode card with the position's
+//!   place in the entry, shown on hover anywhere along the rail and live while
+//!   the value is dragged. It holds no frame thumbnail because mpv hands this
+//!   wrapper only the frame it is playing; a host with its own thumbnail cache
+//!   puts `img(frame)` in the same card.
 //! - The control panel floats over the right edge, closed by default: the
 //!   transport's settings button toggles it, which is why the transport hides
 //!   its own settings menu ([`PlayerTransport::on_control`] rewires the button
@@ -78,19 +83,19 @@
 use std::time::Duration;
 
 use gpui::{
-  AnyElement, App, AppContext as _, Bounds, ClickEvent, Context, Div, Entity,
+  AnyElement, App, AppContext as _, Bounds, ClickEvent, Context, Div, Entity, FontWeight,
   InteractiveElement as _, IntoElement, ParentElement as _, Render,
   StatefulInteractiveElement as _, Styled as _, Subscription, Task, Window, WindowBounds,
-  WindowOptions, deferred, div, prelude::FluentBuilder as _, px, rems,
+  WindowOptions, deferred, div, prelude::FluentBuilder as _, px, relative, rems,
 };
 use woocraft::{
   ActiveTheme as _, Button, ButtonVariants as _, Disableable, Divider, DropdownMenu, Icon,
   IconLabel, IconName, Input, InputEvent, InputState, Player, PlayerEvent, PlayerOptions,
   PlayerPlaylist, PlayerTrackMenu, PlayerTransport, PlayerView, PopupMenuItem, Presence,
-  PropertyValue, ScrollableElement, ScrollbarShow, Sizable, Size, Slider, SliderEvent,
+  PropertyValue, ScrollableElement, ScrollbarShow, SeekPreview, Sizable, Size, Slider, SliderEvent,
   SliderOrigin, SliderState, StyleSized, Switch, Theme, ThemeMode, TitleBar, Tooltip, Track,
-  TrackKind, Transition, TransportControl, VideoTransport, h_flex, init, translate_woocraft,
-  v_flex, window_border,
+  TrackKind, Transition, TransportControl, VideoTransport, h_flex, init, track_color,
+  translate_woocraft, v_flex, window_border,
 };
 
 /// The decoder menu entries, as mpv `hwdec` values: the four generic modes
@@ -2321,16 +2326,11 @@ fn track_label(track: &Track) -> String {
     .unwrap_or_else(|| format!("{} {}", t("media.track"), track.id))
 }
 
-/// Formats a position as `m:ss` / `h:mm:ss`; the library's own formatter is
-/// private to the `media` module, and the info rows need one.
+/// Formats a position as `m:ss` / `h:mm:ss` the way the bar's own labels do.
+/// The player keeps positions in seconds, so the `Duration` conversion lives
+/// here rather than at every call site.
 fn format_time(seconds: f64) -> String {
-  let total = seconds.max(0.0) as u64;
-  let (hours, minutes, seconds) = (total / 3600, (total % 3600) / 60, total % 60);
-  if hours > 0 {
-    format!("{hours}:{minutes:02}:{seconds:02}")
-  } else {
-    format!("{minutes}:{seconds:02}")
-  }
+  woocraft::format_time(Duration::from_secs_f64(seconds.max(0.0)))
 }
 
 /// Localized yes/no for the state flags.
@@ -2409,10 +2409,77 @@ fn mount_transport(
       .with_size(size)
       .floating(true)
       .seek_step(SEEK_STEP)
+      // The seek bar's preview: a timecode card over the rail, live during a
+      // drag. It is the same slot a frame thumbnail would go in.
+      .seek_preview(seek_preview)
       .on_control(TransportControl::Settings, move |_, _, cx| {
         let _ = app.update(cx, |app, cx| app.toggle_panel(cx));
       })
   })
+}
+
+/// The seek slider's preview: where the pointer or the drag stands in the
+/// entry, as a timecode and a strip that places it.
+///
+/// There is no frame thumbnail because there is no source for one: mpv hands
+/// this wrapper only the frame it is playing, and seeking on hover to force
+/// that frame to be the previewed one would fight playback — the transport
+/// seeks once, on release, for exactly that reason. A host with its own
+/// thumbnail cache drops `img(frame)` into this card and changes nothing else.
+fn seek_preview(preview: SeekPreview, _: &mut Window, cx: &mut App) -> AnyElement {
+  let theme = cx.theme();
+  let percentage = if preview.duration > 0.0 {
+    (preview.position / preview.duration).clamp(0.0, 1.0) as f32
+  } else {
+    0.0
+  };
+  let position = format_time(preview.position);
+  let duration = format_time(preview.duration);
+  // A drag commits this value and a hover only names it, so the accent says
+  // which — the same distinction the slider's pending thumb makes.
+  let accent = if preview.dragging {
+    theme.primary
+  } else {
+    theme.primary.opacity(0.6)
+  };
+
+  v_flex()
+    .w(px(168.))
+    .gap_2()
+    .p_2()
+    .rounded(theme.radius_container)
+    .border_1()
+    .border_color(theme.border)
+    .bg(theme.popover)
+    .text_color(theme.popover_foreground)
+    .shadow_md()
+    .text_size(Size::Small.text_size())
+    .child(
+      h_flex()
+        .justify_between()
+        .items_baseline()
+        .child(div().font_weight(FontWeight::SEMIBOLD).child(position))
+        .child(
+          div()
+            .text_color(theme.muted_foreground)
+            .child(format!("of {duration}")),
+        ),
+    )
+    .child(
+      div()
+        .w_full()
+        .h(px(4.))
+        .rounded_full()
+        .bg(track_color(theme))
+        .child(
+          div()
+            .w(relative(percentage))
+            .h_full()
+            .rounded_full()
+            .bg(accent),
+        ),
+    )
+    .into_any_element()
 }
 
 // ----- CLI ----------------------------------------------------------------

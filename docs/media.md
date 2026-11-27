@@ -94,6 +94,10 @@ let view = cx.new(|cx| {
       .leading(|snapshot, _, _| {
         div().child(snapshot.title.clone().unwrap_or_default()).into_any_element()
       })
+      // A timecode over the seek rail; a frame thumbnail goes here too.
+      .seek_preview(|preview, _, _| {
+        div().child(format_time(Duration::from_secs_f64(preview.position))).into_any_element()
+      })
   })
 });
 ```
@@ -102,6 +106,13 @@ A standalone bar works the same way without the view
 (`PlayerTransport::new(&player, cx)` then mount it wherever), and
 `PlayerView::transport_bar()` reaches the view's bar afterwards. Replacing the
 bar outright is still `PlayerView::transport`.
+
+The seek slider takes a host-built preview for the position under the pointer
+(`PlayerTransport::seek_preview`): any element, shown on hover anywhere along
+the rail and live while the value is dragged. It is handed the position, the
+entry's duration and whether a drag is showing it, so a frame thumbnail with a
+timecode is a handful of lines; the `player` example draws the timecode card (it
+has no thumbnail source: mpv hands this wrapper only the frame it is playing).
 
 `PlayerTransport::floating(true)` swaps the flush card for an elevated surface
 (a hairline border and a drop shadow) for a bar laid *over* the picture. The

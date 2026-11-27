@@ -39,11 +39,11 @@ mod view;
 pub use event::{PlayerEvent, PropertyValue};
 pub use player::{
   Chapter, HwDec, Player, PlayerOptions, PlayerState, PlaylistEntry, SubtitleStyle, Track,
-  TrackKind, VideoTransport,
+  TrackKind, VideoTransport, format_time,
 };
 pub use playlist::PlayerPlaylist;
 pub use snapshot::PlayerSnapshot;
 pub use track_menu::PlayerTrackMenu;
-pub use transport::{PlayerTransport, TransportControl};
+pub use transport::{PlayerTransport, SeekPreview, TransportControl};
 pub use video::{VideoFrame, VideoOutput};
 pub use view::PlayerView;
