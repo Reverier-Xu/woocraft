@@ -10,6 +10,13 @@
 //! layout-relative fraction, so animating it would re-run layout every frame.
 //! The pill's hover growth does animate, and takes no width out of the flow.
 //!
+//! A preview ([`Slider::preview`]) is not a tooltip bound to a pill: it is an
+//! overlay anchored to the value under the pointer, or to the thumb a drag is
+//! moving, and its content is any element. That is what a media player's seek
+//! bar needs — a frame thumbnail for the second the pointer names — so the
+//! builder is asked again on every frame of the gesture, and the overlay is
+//! deferred to paint over the frame behind the slider rather than under it.
+//!
 //! # Example
 //! ```rust,ignore
 //! let volume = cx.new(|_| SliderState::new().min(0.0).max(100.0).step(1.0));
@@ -22,11 +29,11 @@
 //! ```
 
 use gpui::{
-  AnyElement, App, AppContext as _, Axis, Bounds, Context, Div, DragMoveEvent, Empty, Entity,
-  EntityId, EventEmitter, Hsla, InteractiveElement as _, IntoElement, Length, MouseButton,
+  Anchor, AnyElement, App, AppContext as _, Axis, Bounds, Context, Div, DragMoveEvent, Empty,
+  Entity, EntityId, EventEmitter, Hsla, InteractiveElement as _, IntoElement, Length, MouseButton,
   MouseDownEvent, MouseMoveEvent, ParentElement, Pixels, Rems, Render, RenderOnce, SharedString,
-  Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, deferred, div,
-  prelude::FluentBuilder as _, px, relative, rems,
+  Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, anchored, deferred,
+  div, point, prelude::FluentBuilder as _, px, relative, rems,
 };
 
 use crate::{
@@ -119,6 +126,10 @@ pub enum SliderScale {
 const DEFAULT_MAJOR_TICK_RATIO: u32 = 5;
 /// Height of a minor tick, in ems of the slider's size tier.
 const TICK_HEIGHT_EM: f32 = 0.3;
+/// Gap between a preview and the rail it stands over.
+const PREVIEW_GAP_PX: f32 = 4.0;
+/// How far a preview keeps clear of the window's edges, so it is never cut off.
+const PREVIEW_MARGIN_PX: f32 = 8.0;
 /// Height of a major tick: only a little taller, so the marks read as a ruler
 /// rather than as a second track.
 const MAJOR_TICK_HEIGHT_EM: f32 = 0.5;
@@ -162,6 +173,32 @@ impl SliderOrigin {
       Self::End => 1.0,
     }
   }
+}
+
+/// What shows a slider's preview.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SliderPreviewTrigger {
+  /// Hovering anywhere on the rail (default), so the preview follows the
+  /// pointer.
+  #[default]
+  Rail,
+  /// Only hovering a thumb, or dragging one.
+  Thumb,
+}
+
+/// What a preview is asked to show.
+///
+/// It describes one point of the slider: the value under the pointer while the
+/// rail is hovered, a thumb's own value while it is hovered, or the value a
+/// gesture is moving — the pending one of a deferred drag.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SliderPreview {
+  /// The value at the previewed position, snapped and clamped.
+  pub value: f32,
+  /// Where that value sits, as a fraction of the travel range.
+  pub percentage: f32,
+  /// Whether a drag rather than a hover is showing the preview.
+  pub dragging: bool,
 }
 
 /// The slider's value, bounds and drag state.
@@ -447,6 +484,10 @@ impl SliderState {
   fn update_by_position(
     &mut self, axis: Axis, position: gpui::Point<Pixels>, is_start: bool, cx: &mut Context<Self>,
   ) {
+    // A gesture on a pill carries its own end, so record it: otherwise the flag
+    // still names the end the previous gesture moved.
+    self.active_thumb_start = is_start;
+
     let Some(raw_percentage) = self.percentage_at(axis, position) else {
       return;
     };
@@ -494,6 +535,78 @@ impl SliderState {
     }
   }
 
+  /// The snapped value a fraction of the travel range stands for.
+  fn value_at(&self, percentage: f32) -> f32 {
+    let raw = self.percentage_to_value(percentage);
+    match self.snap_and_clamp(SliderValue::Single(raw)) {
+      SliderValue::Single(value) => value,
+      SliderValue::Range(..) => raw,
+    }
+  }
+
+  /// The snapped value the pointer at `position` names, or `None` with no
+  /// geometry yet. Snapping here is what keeps a pointer that moves inside one
+  /// step from re-rendering.
+  fn value_at_position(&self, axis: Axis, position: gpui::Point<Pixels>) -> Option<f32> {
+    self
+      .percentage_at(axis, position)
+      .map(|percentage| self.value_at(percentage))
+  }
+
+  /// Where a fraction of the travel range stands along the axis, in the track's
+  /// own coordinates: the cross position is the track's edge, which is what an
+  /// anchor on the rail is anchored to.
+  fn thumb_offset(&self, axis: Axis, percentage: f32) -> Pixels {
+    let travelled = self.travel_length(axis) * percentage;
+    match axis {
+      Axis::Horizontal => self.travel_inset + travelled,
+      Axis::Vertical => self.bounds.size.height - self.travel_inset - travelled,
+    }
+  }
+
+  /// What a preview should show right now: a drag always previews, a hover does
+  /// what the trigger allows.
+  fn preview(&self, trigger: SliderPreviewTrigger, hover: &PreviewHover) -> Option<SliderPreview> {
+    if self.dragging {
+      // A deferred drag has not moved the value yet, so its pending value is
+      // the one under the pointer; an immediate drag has already moved it.
+      let start = self.value.is_range() && self.active_thumb_start;
+      let (value, percentage) = match self.drag_value {
+        Some(pending) if start => (pending.start(), self.value_to_percentage(pending.start())),
+        Some(pending) => (pending.end(), self.value_to_percentage(pending.end())),
+        None if start => (self.value.start(), self.percentage.start),
+        None => (self.value.end(), self.percentage.end),
+      };
+      return Some(SliderPreview {
+        value,
+        percentage,
+        dragging: true,
+      });
+    }
+
+    match trigger {
+      // Anywhere on the rail: the value the pointer names.
+      SliderPreviewTrigger::Rail => hover.value.map(|value| SliderPreview {
+        value,
+        percentage: self.value_to_percentage(value),
+        dragging: false,
+      }),
+      // Only a thumb, and then its own value rather than the pointer's.
+      SliderPreviewTrigger::Thumb => {
+        let (value, percentage) = match hover.thumb? {
+          ThumbKind::RangeStart => (self.value.start(), self.percentage.start),
+          ThumbKind::Value => (self.value.end(), self.percentage.end),
+          ThumbKind::Pending => return None,
+        };
+        Some(SliderPreview {
+          value,
+          percentage,
+          dragging: false,
+        })
+      }
+    }
+  }
+
   /// Ends a drag gesture, committing the preview in non-immediate mode.
   fn end_drag(&mut self, cx: &mut Context<Self>) {
     if !self.dragging {
@@ -527,6 +640,40 @@ enum TrackSegment {
   Primary,
   /// From the committed thumb to the thumb a deferred drag previews.
   Warning,
+}
+
+/// Where the pointer stands for a preview.
+///
+/// This is keyed window state rather than slider state: a slider that stops
+/// rendering — a floating bar that hides itself — forgets a hover it can no
+/// longer see, instead of resurrecting a stale preview when it comes back.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct PreviewHover {
+  /// The snapped value under the pointer over the rail.
+  value: Option<f32>,
+  /// The thumb pill the pointer is over.
+  thumb: Option<ThumbKind>,
+}
+
+impl PreviewHover {
+  /// Records the value under the pointer; returns whether a preview would now
+  /// show another value.
+  fn set_value(&mut self, value: Option<f32>) -> bool {
+    if self.value == value {
+      return false;
+    }
+    self.value = value;
+    true
+  }
+
+  /// Records the thumb pill under the pointer; returns whether it changed.
+  fn set_thumb(&mut self, thumb: Option<ThumbKind>) -> bool {
+    if self.thumb == thumb {
+      return false;
+    }
+    self.thumb = thumb;
+    true
+  }
 }
 
 /// Which thumb of the slider one pill is.
@@ -706,6 +853,9 @@ fn tick_positions(
 
 impl EventEmitter<SliderEvent> for SliderState {}
 
+/// Builds a preview from what the slider is pointing at.
+type SliderPreviewBuilder = Box<dyn Fn(SliderPreview, &mut Window, &mut App) -> AnyElement>;
+
 #[derive(IntoElement)]
 pub struct Slider {
   id: SharedString,
@@ -714,6 +864,8 @@ pub struct Slider {
   size: Size,
   disabled: bool,
   axis: Axis,
+  preview: Option<SliderPreviewBuilder>,
+  preview_trigger: SliderPreviewTrigger,
 }
 
 impl Slider {
@@ -725,7 +877,41 @@ impl Slider {
       size: Size::default(),
       disabled: false,
       axis: Axis::Horizontal,
+      preview: None,
+      preview_trigger: SliderPreviewTrigger::default(),
     }
+  }
+
+  /// Show a preview for the point the pointer names, or for the thumb a drag is
+  /// moving: the content is any element, not only a text tooltip. A media
+  /// player's seek bar is the typical case — render a frame thumbnail for
+  /// [`SliderPreview::value`] and the slider places it over the rail.
+  ///
+  /// The builder is asked again on every render while the preview is visible,
+  /// so it sees a drag's live value; and since a slider is a `RenderOnce`
+  /// element with no state of its own, prefer plain elements over a new view
+  /// unless the content needs state that outlives one frame.
+  ///
+  /// The overlay is deferred, so it paints over whatever stands behind the
+  /// slider — an ancestor that hides its own overflow still clips it. It is
+  /// laid out inside the slider's track, so auto-width content is measured
+  /// against that: one em wide on a vertical slider, where the content should
+  /// bring a width of its own.
+  pub fn preview<E, F>(mut self, builder: F) -> Self
+  where
+    E: IntoElement,
+    F: Fn(SliderPreview, &mut Window, &mut App) -> E + 'static, {
+    self.preview = Some(Box::new(move |preview, window, cx| {
+      builder(preview, window, cx).into_any_element()
+    }));
+    self
+  }
+
+  /// What shows the preview: anywhere on the rail (the default) or only on a
+  /// thumb. A drag shows it either way.
+  pub fn preview_trigger(mut self, trigger: SliderPreviewTrigger) -> Self {
+    self.preview_trigger = trigger;
+    self
   }
 
   pub fn horizontal(mut self) -> Self {
@@ -759,6 +945,7 @@ impl Slider {
   /// selects the element id and which thumb the drag belongs to.
   fn thumb(
     &self, axis: Axis, pill: ThumbPill, is_start: bool, state: Entity<SliderState>,
+    preview_hover: Option<Entity<PreviewHover>>,
   ) -> Stateful<Div> {
     let thumb_id = if is_start {
       "slider-thumb-start"
@@ -787,6 +974,7 @@ impl Slider {
             cx.new(|_| drag.clone())
           })
           .on_drag_move({
+            let state = state.clone();
             move |e: &DragMoveEvent<DragThumb>, _, cx| {
               let DragThumb((id, drag_is_start)) = e.drag(cx).clone();
               if id != entity_id || drag_is_start != is_start {
@@ -799,6 +987,28 @@ impl Slider {
               });
             }
           })
+          // A thumb-scoped preview is about the pill, not about the rail under
+          // it, so the pill's own hitbox decides.
+          .when_some(
+            preview_hover.filter(|_| self.preview_trigger == SliderPreviewTrigger::Thumb),
+            |this, hover| {
+              let thumb = if is_start {
+                ThumbKind::RangeStart
+              } else {
+                ThumbKind::Value
+              };
+              this.on_hover({
+                move |hovered, _, cx| {
+                  let thumb = hovered.then_some(thumb);
+                  hover.update(cx, |hover, cx| {
+                    if hover.set_thumb(thumb) {
+                      cx.notify();
+                    }
+                  });
+                }
+              })
+            },
+          )
       })
   }
 }
@@ -809,8 +1019,19 @@ impl_styled!(Slider);
 
 impl RenderOnce for Slider {
   fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let axis = self.axis;
+    let entity_id = self.state.entity_id();
+
+    // Where the pointer stands, for a preview. Keyed state, so it dies with the
+    // element: a slider that leaves the frame has no hover either.
+    let preview_hover = self.preview.is_some().then(|| {
+      window.use_keyed_state(("slider-preview", entity_id.as_u64()), cx, |_, _| {
+        PreviewHover::default()
+      })
+    });
+
     // `Range` is not `Copy`, so clone the (8-byte) value out of the state.
-    let (percentage, is_range, active_thumb_start, origin_pct, drag_pct, tick_marks) = {
+    let (percentage, is_range, active_thumb_start, origin_pct, drag_pct, tick_marks, preview) = {
       let state = self.state.read(cx);
       let drag_pct = match state.drag_value {
         Some(value) if !state.value.is_range() => Some(state.value_to_percentage(value.start())),
@@ -827,6 +1048,13 @@ impl RenderOnce for Slider {
       } else {
         Vec::new()
       };
+      // A preview is only resolved for an enabled slider with one configured:
+      // without a builder the hover listeners are not wired either, so this is
+      // the one place that decides.
+      let preview = match preview_hover.as_ref() {
+        Some(hover) if !self.disabled => state.preview(self.preview_trigger, hover.read(cx)),
+        _ => None,
+      };
       (
         state.percentage.clone(),
         state.value.is_range(),
@@ -834,11 +1062,10 @@ impl RenderOnce for Slider {
         state.origin_percentage(),
         drag_pct,
         tick_marks,
+        preview,
       )
     };
 
-    let axis = self.axis;
-    let entity_id = self.state.entity_id();
     let rem = window.rem_size();
 
     // The hover flag behind the thumb's grow-and-brighten transition, fed by
@@ -949,13 +1176,13 @@ impl RenderOnce for Slider {
           }
           ThumbKind::RangeStart => centre_on_slot(
             axis,
-            self.thumb(axis, pill, true, self.state.clone()),
+            self.thumb(axis, pill, true, self.state.clone(), preview_hover.clone()),
             thumb_main,
           )
           .into_any_element(),
           ThumbKind::Value => centre_on_slot(
             axis,
-            self.thumb(axis, pill, false, self.state.clone()),
+            self.thumb(axis, pill, false, self.state.clone(), preview_hover.clone()),
             thumb_main,
           )
           .into_any_element(),
@@ -977,6 +1204,50 @@ impl RenderOnce for Slider {
     // Half the track's thickness: the rail's ends are rounded as one pill,
     // which is what the two stubs' outer corners carry.
     let radius = rems(thickness.0 * 0.5);
+
+    // The preview, if anything shows it: an overlay the flow does not see, hung
+    // off the point it describes and anchored to whichever side has room, so a
+    // preview near a window edge slides in instead of being cut off. It is
+    // deferred because a preview over the frame behind the slider is the whole
+    // point of having one. The anchor is a window position because the track's
+    // own layout is the flow's business: a slot standing on it would leave the
+    // overlay to whatever alignment the rail happens to use.
+    let preview = preview.and_then(|preview| {
+      let build = self.preview.as_ref()?;
+      let content = build(preview, window, cx);
+      let (anchor, position) = {
+        let state = self.state.read(cx);
+        let offset = state.thumb_offset(axis, preview.percentage);
+        match axis {
+          // Over the rail, centred on the value.
+          Axis::Horizontal => (
+            Anchor::BottomCenter,
+            point(
+              state.bounds.origin.x + offset,
+              state.bounds.origin.y - px(PREVIEW_GAP_PX),
+            ),
+          ),
+          // Beside the rail, centred on the value.
+          Axis::Vertical => (
+            Anchor::RightCenter,
+            point(
+              state.bounds.right() + px(PREVIEW_GAP_PX),
+              state.bounds.origin.y + offset,
+            ),
+          ),
+        }
+      };
+      Some(
+        deferred(
+          anchored()
+            .anchor(anchor)
+            .position(position)
+            .snap_to_window_with_margin(px(PREVIEW_MARGIN_PX))
+            .child(content),
+        )
+        .with_priority(1),
+      )
+    });
 
     let state_for_down = self.state.clone();
     let drag_start = active_thumb_start;
@@ -1145,6 +1416,33 @@ impl RenderOnce for Slider {
                 }
               })
           })
+          .when_some(preview_hover.filter(|_| !self.disabled), |this, hover| {
+            this
+              .on_mouse_move({
+                let state = self.state.clone();
+                let hover = hover.clone();
+                move |e: &MouseMoveEvent, _, cx| {
+                  let value = state.read(cx).value_at_position(axis, e.position);
+                  hover.update(cx, |hover, cx| {
+                    if hover.set_value(value) {
+                      cx.notify();
+                    }
+                  });
+                }
+              })
+              .on_hover({
+                move |hovered, _, cx| {
+                  if *hovered {
+                    return;
+                  }
+                  hover.update(cx, |hover, cx| {
+                    if hover.set_value(None) {
+                      cx.notify();
+                    }
+                  });
+                }
+              })
+          })
           .child(rail_stub(
             axis,
             travel_inset,
@@ -1173,7 +1471,10 @@ impl RenderOnce for Slider {
             radius,
             color_of(tail_kind),
             false,
-          )),
+          ))
+          // The overlay is a child of the track so that its anchor is measured
+          // from the same origin the thumb positions are.
+          .children(preview),
       )
       .opacity(if self.disabled {
         opacity::DISABLED
@@ -1186,7 +1487,10 @@ impl RenderOnce for Slider {
 
 #[cfg(test)]
 mod tests {
+  use gpui::{Modifiers, Render, TestAppContext, Window};
+
   use super::*;
+  use crate::Theme;
 
   fn spans(parts: &[RailPart]) -> Vec<(f32, f32, TrackSegment)> {
     parts
@@ -1364,5 +1668,249 @@ mod tests {
     state.sync_percentage();
     assert_eq!(state.drag_value, Some(SliderValue::Single(80.0)));
     assert_eq!(state.value, SliderValue::Single(12.0));
+  }
+
+  /// A laid-out slider: a 200px track whose thumbs may travel 8..192, so a
+  /// percentage reads straight off the pointer.
+  fn laid_out() -> SliderState {
+    let mut state = SliderState::new().min(0.0).max(100.0).step(1.0);
+    state.bounds = Bounds::new(point(px(0.), px(0.)), gpui::size(px(200.), px(16.)));
+    state.travel_inset = px(8.);
+    state
+  }
+
+  /// Points a preview's hover state at a position on a laid-out slider.
+  fn hover_at(state: &SliderState, hover: &mut PreviewHover, x: f32) -> bool {
+    hover.set_value(state.value_at_position(Axis::Horizontal, point(px(x), px(8.))))
+  }
+
+  #[test]
+  fn a_rail_hover_previews_the_value_under_the_pointer() {
+    let state = laid_out();
+    let mut hover = PreviewHover::default();
+    assert!(hover_at(&state, &mut hover, 100.));
+
+    let preview = state.preview(SliderPreviewTrigger::Rail, &hover).unwrap();
+    assert_eq!(preview.value, 50.0);
+    assert!((preview.percentage - 0.5).abs() < 1e-6);
+    assert!(!preview.dragging);
+  }
+
+  #[test]
+  fn a_hover_inside_one_step_asks_for_no_other_frame() {
+    let state = laid_out();
+    let mut hover = PreviewHover::default();
+    assert!(hover_at(&state, &mut hover, 100.));
+    // 0.5px on is still the same step, so the preview cannot change.
+    assert!(!hover_at(&state, &mut hover, 100.5));
+    assert!(hover_at(&state, &mut hover, 120.));
+  }
+
+  #[test]
+  fn the_trigger_decides_whether_the_rail_or_a_thumb_previews() {
+    // Hovering the rail is not hovering a thumb.
+    let state = laid_out();
+    let mut hover = PreviewHover::default();
+    hover_at(&state, &mut hover, 100.);
+    assert!(state.preview(SliderPreviewTrigger::Thumb, &hover).is_none());
+
+    // And a thumb previews its own value, not the one under the pointer.
+    let state = laid_out().default_value(30.0);
+    let hover = PreviewHover {
+      value: None,
+      thumb: Some(ThumbKind::Value),
+    };
+    let preview = state.preview(SliderPreviewTrigger::Thumb, &hover).unwrap();
+    assert_eq!(preview.value, 30.0);
+    assert!((preview.percentage - 0.3).abs() < 1e-6);
+    assert!(state.preview(SliderPreviewTrigger::Rail, &hover).is_none());
+  }
+
+  #[test]
+  fn a_deferred_drag_previews_the_end_it_moves() {
+    let mut state = laid_out().default_value((20.0, 80.0)).with_immediate(false);
+    let hover = PreviewHover::default();
+    state.dragging = true;
+
+    // The pending value, not the committed one, is what the gesture stands on.
+    state.active_thumb_start = true;
+    state.drag_value = Some(SliderValue::Range(45.0, 80.0));
+    let preview = state.preview(SliderPreviewTrigger::Rail, &hover).unwrap();
+    assert_eq!(preview.value, 45.0);
+    assert!((preview.percentage - 0.45).abs() < 1e-6);
+    assert!(preview.dragging);
+
+    state.active_thumb_start = false;
+    state.drag_value = Some(SliderValue::Range(45.0, 60.0));
+    let preview = state.preview(SliderPreviewTrigger::Rail, &hover).unwrap();
+    assert_eq!(preview.value, 60.0);
+    assert!((preview.percentage - 0.6).abs() < 1e-6);
+  }
+
+  struct PreviewRoot {
+    state: Entity<SliderState>,
+    trigger: SliderPreviewTrigger,
+  }
+
+  impl Render for PreviewRoot {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+      div().size_full().pt(px(100.)).pl(px(50.)).child(
+        div().w(px(200.)).child(
+          Slider::new("preview-slider", &self.state)
+            .preview(|_, _, _| {
+              div()
+                .id("slider-preview")
+                .debug_selector(|| "SLIDER-PREVIEW".into())
+                .w(px(60.))
+                .h(px(30.))
+            })
+            .preview_trigger(self.trigger),
+        ),
+      )
+    }
+  }
+
+  #[gpui::test]
+  fn the_preview_stands_over_the_value_the_pointer_names(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    let (_, cx) = cx.add_window_view(|_, cx| PreviewRoot {
+      state: cx.new(|_| SliderState::new().min(0.0).max(100.0).step(1.0)),
+      trigger: SliderPreviewTrigger::Rail,
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("SLIDER-PREVIEW").is_none());
+
+    // The slider sits at x 50, y 100 and is 200x32, so its 16px track band is
+    // y 108..124 and its travel range runs x 58..242: the middle of it is 50.
+    cx.simulate_mouse_move(point(px(150.), px(116.)), None, Modifiers::none());
+    cx.run_until_parked();
+
+    let bounds = cx.debug_bounds("SLIDER-PREVIEW").expect("preview on hover");
+    assert_eq!(bounds.size, gpui::size(px(60.), px(30.)));
+    // Centred on the value and standing just above the band.
+    assert_eq!(bounds.center().x, px(150.));
+    assert_eq!(bounds.bottom(), px(104.));
+
+    // And leaving the rail takes it away again.
+    cx.simulate_mouse_move(point(px(700.), px(500.)), None, Modifiers::none());
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("SLIDER-PREVIEW").is_none());
+  }
+
+  #[gpui::test]
+  fn a_thumb_trigger_previews_only_the_pill(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    let (_, cx) = cx.add_window_view(|_, cx| PreviewRoot {
+      state: cx.new(|_| {
+        SliderState::new()
+          .min(0.0)
+          .max(100.0)
+          .step(1.0)
+          .default_value(30.0)
+      }),
+      trigger: SliderPreviewTrigger::Thumb,
+    });
+    cx.run_until_parked();
+
+    // The rail is not a thumb.
+    cx.simulate_mouse_move(point(px(150.), px(116.)), None, Modifiers::none());
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("SLIDER-PREVIEW").is_none());
+
+    // The value thumb stands at 30% of x 58..242, so its pill straddles 113.
+    cx.simulate_mouse_move(point(px(113.), px(116.)), None, Modifiers::none());
+    cx.run_until_parked();
+    let bounds = cx
+      .debug_bounds("SLIDER-PREVIEW")
+      .expect("preview on the thumb");
+    assert!(
+      (bounds.center().x - px(113.2)).abs() < px(1.),
+      "preview at {:?}, expected over the thumb at 113",
+      bounds.center().x
+    );
+  }
+
+  #[gpui::test]
+  fn a_drag_previews_while_the_button_is_down(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    let (_, cx) = cx.add_window_view(|_, cx| PreviewRoot {
+      state: cx.new(|_| SliderState::new().min(0.0).max(100.0).step(1.0)),
+      trigger: SliderPreviewTrigger::Rail,
+    });
+    cx.run_until_parked();
+
+    cx.simulate_mouse_down(
+      point(px(150.), px(116.)),
+      MouseButton::Left,
+      Modifiers::none(),
+    );
+    cx.run_until_parked();
+
+    // A press drags the value to the pointer, and the preview is there before
+    // the first move: a gesture on the rail starts where it landed.
+    let bounds = cx
+      .debug_bounds("SLIDER-PREVIEW")
+      .expect("preview while dragging");
+    assert_eq!(bounds.center().x, px(150.));
+    assert_eq!(bounds.bottom(), px(104.));
+  }
+
+  struct ToggledRoot {
+    state: Entity<SliderState>,
+    shown: Entity<bool>,
+  }
+
+  impl Render for ToggledRoot {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+      let shown = *self.shown.read(cx);
+      div()
+        .size_full()
+        .pt(px(100.))
+        .pl(px(50.))
+        .children(shown.then(|| {
+          div().w(px(200.)).child(
+            Slider::new("preview-slider", &self.state).preview(|_, _, _| {
+              div()
+                .id("slider-preview")
+                .debug_selector(|| "SLIDER-PREVIEW".into())
+                .w(px(60.))
+                .h(px(30.))
+            }),
+          )
+        }))
+    }
+  }
+
+  #[gpui::test]
+  fn a_slider_that_leaves_and_returns_does_not_resurrect_a_hover(cx: &mut TestAppContext) {
+    cx.set_global(Theme::default());
+    let (root, cx) = cx.add_window_view(|_, cx| ToggledRoot {
+      state: cx.new(|_| SliderState::new().min(0.0).max(100.0).step(1.0)),
+      shown: cx.new(|_| true),
+    });
+    cx.run_until_parked();
+
+    cx.simulate_mouse_move(point(px(150.), px(116.)), None, Modifiers::none());
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("SLIDER-PREVIEW").is_some());
+
+    // A floating bar hides itself while the pointer rests on the rail; when it
+    // comes back the hover is gone, not frozen at the old position.
+    let shown = cx.update(|_, cx| root.read(cx).shown.clone());
+    for visible in [false, true] {
+      cx.update(|_, cx| {
+        shown.update(cx, |shown, cx| {
+          *shown = visible;
+          cx.notify();
+        });
+      });
+      cx.run_until_parked();
+    }
+    assert!(cx.debug_bounds("SLIDER-PREVIEW").is_none());
+
+    // And the pointer has to come back for the preview to.
+    cx.simulate_mouse_move(point(px(150.), px(116.)), None, Modifiers::none());
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("SLIDER-PREVIEW").is_some());
   }
 }

@@ -1,16 +1,18 @@
-//! Slider features: origin, ticks and immediate vs deferred dragging.
+//! Slider features: origin, ticks, immediate vs deferred dragging, and the
+//! thumb/rail preview a media player's seek bar wants.
 //!
 //! ```text
 //! cargo run -p woocraft --example slider
 //! ```
 
 use gpui::{
-  App, AppContext as _, Bounds, Context, Entity, IntoElement, ParentElement as _, Render,
-  Styled as _, Window, WindowBounds, WindowOptions, div,
+  AnyElement, App, AppContext as _, Bounds, Context, Entity, IntoElement, ParentElement as _,
+  Render, Styled as _, Window, WindowBounds, WindowOptions, div,
 };
 use woocraft::{
-  ActiveTheme as _, Label, Sizable as _, Size, Slider, SliderEvent, SliderOrigin, SliderState,
-  StyleSized, Theme, ThemeMode, TitleBar, init, v_flex, window_border,
+  ActiveTheme as _, Label, Sizable as _, Size, Slider, SliderEvent, SliderOrigin, SliderPreview,
+  SliderPreviewTrigger, SliderState, StyleSized, Theme, ThemeMode, TitleBar, init, v_flex,
+  window_border,
 };
 
 struct SliderDemo {
@@ -22,6 +24,63 @@ struct SliderDemo {
   seen: String,
   size: Size,
   subscriptions: Vec<gpui::Subscription>,
+}
+
+/// A thumb-scoped preview: the slider only names a value, so the content can be
+/// as small and as textual as this.
+fn value_preview(preview: SliderPreview, cx: &App) -> AnyElement {
+  let theme = cx.theme();
+  div()
+    .px(Size::Small.container_gap())
+    .py(Size::Small.container_gap())
+    .rounded(theme.radius)
+    .border_1()
+    .border_color(theme.border)
+    .bg(theme.popover)
+    .text_color(theme.popover_foreground)
+    .text_size(Size::Small.text_size())
+    .child(format!("{:.0}%", preview.value))
+    .into_any_element()
+}
+
+/// A stand-in for a media player's frame preview. Note that it is not a text
+/// tooltip: the card carries a picture-sized block whose colour follows the
+/// value, and a drag marks itself as such.
+fn frame_preview(preview: SliderPreview, cx: &App) -> AnyElement {
+  let theme = cx.theme();
+  let frame = (preview.value / 100.0).clamp(0.0, 1.0);
+  v_flex()
+    .w(gpui::px(112.))
+    .p_2()
+    .gap_1()
+    .rounded(theme.radius_container)
+    .border_1()
+    .border_color(theme.border)
+    .bg(theme.popover)
+    .text_color(theme.popover_foreground)
+    .child(
+      div()
+        .w_full()
+        .h(gpui::px(56.))
+        .rounded(theme.radius)
+        .bg(theme.primary.opacity(0.15 + 0.6 * frame))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(Size::Small.text_size())
+        .text_color(theme.primary_foreground)
+        .child(if preview.dragging {
+          "dragging"
+        } else {
+          "hovering"
+        }),
+    )
+    .child(
+      div()
+        .text_size(Size::Small.text_size())
+        .child(format!("{:.0}s", preview.value * 0.6)),
+    )
+    .into_any_element()
 }
 
 impl SliderDemo {
@@ -107,11 +166,16 @@ impl Render for SliderDemo {
             .w_full()
             .container_padding(size)
             .container_gap_y(size)
-            .child(Label::new("Volume — default origin, no ticks"))
+            .child(Label::new(
+              "Volume — hover the thumb for a text preview, drag for the live value",
+            ))
             .child(
-              div()
-                .w_full()
-                .child(Slider::new("demo-volume", &self.volume).with_size(size)),
+              div().w_full().child(
+                Slider::new("demo-volume", &self.volume)
+                  .with_size(size)
+                  .preview(|preview, _, cx| value_preview(preview, cx))
+                  .preview_trigger(SliderPreviewTrigger::Thumb),
+              ),
             )
             .child(Label::new(format!(
               "Bass — origin middle, ticks, major every 5  ({:+.0} dB)",
@@ -141,12 +205,14 @@ impl Render for SliderDemo {
                 .child(Slider::new("demo-treble", &self.eq_treble).with_size(size)),
             )
             .child(Label::new(
-              "Scrub — immediate off: drag previews, release commits",
+              "Scrub — immediate off: hover the rail for a frame preview, drag previews what it will commit",
             ))
             .child(
-              div()
-                .w_full()
-                .child(Slider::new("demo-scrub", &self.scrub).with_size(size)),
+              div().w_full().child(
+                Slider::new("demo-scrub", &self.scrub)
+                  .with_size(size)
+                  .preview(|preview, _, cx| frame_preview(preview, cx)),
+              ),
             )
             .child(Label::new(format!("last event: {}", self.seen))),
         ),
@@ -162,7 +228,7 @@ fn main() {
       cx.activate(true);
       Theme::set_mode(ThemeMode::Dark, cx);
 
-      let bounds = Bounds::centered(None, gpui::Size::new(gpui::px(720.0), gpui::px(460.0)), cx);
+      let bounds = Bounds::centered(None, gpui::Size::new(gpui::px(720.0), gpui::px(520.0)), cx);
       let window = cx
         .open_window(
           WindowOptions {
